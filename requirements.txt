@@ -1,5 +1,11 @@
+# megatron requirements
+
 pybind11
 torch
 six
 regex
 numpy
+
+# big-science requirements
+
+codecarbon==1.2.0

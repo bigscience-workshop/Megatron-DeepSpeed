@@ -110,6 +110,11 @@ def pretrain(train_valid_test_dataset_provider,
     args = get_args()
     timers = get_timers()
 
+    # XXX: hack-in for now - add cli arg
+    import codecarbon
+    cc_tracker = codecarbon.EmissionsTracker(output_dir=args.save)
+    cc_tracker.start()
+
     # Model, optimizer, and learning rate.
     timers('model-and-optimizer-setup').start()
     model, optimizer, lr_scheduler = setup_model_and_optimizer(model_provider)
@@ -161,6 +166,9 @@ def pretrain(train_valid_test_dataset_provider,
         evaluate_and_print_results(prefix, forward_step_func,
                                    test_data_iterator, model,
                                    0, True)
+
+    # XXX: fixme
+    cc_tracker.stop()
 
 def update_train_iters(args):
 
