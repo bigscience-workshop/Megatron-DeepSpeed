@@ -115,8 +115,6 @@ def get_args():
                        help='Append an <eod> token to the end of a document.')
     group.add_argument("--tokenizer-name-or-path", type=str, default=None, 
                        help="Name or path of the huggingface tokenizer.")
-    group.add_argument("--tokenizer-extra-id", type=int, default=None,
-                       help="Extra ids for T5 Tokenizer.")
 
     group = parser.add_argument_group(title='output data')
     group.add_argument('--output-prefix', type=str, required=True,
