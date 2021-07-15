@@ -56,7 +56,7 @@ class Encoder(object):
     def __init__(self, args):
         self.args = args
 
-    def initializer(self):
+    def initializer(self, output_dataset_builders, level: str):
         # Use Encoder class as a container for global data
         Encoder.tokenizer = build_tokenizer(self.args)
         if self.args.split_sentences:
@@ -75,6 +75,15 @@ class Encoder(object):
         else:
             Encoder.splitter = IdentitySplitter()
 
+        Encoder.builders = {}
+        for key in self.args.json_keys:
+            output_bin_files_key = "{}_{}_{}_{}.bin".format(self.args.output_prefix,
+                                                          key, level, multiprocessing.current_process()._identity)
+            Encoder.builders[key] = indexed_dataset.make_builder(output_bin_files_key,
+                                                         impl=self.args.dataset_impl,
+                                                         vocab_size=Encoder.tokenizer.vocab_size)
+            output_dataset_builders[key].append(output_bin_files_key)
+
     def encode(self, json_line):
         data = json.loads(json_line)
         ids = {}
@@ -88,7 +97,15 @@ class Encoder(object):
             if len(doc_ids) > 0 and self.args.append_eod:
                 doc_ids[-1].append(Encoder.tokenizer.eod)
             ids[key] = doc_ids
-        return ids, len(json_line)
+
+        for key, sentences in ids.items():
+            if len(sentences) == 0:
+                continue
+            for sentence in sentences:
+                Encoder.builders[key].add_item(torch.IntTensor(sentence))
+            Encoder.builders[key].end_document()
+
+        return len(json_line)
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -153,41 +170,29 @@ def main():
 
     encoder = Encoder(args)
     tokenizer = build_tokenizer(args)
-    pool = multiprocessing.Pool(args.workers, initializer=encoder.initializer)
-    encoded_docs = pool.imap(encoder.encode, fin, 25)
-    #encoded_docs = map(encoder.encode, fin)
+
+    # Necessary to share a semaphore across processes
+    m = multiprocessing.Manager()
+    output_dataset_builders = m.dict({key: m.list() for key in args.json_keys}) # This is used to obtain all the filenames
 
     level = "document"
     if args.split_sentences:
         level = "sentence"
 
+    pool = multiprocessing.Pool(args.workers, initializer=encoder.initializer, initargs=(output_dataset_builders, level))
+    encoded_docs = pool.imap_unordered(encoder.encode, fin, 25)
+    #encoded_docs = map(encoder.encode, fin)
+
     print(f"Vocab size: {tokenizer.vocab_size}")
     print(f"Output prefix: {args.output_prefix}")
-    output_bin_files = {}
-    output_idx_files = {}
-    builders = {}
-    for key in args.json_keys:
-        output_bin_files[key] = "{}_{}_{}.bin".format(args.output_prefix,
-                                                      key, level)
-        output_idx_files[key] = "{}_{}_{}.idx".format(args.output_prefix,
-                                                      key, level)
-        builders[key] = indexed_dataset.make_builder(output_bin_files[key],
-                                               impl=args.dataset_impl,
-                                               vocab_size=tokenizer.vocab_size)
 
     startup_end = time.time()
     proc_start = time.time()
     total_bytes_processed = 0
     print("Time to startup:", startup_end - startup_start)
 
-    for i, (doc, bytes_processed) in enumerate(encoded_docs, start=1):
+    for i, bytes_processed in enumerate(encoded_docs, start=1):
         total_bytes_processed += bytes_processed
-        for key, sentences in doc.items():
-            if len(sentences) == 0:
-                continue
-            for sentence in sentences:
-                builders[key].add_item(torch.IntTensor(sentence))
-            builders[key].end_document()
         if i % args.log_interval == 0:
             current = time.time()
             elapsed = current - proc_start
@@ -196,8 +201,16 @@ def main():
                   f"({i/elapsed} docs/s, {mbs} MB/s).",
                   file=sys.stderr)
 
-    for key in args.json_keys:
-        builders[key].finalize(output_idx_files[key])
+    print("Finished writing, time to index.")
+    for key , bin_paths in output_dataset_builders.items():
+        output_idx_files_key = "{}_{}_{}.idx".format(args.output_prefix, key, level)
+        for bin_path in bin_paths:
+            print(bin_path)
+            indexed_dataset.make_builder(
+                bin_path,
+                impl=args.dataset_impl,
+                vocab_size=tokenizer.vocab_size
+            ).finalize(output_idx_files_key)
 
 if __name__ == '__main__':
     main()
