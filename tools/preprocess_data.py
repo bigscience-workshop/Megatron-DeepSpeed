@@ -157,12 +157,17 @@ def main():
 
     encoder = Encoder(args)
     tokenizer = build_tokenizer(args)
+    chunksize = 25
 
     # Necessary to share a semaphore across processes
     m = multiprocessing.Manager()
     semaphore = m.Semaphore(args.max_sample_in_memory)
+
+    # This helps prevent deadlock
+    assert args.max_sample_in_memory >= args.workers * chunksize
+
     pool = multiprocessing.Pool(args.workers, initializer=encoder.initializer)
-    encoded_docs = pool.imap(functools.partial(encoder.encode, semaphore=semaphore), fin, 25)
+    encoded_docs = pool.imap_unordered(functools.partial(encoder.encode, semaphore=semaphore), fin, chunksize)
     #encoded_docs = map(encoder.encode, fin)
 
     level = "document"
