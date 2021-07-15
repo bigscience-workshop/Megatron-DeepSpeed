@@ -20,6 +20,7 @@ import json
 import multiprocessing
 import os
 import sys
+import functools
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
                                              os.path.pardir)))
 import time
@@ -156,9 +157,12 @@ def main():
 
     encoder = Encoder(args)
     tokenizer = build_tokenizer(args)
+
+    # Necessary to share a semaphore across processes
+    m = multiprocessing.Manager()
+    semaphore = m.Semaphore(args.max_sample_in_memory)
     pool = multiprocessing.Pool(args.workers, initializer=encoder.initializer)
-    semaphore = multiprocessing.Semaphore(args.max_sample_in_memory)
-    encoded_docs = pool.imap(lambda x: encoder.encode(x, semaphore), fin, 25)
+    encoded_docs = pool.imap(functools.partial(encoder.encode, semaphore=semaphore), fin, 25)
     #encoded_docs = map(encoder.encode, fin)
 
     level = "document"
