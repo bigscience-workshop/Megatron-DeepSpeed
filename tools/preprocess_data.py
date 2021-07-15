@@ -75,7 +75,8 @@ class Encoder(object):
         else:
             Encoder.splitter = IdentitySplitter()
 
-    def encode(self, json_line):
+    def encode(self, json_line, semaphore: multiprocessing.Semaphore):
+        semaphore.acquire()
         data = json.loads(json_line)
         ids = {}
         for key in self.args.json_keys:
@@ -126,6 +127,8 @@ def get_args():
                        help='Number of worker processes to launch')
     group.add_argument('--log-interval', type=int, default=100,
                        help='Interval between progress updates')
+    group.add_argument('--max-sample-in-memory', type=int, default=100,
+                       help='Maximum sample stored in memory awaiting to be stored in preprocessed dataset.')
     args = parser.parse_args()
     args.keep_empty = False
 
@@ -154,7 +157,8 @@ def main():
     encoder = Encoder(args)
     tokenizer = build_tokenizer(args)
     pool = multiprocessing.Pool(args.workers, initializer=encoder.initializer)
-    encoded_docs = pool.imap(encoder.encode, fin, 25)
+    semaphore = multiprocessing.Semaphore(args.max_sample_in_memory)
+    encoded_docs = pool.imap(lambda x: encoder.encode(x, semaphore), fin, 25)
     #encoded_docs = map(encoder.encode, fin)
 
     level = "document"
@@ -181,6 +185,7 @@ def main():
     print("Time to startup:", startup_end - startup_start)
 
     for i, (doc, bytes_processed) in enumerate(encoded_docs, start=1):
+        semaphore.release()
         total_bytes_processed += bytes_processed
         for key, sentences in doc.items():
             if len(sentences) == 0:
