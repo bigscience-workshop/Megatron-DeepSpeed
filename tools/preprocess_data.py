@@ -203,14 +203,17 @@ def main():
 
     print("Finished writing, time to index.")
     for key , bin_paths in output_dataset_builders.items():
+        output_bin_files_key = "{}_{}_{}.bin".format(args.output_prefix, key, level)
         output_idx_files_key = "{}_{}_{}.idx".format(args.output_prefix, key, level)
+        builder = indexed_dataset.make_builder(
+            output_bin_files_key,
+            impl=args.dataset_impl,
+            vocab_size=tokenizer.vocab_size
+        )
         for bin_path in bin_paths:
             print(bin_path)
-            indexed_dataset.make_builder(
-                bin_path,
-                impl=args.dataset_impl,
-                vocab_size=tokenizer.vocab_size
-            ).finalize(output_idx_files_key)
+            builder.merge_file_(bin_path)
+        builder.finalize(output_idx_files_key)
 
 if __name__ == '__main__':
     main()
