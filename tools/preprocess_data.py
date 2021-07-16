@@ -89,7 +89,7 @@ class Encoder(object):
                     doc_ids.append(sentence_ids)
             if len(doc_ids) > 0 and self.args.append_eod:
                 doc_ids[-1].append(Encoder.tokenizer.eod)
-            ids[key] = [torch.IntTensor(sentence) for sentence in doc_ids]
+            ids[key] = doc_ids
         return ids, len(json_line)
 
 def get_args():
@@ -200,7 +200,7 @@ def main():
             if len(sentences) == 0:
                 continue
             for sentence in sentences:
-                builders[key].add_item(sentence)
+                builders[key].add_item(torch.IntTensor(sentence))
             builders[key].end_document()
         if i % args.log_interval == 0:
             current = time.time()
