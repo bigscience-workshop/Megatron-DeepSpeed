@@ -214,12 +214,20 @@ def main():
         # Merge partial datasets into the main dataset.
         for bin_path in bin_paths:
             print(bin_path)
+            # We need to finalize the partial datasets first
+            partial_builder = indexed_dataset.make_builder(
+                indexed_dataset.data_file_path(bin_path),
+                impl=args.dataset_impl,
+                vocab_size=tokenizer.vocab_size
+            )
+            partial_builder.finalize(indexed_dataset.index_file_path(bin_path))
             builder.merge_file_(bin_path)
         builder.finalize(indexed_dataset.index_file_path(output_files_key))
 
         # Remove partial datasets
         for bin_path in bin_paths:
             os.remove(indexed_dataset.data_file_path(bin_path))
+            os.remove(indexed_dataset.index_file_path(bin_path))
 
 
 if __name__ == '__main__':
