@@ -210,10 +210,17 @@ def main():
             impl=args.dataset_impl,
             vocab_size=tokenizer.vocab_size
         )
+
+        # Merge partial datasets into the main dataset.
         for bin_path in bin_paths:
             print(bin_path)
             builder.merge_file_(bin_path)
         builder.finalize(output_idx_files_key)
+
+        # Remove partial datasets
+        for bin_path in bin_paths:
+            os.remove(bin_path)
+
 
 if __name__ == '__main__':
     main()
