@@ -29,7 +29,7 @@ def build_tokenizer(args):
               flush=True)
 
     # Select and instantiate the tokenizer.
-    assert args.vocab_file is not None or args.tokenizer_type == "PretrainedFromHf"
+    assert args.vocab_file is not None or args.tokenizer_type == "PretrainedFromHF"
     if args.tokenizer_type == 'BertWordPieceLowerCase':
         tokenizer = _BertWordPieceTokenizer(vocab_file=args.vocab_file,
                                             lower_case=True,
@@ -41,7 +41,7 @@ def build_tokenizer(args):
     elif args.tokenizer_type == 'GPT2BPETokenizer':
         assert args.merge_file is not None
         tokenizer = _GPT2BPETokenizer(args.vocab_file, args.merge_file)
-    elif args.tokenizer_type == "PretrainedFromHf":
+    elif args.tokenizer_type == "PretrainedFromHF":
         assert args.tokenizer_name_or_path is not None
         print(
             " vocab file is un-used. loading tokenizer from pre-trained model",
