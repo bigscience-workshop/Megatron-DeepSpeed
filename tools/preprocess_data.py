@@ -54,8 +54,9 @@ class IdentitySplitter(object):
         return text
 
 class Encoder(object):
-    def __init__(self, args):
+    def __init__(self, args, chunksize):
         self.args = args
+        self.chunksize = chunksize
 
     def initializer(self):
         # Use Encoder class as a container for global data
@@ -75,9 +76,12 @@ class Encoder(object):
 
         else:
             Encoder.splitter = IdentitySplitter()
+        Encoder.chunk_index = -1
 
     def encode(self, json_line, semaphore: multiprocessing.Semaphore):
-        semaphore.acquire()
+        Encoder.chunk_index = (Encoder.chunk_index + 1) % self.chunksize
+        if Encoder.chunk_index == 0:
+            semaphore.acquire()
         data = json.loads(json_line)
         ids = {}
         for key in self.args.json_keys:
@@ -155,13 +159,13 @@ def main():
     if nltk_available and args.split_sentences:
         nltk.download("punkt", quiet=True)
 
-    encoder = Encoder(args)
-    tokenizer = build_tokenizer(args)
     chunksize = 25
+    encoder = Encoder(args, chunksize)
+    tokenizer = build_tokenizer(args)
 
     # Necessary to share a semaphore across processes
     m = multiprocessing.Manager()
-    semaphore = m.Semaphore(args.max_sample_in_memory)
+    semaphore = m.Semaphore(args.max_sample_in_memory) # we're going to release/acquire by chunks
 
     # This helps prevent deadlock
     assert args.max_sample_in_memory >= args.workers * chunksize
@@ -194,7 +198,8 @@ def main():
     print("Time to startup:", startup_end - startup_start)
 
     for i, (doc, bytes_processed) in enumerate(encoded_docs, start=1):
-        semaphore.release()
+        if i % chunksize == 0:
+            semaphore.release()
         total_bytes_processed += bytes_processed
         for key, sentences in doc.items():
             if len(sentences) == 0:
