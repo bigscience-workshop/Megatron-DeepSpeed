@@ -20,6 +20,7 @@ import json
 import multiprocessing
 import os
 import sys
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
                                              os.path.pardir)))
 import time
@@ -77,12 +78,12 @@ class Encoder(object):
 
         Encoder.builders = {}
         for key in self.args.json_keys:
-            output_bin_files_key = "{}_{}_{}_{}.bin".format(self.args.output_prefix,
+            output_files_key = "{}_{}_{}_{}".format(self.args.output_prefix,
                                                           key, level, multiprocessing.current_process()._identity)
-            Encoder.builders[key] = indexed_dataset.make_builder(output_bin_files_key,
+            Encoder.builders[key] = indexed_dataset.make_builder(indexed_dataset.data_file_path(output_files_key),
                                                          impl=self.args.dataset_impl,
                                                          vocab_size=Encoder.tokenizer.vocab_size)
-            output_dataset_builders[key].append(output_bin_files_key)
+            output_dataset_builders[key].append(output_files_key)
 
     def encode(self, json_line):
         data = json.loads(json_line)
@@ -203,10 +204,9 @@ def main():
 
     print("Finished writing, time to index.")
     for key , bin_paths in output_dataset_builders.items():
-        output_bin_files_key = "{}_{}_{}.bin".format(args.output_prefix, key, level)
-        output_idx_files_key = "{}_{}_{}.idx".format(args.output_prefix, key, level)
+        output_files_key = "{}_{}_{}".format(args.output_prefix, key, level)
         builder = indexed_dataset.make_builder(
-            output_bin_files_key,
+            indexed_dataset.data_file_path(output_files_key),
             impl=args.dataset_impl,
             vocab_size=tokenizer.vocab_size
         )
@@ -215,11 +215,11 @@ def main():
         for bin_path in bin_paths:
             print(bin_path)
             builder.merge_file_(bin_path)
-        builder.finalize(output_idx_files_key)
+        builder.finalize(indexed_dataset.index_file_path(output_files_key))
 
         # Remove partial datasets
         for bin_path in bin_paths:
-            os.remove(bin_path)
+            os.remove(indexed_dataset.data_file_path(bin_path))
 
 
 if __name__ == '__main__':
