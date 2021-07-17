@@ -260,6 +260,9 @@ python pretrain_t5.py \
        --data-path $DATA_PATH
 </pre>
 
+## Using any pretrained tokenizer
+
+Thanks to @sbmaruf, any HF pretrained tokenizer may be used instead of the Megatron-provided BERT/GPT/T5 tokenizers. You'll need to run preprocessing yourself (`tools/preprocess_data.py`), using `tokenizer-type=PretrainedFromHF` and `tokenizer-name-or-path=<your_tokenizer>`. For example, `python tools/preprocess_data.py --input ~/c4_en_train.jsonl --output-prefix c4_en_train --dataset-impl mmap --tokenizer-type PretrainedFromHF --tokenizer-name-or-path t5-small --workers 30 --append-eod`
 
 ## Distributed Pretraining
 
