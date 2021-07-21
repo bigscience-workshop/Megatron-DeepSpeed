@@ -17,11 +17,12 @@
 import math
 import torch
 import torch.nn.functional as F
+from torch import nn
 
 from megatron import get_args
 from megatron import mpu
 from .module import MegatronModule
-from megatron.model.enums import AttnMaskType, LayerType, AttnType
+from megatron.model.enums import AttnMaskType, LayerType, AttnType, PositionalEmbedding
 from megatron.model import LayerNorm
 from megatron.model.fused_softmax import FusedScaleMaskSoftmax
 from megatron.model.fused_bias_gelu import bias_gelu_impl
@@ -30,6 +31,8 @@ from megatron.model.utils import attention_mask_func, openai_gelu, erf_gelu
 import deepspeed
 
 # flags required to enable jit fusion kernels
+from .positional_embeddings import RotaryEmbedding, apply_rotary_pos_emb_torch, apply_rotary_pos_emb
+
 torch._C._jit_set_profiling_mode(False)
 torch._C._jit_set_profiling_executor(False)
 torch._C._jit_override_can_fuse_on_cpu(True)
@@ -119,6 +122,7 @@ class ParallelAttention(MegatronModule):
         args = get_args()
         self.fp16 = args.fp16
         self.bf16 = args.bf16
+        self.position_embeddings = args.position_embeddings
 
         self.apply_query_key_layer_scaling = args.apply_query_key_layer_scaling
         self.attention_softmax_in_fp32 = args.attention_softmax_in_fp32
@@ -191,6 +195,9 @@ class ParallelAttention(MegatronModule):
             global get_cuda_rng_tracker, checkpoint
             get_cuda_rng_tracker = deepspeed.checkpointing.get_cuda_rng_tracker
             checkpoint = deepspeed.checkpointing.checkpoint
+
+        if self.position_embeddings == PositionalEmbedding.rotary:
+            self.rotary_emb = RotaryEmbedding(args.hidden_size, precision=args.params_dtype)
 
     def forward(self, hidden_states, attention_mask, layer_past=None,
                 get_key_value=False, encoder_output=None):
@@ -273,6 +280,19 @@ class ParallelAttention(MegatronModule):
             output_size[3],
             dtype=query_layer.dtype,
             device=torch.cuda.current_device())
+
+        # Rotary embeddings
+        if self.position_embeddings == PositionalEmbedding.rotary:
+            query_rot, key_rot = query_layer, key_layer
+            apply_rotary_fn = apply_rotary_pos_emb_torch if self.bf16 else apply_rotary_pos_emb
+
+            seq_len = key_layer.shape[0]
+            offset = 0
+            if layer_past is not None and layer_past.numel() > 0:
+                offset = layer_past[0].shape[0]
+                seq_len += offset
+            cos, sin = self.rotary_emb(value_layer, seq_len=seq_len)
+            query_layer, key_layer = apply_rotary_fn(query_rot, key_rot, cos, sin, offset=offset)
 
         # Raw attention scores. [b * np, sq, sk]
         matmul_result = torch.baddbmm(
