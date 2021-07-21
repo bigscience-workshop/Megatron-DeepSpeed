@@ -14,7 +14,7 @@
 # limitations under the License.
 
 import torch
-from megatron.model.enums import AttnMaskType
+from megatron.enums import AttnMaskType
 
 
 class ScaledUpperTriangMaskedSoftmax(torch.autograd.Function):

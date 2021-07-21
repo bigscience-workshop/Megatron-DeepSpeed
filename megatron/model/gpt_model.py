@@ -20,9 +20,9 @@ import torch
 
 from megatron import get_args
 from megatron import mpu
+from megatron.enums import AttnMaskType
 from .module import MegatronModule, fp32_to_float16
 
-from .enums import AttnMaskType
 from .language_model import parallel_lm_logits
 from .language_model import get_language_model
 from .utils import init_method_normal

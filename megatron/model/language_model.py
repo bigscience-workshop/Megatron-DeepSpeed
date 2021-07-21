@@ -21,7 +21,7 @@ import torch.nn.functional as F
 from megatron import get_args
 from megatron import mpu
 from .module import MegatronModule
-from megatron.model.enums import LayerType, AttnMaskType, PositionEmbeddingType
+from megatron.enums import LayerType, AttnMaskType, PositionEmbeddingType
 from megatron.model.transformer import ParallelTransformer
 from megatron.model.utils import get_linear_layer
 from megatron.model.utils import init_method_normal, scaled_init_method_normal
@@ -143,6 +143,8 @@ class Embedding(MegatronModule):
             self._position_embeddings_key = 'position_embeddings'
             # Initialize the position embeddings.
             self.init_method(self.position_embeddings.weight)
+        else:
+            self.position_embeddings = None
 
         # Token type embedding.
         # Add this as an optional field that can be added through
@@ -186,7 +188,7 @@ class Embedding(MegatronModule):
             assert self.position_embeddings is not None
             embeddings = embeddings + self.position_embeddings(position_ids)
         else:
-            assert self.position_embeddings is not None
+            assert self.position_embeddings is None
 
         if tokentype_ids is not None:
             assert self.tokentype_embeddings is not None

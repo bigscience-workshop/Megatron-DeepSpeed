@@ -22,7 +22,7 @@ from torch import nn
 from megatron import get_args
 from megatron import mpu
 from .module import MegatronModule
-from megatron.model.enums import AttnMaskType, LayerType, AttnType, PositionEmbeddingType
+from megatron.enums import AttnMaskType, LayerType, AttnType, PositionEmbeddingType
 from megatron.model import LayerNorm
 from megatron.model.fused_softmax import FusedScaleMaskSoftmax
 from megatron.model.fused_bias_gelu import bias_gelu_impl
@@ -198,8 +198,6 @@ class ParallelAttention(MegatronModule):
 
         if self.position_embedding_type == PositionEmbeddingType.rotary:
             self.rotary_emb = RotaryEmbedding(args.hidden_size, precision=args.params_dtype)
-        else:
-            raise ValueError("Temporary in order to make sure that argparser works perfectly.")
 
     def forward(self, hidden_states, attention_mask, layer_past=None,
                 get_key_value=False, encoder_output=None):
