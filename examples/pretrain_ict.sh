@@ -18,7 +18,7 @@ python pretrain_ict.py \
         --tensor-model-parallel-size 1 \
         --micro-batch-size 32 \
         --seq-length 256 \
-        --max-position-embeddings 512 \
+        --max-absolute-position-embeddings 512 \
         --train-iters 100000 \
         --vocab-file bert-vocab.txt \
         --tokenizer-type BertWordPieceLowerCase \

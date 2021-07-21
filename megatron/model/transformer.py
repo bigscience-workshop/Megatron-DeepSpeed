@@ -22,7 +22,7 @@ from torch import nn
 from megatron import get_args
 from megatron import mpu
 from .module import MegatronModule
-from megatron.model.enums import AttnMaskType, LayerType, AttnType, PositionalEmbedding
+from megatron.model.enums import AttnMaskType, LayerType, AttnType, PositionEmbeddingType
 from megatron.model import LayerNorm
 from megatron.model.fused_softmax import FusedScaleMaskSoftmax
 from megatron.model.fused_bias_gelu import bias_gelu_impl
@@ -122,7 +122,7 @@ class ParallelAttention(MegatronModule):
         args = get_args()
         self.fp16 = args.fp16
         self.bf16 = args.bf16
-        self.position_embeddings = args.position_embeddings
+        self.position_embedding_type = args.position_embedding_type
 
         self.apply_query_key_layer_scaling = args.apply_query_key_layer_scaling
         self.attention_softmax_in_fp32 = args.attention_softmax_in_fp32
@@ -196,7 +196,7 @@ class ParallelAttention(MegatronModule):
             get_cuda_rng_tracker = deepspeed.checkpointing.get_cuda_rng_tracker
             checkpoint = deepspeed.checkpointing.checkpoint
 
-        if self.position_embeddings == PositionalEmbedding.rotary:
+        if self.position_embedding_type == PositionEmbeddingType.rotary:
             self.rotary_emb = RotaryEmbedding(args.hidden_size, precision=args.params_dtype)
         else:
             raise ValueError("Temporary in order to make sure that argparser works perfectly.")
@@ -284,7 +284,7 @@ class ParallelAttention(MegatronModule):
             device=torch.cuda.current_device())
 
         # Rotary embeddings
-        if self.position_embeddings == PositionalEmbedding.rotary:
+        if self.position_embedding_type == PositionEmbeddingType.rotary:
             query_rot, key_rot = query_layer, key_layer
             apply_rotary_fn = apply_rotary_pos_emb_torch if self.bf16 else apply_rotary_pos_emb
 

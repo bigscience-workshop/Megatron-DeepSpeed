@@ -27,5 +27,6 @@ class AttnMaskType(enum.Enum):
     padding = 1
     causal = 2
 
-class PositionalEmbedding(enum.Enum):
+class PositionEmbeddingType(enum.Enum):
     rotary = 1
+    absolute = 2

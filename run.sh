@@ -76,7 +76,7 @@ options=" \
         --num-attention-heads 32 \
         --seq-length $SEQ \
         --loss-scale 12 \
-        --max-position-embeddings $SEQ \
+        --max-absolute-position-embeddings $SEQ \
 	--micro-batch-size $MICRO_BATCH \
 	--global-batch-size $GLOBAL_BATCH \
 	--train-iters 1000 \

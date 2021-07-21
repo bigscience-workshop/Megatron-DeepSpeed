@@ -22,7 +22,7 @@ options=" \
         --hidden-size 12288 \
         --num-attention-heads 96 \
         --seq-length 2048 \
-        --max-position-embeddings 2048 \
+        --max-absolute-position-embeddings 2048 \
 	--micro-batch-size 1 \
 	--global-batch-size 1536 \
 	--rampup-batch-size 16 16 5859375 \
