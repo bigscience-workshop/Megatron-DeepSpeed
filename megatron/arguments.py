@@ -21,6 +21,9 @@ import os
 import torch
 import deepspeed
 
+from megatron.model.enums import PositionalEmbedding
+
+
 def parse_args(extra_args_provider=None, defaults={},
                ignore_unknown_args=False):
     """Parse all arguments."""
@@ -301,6 +304,9 @@ def _add_network_size_args(parser):
     group.add_argument('--bert-no-binary-head', action='store_false',
                        help='Disable BERT binary head.',
                        dest='bert_binary_head')
+    group.add_argument('--positional-embeddings', type=PositionalEmbedding, choices=list(PositionalEmbedding),
+                       help='Define positional embeddings strategy.'
+                       )
 
     return parser
 

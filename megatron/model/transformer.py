@@ -30,9 +30,9 @@ from megatron.model.utils import attention_mask_func, openai_gelu, erf_gelu
 
 import deepspeed
 
-# flags required to enable jit fusion kernels
 from .positional_embeddings import RotaryEmbedding, apply_rotary_pos_emb_torch, apply_rotary_pos_emb
 
+# flags required to enable jit fusion kernels
 torch._C._jit_set_profiling_mode(False)
 torch._C._jit_set_profiling_executor(False)
 torch._C._jit_override_can_fuse_on_cpu(True)
@@ -198,6 +198,8 @@ class ParallelAttention(MegatronModule):
 
         if self.position_embeddings == PositionalEmbedding.rotary:
             self.rotary_emb = RotaryEmbedding(args.hidden_size, precision=args.params_dtype)
+        else:
+            raise ValueError("Temporary in order to make sure that argparser works perfectly.")
 
     def forward(self, hidden_states, attention_mask, layer_past=None,
                 get_key_value=False, encoder_output=None):
