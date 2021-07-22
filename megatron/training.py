@@ -43,7 +43,7 @@ from megatron.initialize import initialize_megatron
 from megatron.initialize import write_args_to_tensorboard
 from megatron.learning_rates import AnnealingLR
 from megatron.model import DistributedDataParallel as LocalDDP
-from megatron.utils import check_adlr_autoresume_termination
+from megatron.utils import check_adlr_autoresume_termination, get_parameters_in_billions
 from megatron.utils import unwrap_model
 from megatron.data.data_samplers import build_pretraining_data_loader
 from megatron.utils import calc_params_l2_norm
@@ -113,6 +113,7 @@ def pretrain(train_valid_test_dataset_provider,
     # Model, optimizer, and learning rate.
     timers('model-and-optimizer-setup').start()
     model, optimizer, lr_scheduler = setup_model_and_optimizer(model_provider)
+    print(get_parameters_in_billions(model))
     timers('model-and-optimizer-setup').stop()
     print_datetime('after model, optimizer, and learning rate '
                    'scheduler are built')
@@ -545,7 +546,7 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
                        total_loss_dict[skipped_iters_key]
 
     # Tensorboard values.
-    if writer and (iteration % args.tensorboard_log_interval == 0 ) and \
+    if writer and (iteration % args.tensorboard_log_interval == 0) and \
        is_last_rank():
         if args.log_learning_rate_to_tensorboard:
             writer.add_scalar('learning-rate', learning_rate, iteration)
@@ -642,6 +643,7 @@ def save_checkpoint_and_time(iteration, model, optimizer, lr_scheduler):
 def train(forward_step_func, model, optimizer, lr_scheduler,
           train_data_iterator, valid_data_iterator):
     """Train the model function."""
+    print(sum(p.numel() for submodel in model for p in submodel.parameters() if p.requires_grad))
     args = get_args()
     timers = get_timers()
 
@@ -670,9 +672,11 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
                        optimizer,
                        lr_scheduler)
         iteration += 1
-        args.consumed_train_samples += mpu.get_data_parallel_world_size() * \
+        new_samples = mpu.get_data_parallel_world_size() * \
                                        args.micro_batch_size * \
                                        get_num_microbatches()
+        args.consumed_train_samples += new_samples
+        args.total_gigaflos += (6 * new_samples * args.seq_length * get_parameters_in_billions(model))
 
         # Logging.
         if args.deepspeed:
@@ -807,6 +811,9 @@ def evaluate_and_print_results(prefix, forward_step_func,
             writer.add_scalar('{} validation vs samples'.format(key),
                               total_loss_dict[key].item(),
                               args.consumed_train_samples)
+            writer.add_scalar('{} validation vs gigaflos'.format(key),
+                              total_loss_dict[key].item(),
+                              args.total_gigaflos)
             if args.log_validation_ppl_to_tensorboard:
                 writer.add_scalar('{} validation ppl'.format(key), ppl,
                                   iteration)
