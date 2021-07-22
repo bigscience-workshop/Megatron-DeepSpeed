@@ -24,9 +24,9 @@ class RotaryEmbedding(torch.nn.Module):
             emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
             if self.precision == torch.bfloat16:
                 emb = emb.float()
-            # [sx, 1 (b), 1 (np), hn]
-            self.cos_cached = emb.cos()[:, None, None, :]
-            self.sin_cached = emb.sin()[:, None, None, :]
+            # [sx, 1 (b * np), hn]
+            self.cos_cached = emb.cos()[:, None, :]
+            self.sin_cached = emb.sin()[:, None, :]
             if self.precision == torch.bfloat16:
                 self.cos_cached = self.cos_cached.bfloat16()
                 self.sin_cached = self.sin_cached.bfloat16()
@@ -43,6 +43,7 @@ def rotate_half(x):
 @torch.jit.script
 def apply_rotary_pos_emb(q, k, cos, sin, offset: int = 0):
     cos, sin = cos[offset:q.shape[0] + offset, ...], sin[offset:q.shape[0] + offset, ...]
+    print(cos.shape, sin.shape, q.shape, k.shape)
     return (q * cos) + (rotate_half(q) * sin), (k * cos) + (rotate_half(k) * sin)
 
 

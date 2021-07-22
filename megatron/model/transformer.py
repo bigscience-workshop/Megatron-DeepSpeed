@@ -283,7 +283,6 @@ class ParallelAttention(MegatronModule):
 
         # Rotary embeddings
         if self.position_embedding_type == PositionEmbeddingType.rotary:
-            query_rot, key_rot = query_layer, key_layer
             apply_rotary_fn = apply_rotary_pos_emb_torch if self.bf16 else apply_rotary_pos_emb
 
             seq_len = key_layer.shape[0]
@@ -292,7 +291,7 @@ class ParallelAttention(MegatronModule):
                 offset = layer_past[0].shape[0]
                 seq_len += offset
             cos, sin = self.rotary_emb(value_layer, seq_len=seq_len)
-            query_layer, key_layer = apply_rotary_fn(query_rot, key_rot, cos, sin, offset=offset)
+            query_layer, key_layer = apply_rotary_fn(query_layer, key_layer, cos, sin, offset=offset)
 
         # Raw attention scores. [b * np, sq, sk]
         matmul_result = torch.baddbmm(
