@@ -197,7 +197,7 @@ class ParallelAttention(MegatronModule):
             checkpoint = deepspeed.checkpointing.checkpoint
 
         if self.position_embedding_type == PositionEmbeddingType.rotary:
-            self.rotary_emb = RotaryEmbedding(args.hidden_size, precision=args.params_dtype)
+            self.rotary_emb = RotaryEmbedding(self.hidden_size_per_attention_head, precision=args.params_dtype)
 
     def forward(self, hidden_states, attention_mask, layer_past=None,
                 get_key_value=False, encoder_output=None):
