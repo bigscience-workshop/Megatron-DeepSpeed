@@ -27,6 +27,7 @@ python -m torch.distributed.launch $DISTRIBUTED_ARGS \
        --global-batch-size 2048 \
        --seq-length 512 \
        --max-absolute-position-embeddings 512 \
+       --position-embedding-type absolute \
        --train-iters 1000000 \
        --lr-decay-iters 1000000 \
        --save $CHECKPOINT_PATH \

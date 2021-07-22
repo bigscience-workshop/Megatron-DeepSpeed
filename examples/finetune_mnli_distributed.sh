@@ -35,6 +35,7 @@ python -m torch.distributed.launch $DISTRIBUTED_ARGS ./tasks/main.py \
                --lr-warmup-fraction 0.065 \
                --seq-length 512 \
                --max-absolute-position-embeddings 512 \
+               --position-embedding-type absolute \
                --save-interval 500000 \
                --save $CHECKPOINT_PATH \
                --log-interval 10 \

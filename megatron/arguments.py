@@ -309,7 +309,7 @@ def _add_network_size_args(parser):
                        help='Disable BERT binary head.',
                        dest='bert_binary_head')
     group.add_argument('--position-embedding-type', type=lambda x: PositionEmbeddingType[x], choices=list(PositionEmbeddingType),
-                       help='Define position embedding type.'
+                       help='Define position embedding type ("absolute" | "rotary").'
                        )
 
     return parser

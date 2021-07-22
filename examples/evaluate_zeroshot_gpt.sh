@@ -32,6 +32,7 @@ python -m torch.distributed.launch $DISTRIBUTED_ARGS ./tasks/main.py \
                --checkpoint-activations \
                --seq-length 1024 \
                --max-absolute-position-embeddings 1024 \
+               --position-embedding-type absolute \
                --log-interval 10 \
                --fp16 \
                --no-load-optim \

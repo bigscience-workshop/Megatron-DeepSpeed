@@ -17,6 +17,7 @@ deepspeed --num_gpus 1 pretrain_gpt.py \
        --global-batch-size 8 \
        --seq-length 256 \
        --max-absolute-position-embeddings 256 \
+       --position-embedding-type absolute \
        --train-iters 10000 \
        --lr-decay-iters 5000 \
        --save $CHECKPOINT_PATH \

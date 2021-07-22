@@ -23,6 +23,7 @@ options=" \
         --num-attention-heads 96 \
         --seq-length 2048 \
         --max-absolute-position-embeddings 2048 \
+        --position-embedding-type absolute \
 	--micro-batch-size 1 \
 	--global-batch-size 1536 \
 	--rampup-batch-size 16 16 5859375 \

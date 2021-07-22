@@ -77,6 +77,7 @@ options=" \
         --seq-length $SEQ \
         --loss-scale 12 \
         --max-absolute-position-embeddings $SEQ \
+        --position-embedding-type absolute \
 	--micro-batch-size $MICRO_BATCH \
 	--global-batch-size $GLOBAL_BATCH \
 	--train-iters 1000 \
