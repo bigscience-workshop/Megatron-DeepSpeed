@@ -16,7 +16,7 @@ class RotaryEmbedding(torch.nn.Module):
     def forward(self, x, seq_dim=1, seq_len=None):
         if seq_len is None:
             seq_len = x.shape[seq_dim]
-        if seq_len > self.max_seq_len_cached:
+        if self.max_seq_len_cached is None or (seq_len > self.max_seq_len_cached):
             self.max_seq_len_cached = seq_len
             t = torch.arange(seq_len, device=x.device, dtype=self.inv_freq)
             freqs = torch.einsum('i,j->ij', t, self.inv_freq)
