@@ -93,8 +93,10 @@ class Encoder(object):
 def get_args():
     parser = argparse.ArgumentParser()
     group = parser.add_argument_group(title='input data')
-    group.add_argument('--input', type=str, required=True,
+    group.add_argument('--input', type=str, default=None,
                        help='Path to input JSON')
+    group.add_argument('--datasets', nargs='+', default=None,
+                       help='Paths to one or more input datasets to merge')
     group.add_argument('--json-keys', nargs='+', default=['text'],
                        help='space separate listed of keys to extract from json')
     group.add_argument('--split-sentences', action='store_true',
@@ -103,7 +105,7 @@ def get_args():
                        help='Keep newlines between sentences when splitting.')
 
     group = parser.add_argument_group(title='tokenizer')
-    group.add_argument('--tokenizer-type', type=str, required=True,
+    group.add_argument('--tokenizer-type', type=str, default=None, required=True,
                        choices=['BertWordPieceLowerCase','BertWordPieceCase',
                                 'GPT2BPETokenizer', 'PretrainedFromHF'],
                        help='What type of tokenizer to use.')
@@ -113,7 +115,7 @@ def get_args():
                        help='Path to the BPE merge file (if necessary).')
     group.add_argument('--append-eod', action='store_true',
                        help='Append an <eod> token to the end of a document.')
-    group.add_argument("--tokenizer-name-or-path", type=str, default=None, 
+    group.add_argument("--tokenizer-name-or-path", type=str, default=None,
                        help="Name or path of the huggingface tokenizer.")
 
     group = parser.add_argument_group(title='output data')
@@ -130,6 +132,13 @@ def get_args():
     args = parser.parse_args()
     args.keep_empty = False
 
+    if args.input is None and args.datasets is None:
+      raise RuntimeError("Either an input file or one or more datasets to merge must be provided.")
+    if args.input is not None and args.datasets is not None:
+      raise RuntimeError("Both input and datasets are set. Either an input file is processed or a list of datasets are merged, but not both.")
+    if args.datasets is not None and len(args.json_keys) > 1:
+      raise RuntimeError("Merging datasets are performed only for one key at a time.")
+
     if args.tokenizer_type.lower().startswith('bert'):
         if not args.split_sentences:
             print("Bert tokenizer detected, are you sure you don't want to split sentences?")
@@ -145,60 +154,91 @@ def get_args():
 def main():
     args = get_args()
     startup_start = time.time()
+    if args.datasets is not None:
+      print("Merging",args.datasets)
+      tokenizer = build_tokenizer(args)
+      level = "document"
+      if args.split_sentences:
+          level = "sentence"
+      print(f"Vocab size: {tokenizer.vocab_size}")
+      print(f"Output prefix: {args.output_prefix}")
+      output_bin_files = {}
+      output_idx_files = {}
+      builders = {}
+      for key in args.json_keys:
+          output_bin_files[key] = "{}_{}_{}.bin".format(args.output_prefix,
+                                                        key, level)
+          output_idx_files[key] = "{}_{}_{}.idx".format(args.output_prefix,
+                                                        key, level)
 
-    print("Opening", args.input)
-    fin = open(args.input, 'r', encoding='utf-8')
+          builders[key] = indexed_dataset.make_builder(output_bin_files[key],
+                                                impl=args.dataset_impl,
+                                                vocab_size=tokenizer.vocab_size)
+          for dataset in args.datasets:
+            builders[key].merge_file_(dataset)
 
-    if nltk_available and args.split_sentences:
-        nltk.download("punkt", quiet=True)
+      startup_end = time.time()
+      print("Time to merge:", startup_end - startup_start)
 
-    encoder = Encoder(args)
-    tokenizer = build_tokenizer(args)
-    pool = multiprocessing.Pool(args.workers, initializer=encoder.initializer)
-    encoded_docs = pool.imap(encoder.encode, fin, 25)
-    #encoded_docs = map(encoder.encode, fin)
+      for key in args.json_keys:
+          builders[key].finalize(output_idx_files[key])
 
-    level = "document"
-    if args.split_sentences:
-        level = "sentence"
+      print(f"Merged {len(args.datasets)} datasets to {args.output_prefix}")
 
-    print(f"Vocab size: {tokenizer.vocab_size}")
-    print(f"Output prefix: {args.output_prefix}")
-    output_bin_files = {}
-    output_idx_files = {}
-    builders = {}
-    for key in args.json_keys:
-        output_bin_files[key] = "{}_{}_{}.bin".format(args.output_prefix,
-                                                      key, level)
-        output_idx_files[key] = "{}_{}_{}.idx".format(args.output_prefix,
-                                                      key, level)
-        builders[key] = indexed_dataset.make_builder(output_bin_files[key],
-                                               impl=args.dataset_impl,
-                                               vocab_size=tokenizer.vocab_size)
+    else:
+      print("Opening", args.input)
+      fin = open(args.input, 'r', encoding='utf-8')
 
-    startup_end = time.time()
-    proc_start = time.time()
-    total_bytes_processed = 0
-    print("Time to startup:", startup_end - startup_start)
+      if nltk_available and args.split_sentences:
+          nltk.download("punkt", quiet=True)
 
-    for i, (doc, bytes_processed) in enumerate(encoded_docs, start=1):
-        total_bytes_processed += bytes_processed
-        for key, sentences in doc.items():
-            if len(sentences) == 0:
-                continue
-            for sentence in sentences:
-                builders[key].add_item(torch.IntTensor(sentence))
-            builders[key].end_document()
-        if i % args.log_interval == 0:
-            current = time.time()
-            elapsed = current - proc_start
-            mbs = total_bytes_processed/elapsed/1024/1024
-            print(f"Processed {i} documents",
-                  f"({i/elapsed} docs/s, {mbs} MB/s).",
-                  file=sys.stderr)
+      encoder = Encoder(args)
+      tokenizer = build_tokenizer(args)
+      pool = multiprocessing.Pool(args.workers, initializer=encoder.initializer)
+      encoded_docs = pool.imap(encoder.encode, fin, 25)
+      #encoded_docs = map(encoder.encode, fin)
 
-    for key in args.json_keys:
-        builders[key].finalize(output_idx_files[key])
+      level = "document"
+      if args.split_sentences:
+          level = "sentence"
+
+      print(f"Vocab size: {tokenizer.vocab_size}")
+      print(f"Output prefix: {args.output_prefix}")
+      output_bin_files = {}
+      output_idx_files = {}
+      builders = {}
+      for key in args.json_keys:
+          output_bin_files[key] = "{}_{}_{}.bin".format(args.output_prefix,
+                                                        key, level)
+          output_idx_files[key] = "{}_{}_{}.idx".format(args.output_prefix,
+                                                        key, level)
+          builders[key] = indexed_dataset.make_builder(output_bin_files[key],
+                                                impl=args.dataset_impl,
+                                                vocab_size=tokenizer.vocab_size)
+
+      startup_end = time.time()
+      proc_start = time.time()
+      total_bytes_processed = 0
+      print("Time to startup:", startup_end - startup_start)
+
+      for i, (doc, bytes_processed) in enumerate(encoded_docs, start=1):
+          total_bytes_processed += bytes_processed
+          for key, sentences in doc.items():
+              if len(sentences) == 0:
+                  continue
+              for sentence in sentences:
+                  builders[key].add_item(torch.IntTensor(sentence))
+              builders[key].end_document()
+          if i % args.log_interval == 0:
+              current = time.time()
+              elapsed = current - proc_start
+              mbs = total_bytes_processed/elapsed/1024/1024
+              print(f"Processed {i} documents",
+                    f"({i/elapsed} docs/s, {mbs} MB/s).",
+                    file=sys.stderr)
+
+      for key in args.json_keys:
+          builders[key].finalize(output_idx_files[key])
 
 if __name__ == '__main__':
     main()
