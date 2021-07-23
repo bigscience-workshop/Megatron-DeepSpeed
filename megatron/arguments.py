@@ -202,7 +202,7 @@ def parse_args(extra_args_provider=None, defaults={},
                 'and lr-warmup-samples'
 
     # Check required arguments.
-    required_args = ['num_layers', 'hidden_size', 'num_attention_heads', 'position_embedding_type']
+    required_args = ['num_layers', 'hidden_size', 'num_attention_heads']
     for req_arg in required_args:
         _check_arg_is_not_none(args, req_arg)
 
@@ -222,13 +222,13 @@ def parse_args(extra_args_provider=None, defaults={},
         args.seq_length = args.encoder_seq_length
 
     if args.position_embedding_type == PositionEmbeddingType.absolute:
-        assert args.max_absolute_position_embeddings is not None
+        assert args.max_position_embeddings is not None
         if args.seq_length is not None:
-            assert args.max_absolute_position_embeddings >= args.seq_length
+            assert args.max_position_embeddings >= args.seq_length
         if args.decoder_seq_length is not None:
-            assert args.max_absolute_position_embeddings >= args.decoder_seq_length
+            assert args.max_position_embeddings >= args.decoder_seq_length
     else:
-        assert args.max_absolute_position_embeddings is None
+        assert args.max_position_embeddings is None
 
     if args.lr is not None:
         assert args.min_lr <= args.lr
@@ -286,7 +286,7 @@ def _add_network_size_args(parser):
                        'attention. This is set to '
                        '   args.hidden_size // args.num_attention_heads '
                        'if not provided.')
-    group.add_argument('--max-absolute-position-embeddings', type=int, default=None,
+    group.add_argument('--max-position-embeddings', type=int, default=None,
                        help='Maximum number of position embeddings to use. '
                        'This is the size of position embedding.')
     group.add_argument('--make-vocab-size-divisible-by', type=int, default=128,
@@ -309,7 +309,8 @@ def _add_network_size_args(parser):
                        help='Disable BERT binary head.',
                        dest='bert_binary_head')
     group.add_argument('--position-embedding-type', type=lambda x: PositionEmbeddingType[x], choices=list(PositionEmbeddingType),
-                       help='Define position embedding type ("absolute" | "rotary").'
+                       default=PositionEmbeddingType.absolute,
+                       help='Define position embedding type ("absolute" | "rotary"). "absolute" by default.'
                        )
 
     return parser

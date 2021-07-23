@@ -22,8 +22,7 @@ python tasks/main.py \
     --micro-batch-size 128 \
     --checkpoint-activations \
     --seq-length 512 \
-    --max-absolute-position-embeddings 512 \
-    --position-embedding-type absolute \
+    --max-position-embeddings 512 \
     --load ${CHECKPOINT_PATH} \
     --evidence-data-path ${EVIDENCE_DATA_DIR} \
     --embedding-path ${EMBEDDING_PATH} \

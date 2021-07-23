@@ -10,8 +10,7 @@ python tools/generate_samples_gpt2.py \
        --hidden-size 1024 \
        --load $CHECKPOINT_PATH \
        --num-attention-heads 16 \
-       --max-absolute-position-embeddings 1024 \
-       --position-embedding-type absolute \
+       --max-position-embeddings 1024 \
        --tokenizer-type GPT2BPETokenizer \
        --fp16 \
        --batch-size 2 \

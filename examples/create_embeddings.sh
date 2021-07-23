@@ -20,8 +20,7 @@ python tools/create_doc_index.py \
     --checkpoint-activations \
     --seq-length 512 \
     --retriever-seq-length 256 \
-    --max-absolute-position-embeddings 512 \
-    --position-embedding-type absolute \
+    --max-position-embeddings 512 \
     --load ${CHECKPOINT_PATH} \
     --evidence-data-path ${EVIDENCE_DATA_DIR} \
     --embedding-path ${EMBEDDING_PATH} \

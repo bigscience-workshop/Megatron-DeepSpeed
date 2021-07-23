@@ -12,8 +12,7 @@ python pretrain_bert.py \
        --micro-batch-size 4 \
        --global-batch-size 8 \
        --seq-length 512 \
-       --max-absolute-position-embeddings 512 \
-       --position-embedding-type absolute \
+       --max-position-embeddings 512 \
        --train-iters 2000000 \
        --lr-decay-iters 990000 \
        --save $CHECKPOINT_PATH \

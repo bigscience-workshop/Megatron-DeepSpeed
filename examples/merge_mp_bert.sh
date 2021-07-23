@@ -14,6 +14,5 @@ WORLD_SIZE=$TENSOR_MODEL_PARALLEL_SIZE python tools/merge_mp_partitions.py \
                                 --hidden-size 1024 \
                                 --num-attention-heads 16 \
                                 --seq-length 512 \
-                                --max-absolute-position-embeddings 512 \
-                                --position-embedding-type absolute \
-                                --load $CHECKPOINT_PATH
+                                --max-position-embeddings 512 \
+                                                         --load $CHECKPOINT_PATH

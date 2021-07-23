@@ -225,7 +225,7 @@ def main():
     print('    number of attention heads ....... {}'.format(
         args.num_attention_heads))
     print('    maximum position embeddings ..... {}'.format(
-        args.max_absolute_position_embeddings))
+        args.max_position_embeddings))
 
     # Full model.
     print('> building the full model ...')

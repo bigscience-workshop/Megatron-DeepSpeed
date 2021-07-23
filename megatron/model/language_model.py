@@ -136,10 +136,10 @@ class Embedding(MegatronModule):
         # Position embedding (serial).
         self.position_embedding_type = args.position_embedding_type
         if self.position_embedding_type == PositionEmbeddingType.absolute:
-            max_absolute_position_embeddings = args.max_absolute_position_embeddings
-            assert max_absolute_position_embeddings is not None
+            max_position_embeddings = args.max_position_embeddings
+            assert max_position_embeddings is not None
             self.position_embeddings = torch.nn.Embedding(
-                max_absolute_position_embeddings, self.hidden_size)
+                max_position_embeddings, self.hidden_size)
             self._position_embeddings_key = 'position_embeddings'
             # Initialize the position embeddings.
             self.init_method(self.position_embeddings.weight)
