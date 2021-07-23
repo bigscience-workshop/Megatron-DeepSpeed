@@ -12,15 +12,26 @@ Please note that the rest of this page has been trimmed to only include the info
 
 # Setup
 
+1. Step 1
 ```
 git clone https://github.com/bigscience-workshop/Megatron-DeepSpeed
 cd Megatron-DeepSpeed
 pip install -r requirements.txt
 ```
 
+You can now use this repo directly by working directly from it. You don't need to install it unless you write your own scripts elsewhere that use the modules in this repo, in which case you may want to do:
+
+```
+pip install -e .
+```
+
+2. Step 2
+
 Then install `apex` and `deepspeed` either via their homepages, or as explained for [apex](
 https://github.com/bigscience-workshop/bigscience/tree/master/jz/envs#apex) and
 [deepspeed](https://github.com/bigscience-workshop/bigscience/tree/master/jz/envs#deepspeed). The instructions are for JZ, so you may need to adjust the scripts to your setup.
+
+The first time you run the training scripts several CUDA kernels will be compiled. Which means you need to have a cuda environment set up in your environment and it should match the version pytorch was built with.
 
 
 # Usage
