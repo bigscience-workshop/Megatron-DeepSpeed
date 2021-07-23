@@ -142,7 +142,7 @@ def main():
     parser.add_argument('--cache-dir', type=str, required=True,
                         help='Path to the cache dir. (The directory may require very large space)')
     parser.add_argument('--size-format', type=str, required=True,
-                        help='Calculation will be done either byte, mega-byte or tera-byte',
+                        help='Calculation will be done in byte, mega-byte, giga-byte or tera-byte',
                         choices=['B', 'MB', 'GB', 'TB'])
     parser.add_argument('--new-expected-size', type=int, required=True,
                         help='Total amount of data to be selected.')
