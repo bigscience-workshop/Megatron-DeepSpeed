@@ -183,5 +183,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-# python3 tools/c4_mc4/iterator_selection_prob.py --dataset_name mc4 --languages "ar" "sw" "zh" "zh-Latn" "ca" "fr" "hi" "ur" "bn" "id" "pt" "es" "ru" "ru-Latn" "ja" "am" --cache_dir ../c4/mc4_splits/
