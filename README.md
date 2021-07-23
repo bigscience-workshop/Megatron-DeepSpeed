@@ -80,6 +80,26 @@ The output will be two files named, in this case, `my-gpt2_text_document.bin` an
 Further command line arguments are described in the source file [`preprocess_data.py`](./tools/preprocess_data.py).
 
 
+**Merging datasets**
+
+Sometimes it's hard to work on a very large dataset at once, so one can pre-process it in chunks and then merge those datasets into a single combined indexed dataset. Here is an example:
+
+```
+python tools/preprocess_data.py \
+    --datasets \
+    meg-gpt2-oscar-en-500-p1_text_document \
+    meg-gpt2-oscar-en-500-p2_text_document \
+    meg-gpt2-oscar-en-500-p3_text_document \
+    --output-prefix meg-gpt2_oscar-combined \
+    --merge-file gpt2-merges.txt \
+    --vocab gpt2-vocab.json \
+    --dataset-impl mmap \
+    --tokenizer-type GPT2BPETokenizer
+```
+
+Just make sure to use the same arguments as the ones used to create the datasets, i.e, `--dataset-impl`, `--tokenizer-type`, etc.
+
+
 ## GPT Pretraining
 
 The `examples/pretrain_gpt.sh` script runs single GPU 345M parameter GPT pretraining. Debugging is the primary use for single GPU training, as the code base and command line arguments are optimized for highly distributed training. Most of the arguments are fairly self-explanatory. By default, the learning rate decays linearly over the training iterations starting at `--lr` to a minimum set by `--min-lr` over `--lr-decay-iters` iterations. The fraction of training iterations used for warmup is set by `--lr-warmup-fraction`. While this is single GPU training, the batch size specified by `--micro-batch-size` is a single forward-backward path batch-size and the code will perform gradient accumulation steps until it reaches `global-batch-size` whcih is the batch size per iteration.
