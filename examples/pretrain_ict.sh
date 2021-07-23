@@ -19,7 +19,7 @@ python pretrain_ict.py \
         --micro-batch-size 32 \
         --seq-length 256 \
         --max-position-embeddings 512 \
-         --train-iters 100000 \
+        --train-iters 100000 \
         --vocab-file bert-vocab.txt \
         --tokenizer-type BertWordPieceLowerCase \
         --DDP-impl torch \
