@@ -1,12 +1,10 @@
 # What is this fork of Megatron-LM and Megatron-DeepSpeed
 
-This is a fork of https://github.com/microsoft/Megatron-DeepSpeed, which in itself is a fork of https://github.com/NVIDIA/Megatron-LM. The former integrates DeepSpeed into the original Megatron-LM code.
+This is a detached fork of https://github.com/microsoft/Megatron-DeepSpeed, which in itself is a fork of https://github.com/NVIDIA/Megatron-LM. The former integrates DeepSpeed into the original Megatron-LM code.
 
 This fork in turn will include direct changes to the models needed for the BigScience project. This is the repo we use for this project.
 
 In addition various code bits and lots of docs are to be found at https://github.com/bigscience-workshop/bigscience.
-
-**Important**: **Forking this repo** If you need to fork this repo to your personal account, github won't let you if you already forked either https://github.com/microsoft/Megatron-DeepSpeed or https://github.com/NVIDIA/Megatron-LM, this is a [strange limitation of github](https://stackoverflow.com/questions/6675994/is-it-possible-to-fork-a-fork-in-github) that they don't seem to plan to fix. So if you have commit access to this repo you can use a PR branch instead. If you don't, then you will need to delete the previously existing fork (first making sure you don't lose any of your work in that fork), and then you can fork this repo. This also means that one can't PR only into all 3 repos becase PR requires a fork of each and github won't let you do it. That's a problem.
 
 Please note that the rest of this page has been trimmed to only include the info relevant to the BigScience project and also updated to usage with the integrated Deepspeed. You will find the original page with all the tables and training info on Bert and T5 [here](https://github.com/NVIDIA/Megatron-LM).
 
