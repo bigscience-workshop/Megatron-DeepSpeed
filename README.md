@@ -44,10 +44,10 @@ The GPT [vocab file](https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-vo
 ## Data Preprocessing
 
 The training data requires preprocessing. First, place your training data in a loose json format, with one json containing a text sample per line. For example:
-<pre>
+```
 {"src": "www.nvidia.com", "text": "The quick brown fox", "type": "Eng", "id": "0", "title": "First Part"}
 {"src": "The Internet", "text": "jumps over the lazy dog", "type": "Eng", "id": "42", "title": "Second Part"}
-</pre>
+```
 
 The name of the `text` field of the json can be changed by using the `--json-key` flag in [`preprocess_data.py`](./tools/preprocess_data.py) The other metadata are optional and are not used in training.
 
@@ -55,7 +55,7 @@ The loose json is then processed into a binary format for training. To convert t
 
 An example script to prepare data for GPT training is:
 
-<pre>
+```
 python tools/preprocess_data.py \
     --input my-corpus.json \
     --output-prefix my-gpt2 \
@@ -64,7 +64,7 @@ python tools/preprocess_data.py \
     --tokenizer-type GPT2BPETokenizer \
     --merge-file gpt2-merges.txt \
     --append-eod
-</pre>
+```
 
 The output will be two files named, in this case, `my-gpt2_text_document.bin` and `my-gpt2_text_document.idx`. The `--data-path` specified in later GPT training is the full path and new filename, but without the file extension.
 
@@ -77,13 +77,14 @@ The `examples/pretrain_gpt.sh` script runs single GPU 345M parameter GPT pretrai
 
 It follows largely the same format as the previous BERT script with a few notable differences: the tokenization scheme used is BPE (which requires a merge table and a `json` vocabulary file) instead of WordPiece, the model architecture allows for longer sequences (note that the max position embedding must be greater than or equal to the maximum sequence length), and the `--lr-decay-style` has been set to cosine decay.  Note that the `--data-path` now includes the additional `_text_document` suffix added in preprocessing, but does not include the file extensions.
 
-<pre>
+```
 CHECKPOINT_PATH=checkpoints/gpt2
 VOCAB_FILE=gpt2-vocab.json
 MERGE_FILE=gpt2-merges.txt
 DATA_PATH=my-gpt2_text_document
 
-GPT_ARGS="--num-layers 24 \
+GPT_ARGS=" \
+    --num-layers 24 \
     --hidden-size 1024 \
     --num-attention-heads 16 \
     --seq-length 1024 \
@@ -97,24 +98,31 @@ GPT_ARGS="--num-layers 24 \
     --vocab-file $VOCAB_FILE \
     --merge-file $MERGE_FILE \
     --lr-warmup-fraction .01 \
-    --fp16"
+    --fp16 \
+    "
 
-OUTPUT_ARGS="--log-interval 10 \
+OUTPUT_ARGS=" \
+    --log-interval 10 \
     --save-interval 500 \
     --eval-interval 100 \
     --eval-iters 10 \
-    --checkpoint-activations"
+    --checkpoint-activations \
+    "
 
 DATA_ARGS=" \
     --save $CHECKPOINT_PATH \
     --load $CHECKPOINT_PATH \
     --data-path $DATA_PATH \
     "
+
 CMD="pretrain_gpt.py $GPT_ARGS $OUTPUT_ARGS $DATA_ARGS"
-LAUNCHER="deepspeed --num_gpus 1"
+
+N_GPUS=1
+
+LAUNCHER="deepspeed --num_gpus $N_GPUS"
 
 $LAUNCHER $CMD
-</pre>
+```
 
 Note, we replaced `python` with `deepspeed --num_gpus 1`. For multi-gpu training update `--num_gpus` to the number of GPUs you have.
 
@@ -169,7 +177,7 @@ Distributed training:
 **see the details on how to do distributed training with the `deepspeed` launcher a few sections up**
 XXX: The following needs to be updated:
 
-<pre>
+```
 WORLD_SIZE=8
 TENSOR_MP_SIZE=2
 PIPELINE_MP_SIZE=2
@@ -195,7 +203,7 @@ python -m torch.distributed.launch $DISTRIBUTED_ARGS ./pretrain_<model>.py \
     --tensor-model-parallel-size $TENSOR_MP_SIZE \
     --pipeline-model-parallel-size $PIPELINE_MP_SIZE \
     --DDP-impl torch
-</pre>
+```
 
 ## GPT-3 Example
 
@@ -210,7 +218,7 @@ We provide several command line arguments, detailed in the scripts listed below,
 
 Because evaluation requires substantially less memory than training, it may be advantageous to merge a model trained in parallel for use on a single GPU in downstream tasks. The following script accomplishes this. Currently only tensor model parallelism is supported on input and pipeline model parallelsim on the output. This example reads in a model with 2-way tensor model parallelism and writes out a model with 2-way pipeline model parallelism.
 
-<pre>
+```
 TENSOR_MODEL_PARALLEL_SIZE=2
 TARGET_PIPELINE_MODEL_PARALLEL_SIZE=2
 
@@ -232,7 +240,7 @@ WORLD_SIZE=$TENSOR_MODEL_PARALLEL_SIZE python tools/merge_mp_partitions.py \
     --load $CHECKPOINT_PATH
     --save $CHECKPOINT_PATH/merged
 
-</pre>
+```
 
 Several downstream tasks are described for both GPT and BERT models below. They can be run in distributed and model parallel modes with the same changes used in the training scripts.
 
@@ -241,7 +249,7 @@ Several downstream tasks are described for both GPT and BERT models below. They 
 
 We generate text samples using largely the GPT pretraining script. Few changes need to make, such as we need to provide the path to the pretrained checkpoint, the length of the output samples, whether to generate texts unconditionally (`--num-samples` to denote how many samples to generate) or conditional (need to pass `--sample-input-file <filename>` where each line of the file will be used as the conditional texts). There are few optional parameters to play, e.g. `top-k`, `top-p`, or `greedy` (set top-k and top-p to 0) sampling..
 
-<pre>
+```
 CHECKPOINT_PATH=checkpoints/gpt2_345m
 VOCAB_FILE=gpt2-vocab.json
 MERGE_FILE=gpt2-merges.txt
@@ -262,7 +270,7 @@ python tools/generate_samples_gpt.py \
     --num-samples $NUMBER_OF_SAMPLES \
     --top_p $TOP_P \
     --recompute
-</pre>
+```
 
 ## GPT Evaluation
 We include example scripts for GPT evaluation on WikiText perplexity evaluation and LAMBADA Cloze accuracy.
@@ -271,7 +279,7 @@ We include example scripts for GPT evaluation on WikiText perplexity evaluation 
 For even comparison with prior works, we evaluate perplexity on the word-level [WikiText-103 test dataset](https://s3.amazonaws.com/research.metamind.io/wikitext/wikitext-103-v1.zip), and appropriately compute perplexity given the change in tokens when using our subword tokenizer.
 
 We use the following command to run WikiText-103 evaluation on a 345M parameter model.
-<pre>
+```
 TASK="WIKITEXT103"
 
 VALID_DATA=&#60;wikitext path&#62;.txt
@@ -279,7 +287,8 @@ VOCAB_FILE=gpt2-vocab.json
 MERGE_FILE=gpt2-merges.txt
 CHECKPOINT_PATH=checkpoints/gpt2_345m
 
-COMMON_TASK_ARGS="--num-layers 24 \
+COMMON_TASK_ARGS=" \
+    --num-layers 24 \
     --hidden-size 1024 \
     --num-attention-heads 16 \
     --seq-length 1024 \
@@ -299,4 +308,4 @@ python tasks/main.py \
     --log-interval 10 \
     --no-load-optim \
     --no-load-rng
-</pre>
+```
