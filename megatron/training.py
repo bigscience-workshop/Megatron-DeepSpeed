@@ -676,7 +676,7 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
                                        args.micro_batch_size * \
                                        get_num_microbatches()
         args.consumed_train_samples += new_samples
-        args.total_gigaflos += (6 * new_samples * args.seq_length * get_parameters_in_billions(model))
+        args.gigaflos_no_embeds += (6 * new_samples * args.seq_length * get_parameters_in_billions(model, exclude_embeddings=True))
 
         # Logging.
         if args.deepspeed:
@@ -811,9 +811,9 @@ def evaluate_and_print_results(prefix, forward_step_func,
             writer.add_scalar('{} validation vs samples'.format(key),
                               total_loss_dict[key].item(),
                               args.consumed_train_samples)
-            writer.add_scalar('{} validation vs gigaflos'.format(key),
+            writer.add_scalar('{} validation vs gigaflos (without embeddings)'.format(key),
                               total_loss_dict[key].item(),
-                              args.total_gigaflos)
+                              args.gigaflos_no_embeds)
             if args.log_validation_ppl_to_tensorboard:
                 writer.add_scalar('{} validation ppl'.format(key), ppl,
                                   iteration)

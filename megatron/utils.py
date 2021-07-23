@@ -18,6 +18,7 @@
 import sys
 
 import torch
+from torch import nn
 from torch.nn.parallel import DistributedDataParallel as torchDDP
 
 from apex.multi_tensor_apply import multi_tensor_applier
@@ -28,7 +29,7 @@ from megatron import print_rank_0
 from megatron import get_adlr_autoresume
 from megatron import mpu
 from megatron.model.module import param_is_not_shared
-from megatron.mpu.layers import param_is_not_tensor_parallel_duplicate
+from megatron.mpu.layers import param_is_not_tensor_parallel_duplicate, VocabParallelEmbedding
 from megatron import get_num_microbatches
 
 def unwrap_model(model, module_instances=(torchDDP)):
@@ -204,11 +205,24 @@ def get_ltor_masks_and_position_ids(data,
     return attention_mask, loss_mask, position_ids
 
 
-def get_parameters_in_billions(model):
+def non_embedding_params(module):
+    embedding_param_names = [
+        f"{name}.weight" for name, module_type in module.named_modules() if isinstance(module_type, nn.Embedding) or isinstance(module_type, VocabParallelEmbedding)
+    ]
+    non_embedding_parameters = [
+        parameter for name, parameter in module.named_parameters() if name not in embedding_param_names
+    ]
+    return sum(p.ds_numel if hasattr(p,'ds_id') else p.nelement() for p in non_embedding_parameters)
+
+
+def get_parameters_in_billions(model, exclude_embeddings=False):
     gpus_per_model = torch.distributed.get_world_size(group=mpu.get_model_parallel_group())
 
-    approx_parameters_in_billions = sum([sum([p.ds_numel if hasattr(p,'ds_id') else  p.nelement() for p in model_module.parameters()])
-                                        for model_module in model])
+    if exclude_embeddings:
+        approx_parameters_in_billions = sum([non_embedding_params(model_module) for model_module in model])
+    else:
+        approx_parameters_in_billions = sum([sum([p.ds_numel if hasattr(p,'ds_id') else p.nelement() for p in model_module.parameters()])
+                                            for model_module in model])
 
     return approx_parameters_in_billions*gpus_per_model/(1e9)
 
