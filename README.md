@@ -8,20 +8,20 @@ In addition various code bits and lots of docs are to be found at https://github
 
 **Important**: **Forking this repo** If you need to fork this repo to your personal account, github won't let you if you already forked either https://github.com/microsoft/Megatron-DeepSpeed or https://github.com/NVIDIA/Megatron-LM, this is a [strange limitation of github](https://stackoverflow.com/questions/6675994/is-it-possible-to-fork-a-fork-in-github) that they don't seem to plan to fix. So if you have commit access to this repo you can use a PR branch instead. If you don't, then you will need to delete the previously existing fork (first making sure you don't lose any of your work in that fork), and then you can fork this repo. This also means that one can't PR only into all 3 repos becase PR requires a fork of each and github won't let you do it. That's a problem.
 
-The rest of this page has been trimmed to only include the info relevant to the BigScience project and also updated to usage with integrated Deepspeed
+Please note that the rest of this page has been trimmed to only include the info relevant to the BigScience project and also updated to usage with the integrated Deepspeed. You will find the original page with all the tables and training info on Bert and T5 [here](https://github.com/NVIDIA/Megatron-LM).
 
 # Setup
 
-We have tested Megatron with [NGC's PyTorch container](https://ngc.nvidia.com/catalog/containers/nvidia:pytorch) version 20.12, which uses python 3.8, pytorch 1.8, cuda 11.1, and nccl 2.8.3.
+```
+git clone https://github.com/bigscience-workshop/Megatron-DeepSpeed
+cd Megatron-DeepSpeed
+pip install -r requirements.txt
+```
 
-To use this repository, please install the latest supported versions of PyTorch with GPU support (python 3.8, pytorch 1.8, cuda 11.1, and nccl 2.8.3 and above) and NVIDIA [APEX](https://github.com/NVIDIA/apex#quick-start). We strongly recommend using one of [NGC's recent PyTorch containers](https://ngc.nvidia.com/catalog/containers/nvidia:pytorch) (the latest compatible version at time of publication can be pulled with `docker pull nvcr.io/nvidia/pytorch:20.12-py3`). Data preprocessing requires [NLTK](https://www.nltk.org/install.html), though this is not required for training, evaluation, or downstream tasks.
+Then install `apex` and `deepspeed` either via their homepages, or as explained for [apex](
+https://github.com/bigscience-workshop/bigscience/tree/master/jz/envs#apex) and
+[deepspeed](https://github.com/bigscience-workshop/bigscience/tree/master/jz/envs#deepspeed). The instructions are for JZ, so you may need to adjust the scripts to your setup.
 
-<!--
-To use megatron you can either clone the repo or install it via pip (make sure python3-dev is installed):
-<pre>
-pip install megatron-lm
-</pre>
--->
 
 # Usage
 
@@ -57,13 +57,13 @@ An example script to prepare data for GPT training is:
 
 <pre>
 python tools/preprocess_data.py \
-       --input my-corpus.json \
-       --output-prefix my-gpt2 \
-       --vocab gpt2-vocab.json \
-       --dataset-impl mmap \
-       --tokenizer-type GPT2BPETokenizer \
-       --merge-file gpt2-merges.txt \
-       --append-eod
+    --input my-corpus.json \
+    --output-prefix my-gpt2 \
+    --vocab gpt2-vocab.json \
+    --dataset-impl mmap \
+    --tokenizer-type GPT2BPETokenizer \
+    --merge-file gpt2-merges.txt \
+    --append-eod
 </pre>
 
 The output will be two files named, in this case, `my-gpt2_text_document.bin` and `my-gpt2_text_document.idx`. The `--data-path` specified in later GPT training is the full path and new filename, but without the file extension.
@@ -84,26 +84,26 @@ MERGE_FILE=gpt2-merges.txt
 DATA_PATH=my-gpt2_text_document
 
 GPT_ARGS="--num-layers 24 \
-          --hidden-size 1024 \
-          --num-attention-heads 16 \
-          --seq-length 1024 \
-          --max-position-embeddings 1024 \
-          --micro-batch-size 4 \
-          --global-batch-size 8 \
-          --lr 0.00015 \
-          --train-iters 500000 \
-          --lr-decay-iters 320000 \
-          --lr-decay-style cosine \
-          --vocab-file $VOCAB_FILE \
-          --merge-file $MERGE_FILE \
-          --lr-warmup-fraction .01 \
-          --fp16"
+    --hidden-size 1024 \
+    --num-attention-heads 16 \
+    --seq-length 1024 \
+    --max-position-embeddings 1024 \
+    --micro-batch-size 4 \
+    --global-batch-size 8 \
+    --lr 0.00015 \
+    --train-iters 500000 \
+    --lr-decay-iters 320000 \
+    --lr-decay-style cosine \
+    --vocab-file $VOCAB_FILE \
+    --merge-file $MERGE_FILE \
+    --lr-warmup-fraction .01 \
+    --fp16"
 
 OUTPUT_ARGS="--log-interval 10 \
-             --save-interval 500 \
-             --eval-interval 100 \
-             --eval-iters 10 \
-             --checkpoint-activations"
+    --save-interval 500 \
+    --eval-interval 100 \
+    --eval-iters 10 \
+    --checkpoint-activations"
 
 DATA_ARGS=" \
     --save $CHECKPOINT_PATH \
@@ -138,7 +138,7 @@ export LAUNCHER="python -u -m torch.distributed.launch \
 srun --jobid $SLURM_JOBID bash -c '$LAUNCHER --node_rank $SLURM_PROCID $CMD'
 ```
 
-For a single GPU the other approach is to emulate distributed with:
+For a single GPU the other approach is to emulate `distributed` with:
 ```
 MASTER_ADDR=localhost MASTER_PORT=9994 RANK=0 LOCAL_RANK=0 python pretrain_gpt.py ...
 ```
@@ -166,7 +166,7 @@ Other than these minor changes, the distributed training is identical to the tra
 
 Distributed training:
 
-**see the details on how to use distributed with the `deepspeed` launcher a few sections up**
+**see the details on how to do distributed training with the `deepspeed` launcher a few sections up**
 XXX: The following needs to be updated:
 
 <pre>
@@ -175,10 +175,10 @@ TENSOR_MP_SIZE=2
 PIPELINE_MP_SIZE=2
 
 DISTRIBUTED_ARGS="--nproc_per_node $WORLD_SIZE \
-                  --nnodes 1 \
-                  --node_rank 0 \
-                  --master_addr localhost \
-                  --master_port 6000"
+    --nnodes 1 \
+    --node_rank 0 \
+    --master_addr localhost \
+    --master_port 6000"
 
 CHECKPOINT_PATH=&#60;same as above&#62;
 VOCAB_FILE=&#60;same as above&#62;
@@ -187,14 +187,14 @@ MODEL_ARGS=&#60;same as above&#62;
 OUTPUT_ARGS=&#60;same as above&#62;
 
 python -m torch.distributed.launch $DISTRIBUTED_ARGS ./pretrain_<model>.py \
-                $MODEL_ARGS \
-                $OUTPUT_ARGS \
-                --save $CHECKPOINT_PATH \
-                --load $CHECKPOINT_PATH \
-                --data-path $DATA_PATH \
-                --tensor-model-parallel-size $TENSOR_MP_SIZE \
-                --pipeline-model-parallel-size $PIPELINE_MP_SIZE \
-                --DDP-impl torch
+    $MODEL_ARGS \
+    $OUTPUT_ARGS \
+    --save $CHECKPOINT_PATH \
+    --load $CHECKPOINT_PATH \
+    --data-path $DATA_PATH \
+    --tensor-model-parallel-size $TENSOR_MP_SIZE \
+    --pipeline-model-parallel-size $PIPELINE_MP_SIZE \
+    --DDP-impl torch
 </pre>
 
 ## GPT-3 Example
@@ -218,19 +218,19 @@ VOCAB_FILE=bert-vocab.txt
 CHECKPOINT_PATH=checkpoints/bert_345m
 
 WORLD_SIZE=$TENSOR_MODEL_PARALLEL_SIZE python tools/merge_mp_partitions.py \
-        --model-type BERT \
-        --tensor-model-parallel-size $TENSOR_MODEL_PARALLEL_SIZE \
-        --pipeline-model-parallel-size 1 \
-        --target-pipeline-model-parallel-size $TARGET_PIPELINE_MODEL_PARALLEL_SIZE \
-        --tokenizer-type BertWordPieceLowerCase \
-        --vocab-file $VOCAB_FILE \
-        --num-layers 24 \
-        --hidden-size 1024 \
-        --num-attention-heads 16 \
-        --seq-length 512 \
-        --max-position-embeddings 512 \
-        --load $CHECKPOINT_PATH
-        --save $CHECKPOINT_PATH/merged
+    --model-type BERT \
+    --tensor-model-parallel-size $TENSOR_MODEL_PARALLEL_SIZE \
+    --pipeline-model-parallel-size 1 \
+    --target-pipeline-model-parallel-size $TARGET_PIPELINE_MODEL_PARALLEL_SIZE \
+    --tokenizer-type BertWordPieceLowerCase \
+    --vocab-file $VOCAB_FILE \
+    --num-layers 24 \
+    --hidden-size 1024 \
+    --num-attention-heads 16 \
+    --seq-length 512 \
+    --max-position-embeddings 512 \
+    --load $CHECKPOINT_PATH
+    --save $CHECKPOINT_PATH/merged
 
 </pre>
 
@@ -254,14 +254,14 @@ NUMBER_OF_SAMPLES=2
 OUTPUT_FILE=samples.json
 
 python tools/generate_samples_gpt.py \
-       $GPT_ARGS \
-       --load $CHECKPOINT_PATH \
-       --out-seq-length $MAX_OUTPUT_SEQUENCE_LENGTH \
-       --temperature $TEMPERATURE \
-       --genfile $OUTPUT_FILE \
-       --num-samples $NUMBER_OF_SAMPLES \
-       --top_p $TOP_P \
-       --recompute
+    $GPT_ARGS \
+    --load $CHECKPOINT_PATH \
+    --out-seq-length $MAX_OUTPUT_SEQUENCE_LENGTH \
+    --temperature $TEMPERATURE \
+    --genfile $OUTPUT_FILE \
+    --num-samples $NUMBER_OF_SAMPLES \
+    --top_p $TOP_P \
+    --recompute
 </pre>
 
 ## GPT Evaluation
@@ -280,23 +280,23 @@ MERGE_FILE=gpt2-merges.txt
 CHECKPOINT_PATH=checkpoints/gpt2_345m
 
 COMMON_TASK_ARGS="--num-layers 24 \
-                  --hidden-size 1024 \
-                  --num-attention-heads 16 \
-                  --seq-length 1024 \
-                  --max-position-embeddings 1024 \
-                  --fp16 \
-                  --vocab-file $VOCAB_FILE"
+    --hidden-size 1024 \
+    --num-attention-heads 16 \
+    --seq-length 1024 \
+    --max-position-embeddings 1024 \
+    --fp16 \
+    --vocab-file $VOCAB_FILE"
 
 python tasks/main.py \
-       --task $TASK \
-       $COMMON_TASK_ARGS \
-       --valid-data $VALID_DATA \
-       --tokenizer-type GPT2BPETokenizer \
-       --merge-file $MERGE_FILE \
-       --load $CHECKPOINT_PATH \
-       --micro-batch-size 8 \
-       --checkpoint-activations \
-       --log-interval 10 \
-       --no-load-optim \
-       --no-load-rng
+    --task $TASK \
+    $COMMON_TASK_ARGS \
+    --valid-data $VALID_DATA \
+    --tokenizer-type GPT2BPETokenizer \
+    --merge-file $MERGE_FILE \
+    --load $CHECKPOINT_PATH \
+    --micro-batch-size 8 \
+    --checkpoint-activations \
+    --log-interval 10 \
+    --no-load-optim \
+    --no-load-rng
 </pre>
