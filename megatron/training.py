@@ -110,10 +110,16 @@ def pretrain(train_valid_test_dataset_provider,
     args = get_args()
     timers = get_timers()
 
-    # XXX: hack-in for now - add cli arg
-    import codecarbon
-    cc_tracker = codecarbon.EmissionsTracker(output_dir=args.save)
-    cc_tracker.start()
+    # XXX: quick hack-in for now - add a clean wrapper later
+    if args.codecarbon_dir is not None:
+        import codecarbon
+        from pathlib import Path
+        print("CC START")
+
+        Path(args.codecarbon_dir).mkdir(parents=True, exist_ok=True)
+        output_file = f"emissions-{args.rank:03d}.csv"
+        cc_tracker = codecarbon.EmissionsTracker(output_dir=args.codecarbon_dir, output_file=output_file)
+        cc_tracker.start()
 
     # Model, optimizer, and learning rate.
     timers('model-and-optimizer-setup').start()
@@ -167,8 +173,11 @@ def pretrain(train_valid_test_dataset_provider,
                                    test_data_iterator, model,
                                    0, True)
 
-    # XXX: fixme
-    cc_tracker.stop()
+
+    # XXX: clean up
+    if args.codecarbon_dir is not None:
+        print("CC STOP")
+        cc_tracker.stop()
 
 def update_train_iters(args):
 
