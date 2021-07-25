@@ -30,6 +30,7 @@ def build_tokenizer(args):
 
     # Select and instantiate the tokenizer.
     assert args.vocab_file is not None or args.tokenizer_type == "PretrainedFromHF"
+    assert args.use_fast_tokenizer is False or args.tokenizer_type == "PretrainedFromHF"
     if args.tokenizer_type == 'BertWordPieceLowerCase':
         tokenizer = _BertWordPieceTokenizer(vocab_file=args.vocab_file,
                                             lower_case=True,
@@ -47,7 +48,7 @@ def build_tokenizer(args):
             " vocab file is un-used. loading tokenizer from pre-trained model",
             flush=True,
         )
-        tokenizer = _AutoTokenizer(args.tokenizer_name_or_path)
+        tokenizer = _AutoTokenizer(args.tokenizer_name_or_path, use_fast=args.use_fast_tokenizer)
     else:
         raise NotImplementedError('{} tokenizer is not '
                                   'implemented.'.format(args.tokenizer_type))
@@ -301,10 +302,10 @@ class _GPT2BPETokenizer(AbstractTokenizer):
 class _AutoTokenizer(AbstractTokenizer):
     """AutoTokenizer for Hf Pretrained model loading."""
 
-    def __init__(self, tokenizer_name_or_path):
+    def __init__(self, tokenizer_name_or_path, use_fast: bool):
         name = tokenizer_name_or_path
         super().__init__(name)
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path)
+        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, use_fast=use_fast)
         self.encoder = self.tokenizer.get_vocab()
         self.decoder = {v: k for k, v in self.encoder.items()}
 
