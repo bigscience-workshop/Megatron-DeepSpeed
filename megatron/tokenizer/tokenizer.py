@@ -103,6 +103,9 @@ class AbstractTokenizer(ABC):
     def tokenize(self, text):
         pass
 
+    def batch_tokenize(self, texts):
+        return [self.tokenize(text) for text in texts]
+
     def detokenize(self, token_ids):
         raise NotImplementedError('detokenizer is not implemented for {} '
                                   'tokenizer'.format(self.name))
@@ -322,6 +325,9 @@ class _AutoTokenizer(AbstractTokenizer):
 
     def tokenize(self, text):
         return self.tokenizer.encode(text)
+
+    def batch_tokenize(self, texts):
+        return self.tokenizer.batch_encode_plus(texts, return_attention_mask=False)["input_ids"]
 
     def detokenize(self, token_ids):
         return self.tokenizer.decode(token_ids)

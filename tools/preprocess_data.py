@@ -80,16 +80,17 @@ class Encoder(object):
         ids = {}
         for key in self.args.json_keys:
             text = data[key]
-            doc_ids = []
-            for sentence in Encoder.splitter.tokenize(text):
-                sentence_ids = Encoder.tokenizer.tokenize(sentence)
-                if len(sentence_ids) > 0:
-                    doc_ids.append(sentence_ids)
+            sentences = Encoder.splitter.tokenize(text)
+            doc_ids = [
+                sentence_ids
+                for sentence_ids in Encoder.tokenizer(sentences)
+                if len(sentence_ids) > 0
+            ]
             if len(doc_ids) > 0 and self.args.append_eod:
                 doc_ids[-1].append(Encoder.tokenizer.eod)
             ids[key] = doc_ids
         return ids, len(json_line)
-
+    
 def get_args():
     parser = argparse.ArgumentParser()
     group = parser.add_argument_group(title='input data')
