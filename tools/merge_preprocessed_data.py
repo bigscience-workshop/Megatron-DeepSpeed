@@ -38,7 +38,7 @@ def main():
     output_bin_file = data_file_path(output_filename)
     output_idx_file = index_file_path(output_filename)
     builder = indexed_dataset.make_builder(output_bin_file,
-                                           impl=infer_dataset_impl,
+                                           impl=dataset_impl,
                                            dtype=dtype)
     for dataset in args.datasets:
         builder.merge_file_(dataset)
