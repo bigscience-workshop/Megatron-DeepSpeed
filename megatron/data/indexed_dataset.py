@@ -18,10 +18,11 @@ from itertools import accumulate
 
 import numpy as np
 import torch
+
 from megatron import print_rank_0
 
 
-def __best_fitting_dtype(vocab_size=None):
+def best_fitting_dtype(vocab_size=None):
     if vocab_size is not None and vocab_size < 65500:
         return np.uint16
     else:
@@ -48,10 +49,12 @@ def infer_dataset_impl(path):
         return None
 
 
-def make_builder(out_file, impl, vocab_size=None):
+def make_builder(out_file, impl, dtype=None):
     if impl == 'mmap':
-        return MMapIndexedDatasetBuilder(out_file, dtype=__best_fitting_dtype(vocab_size))
+        assert dtype is not None
+        return MMapIndexedDatasetBuilder(out_file, dtype=dtype)
     else:
+        assert dtype is None
         return IndexedDatasetBuilder(out_file)
 
 
@@ -534,6 +537,10 @@ class MMapIndexedDataset(torch.utils.data.Dataset):
         return (
             os.path.exists(index_file_path(path)) and os.path.exists(data_file_path(path))
         )
+
+    @property
+    def dtype(self):
+        return self._index.dtype
 
 
 class MMapIndexedDatasetBuilder(object):
