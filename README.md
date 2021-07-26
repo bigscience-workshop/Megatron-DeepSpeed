@@ -10,7 +10,7 @@ Please note that the rest of this page has been trimmed to only include the info
 
 # Setup
 
-1. Step 1: install `bigscience-workshop/Megatron-DeepSpeed`
+1. Install `bigscience-workshop/Megatron-DeepSpeed`
 ```
 git clone https://github.com/bigscience-workshop/Megatron-DeepSpeed
 cd Megatron-DeepSpeed
@@ -23,7 +23,7 @@ You can now use this repo directly by working directly from it. You don't need t
 pip install -e .
 ```
 
-2. Step 2: install `apex`
+2. Install `apex`
 
 ```
 git clone https://github.com/NVIDIA/apex
@@ -33,7 +33,7 @@ pip install --global-option="--cpp_ext" --global-option="--cuda_ext" --no-cache 
 
 (on JZ it's done in a special way, see [here](https://github.com/bigscience-workshop/bigscience/tree/master/jz/envs#apex).)
 
-3. Step 3: install `deepspeed` / the `big-science` branch
+3. Install `deepspeed` / the `big-science` branch
 
 Then install the `big-science` branch of `deepspeed`:
 
@@ -50,7 +50,7 @@ adjust `TORCH_CUDA_ARCH_LIST="7.0"` to the architecture of your NVIDIA GPU (or j
 (on JZ it's done in a special way, see [here](https://github.com/bigscience-workshop/bigscience/tree/master/jz/envs#deepspeed).)
 
 
-3. Step 4: CUDA kernels compilation
+3. CUDA kernels compilation
 
 The first time you run the training scripts several CUDA kernels will be compiled. Which means you need to have a cuda environment set up in your environment and it should match the version pytorch was built with.
 
@@ -72,6 +72,7 @@ We've provided several scripts for pretraining both BERT and GPT in [`examples`]
 ## Vocab
 
 The GPT [vocab file](https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-vocab.json) and [merge table](https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-merges.txt) can be downloaded directly.
+
 
 ## Data Preprocessing
 
@@ -114,6 +115,25 @@ python tools/merge_preprocessed_data.py \
     meg-gpt2-oscar-en-500-p2_text_document \
     meg-gpt2-oscar-en-500-p3_text_document \
     --output-prefix meg-gpt2_oscar-combined
+```
+
+## Quick pre-processing to start training with
+
+Here is how you can get ready to train quickly, using a 1GB 79K-record jsonl dataset.
+
+```
+wget https://huggingface.co/bigscience/misc-test-data/resolve/main/stas/oscar-1GB.jsonl.xz
+wget https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-vocab.json
+wget https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-merges.txt
+xz -d oscar-1GB.jsonl.xz
+python tools/preprocess_data.py \
+    --input oscar-1GB.jsonl \
+    --output-prefix my-gpt2 \
+    --vocab gpt2-vocab.json \
+    --dataset-impl mmap \
+    --tokenizer-type GPT2BPETokenizer \
+    --merge-file gpt2-merges.txt \
+    --append-eod
 ```
 
 ## GPT Pretraining
