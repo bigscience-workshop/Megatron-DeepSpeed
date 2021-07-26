@@ -26,10 +26,12 @@ def main():
 
     print("Merging", args.datasets)
 
+    # We use the first dataset to infer the dataset implementation common to all datasets.
     dataset_impl = infer_dataset_impl(args.datasets[0])
     assert dataset_impl is not None
 
     first_dataset = indexed_dataset.make_dataset(args.datasets[0], dataset_impl)
+    # We use the first dataset to infer the dtype ncommon to all datasets.
     dtype = first_dataset.dtype if isinstance(first_dataset, MMapIndexedDataset) else None
 
     print(f"Output prefix: {args.output_prefix}")

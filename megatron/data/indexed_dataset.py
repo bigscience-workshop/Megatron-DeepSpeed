@@ -49,7 +49,7 @@ def infer_dataset_impl(path):
         return None
 
 
-def make_builder(out_file, impl, dtype = None):
+def make_builder(out_file, impl, dtype=None):
     if impl == 'mmap':
         assert dtype is not None
         return MMapIndexedDatasetBuilder(out_file, dtype=dtype)
