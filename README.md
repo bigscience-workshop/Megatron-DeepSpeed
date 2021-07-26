@@ -10,7 +10,7 @@ Please note that the rest of this page has been trimmed to only include the info
 
 # Setup
 
-1. Step 1
+1. Step 1: install `bigscience-workshop/Megatron-DeepSpeed`
 ```
 git clone https://github.com/bigscience-workshop/Megatron-DeepSpeed
 cd Megatron-DeepSpeed
@@ -23,11 +23,34 @@ You can now use this repo directly by working directly from it. You don't need t
 pip install -e .
 ```
 
-2. Step 2
+2. Step 2: install `apex`
 
-Then install `apex` and `deepspeed` either via their homepages, or as explained for [apex](
-https://github.com/bigscience-workshop/bigscience/tree/master/jz/envs#apex) and
-[deepspeed](https://github.com/bigscience-workshop/bigscience/tree/master/jz/envs#deepspeed). The instructions are for JZ, so you may need to adjust the scripts to your setup.
+```
+git clone https://github.com/NVIDIA/apex
+cd apex
+pip install --global-option="--cpp_ext" --global-option="--cuda_ext" --no-cache -v --disable-pip-version-check .  2>&1 | tee build.log
+```
+
+(on JZ it's done in a special way, see [here](https://github.com/bigscience-workshop/bigscience/tree/master/jz/envs#apex).)
+
+3. Step 3: install `deepspeed` / the `big-science` branch
+
+Then install the `big-science` branch of `deepspeed`:
+
+```
+git clone https://github.com/microsoft/deepspeed deepspeed-big-science
+cd deepspeed-big-science
+git checkout big-science
+rm -rf build
+TORCH_CUDA_ARCH_LIST="7.0" DS_BUILD_CPU_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 pip install -e . --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
+```
+
+adjust `TORCH_CUDA_ARCH_LIST="7.0"` to the architecture of your NVIDIA GPU (or just remove it altogether if you are not sure how to find one).
+
+(on JZ it's done in a special way, see [here](https://github.com/bigscience-workshop/bigscience/tree/master/jz/envs#deepspeed).)
+
+
+3. Step 4: CUDA kernels compilation
 
 The first time you run the training scripts several CUDA kernels will be compiled. Which means you need to have a cuda environment set up in your environment and it should match the version pytorch was built with.
 
