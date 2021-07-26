@@ -15,10 +15,7 @@ def get_args():
     group.add_argument('--output-prefix', type=str, required=True,
                        help='Path to binary output file without suffix')
 
-    args = parser.parse_args()
-
-    if args.datasets is not None and len(args.json_keys) > 1:
-      raise RuntimeError("Merging datasets are performed only for one key at a time.")
+    return parser.parse_args()
 
 def main():
     """
