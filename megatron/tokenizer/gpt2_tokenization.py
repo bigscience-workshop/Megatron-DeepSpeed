@@ -234,7 +234,7 @@ class GPT2Tokenizer(object):
         self.cache[token] = word
         return word
 
-def tokenize(self, text):
+    def tokenize(self, text):
         """ Tokenize a string. """
         bpe_tokens = []
         cache2 = self.cache2
