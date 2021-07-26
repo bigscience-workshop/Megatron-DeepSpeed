@@ -96,7 +96,8 @@ python tools/preprocess_data.py \
     --dataset-impl mmap \
     --tokenizer-type GPT2BPETokenizer \
     --merge-file gpt2-merges.txt \
-    --append-eod
+    --append-eod \
+    --workers 8
 ```
 
 The output will be two files named, in this case, `my-gpt2_text_document.bin` and `my-gpt2_text_document.idx`. The `--data-path` specified in later GPT training is the full path and new filename, but without the file extension.
@@ -133,7 +134,8 @@ python tools/preprocess_data.py \
     --dataset-impl mmap \
     --tokenizer-type GPT2BPETokenizer \
     --merge-file gpt2-merges.txt \
-    --append-eod
+    --append-eod \
+    --workers 8
 ```
 
 ## GPT Pretraining
