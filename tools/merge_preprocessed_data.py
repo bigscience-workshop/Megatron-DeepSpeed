@@ -2,7 +2,7 @@ import argparse
 import time
 
 from megatron.data import indexed_dataset
-from megatron.data.indexed_dataset import infer_dataset_impl, MMapIndexedDataset
+from megatron.data.indexed_dataset import infer_dataset_impl, MMapIndexedDataset, data_file_path, index_file_path
 
 
 def get_args():
@@ -35,21 +35,15 @@ def main():
     first_dataset = indexed_dataset.make_dataset(args.datasets[0], dataset_impl)
     dtype = first_dataset.dtype if isinstance(first_dataset, MMapIndexedDataset) else None
 
-
-    level = "document"
-    if args.split_sentences:
-        level = "sentence"
-
     print(f"Output prefix: {args.output_prefix}")
     output_bin_files = {}
     output_idx_files = {}
     builders = {}
     for key in args.json_keys:
-        output_bin_files[key] = "{}_{}_{}.bin".format(args.output_prefix,
-                                                      key, level)
-        output_idx_files[key] = "{}_{}_{}.idx".format(args.output_prefix,
-                                                      key, level)
-
+        # TODO: find a way to automatically detect if the level is document or text
+        output_filename = f"{args.output_prefix}_{key}"
+        output_bin_files[key] = data_file_path(output_filename)
+        output_idx_files[key] = index_file_path(output_filename)
         builders[key] = indexed_dataset.make_builder(output_bin_files[key],
                                                      impl=infer_dataset_impl,
                                                      dtype=dtype)

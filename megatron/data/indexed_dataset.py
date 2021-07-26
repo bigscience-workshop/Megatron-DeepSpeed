@@ -54,6 +54,7 @@ def make_builder(out_file, impl, dtype = None):
         assert dtype is not None
         return MMapIndexedDatasetBuilder(out_file, dtype=dtype)
     else:
+        assert dtype is None
         return IndexedDatasetBuilder(out_file)
 
 
