@@ -31,7 +31,7 @@ def main():
     assert dataset_impl is not None
 
     first_dataset = indexed_dataset.make_dataset(args.datasets[0], dataset_impl)
-    # We use the first dataset to infer the dtype ncommon to all datasets.
+    # We use the first dataset to infer the dtype common to all datasets.
     dtype = first_dataset.dtype if isinstance(first_dataset, MMapIndexedDataset) else None
 
     print(f"Output prefix: {args.output_prefix}")
