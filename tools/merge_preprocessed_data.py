@@ -36,25 +36,20 @@ def main():
     dtype = first_dataset.dtype if isinstance(first_dataset, MMapIndexedDataset) else None
 
     print(f"Output prefix: {args.output_prefix}")
-    output_bin_files = {}
-    output_idx_files = {}
-    builders = {}
-    for key in args.json_keys:
-        # TODO: find a way to automatically detect if the level is document or text
-        output_filename = f"{args.output_prefix}_{key}"
-        output_bin_files[key] = data_file_path(output_filename)
-        output_idx_files[key] = index_file_path(output_filename)
-        builders[key] = indexed_dataset.make_builder(output_bin_files[key],
-                                                     impl=infer_dataset_impl,
-                                                     dtype=dtype)
-        for dataset in args.datasets:
-            builders[key].merge_file_(dataset)
+
+    output_filename = args.output_prefix
+    output_bin_file = data_file_path(output_filename)
+    output_idx_file = index_file_path(output_filename)
+    builder = indexed_dataset.make_builder(output_bin_file,
+                                           impl=infer_dataset_impl,
+                                           dtype=dtype)
+    for dataset in args.datasets:
+        builder.merge_file_(dataset)
 
     startup_end = time.time()
     print("Time to merge:", startup_end - startup_start)
 
-    for key in args.json_keys:
-        builders[key].finalize(output_idx_files[key])
+    builder.finalize(output_idx_file)
 
     print(f"Merged {len(args.datasets)} datasets to {args.output_prefix}")
 
