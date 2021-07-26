@@ -2,7 +2,7 @@ import argparse
 import time
 
 from megatron.data import indexed_dataset
-from megatron.tokenizer import build_tokenizer
+from megatron.data.indexed_dataset import infer_dataset_impl, MMapIndexedDataset
 
 
 def get_args():
@@ -14,8 +14,6 @@ def get_args():
     group = parser.add_argument_group(title='output data')
     group.add_argument('--output-prefix', type=str, required=True,
                        help='Path to binary output file without suffix')
-    group.add_argument('--dataset-impl', type=str, default='mmap',
-                       choices=['lazy', 'cached', 'mmap'])
 
     args = parser.parse_args()
 
@@ -31,14 +29,17 @@ def main():
 
     print("Merging", args.datasets)
 
-    # TODO: Remove once we find a way to get vocab_size without loading the entire
-    tokenizer = build_tokenizer(args)
+    dataset_impl = infer_dataset_impl(args.datasets[0])
+    assert dataset_impl is not None
+
+    first_dataset = indexed_dataset.make_dataset(args.datasets[0], dataset_impl)
+    dtype = first_dataset.dtype if isinstance(first_dataset, MMapIndexedDataset) else None
+
 
     level = "document"
     if args.split_sentences:
         level = "sentence"
 
-    print(f"Vocab size: {tokenizer.vocab_size}")
     print(f"Output prefix: {args.output_prefix}")
     output_bin_files = {}
     output_idx_files = {}
@@ -50,8 +51,8 @@ def main():
                                                       key, level)
 
         builders[key] = indexed_dataset.make_builder(output_bin_files[key],
-                                                     impl=args.dataset_impl,
-                                                     vocab_size=tokenizer.vocab_size)
+                                                     impl=infer_dataset_impl,
+                                                     dtype=dtype)
         for dataset in args.datasets:
             builders[key].merge_file_(dataset)
 

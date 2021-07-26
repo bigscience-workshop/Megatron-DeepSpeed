@@ -85,16 +85,12 @@ Further command line arguments are described in the source file [`preprocess_dat
 Sometimes it's hard to work on a very large dataset at once, so one can pre-process it in chunks and then merge those datasets into a single combined indexed dataset. Here is an example:
 
 ```
-python tools/preprocess_data.py \
+python tools/merge_processed_data.py \
     --datasets \
     meg-gpt2-oscar-en-500-p1_text_document \
     meg-gpt2-oscar-en-500-p2_text_document \
     meg-gpt2-oscar-en-500-p3_text_document \
     --output-prefix meg-gpt2_oscar-combined \
-    --merge-file gpt2-merges.txt \
-    --vocab gpt2-vocab.json \
-    --dataset-impl mmap \
-    --tokenizer-type GPT2BPETokenizer
 ```
 
 Just make sure to use the same arguments as the ones used to create the datasets, i.e, `--dataset-impl`, `--tokenizer-type`, etc.

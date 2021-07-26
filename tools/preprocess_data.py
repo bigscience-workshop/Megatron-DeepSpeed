@@ -20,6 +20,9 @@ import json
 import multiprocessing
 import os
 import sys
+
+from megatron.data.indexed_dataset import best_fitting_dtype
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
                                              os.path.pardir)))
 import time
@@ -175,8 +178,8 @@ def main():
         output_idx_files[key] = "{}_{}_{}.idx".format(args.output_prefix,
                                                     key, level)
         builders[key] = indexed_dataset.make_builder(output_bin_files[key],
-                                            impl=args.dataset_impl,
-                                            vocab_size=tokenizer.vocab_size)
+                                                     impl=args.dataset_impl,
+                                                     dtype=best_fitting_dtype(tokenizer.vocab_size))
 
     startup_end = time.time()
     proc_start = time.time()
