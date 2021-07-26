@@ -165,6 +165,7 @@ class GPT2Tokenizer(object):
         bpe_merges = [tuple(merge.split()) for merge in bpe_data]
         self.bpe_ranks = dict(zip(bpe_merges, range(len(bpe_merges))))
         self.cache = {}
+        self.cache2 = {}
 
         # Should haved added re.IGNORECASE so BPE merges can happen for
         # capitalized versions of contractions
@@ -233,7 +234,25 @@ class GPT2Tokenizer(object):
         self.cache[token] = word
         return word
 
-    def tokenize(self, text):
+def tokenize(self, text):
+        """ Tokenize a string. """
+        bpe_tokens = []
+        cache2 = self.cache2
+        for token in re.findall(self.pat, text):
+            if token in cache2:
+              ret = cache2[token]
+              bpe_tokens.extend(ret)
+            else:
+              orig_token=token
+              len_orig_token = len(orig_token)
+              token = token.translate(self.byte_encoder)
+              ret = [bpe_token for bpe_token in self.bpe(token).split(' ')]
+              bpe_tokens.extend(ret)
+              if len_orig_token< 10:
+                cache2[orig_token] = ret
+        return bpe_tokens
+      
+    def tokenize_old(self, text):
         """ Tokenize a string. """
         bpe_tokens = []
         for token in re.findall(self.pat, text):
@@ -243,6 +262,7 @@ class GPT2Tokenizer(object):
                 token = ''.join(self.byte_encoder[b] for b in token.encode('utf-8'))
             bpe_tokens.extend(bpe_token for bpe_token in self.bpe(token).split(' '))
         return bpe_tokens
+      
 
     def convert_tokens_to_ids(self, tokens):
         """ Converts a sequence of tokens into ids using the vocab. """
