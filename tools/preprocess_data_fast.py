@@ -24,11 +24,10 @@ import os
 import sys
 import threading
 from multiprocessing.connection import Connection
-
-from megatron.data.indexed_dataset import index_file_path, data_file_path
-
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
                                              os.path.pardir)))
+from megatron.data.indexed_dataset import index_file_path, data_file_path
+
 import time
 
 import torch
