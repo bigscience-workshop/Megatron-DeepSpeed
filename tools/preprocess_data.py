@@ -1,3 +1,4 @@
+%%writefile /content/Megatron-DeepSpeed/tools/preprocess_data.py
 # coding=utf-8
 # Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -75,14 +76,34 @@ class Encoder(object):
 
         else:
             Encoder.splitter = IdentitySplitter()
-    
+
+
+    def encode(self, json_line):
+        data = json.loads(json_line)
+        ids = {}
+        for key in self.args.json_keys:
+            text = data[key]
+            doc_ids = []
+            for sentence in Encoder.splitter.tokenize(text):
+                if self.args.old_gpt_tokenize:
+                  sentence_ids = Encoder.tokenizer.tokenize_old(sentence)
+                else:
+                  sentence_ids = Encoder.tokenizer.tokenize(sentence)
+                if len(sentence_ids) > 0:
+                    doc_ids.append(sentence_ids)
+            if len(doc_ids) > 0 and self.args.append_eod:
+                doc_ids[-1].append(Encoder.tokenizer.eod)
+            ids[key] = doc_ids
+        return ids, len(json_line)
+
     # this depends on a queue in the main process to read the lines and write to disk
     def encode_yield(self, job):
       with  open(self.args.input, 'r', encoding='utf-8') as fin:
         fin.seek(job[0])
         all_jsonl = fin.readlines(job[1])
+      ret = []
       while all_jsonl:
-        json_line all_jsonl[0]
+        json_line = all_jsonl[0]
         all_jsonl = all_jsonl[1:]
         data = json.loads(json_line)
         ids = {}
@@ -90,13 +111,17 @@ class Encoder(object):
             text = data[key]
             doc_ids = []
             for sentence in Encoder.splitter.tokenize(text):
-                sentence_ids = Encoder.tokenizer.tokenize(sentence)
+                if self.args.old_gpt_tokenize:
+                  sentence_ids = Encoder.tokenizer.tokenize_old(sentence)
+                else:
+                  sentence_ids = Encoder.tokenizer.tokenize(sentence)
                 if len(sentence_ids) > 0:
                     doc_ids.append(sentence_ids)
             if len(doc_ids) > 0 and self.args.append_eod:
                 doc_ids[-1].append(Encoder.tokenizer.eod)
             ids[key] = doc_ids
-        yield ids, len(json_line)
+        ret.append((ids, len(json_line)))
+      return ret
 
     # this does writing to shard files, and then merge on disk
     def encode_shard(self, job):
@@ -117,8 +142,10 @@ class Encoder(object):
           builders[key] = indexed_dataset.make_builder(output_bin_files[key],
                                                 impl=self.args.dataset_impl,
                                                 vocab_size=Encoder.tokenizer.vocab_size)
+      num_docs=0
       while all_jsonl:
-        json_line all_jsonl[0]
+        num_docs += 1
+        json_line = all_jsonl[0]
         all_jsonl = all_jsonl[1:]
         data = json.loads(json_line)
         ids = {}
@@ -126,7 +153,10 @@ class Encoder(object):
             text = data[key]
             doc_ids = []
             for sentence in Encoder.splitter.tokenize(text):
-                sentence_ids = Encoder.tokenizer.tokenize(sentence)
+                if self.args.old_gpt_tokenize:
+                  sentence_ids = Encoder.tokenizer.tokenize_old(sentence)
+                else:
+                  sentence_ids = Encoder.tokenizer.tokenize(sentence)
                 if len(sentence_ids) > 0:
                     doc_ids.append(sentence_ids)
             if len(doc_ids) > 0 and self.args.append_eod:
@@ -143,16 +173,18 @@ class Encoder(object):
       for key in self.args.json_keys:
           builders[key].finalize(output_idx_files[key])
 
-      return [output_bin_files[key].replace(".bin", "") for key in self.args.json_keys], job[1]
+      return num_docs, [output_bin_files[key].replace(".bin", "") for key in self.args.json_keys], job[1]
 
 def get_args():
     parser = argparse.ArgumentParser()
     group = parser.add_argument_group(title='input data')
     group.add_argument('--input', type=str, default=None,
                        help='Path to input JSON')
-    group.add_argument('--shard_and_merge_input', type=bool, default=False,
-                       help='Shard the input and process in jobs, and then merge')
-    group.add_argument('--shard_size', type=int, default=100,
+    group.add_argument('--batch_encode', type=bool, default=False,
+                       help='Run the encoder workers on batches')
+    group.add_argument('--shard_and_merge_encode', type=bool, default=False,
+                       help='Shard the input and encode, and then merge')
+    group.add_argument('--shard_size', type=int, default=10,
                        help='Size of shards in MBs')
     group.add_argument('--datasets', nargs='+', default=None,
                        help='Paths to one or more input datasets to merge')
@@ -168,6 +200,8 @@ def get_args():
                        choices=['BertWordPieceLowerCase','BertWordPieceCase',
                                 'GPT2BPETokenizer', 'PretrainedFromHF'],
                        help='What type of tokenizer to use.')
+    group.add_argument('--old_gpt_tokenize', type=bool, default=False,
+                       help='Use the old gpt tokenize')
     group.add_argument('--vocab-file', type=str, default=None,
                        help='Path to the vocab file')
     group.add_argument('--merge-file', type=str, default=None,
@@ -191,6 +225,9 @@ def get_args():
     args = parser.parse_args()
     args.keep_empty = False
 
+    if args.old_gpt_tokenize and args.tokenizer_type != 'GPT2BPETokenizer':
+      print ("warning: old_gpt_tokenize only available for tokenizer-type == GPT2BPETokenizer")
+      args.old_gpt_tokenize = False
     if args.input is None and args.datasets is None:
       raise RuntimeError("Either an input file or one or more datasets to merge must be provided.")
     if args.input is not None and args.datasets is not None:
@@ -221,20 +258,20 @@ def get_file_shard_ranges(input_file_path, shard_size, num_proc, num_shards=None
           file_pos = 0
           while file_pos < file_size:
                 if file_size - file_pos <= shard_size:
-                    file_segs.append((file_pos, file_size))
+                    file_segs.append((file_pos, file_size-file_pos))
                     break
                 f.seek(file_pos+shard_size, 0)
                 seg_len = shard_size
                 line = f.readline()
                 if not line:
-                    file_segs.append((file_pos, file_size))
+                    file_segs.append((file_pos, file_size-file_pos))
                     break
                 seg_len += len(line)
                 if file_size-(file_pos+seg_len) < shard_size:
-                    file_segs.append((file_pos, file_size))
+                    file_segs.append((file_pos, file_size-file_pos))
                     break
 
-                file_segs.append((file_pos, file_pos + seg_len))
+                file_segs.append((file_pos, seg_len))
                 file_pos = f.tell()
           line = None
           return file_segs
@@ -262,21 +299,53 @@ def merge_by_key(key, args, vocab_size):
 def main():
     args = get_args()
     startup_start = time.time()
-    if args.input is not None:
+    if args.datasets is not None:
+      print("Merging",args.datasets)
+      tokenizer = build_tokenizer(args)
+      level = "document"
+      if args.split_sentences:
+          level = "sentence"
+      print(f"Vocab size: {tokenizer.vocab_size}")
+      print(f"Output prefix: {args.output_prefix}")
+      output_bin_files = {}
+      output_idx_files = {}
+      builders = {}
+      for key in args.json_keys:
+          output_bin_files[key] = "{}_{}_{}.bin".format(args.output_prefix,
+                                                        key, level)
+          output_idx_files[key] = "{}_{}_{}.idx".format(args.output_prefix,
+                                                        key, level)
+
+          builders[key] = indexed_dataset.make_builder(output_bin_files[key],
+                                                impl=args.dataset_impl,
+                                                vocab_size=tokenizer.vocab_size)
+          for dataset in args.datasets:
+            builders[key].merge_file_(dataset)
+
+      startup_end = time.time()
+      print("Time to merge:", startup_end - startup_start)
+
+      for key in args.json_keys:
+          builders[key].finalize(output_idx_files[key])
+
+      print(f"Merged {len(args.datasets)} datasets to {args.output_prefix}")
+    else:
       print("Opening", args.input)
       if nltk_available and args.split_sentences:
           nltk.download("punkt", quiet=True)
-      shards = get_file_shard_ranges(args.input, args.shard_size*1000000,  num_proc=args.workers) 
+      level = "document"
+      if args.split_sentences:
+          level = "sentence"
+
       encoder = Encoder(args)
       vocab_size = build_tokenizer(args).vocab_size
       pool = multiprocessing.Pool(args.workers, initializer=encoder.initializer)
-      if not args.shard_and_merge_input:
-        encoded_docs = pool.map_async(encoder.encode_yield, shards, chunksize=1)
-        level = "document"
-        if args.split_sentences:
-            level = "sentence"
-
-        print(f"Vocab size: {tokenizer.vocab_size}")
+      if not args.shard_and_merge_encode and not args.batch_encode:
+        print("Opening", args.input)
+        fin = open(args.input, 'r', encoding='utf-8')
+        encoded_docs = pool.imap(encoder.encode, fin, 25)
+        #encoded_docs = map(encoder.encode, fin)
+        print(f"Vocab size: {vocab_size}")
         print(f"Output prefix: {args.output_prefix}")
         output_bin_files = {}
         output_idx_files = {}
@@ -294,7 +363,52 @@ def main():
         proc_start = time.time()
         total_bytes_processed = 0
         print("Time to startup:", startup_end - startup_start)
-        for i, (doc, bytes_processed) in enumerate(encoded_docs.get(), start=1):
+
+        for i, (doc, bytes_processed) in enumerate(encoded_docs, start=1):
+            total_bytes_processed += bytes_processed
+            for key, sentences in doc.items():
+                if len(sentences) == 0:
+                    continue
+                for sentence in sentences:
+                    builders[key].add_item(torch.IntTensor(sentence))
+                builders[key].end_document()
+            if i % args.log_interval == 0:
+                current = time.time()
+                elapsed = current - proc_start
+                mbs = total_bytes_processed/elapsed/1024/1024
+                print(f"Processed {i} documents",
+                      f"({i/elapsed} docs/s, {mbs} MB/s).",
+                      file=sys.stderr)
+
+        for key in args.json_keys:
+            builders[key].finalize(output_idx_files[key])
+
+      elif args.batch_encode:
+        shards = get_file_shard_ranges(args.input, args.shard_size*1000000,  num_proc=args.workers) 
+        encoded_docs = pool.imap(encoder.encode_yield, shards, chunksize=1)
+
+        print(f"Vocab size: {vocab_size}")
+        print(f"Output prefix: {args.output_prefix}")
+        output_bin_files = {}
+        output_idx_files = {}
+        builders = {}
+        for key in args.json_keys:
+            output_bin_files[key] = "{}_{}_{}.bin".format(args.output_prefix,
+                                                          key, level)
+            output_idx_files[key] = "{}_{}_{}.idx".format(args.output_prefix,
+                                                          key, level)
+            builders[key] = indexed_dataset.make_builder(output_bin_files[key],
+                                                  impl=args.dataset_impl,
+                                                  vocab_size=vocab_size)
+
+        startup_end = time.time()
+        proc_start = time.time()
+        total_bytes_processed = 0
+        print("Time to startup:", startup_end - startup_start)
+        i = 0
+        for ret in encoded_docs:
+          for (doc, bytes_processed) in ret:
+            i+=1
             total_bytes_processed += bytes_processed
             for key, sentences in doc.items():
                 if len(sentences) == 0:
@@ -314,50 +428,55 @@ def main():
         pool.close()
         pool.join()
       else:
-        encoded_docs = pool.map_async(encoder.encode_shard, shards, chunksize=1)
-        builders = None
-        datasets =[]
+        shards = get_file_shard_ranges(args.input, args.shard_size*1000000,  num_proc=args.workers) 
+        encoded_docs = pool.imap(encoder.encode_shard, shards, chunksize=1)
+        print(f"Vocab size: {vocab_size}")
+        print(f"Output prefix: {args.output_prefix}")
+        args.datasets =[]
         startup_end = time.time()
         proc_start = time.time()
         total_bytes_processed = 0
         print("Time to startup:", startup_end - startup_start)
-        for i, (shard_files, bytes_processed) in enumerate(encoded_docs.get(), start=1):
+        total_docs=0
+        for i, (num_docs, shard_files, bytes_processed) in enumerate(encoded_docs, start=1):
+            total_docs+=num_docs
             args.datasets.extend(shard_files)  
             total_bytes_processed += bytes_processed
             if i % args.log_interval == 0:
                 current = time.time()
                 elapsed = current - proc_start
                 mbs = total_bytes_processed/elapsed/1024/1024
-                print(f"Processed {i} documents",
-                      f"({i/elapsed} docs/s, {mbs} MB/s).",
+                print(f"Processed {total_docs} documents",
+                      f"({total_docs/elapsed} docs/s, {mbs} MB/s).",
                       file=sys.stderr)
         pool.close()
         pool.join()
         # we could have done the merge incrementally but the dataset builder doesn't really do incremental merge efficiently
-        # now merge all the shards. 
         startup_start = time.time()
-        curr_keys = list(set([a.split("_")[1] for a in args.datasets]))
-        pool = multiprocessing.Pool(len(curr_keys))
-        pool.starmap_async(merge_by_key, curr_keys, [args]* len(curr_keys), [vocab_size]* len(curr_keys)).get()
-        pool.close()
-        pool.join()   
+        curr_keys = list(set([dataset.split(f"{args.output_prefix}_")[1] for dataset in args.datasets]))
+        output_bin_files = {}
+        output_idx_files = {}
+        builders = {}
+        for key in curr_keys:
+            output_bin_files[key] = "{}_{}_{}.bin".format(args.output_prefix,
+                                                          key, level)
+            output_idx_files[key] = "{}_{}_{}.idx".format(args.output_prefix,
+                                                          key, level)
+
+            builders[key] = indexed_dataset.make_builder(output_bin_files[key],
+                                                  impl=args.dataset_impl,
+                                                  vocab_size=vocab_size)
+            for dataset in args.datasets:
+              if dataset.startswith(f"{args.output_prefix}_{key}"):
+                builders[key].merge_file_(dataset)
+
         startup_end = time.time()
         print("Time to merge:", startup_end - startup_start)
-        print(f"Merged {len(args.datasets)} datasets to {args.output_prefix}")
 
-    elif args.datasets is not None:
-      print("Merging",args.datasets)
-      vocab_size = build_tokenizer(args).vocab_size
-      print(f"Vocab size: {tokenizer.vocab_size}")
-      print(f"Output prefix: {args.output_prefix}")
-      curr_keys = list(set([a.split("_")[1] for a in args.datasets]))
-      pool = multiprocessing.Pool(len(curr_keys))
-      pool.starmap_async(merge_by_key, curr_keys, [args]* len(curr_keys), [vocab_size]* len(curr_keys)).get()
-      pool.close()
-      pool.join()   
-      startup_end = time.time()
-      print("Time to merge:", startup_end - startup_start)
-      print(f"Merged {len(args.datasets)} datasets to {args.output_prefix}")
+        for key in curr_keys:
+            builders[key].finalize(output_idx_files[key])
+
+        print(f"Merged {len(args.datasets)} datasets to {args.output_prefix}")
 
 
 if __name__ == '__main__':
