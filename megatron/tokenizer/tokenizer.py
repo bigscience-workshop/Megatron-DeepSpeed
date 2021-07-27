@@ -290,6 +290,9 @@ class _GPT2BPETokenizer(AbstractTokenizer):
     def tokenize(self, text):
         return self.tokenizer.encode(text)
 
+    def tokenize_old(self, text):
+        return self.tokenizer.encode_old(text)
+        
     def detokenize(self, token_ids):
         return self.tokenizer.decode(token_ids)
 
@@ -304,7 +307,7 @@ class _AutoTokenizer(AbstractTokenizer):
     def __init__(self, tokenizer_name_or_path):
         name = tokenizer_name_or_path
         super().__init__(name)
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path)
+        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, use_fast=True)
         self.encoder = self.tokenizer.get_vocab()
         self.decoder = {v: k for k, v in self.encoder.items()}
 
