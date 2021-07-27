@@ -19,6 +19,8 @@ import os
 import sys
 import time
 
+from pathlib import Path
+
 import torch
 
 from megatron.tokenizer import build_tokenizer
@@ -29,9 +31,9 @@ _GLOBAL_ARGS = None
 _GLOBAL_NUM_MICROBATCHES_CALCULATOR = None
 _GLOBAL_TOKENIZER = None
 _GLOBAL_TENSORBOARD_WRITER = None
+_GLOBAL_CODECARBON_TRACKER = None
 _GLOBAL_ADLR_AUTORESUME = None
 _GLOBAL_TIMERS = None
-
 
 def get_args():
     """Return arguments."""
@@ -63,6 +65,10 @@ def get_tensorboard_writer():
     to check if it is initialized."""
     return _GLOBAL_TENSORBOARD_WRITER
 
+def get_codecarbon_tracker():
+    """Return codecarbon tracker. It can be None so no need
+    to check if it is initialized."""
+    return _GLOBAL_CODECARBON_TRACKER
 
 def get_adlr_autoresume():
     """ADLR autoresume object. It can be None so no need
@@ -86,6 +92,7 @@ def set_global_variables(extra_args_provider=None, args_defaults={},
     if args.vocab_file or args.tokenizer_name_or_path:
         _ = _build_tokenizer(args)
     _set_tensorboard_writer(args)
+    _set_codecarbon_tracker(args)
     _set_adlr_autoresume(args)
     _set_timers()
 
@@ -143,6 +150,58 @@ def _set_tensorboard_writer(args):
             print('WARNING: TensorBoard writing requested but is not '
                   'available (are you using PyTorch 1.1.0 or later?), '
                   'no TensorBoard logs will be written.', flush=True)
+
+
+def _set_codecarbon_tracker(args):
+    global _GLOBAL_CODECARBON_TRACKER
+    if hasattr(args, 'codecarbon_dir'):
+        import codecarbon
+        print('> setting codecarbon ...')
+        output_dir = args.codecarbon_dir
+        output_file = f"emissions-{args.rank:03d}.csv"
+        #log_level = "warning"
+        log_level = "info"
+        country_iso_code="FRA"
+
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        _GLOBAL_CODECARBON_TRACKER = codecarbon.OfflineEmissionsTracker(
+            output_dir=output_dir,
+            output_file=output_file,
+            log_level=log_level,
+            country_iso_code=country_iso_code,
+        )
+
+
+def codecarbon_tracker_start():
+    global _GLOBAL_CODECARBON_TRACKER
+    if _GLOBAL_CODECARBON_TRACKER is None:
+        return
+
+    print('codecarbon START')
+    _GLOBAL_CODECARBON_TRACKER.start()
+
+
+def codecarbon_tracker_stop():
+    global _GLOBAL_CODECARBON_TRACKER
+    if _GLOBAL_CODECARBON_TRACKER is None:
+        return
+
+    print('codecarbon STOP')
+    _GLOBAL_CODECARBON_TRACKER.stop()
+
+
+def codecarbon_tracker_restart():
+    global _GLOBAL_CODECARBON_TRACKER
+    if _GLOBAL_CODECARBON_TRACKER is None:
+        return
+
+    # output_dir = _GLOBAL_CODECARBON_TRACKER._output_dir
+    # output_file = _GLOBAL_CODECARBON_TRACKER._output_file
+    # log_level = _GLOBAL_CODECARBON_TRACKER._log_level
+    # country_iso_code = _GLOBAL_CODECARBON_TRACKER._country_iso_code
+
+    codecarbon_tracker_stop()
+    codecarbon_tracker_start()
 
 
 def _set_adlr_autoresume(args):

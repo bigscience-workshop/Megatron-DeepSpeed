@@ -51,6 +51,7 @@ from megatron.schedules import forward_backward_no_pipelining
 from megatron.schedules import forward_backward_pipelining_without_interleaving
 from megatron.schedules import forward_backward_pipelining_with_interleaving
 from megatron.utils import report_memory, flops_calculator
+from megatron.global_vars import codecarbon_tracker_start, codecarbon_tracker_stop
 
 import deepspeed
 
@@ -95,6 +96,8 @@ def pretrain(train_valid_test_dataset_provider,
     initialize_megatron(extra_args_provider=extra_args_provider,
                         args_defaults=args_defaults)
 
+    codecarbon_tracker_start()
+
     # Adjust the startup time so it reflects the largest value.
     # This will be closer to what scheduler will see (outside of
     # image ... launches.
@@ -109,20 +112,6 @@ def pretrain(train_valid_test_dataset_provider,
 
     args = get_args()
     timers = get_timers()
-
-    # XXX: quick hack-in for now - add a clean wrapper later
-    if args.codecarbon_dir is not None:
-        import codecarbon
-        from pathlib import Path
-        print("CC START")
-
-        Path(args.codecarbon_dir).mkdir(parents=True, exist_ok=True)
-        output_file = f"emissions-{args.rank:03d}.csv"
-        cc_tracker = codecarbon.OfflineEmissionsTracker(output_dir=args.codecarbon_dir,
-                                                        output_file=output_file,
-                                                        country_iso_code="FRA",
-        )
-        cc_tracker.start()
 
     # Model, optimizer, and learning rate.
     timers('model-and-optimizer-setup').start()
@@ -176,10 +165,7 @@ def pretrain(train_valid_test_dataset_provider,
                                    test_data_iterator, model,
                                    0, True)
 
-    # XXX: clean up
-    if args.codecarbon_dir is not None:
-        print("CC STOP")
-        cc_tracker.stop()
+    codecarbon_tracker_stop()
 
 
 def update_train_iters(args):
