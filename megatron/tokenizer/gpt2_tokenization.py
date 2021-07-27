@@ -160,13 +160,16 @@ class GPT2Tokenizer(object):
         self.decoder = {v: k for k, v in self.encoder.items()}
         self.errors = errors  # how to handle errors in decoding
         self.byte_encoder = bytes_to_unicode()
+        max_encoder_len=max(self.byte_encoder.keys())+1
+        self.byte_encoder_array = [None]*max_encoder_len
+        for idx, code in self.byte_encoder.items():
+          self.byte_encoder_array[idx]=code
         self.byte_decoder = {v: k for k, v in self.byte_encoder.items()}
         bpe_data = open(merges_file, encoding='utf-8').read().split('\n')[1:-1]
         bpe_merges = [tuple(merge.split()) for merge in bpe_data]
         self.bpe_ranks = dict(zip(bpe_merges, range(len(bpe_merges))))
         self.cache = {}
         self.cache2 = {}
-
         # Should haved added re.IGNORECASE so BPE merges can happen for
         # capitalized versions of contractions
         self.pat = re.compile(
@@ -237,6 +240,10 @@ class GPT2Tokenizer(object):
     def tokenize(self, text):
         """ Tokenize a string. """
         bpe_tokens = []
+        if sys.version_info[0] == 2:
+          for token in re.findall(self.pat, text):
+                token = ''.join(self.byte_encoder[ord(b)] for b in token)
+          return bpe_tokens
         cache2 = self.cache2
         for token in re.findall(self.pat, text):
             if token in cache2:
@@ -245,7 +252,7 @@ class GPT2Tokenizer(object):
             else:
               orig_token=token
               len_orig_token = len(orig_token)
-              token = token.translate(self.byte_encoder)
+              token = token.translate(self.byte_encoder_array)
               ret = [bpe_token for bpe_token in self.bpe(token).split(' ')]
               bpe_tokens.extend(ret)
               if len_orig_token< 10:
@@ -296,6 +303,9 @@ class GPT2Tokenizer(object):
             else:
                 tokens.append(self.decoder[i])
         return tokens
+
+    def encode_old(self, text):
+        return self.convert_tokens_to_ids(self.tokenize_old(text))
 
     def encode(self, text):
         return self.convert_tokens_to_ids(self.tokenize(text))
