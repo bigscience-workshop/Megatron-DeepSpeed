@@ -113,7 +113,8 @@ def pretrain(train_valid_test_dataset_provider,
     # Model, optimizer, and learning rate.
     timers('model-and-optimizer-setup').start()
     model, optimizer, lr_scheduler = setup_model_and_optimizer(model_provider)
-    print(get_parameters_in_billions(model))
+    print(f'estimated model parameters: {get_parameters_in_billions(model)}')
+    print(f'estimated model parameters without embeddings: {get_parameters_in_billions(model, exclude_embeddings=True)}')
     timers('model-and-optimizer-setup').stop()
     print_datetime('after model, optimizer, and learning rate '
                    'scheduler are built')

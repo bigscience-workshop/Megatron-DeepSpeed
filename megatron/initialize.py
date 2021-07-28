@@ -251,7 +251,7 @@ def _set_random_seed(seed_):
         if torch.cuda.device_count() > 0:
             mpu.model_parallel_cuda_manual_seed(seed)
     else:
-        raise ValueError('Seed ({}) should be a positive integer.'.format(seed))
+        raise ValueError('Seed ({}) should be a positive integer.'.format(seed_))
 
 
 def write_args_to_tensorboard():
