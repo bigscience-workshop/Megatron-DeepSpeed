@@ -3,7 +3,7 @@
 #SBATCH --qos=qos_gpu-t3
 #SBATCH --nodes=16
 #SBATCH --ntasks-per-node=1          # crucial - only 1 task per dist per node!
-#SBATCH --cpus-per-task=24         # number of cores per tasks
+#SBATCH --cpus-per-task=40         # number of cores per tasks
 #SBATCH --hint=nomultithread         # we get physical cores not logical
 #SBATCH --gres=gpu:4                 # number of gpus
 #SBATCH --time 20:00:00              # maximum execution time (HH:MM:SS)
@@ -17,7 +17,7 @@ set -x -e
 ROUND=3
 TESTING=0
 
-SAVE_CHECKPOINT_PATH=$SCRATCH/checkpoints/1B3-long/
+OUTPUT_PATH=$SCRATCH/exps/1B3-long/
 MEGATRON_DEEPSPEED_REPO=$SCRATCH/Megatron-DeepSpeed
 
 if [[ ${TESTING} == 1 ]]; then
@@ -31,12 +31,6 @@ fi
 
 source $six_ALL_CCFRWORK/start-prod
 cd $MEGATRON_DEEPSPEED_REPO
-export TRANSFORMERS_CACHE=$six_ALL_CCFRWORK/models
-export HF_DATASETS_CACHE=$six_ALL_CCFRWORK/datasets
-export HF_MODULES_CACHE=$six_ALL_CCFRWORK/modules
-export HF_METRICS_CACHE=$six_ALL_CCFRWORK/metrics
-export HF_DATASETS_OFFLINE=1
-export TRANSFORMERS_OFFLINE=1
 
 MASTER_ADDR=`perl -le '$_=$ENV{"SLURM_JOB_NODELIST"}; s/,.*//; s/-.*//; s/\[//; print'`
 MASTER_PORT=6000
@@ -50,11 +44,8 @@ PP_SIZE=8 # NLAYERS must be a multiple of PP_SIZE here
 TP_SIZE=4 # always fixed to the size of a single node
 DP_SIZE=$((NNODES*GPUS_PER_NODE/(PP_SIZE*TP_SIZE))) # will get derived automatically by trainer
 
-MICRO_BATCH_SIZE=2
-GAS=256 # PP chunks
-
-EXIT_EARLY=0
-#EXIT_EARLY=1
+MICRO_BATCH_SIZE=4
+GLOBAL_BATCH_SIZE=1024
 
 NLAYERS=24
 NHIDDEN=2048
@@ -66,12 +57,6 @@ if   [[ ${ROUND} == 1 ]]; then TRAIN_ITER=500    SAVE_INTERVAL=10
 elif [[ ${ROUND} == 2 ]]; then TRAIN_ITER=1000   SAVE_INTERVAL=18
 elif [[ ${ROUND} == 3 ]]; then TRAIN_ITER=146_484_375 SAVE_INTERVAL=1500
 else echo "invalid ROUND: $ROUND"
-fi
-
-# --exit-duration-in-mins
-# --exit-interval - exit after this many iterations
-if [[ ${EXIT_EARLY} == 1 ]]; then EXIT_OPTS="--exit-interval 2"
-else EXIT_OPTS=""
 fi
 
 OPTIMIZER_ARGS=" \
@@ -88,8 +73,10 @@ OPTIMIZER_ARGS=" \
     --weight-decay 1e-1 \
     "
 
-# GLOBAL_BATCH_SIZE=$(($MICRO_BATCH_SIZE*$GAS*$DP_SIZE))
-GLOBAL_BATCH_SIZE=2048
+EXIT_OPTS=" \
+    --exit-duration-in-mins 1190 \
+    "
+
 GPT_ARGS=" \
     --num-layers $NLAYERS \
     --hidden-size $NHIDDEN \
@@ -113,18 +100,24 @@ GPT_ARGS=" \
 OUTPUT_ARGS=" \
     --log-interval 1 \
     --save-interval $SAVE_INTERVAL \
-    --eval-interval 100 \
+    --eval-interval 1000 \
     --eval-iters 10 \
+    --tensorboard-dir $OUTPUT_PATH/tensorboard \
+    --tensorboard-queue-size 5 \
+    --log-timers-to-tensorboard \
+    --log-batch-size-to-tensorboard \
+    --log-validation-ppl-to-tensorboard \
     "
 
 ZERO_STAGE=1
 
 config_json="./ds_config.$SLURM_JOBID.json"
 
+# Deepspeed figures out GAS dynamically from dynamic GBS via set_train_batch_size()
 cat <<EOT > $config_json
 {
   "train_micro_batch_size_per_gpu": $MICRO_BATCH_SIZE,
-  "gradient_accumulation_steps": $GAS,
+  "train_batch_size": $GLOBAL_BATCH_SIZE,
   "gradient_clipping": 1.0,
   "zero_optimization": {
     "stage": $ZERO_STAGE
@@ -163,12 +156,7 @@ export CMD=" \
     --pipeline-model-parallel-size $PP_SIZE \
     $GPT_ARGS \
     $OUTPUT_ARGS \
-    --save $SAVE_CHECKPOINT_PATH \
-    --tensorboard-dir $SAVE_CHECKPOINT_PATH \
-    --tensorboard-queue-size 5 \
-    --log-timers-to-tensorboard \
-    --log-batch-size-to-tensorboard \
-    --log-validation-ppl-to-tensorboard \
+    --save $OUTPUT_PATH/checkpoints \
     --data-path $DATA_PATH \
     --data-impl mmap \
     --split 949,50,1 \
