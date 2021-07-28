@@ -115,7 +115,7 @@ python tools/merge_preprocessed_data.py \
     meg-gpt2-oscar-en-500-p1_text_document \
     meg-gpt2-oscar-en-500-p2_text_document \
     meg-gpt2-oscar-en-500-p3_text_document \
-    --output-prefix meg-gpt2_oscar-combined
+    --output-prefix meg-gpt2_oscar_text_document
 ```
 
 ## Quick pre-processing to start training with
