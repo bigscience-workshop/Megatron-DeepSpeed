@@ -302,7 +302,7 @@ class IndexedDatasetBuilder(object):
         begin = self.dim_offsets[-1]
         for dim_offset in index.dim_offsets[1:]:
             self.dim_offsets.append(begin + dim_offset)
-        self.doc_idx.extend(index.doc_idx)
+        self.doc_idx.extend( (len(self.sizes) + index.doc_idx)[1:] )
 
         with open(data_file_path(another_file), 'rb') as f:
             while True:
@@ -561,7 +561,7 @@ class MMapIndexedDatasetBuilder(object):
         print(f"    concat {another_file} size={len(index.sizes)} for a total size of {total_len}")
 
         self._sizes.extend(index.sizes)
-        self._doc_idx.extend(index.doc_idx)
+        self._doc_idx.extend( (len(self._sizes) + index.doc_idx)[1:] )
 
         # Concatenate data
         with open(data_file_path(another_file), 'rb') as f:
