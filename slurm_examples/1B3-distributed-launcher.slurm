@@ -14,7 +14,7 @@
 set -x -e
 
 
-ROUND=4
+ROUND=3
 TESTING=0
 
 SAVE_CHECKPOINT_PATH=$SCRATCH/checkpoints/1B3-test/
