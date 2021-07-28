@@ -45,10 +45,10 @@ def main():
     for dataset in args.datasets:
         builder.merge_file_(dataset)
 
+    builder.finalize(output_idx_file)
+
     startup_end = time.time()
     print("Time to merge:", startup_end - startup_start)
-
-    builder.finalize(output_idx_file)
 
     print(f"Merged {len(args.datasets)} datasets to {args.output_prefix}")
 
