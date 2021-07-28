@@ -1,12 +1,12 @@
 #!/bin/bash
-#SBATCH --job-name=1B3-test.slurm
+#SBATCH --job-name=1B3-long.slurm
 #SBATCH --qos=qos_gpu-t3
 #SBATCH --nodes=16
 #SBATCH --ntasks-per-node=1          # crucial - only 1 task per dist per node!
 #SBATCH --cpus-per-task=24         # number of cores per tasks
 #SBATCH --hint=nomultithread         # we get physical cores not logical
 #SBATCH --gres=gpu:4                 # number of gpus
-#SBATCH --time 01:00:00              # maximum execution time (HH:MM:SS)
+#SBATCH --time 20:00:00              # maximum execution time (HH:MM:SS)
 #SBATCH --output=%x-%j.out           # output file name
 #SBATCH --error=%x-%j.out            # error file name (same to watch just one file)
 #SBATCH --account=six@gpu
@@ -14,7 +14,7 @@
 set -x -e
 
 
-ROUND=1
+ROUND=4
 TESTING=0
 
 SAVE_CHECKPOINT_PATH=$SCRATCH/checkpoints/1B3-test/
@@ -51,7 +51,6 @@ TP_SIZE=4 # always fixed to the size of a single node
 DP_SIZE=$((NNODES*GPUS_PER_NODE/(PP_SIZE*TP_SIZE))) # will get derived automatically by trainer
 
 MICRO_BATCH_SIZE=2
-GAS=256 # PP chunks
 
 EXIT_EARLY=0
 #EXIT_EARLY=1
@@ -88,7 +87,6 @@ OPTIMIZER_ARGS=" \
     --weight-decay 1e-1 \
     "
 
-# GLOBAL_BATCH_SIZE=$(($MICRO_BATCH_SIZE*$GAS*$DP_SIZE))
 GLOBAL_BATCH_SIZE=2048
 GPT_ARGS=" \
     --num-layers $NLAYERS \
@@ -165,6 +163,10 @@ export CMD=" \
     $OUTPUT_ARGS \
     --save $SAVE_CHECKPOINT_PATH \
     --tensorboard-dir $SAVE_CHECKPOINT_PATH \
+    --tensorboard-queue-size 5 \
+    --log-timers-to-tensorboard \
+    --log-batch-size-to-tensorboard \
+    --log-validation-ppl-to-tensorboard \
     --data-path $DATA_PATH \
     --data-impl mmap \
     --split 949,50,1 \
