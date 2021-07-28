@@ -1,12 +1,12 @@
 #!/bin/bash
-#SBATCH --job-name=1B3-long.slurm
+#SBATCH --job-name=1B3-test.slurm
 #SBATCH --qos=qos_gpu-t3
 #SBATCH --nodes=16
 #SBATCH --ntasks-per-node=1          # crucial - only 1 task per dist per node!
 #SBATCH --cpus-per-task=24         # number of cores per tasks
 #SBATCH --hint=nomultithread         # we get physical cores not logical
 #SBATCH --gres=gpu:4                 # number of gpus
-#SBATCH --time 20:00:00              # maximum execution time (HH:MM:SS)
+#SBATCH --time 00:20:00              # maximum execution time (HH:MM:SS)
 #SBATCH --output=%x-%j.out           # output file name
 #SBATCH --error=%x-%j.out            # error file name (same to watch just one file)
 #SBATCH --account=six@gpu
@@ -14,8 +14,8 @@
 set -x -e
 
 
-ROUND=3
-TESTING=0
+ROUND=1
+TESTING=1
 
 SAVE_CHECKPOINT_PATH=$SCRATCH/checkpoints/1B3-test/
 MEGATRON_DEEPSPEED_REPO=$SCRATCH/Megatron-DeepSpeed
@@ -49,6 +49,7 @@ NNODES=16
 PP_SIZE=8 # NLAYERS must be a multiple of PP_SIZE here
 TP_SIZE=4 # always fixed to the size of a single node
 DP_SIZE=$((NNODES*GPUS_PER_NODE/(PP_SIZE*TP_SIZE))) # will get derived automatically by trainer
+GAS=256
 
 MICRO_BATCH_SIZE=2
 
