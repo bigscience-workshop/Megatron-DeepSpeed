@@ -78,7 +78,6 @@ def bytes_to_unicode():
 
 def get_pairs(word):
     """Return set of symbol pairs in a word.
-
     Word is represented as tuple of symbols (symbols being variable-length strings).
     """
     pairs = set()
@@ -160,10 +159,6 @@ class GPT2Tokenizer(object):
         self.decoder = {v: k for k, v in self.encoder.items()}
         self.errors = errors  # how to handle errors in decoding
         self.byte_encoder = bytes_to_unicode()
-        max_encoder_len=max(self.byte_encoder.keys())+1
-        self.byte_encoder_array = [None]*max_encoder_len
-        for idx, code in self.byte_encoder.items():
-          self.byte_encoder_array[idx]=code
         self.byte_decoder = {v: k for k, v in self.byte_encoder.items()}
         bpe_data = open(merges_file, encoding='utf-8').read().split('\n')[1:-1]
         bpe_merges = [tuple(merge.split()) for merge in bpe_data]
@@ -252,13 +247,13 @@ class GPT2Tokenizer(object):
             else:
               orig_token=token
               len_orig_token = len(orig_token)
-              token = token.translate(self.byte_encoder_array)
+              token = ''.join(self.byte_encoder[b] for b in token.encode('utf-8'))
               ret = [bpe_token for bpe_token in self.bpe(token).split(' ')]
               bpe_tokens.extend(ret)
               if len_orig_token< 10:
                 cache2[orig_token] = ret
         return bpe_tokens
-      
+
     def tokenize_old(self, text):
         """ Tokenize a string. """
         bpe_tokens = []
@@ -269,7 +264,6 @@ class GPT2Tokenizer(object):
                 token = ''.join(self.byte_encoder[b] for b in token.encode('utf-8'))
             bpe_tokens.extend(bpe_token for bpe_token in self.bpe(token).split(' '))
         return bpe_tokens
-      
 
     def convert_tokens_to_ids(self, tokens):
         """ Converts a sequence of tokens into ids using the vocab. """
