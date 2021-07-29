@@ -30,6 +30,12 @@ else
 fi
 
 source $six_ALL_CCFRWORK/start-prod
+export TRANSFORMERS_CACHE=$six_ALL_CCFRWORK/models
+export HF_DATASETS_CACHE=$six_ALL_CCFRWORK/datasets
+export HF_MODULES_CACHE=$six_ALL_CCFRWORK/modules
+export HF_METRICS_CACHE=$six_ALL_CCFRWORK/metrics
+export HF_DATASETS_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
 cd $MEGATRON_DEEPSPEED_REPO
 
 MASTER_ADDR=`perl -le '$_=$ENV{"SLURM_JOB_NODELIST"}; s/,.*//; s/-.*//; s/\[//; print'`
@@ -44,7 +50,7 @@ PP_SIZE=8 # NLAYERS must be a multiple of PP_SIZE here
 TP_SIZE=4 # always fixed to the size of a single node
 DP_SIZE=$((NNODES*GPUS_PER_NODE/(PP_SIZE*TP_SIZE))) # will get derived automatically by trainer
 
-MICRO_BATCH_SIZE=4
+MICRO_BATCH_SIZE=16
 GLOBAL_BATCH_SIZE=1024
 
 NLAYERS=24
@@ -100,7 +106,7 @@ GPT_ARGS=" \
 OUTPUT_ARGS=" \
     --log-interval 1 \
     --save-interval $SAVE_INTERVAL \
-    --eval-interval 1000 \
+    --eval-interval 10 \
     --eval-iters 10 \
     --tensorboard-dir $OUTPUT_PATH/tensorboard \
     --tensorboard-queue-size 5 \
@@ -172,4 +178,4 @@ export CMD=" \
 echo $CMD
 
 # to debug - add echo (it exits and prints what it would have launched)
-clear; srun --jobid $SLURM_JOBID bash -c '$LAUNCHER --node_rank $SLURM_PROCID $CMD' 2>&1 | tee 1B3-distributed-launcher.$SLURM_JOBID.out
+srun --jobid $SLURM_JOBID bash -c '$LAUNCHER --node_rank $SLURM_PROCID $CMD' 2>&1 | tee 1B3-distributed-launcher.$SLURM_JOBID.out
