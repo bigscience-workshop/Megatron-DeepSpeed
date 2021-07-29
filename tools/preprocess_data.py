@@ -145,7 +145,6 @@ class Encoder(object):
           while fin.tell() < job[0]+job[1]:
             json_line = fin.readline()
             if not json_line: 
-              print ('breaking')
               break
             ret.append(process_line(self, json_line))
       else:
@@ -219,7 +218,6 @@ class Encoder(object):
           while fin.tell() < job[0]+job[1]:
             json_line = fin.readline()
             if not json_line: 
-              print ('breaking')
               break
             num_docs += 1
             process_line(self, json_line, builders)
@@ -674,7 +672,6 @@ def main():
         # we could have done the merge incrementally but the dataset builder doesn't really do incremental merge efficiently
         merge_start = time.time()
         curr_keys = list(set([dataset.split(f"{args.output_prefix}_")[1].split("_")[0] for dataset in args.datasets]))
-        print (curr_keys)
         output_bin_files = {}
         output_idx_files = {}
         builders = {}
