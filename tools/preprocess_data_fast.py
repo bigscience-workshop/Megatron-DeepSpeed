@@ -212,7 +212,7 @@ def get_args():
 
 def fill_simple_queue(filename, simple_queue, chunk_size:int):
     with open(filename, "r") as f:
-        print("Start filling queue")
+        print("Start filling queue", flush=True)
         while True:
             acc = tuple(itertools.islice(f, chunk_size))
             if len(acc) == 0:
@@ -221,7 +221,7 @@ def fill_simple_queue(filename, simple_queue, chunk_size:int):
             simple_queue.put(acc)
 
 def log(readers, log_interval):
-    print("Start Logging")
+    print("Start Logging", flush=True)
     proc_start = time.time()
     total_bytes_processed = 0
     doc_processed = 0
@@ -252,7 +252,7 @@ def log(readers, log_interval):
                 bytes_queue.append((current, total_bytes_processed))
                 mbs = (total_bytes_processed - old_bytes) / (current - old_start_time) / 1024 / 1024
                 print(f"Processed {doc_processed} documents",
-                      f"({doc_processed / elapsed} docs/s, {mbs} MB/s).")
+                      f"({doc_processed / elapsed} docs/s, {mbs} MB/s).", flush=True)
 
 def main():
     args = get_args()
