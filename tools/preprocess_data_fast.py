@@ -229,7 +229,7 @@ def log(readers, log_interval):
                 # This means that a worker has finished.
                 r.close()
                 readers.remove(r)
-                print(f"Remaining workers: {len(readers)}")
+                print(f"Remaining workers: {len(readers)}", flush=True)
                 continue
 
             nb_of_docs, bytes_processed = data
