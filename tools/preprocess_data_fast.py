@@ -120,11 +120,13 @@ def process_samples(simple_queue, process_index, args, level, writer: Connection
     # In case finished, we still need to add None to signal to everyone else
     simple_queue.put(None)
     # Send None as end of sequence signal
-    writer.send(None)
+    writer.send((None, process_index))
     writer.close()
 
     for key in args.json_keys:
         builders[key].finalize(output_idx_files[key])
+
+    print(f"Worker {process_index} finished", flush=True)
 
 
 def process_json_lines(json_lines, encoder, builders, writer):
@@ -200,12 +202,14 @@ def get_args():
     return args
 
 def fill_simple_queue(filename, simple_queue, chunk_size:int):
+    # TODO: Assess if instead we could feed pointers which process can then load.
     with open(filename, "r") as f:
         print("Start filling queue", flush=True)
         while True:
             acc = tuple(itertools.islice(f, chunk_size))
             if len(acc) == 0:
                 simple_queue.put(None)
+                print(f"Finished reading input file", flush=True)
                 return
             simple_queue.put(acc)
 
@@ -224,12 +228,16 @@ def log(readers, log_interval):
 
     while len(readers) != 0:
         for r in multiprocessing.connection.wait(readers):
+            # Can be:
+            #  - tuple (bytes, nb_of_docs): When process notify the writer that
+            #  - tuple (None, process_index): When process finish their processing of data.
             data = r.recv()
-            if data is None:
+            if data[0] is None:
+                process_index = data[1]
                 # This means that a worker has finished.
                 r.close()
                 readers.remove(r)
-                print(f"Remaining workers: {len(readers)}", flush=True)
+                print(f"Process {process_index} finished working. Remaining workers: {len(readers)}", flush=True)
                 continue
 
             nb_of_docs, bytes_processed = data
