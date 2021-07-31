@@ -97,14 +97,14 @@ class Encoder(object):
         return ids, len(json_line)
 
 
-def process_samples(simple_queue, process_index, args, level, writer: Connection):
+def process_samples(simple_queue, process_id, args, level, writer: Connection):
     encoder = Encoder(args)
 
     output_bin_files = {}
     output_idx_files = {}
     builders = {}
     for key in args.json_keys:
-        output_filename = f"{args.output_prefix}_{key}_{level}_{process_index}"
+        output_filename = get_output_filename(args.output_prefix, key, level, process_id)
         output_bin_files[key] = data_file_path(output_filename)
         output_idx_files[key] = index_file_path(output_filename)
         builders[key] = indexed_dataset.make_builder(output_bin_files[key],
@@ -120,13 +120,13 @@ def process_samples(simple_queue, process_index, args, level, writer: Connection
     # In case finished, we still need to add None to signal to everyone else
     simple_queue.put(None)
     # Send None as end of sequence signal
-    writer.send((None, process_index))
+    writer.send((None, process_id))
     writer.close()
 
     for key in args.json_keys:
         builders[key].finalize(output_idx_files[key])
 
-    print(f"Worker {process_index} finished", flush=True)
+    print(f"Worker {process_id} finished", flush=True)
 
 
 def process_json_lines(json_lines, encoder, builders, writer):
@@ -255,6 +255,13 @@ def log(readers, log_interval):
                 print(f"Processed {doc_processed} documents",
                       f"({doc_processed / elapsed} docs/s, {mbs} MB/s).", flush=True)
 
+
+def get_output_filename(prefix, key, level, process_index = None):
+    if process_index is None:
+        return f"{prefix}_{key}_{level}"
+    else:
+        return f"{prefix}_{key}_{level}_{process_index}"
+
 def main():
     args = get_args()
 
@@ -271,7 +278,8 @@ def main():
 
     assert args.workers > 1, "One for filling the queue"
     readers, writers = list(zip(*[multiprocessing.Pipe(duplex=False) for _ in range(args.workers - 1)]))
-    processes = [multiprocessing.Process(target=process_samples, args=(simple_queue, i, args, level, writer)) for i, writer in enumerate(writers)]
+    process_ids = list(range(len(writers)))
+    processes = [multiprocessing.Process(target=process_samples, args=(simple_queue, process_id, args, level, writer)) for process_id, writer in zip(process_ids, writers)]
     log_thread = threading.Thread(target=log, args=(list(readers), args.log_interval))
     fill_thread = multiprocessing.Process(target=fill_simple_queue, args=(args.input, simple_queue, chunk_size))
 
@@ -314,10 +322,18 @@ def main():
                                                      vocab_size=tokenizer.vocab_size)
 
     for key in args.json_keys:
-        for process_index in range(len(processes)):
-            output_filename = f"{args.output_prefix}_{key}_{level}_{process_index}"
+        for process_id in process_ids:
+            output_filename = get_output_filename(args.output_prefix, key, level, process_id)
             builders[key].merge_file_(output_filename)
         builders[key].finalize(output_idx_files[key])
+
+    # Remove temporary files
+    print("Removing shard files")
+    for key in args.json_keys:
+        for process_id in range(len(processes)):
+            output_filename = get_output_filename(args.output_prefix, key, level, process_id)
+            os.remove(data_file_path(output_filename))
+            os.remove(index_file_path(output_filename))
 
 if __name__ == '__main__':
     main()
