@@ -269,8 +269,8 @@ def main():
     if args.split_sentences:
         level = "sentence"
 
-    assert args.workers > 2, "One worker is used for logging, one for filling the queue"
-    readers, writers = list(zip(*[multiprocessing.Pipe(duplex=False) for _ in range(args.workers - 2)]))
+    assert args.workers > 1, "One for filling the queue"
+    readers, writers = list(zip(*[multiprocessing.Pipe(duplex=False) for _ in range(args.workers - 1)]))
     processes = [multiprocessing.Process(target=process_samples, args=(simple_queue, i, args, level, writer)) for i, writer in enumerate(writers)]
     log_thread = threading.Thread(target=log, args=(list(readers), args.log_interval))
     fill_thread = multiprocessing.Process(target=fill_simple_queue, args=(args.input, simple_queue, chunk_size))
