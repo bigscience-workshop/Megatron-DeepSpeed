@@ -229,7 +229,7 @@ def log(readers, log_interval):
     while len(readers) != 0:
         for r in multiprocessing.connection.wait(readers):
             # Can be:
-            #  - tuple (bytes, nb_of_docs): When process notify the writer that
+            #  - tuple (bytes: int, nb_of_docs): When process notify the writer that
             #  - tuple (None, process_index): When process finish their processing of data.
             data = r.recv()
             if data[0] is None:
@@ -259,7 +259,7 @@ def main():
     args = get_args()
 
     print("Opening", args.input)
-    simple_queue = multiprocessing.Queue() # we can also limit the number of elements to reduce the memory footprint.
+    simple_queue = multiprocessing.Queue(1_000_000) # we can also limit the number of elements to reduce the memory footprint.
     chunk_size = 25
 
     if nltk_available and args.split_sentences:
