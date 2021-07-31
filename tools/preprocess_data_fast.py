@@ -259,7 +259,7 @@ def main():
     args = get_args()
 
     print("Opening", args.input)
-    simple_queue = multiprocessing.Queue(1_000_000) # we can also limit the number of elements to reduce the memory footprint.
+    simple_queue = multiprocessing.Queue(1_000) # we can also limit the number of elements to reduce the memory footprint.
     chunk_size = 25
 
     if nltk_available and args.split_sentences:
