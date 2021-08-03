@@ -78,7 +78,6 @@ def bytes_to_unicode():
 
 def get_pairs(word):
     """Return set of symbol pairs in a word.
-
     Word is represented as tuple of symbols (symbols being variable-length strings).
     """
     pairs = set()
@@ -164,8 +163,8 @@ class GPT2Tokenizer(object):
         bpe_data = open(merges_file, encoding='utf-8').read().split('\n')[1:-1]
         bpe_merges = [tuple(merge.split()) for merge in bpe_data]
         self.bpe_ranks = dict(zip(bpe_merges, range(len(bpe_merges))))
-        self.cache = {}
-
+        #self.cache = {}
+        #self.normalized_cache = {}
         # Should haved added re.IGNORECASE so BPE merges can happen for
         # capitalized versions of contractions
         self.pat = re.compile(
@@ -191,10 +190,11 @@ class GPT2Tokenizer(object):
                                    for i, tok in enumerate(special_tokens))
         self.special_tokens_decoder = {v: k for k, v in self.special_tokens.items()}
         logger.info("Special tokens {}".format(self.special_tokens))
-
+    
+    @lru_cache(1000000)
     def bpe(self, token):
-        if token in self.cache:
-            return self.cache[token]
+        #if token in self.cache:
+        #    return self.cache[token]
         word = tuple(token)
         pairs = get_pairs(word)
 
@@ -230,20 +230,81 @@ class GPT2Tokenizer(object):
             else:
                 pairs = get_pairs(word)
         word = ' '.join(word)
-        self.cache[token] = word
+        #self.cache[token] = word
         return word
+      
+    # copied from https://github.com/huggingface/transformers/blob/master/src/transformers/models/bert/tokenization_bert.py
+    def _tokenize_chinese_chars(self, text):
+        """Adds whitespace around any CJK character."""
+        # original note from the Bert Tokenizer: 
+        # This was added on November 1st, 2018 for the multilingual and Chinese
+        # models. This is also applied to the English models now, but it doesn't
+        # matter since the English models were not trained on any Chinese data
+        # and generally don't have any Chinese data in them (there are Chinese
+        # characters in the vocabulary because Wikipedia does have some Chinese
+        # words in the English Wikipedia.).
+        output = []
+        for char in text:
+            cp = ord(char)
+            if self._is_chinese_char(cp):
+                output.append(" ")
+                output.append(char)
+                output.append(" ")
+            else:
+                output.append(char)
+        return "".join(output)
+      
+    #copied from https://github.com/huggingface/transformers/blob/master/src/transformers/models/bert/tokenization_bert.py
+    def _is_chinese_char(self, cp):
+        """Checks whether CP is the codepoint of a CJK character."""
+        # This defines a "chinese character" as anything in the CJK Unicode block:
+        #   https://en.wikipedia.org/wiki/CJK_Unified_Ideographs_(Unicode_block)
+        #
+        # Note that the CJK Unicode block is NOT all Japanese and Korean characters,
+        # despite its name. The modern Korean Hangul alphabet is a different block,
+        # as is Japanese Hiragana and Katakana. Those alphabets are used to write
+        # space-separated words, so they are not treated specially and handled
+        # like the all of the other languages.
+        if (
+            (cp >= 0x4E00 and cp <= 0x9FFF)
+            or (cp >= 0x3400 and cp <= 0x4DBF)  #
+            or (cp >= 0x20000 and cp <= 0x2A6DF)  #
+            or (cp >= 0x2A700 and cp <= 0x2B73F)  #
+            or (cp >= 0x2B740 and cp <= 0x2B81F)  #
+            or (cp >= 0x2B820 and cp <= 0x2CEAF)  #
+            or (cp >= 0xF900 and cp <= 0xFAFF)
+            or (cp >= 0x2F800 and cp <= 0x2FA1F)  #
+        ):  #
+            return True
 
-    def tokenize(self, text):
+        return False
+      
+    @lru_cache(1000000)
+    def normalize_token_py3(self, token):
+          token = ''.join(self.byte_encoder[b] for b in token.encode('utf-8'))
+          ret = [bpe_token for bpe_token in self.bpe(token).split(' ')]
+          return ret
+
+    def tokenize(self, text, max_token_len_cache=9, tokenize_chinese_chars=False):
         """ Tokenize a string. """
         bpe_tokens = []
+        if sys.version_info[0] == 2:
+          if tokenize_chinese_chars:
+            text = self._tokenize_chinese_chars(text)
+          for token in re.findall(self.pat, text):        
+              token = ''.join(self.byte_encoder[ord(b)] for b in token)
+              bpe_tokens.extend(bpe_token for bpe_token in self.bpe(token).split(' '))
+          return bpe_tokens
         for token in re.findall(self.pat, text):
-            if sys.version_info[0] == 2:
-                token = ''.join(self.byte_encoder[ord(b)] for b in token)
-            else:
+           if tokenize_chinese_chars:
+              text = self._tokenize_chinese_chars(text)
+           if len(token) <= max_token_len_cache:
+                bpe_tokens.extend(self.normalize_token_py3(token))
+           else: 
                 token = ''.join(self.byte_encoder[b] for b in token.encode('utf-8'))
-            bpe_tokens.extend(bpe_token for bpe_token in self.bpe(token).split(' '))
+                bpe_tokens.extend(bpe_token for bpe_token in self.bpe(token).split(' '))
         return bpe_tokens
-
+      
     def convert_tokens_to_ids(self, tokens):
         """ Converts a sequence of tokens into ids using the vocab. """
         ids = []
@@ -276,6 +337,9 @@ class GPT2Tokenizer(object):
             else:
                 tokens.append(self.decoder[i])
         return tokens
+
+    def encode_old(self, text):
+        return self.convert_tokens_to_ids(self.tokenize_old(text))
 
     def encode(self, text):
         return self.convert_tokens_to_ids(self.tokenize(text))
