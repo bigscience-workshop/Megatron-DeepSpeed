@@ -13,7 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Processing data for pretraining. It's supposed to be a faster version compared to vanilla preprocess.py"""
+"""
+Processing data for pretraining.
+This preprocessing script should be used only when there's a high number of cpus available.
+It's a faster version compared to vanilla preprocess.py in high number of worker regime
+"""
 
 import argparse
 import collections
@@ -23,23 +27,22 @@ import multiprocessing
 import os
 import sys
 import threading
+import time
+import torch
 from multiprocessing.connection import Connection
 
-from megatron.data.indexed_dataset import index_file_path, data_file_path
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
-                                             os.path.pardir)))
-import time
-
-import torch
 try:
     import nltk
     nltk_available = True
 except ImportError:
     nltk_available = False
 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
+                                             os.path.pardir)))
+
 from megatron.tokenizer import build_tokenizer
 from megatron.data import indexed_dataset
+from megatron.data.indexed_dataset import index_file_path, data_file_path
 
 
 # https://stackoverflow.com/questions/33139531/preserve-empty-lines-with-nltks-punkt-tokenizer
@@ -276,7 +279,8 @@ def main():
     if args.split_sentences:
         level = "sentence"
 
-    assert args.workers > 1, "One for filling the queue"
+    assert args.workers > 1, "Need 2 or more workers for processing, as one will be dedicated to reading chunks of " \
+                             "original file and dispatching them to the rest of the workers to preprocess "
     readers, writers = list(zip(*[multiprocessing.Pipe(duplex=False) for _ in range(args.workers - 1)]))
     process_ids = list(range(len(writers)))
     processes = [multiprocessing.Process(target=process_samples, args=(simple_queue, process_id, args, level, writer)) for process_id, writer in zip(process_ids, writers)]
@@ -330,7 +334,7 @@ def main():
     # Remove temporary files
     print("Removing shard files")
     for key in args.json_keys:
-        for process_id in range(len(processes)):
+        for process_id in process_ids:
             output_filename = get_output_filename(args.output_prefix, key, level, process_id)
             os.remove(data_file_path(output_filename))
             os.remove(index_file_path(output_filename))
