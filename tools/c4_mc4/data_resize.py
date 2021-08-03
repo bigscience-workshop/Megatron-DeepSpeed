@@ -32,7 +32,7 @@ def get_size_stats(args):
 def print_stat(args, lang_size_dict):
     lang_list = sorted([(k,v) for k, v in lang_size_dict.items()], key=lambda tup: tup[1])
     total_size = 0
-    print("Language : Size ")
+    print("Language : Size ({})".format(args.size_format))
     print("-"*20)
     for lang, size in lang_list:
         print("{} :   {}".format(lang, size))
@@ -171,7 +171,7 @@ def main():
     print("-"*15)
     for lang, prob in sampling_probability.items():
         _size = lang_size_dict[lang]*prob
-        print("Language : {}, Sampling prob : {}, ({} -> {} GB)".format(
+        print("Language : {}, Sampling prob : {}, Data resized : ({} -> {} GB)".format(
             lang, round(prob,2), lang_size_dict[lang], round(_size, 2) )
         )
         total_size += _size
