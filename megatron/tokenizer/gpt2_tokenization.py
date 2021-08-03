@@ -338,9 +338,6 @@ class GPT2Tokenizer(object):
                 tokens.append(self.decoder[i])
         return tokens
 
-    def encode_old(self, text):
-        return self.convert_tokens_to_ids(self.tokenize_old(text))
-
     def encode(self, text):
         return self.convert_tokens_to_ids(self.tokenize(text))
 
