@@ -829,7 +829,7 @@ def evaluate_and_print_results(prefix, forward_step_func,
             if args.log_validation_ppl_to_tensorboard:
                 writer.add_scalar(f'lm-loss-validation/{key} validation ppl', ppl,
                                   iteration)
-                writer.add_scalar('lm-loss-validation/{} validation ppl vs samples'.format(key),
+                writer.add_scalar(f'lm-loss-validation/{key} validation ppl vs samples',
                                   ppl, args.consumed_train_samples)
 
     length = len(string) + 1
