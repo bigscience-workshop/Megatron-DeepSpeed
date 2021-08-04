@@ -355,28 +355,37 @@ class MMapIndexedDataset(torch.utils.data.Dataset):
                     return self
 
                 @staticmethod
-                def _get_pointers(sizes):
-                    dtype_size = dtype().itemsize
-                    address = 0
-                    pointers = []
+                def _get_pointers(sizes, npdtype):
+                    """Return a numpy array of byte offsets given a list of sizes.
 
-                    for size in sizes:
-                        pointers.append(address)
-                        address += size * dtype_size
+                    Multiplies values in the sizes array by dtype size (bytes),
+                    and then computes a zero-based prefix scan.
+                    """
+
+                    # create numpy array of desired numpy datatype
+                    pointers = np.array(sizes, dtype=npdtype)
+
+                    # scale each element by its dtype size
+                    dtype_size = dtype().itemsize
+                    pointers *= dtype_size
+
+                    # in-place prefix scan to compute byte offsets
+                    np.cumsum(pointers, axis=0, out=pointers)
+
+                    # zero-base the prefix scan (exclusive scan)
+                    pointers -= pointers[0]
 
                     return pointers
 
                 def write(self, sizes, doc_idx):
-                    pointers = self._get_pointers(sizes)
-
                     self._file.write(struct.pack('<Q', len(sizes)))
                     self._file.write(struct.pack('<Q', len(doc_idx)))
 
-                    sizes = np.array(sizes, dtype=np.int32)
-                    self._file.write(sizes.tobytes(order='C'))
-                    del sizes
+                    sizes32 = np.array(sizes, dtype=np.int32)
+                    self._file.write(sizes32.tobytes(order='C'))
+                    del sizes32
 
-                    pointers = np.array(pointers, dtype=np.int64)
+                    pointers = self._get_pointers(sizes, np.int64)
                     self._file.write(pointers.tobytes(order='C'))
                     del pointers
 
