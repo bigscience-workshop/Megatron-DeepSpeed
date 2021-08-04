@@ -1,14 +1,14 @@
 #!/bin/bash
-BASE_DATA_PATH=tmp
-INPUT_PATH=tmp
-OUTPUT_PATH=tmp
+BASE_DATA_PATH=/tmp
+INPUT_PATH=/tmp
+OUTPUT_PATH=/tmp
 
 wget https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-vocab.json -P ${BASE_DATA_PATH}
 wget https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-merges.txt -P ${BASE_DATA_PATH}
 
-python tests/create_dummy_dataset.py --dir ${INPUT_PATH}
+python create_dummy_dataset.py --dir ${INPUT_PATH}
 
-python tools/preprocess_data.py \
+python preprocess_data.py \
     --input ${INPUT_PATH}/dataset_0.json \
     --output-prefix ${OUTPUT_PATH}/dataset-0 \
     --vocab ${BASE_DATA_PATH}/gpt2-vocab.json \
@@ -17,7 +17,7 @@ python tools/preprocess_data.py \
     --merge-file ${BASE_DATA_PATH}/gpt2-merges.txt \
     --append-eod
 
-python tools/preprocess_data.py \
+python preprocess_data.py \
     --input ${INPUT_PATH}/dataset_1.json \
     --output-prefix ${OUTPUT_PATH}/dataset-1 \
     --vocab ${BASE_DATA_PATH}/gpt2-vocab.json \
@@ -26,7 +26,7 @@ python tools/preprocess_data.py \
     --merge-file ${BASE_DATA_PATH}/gpt2-merges.txt \
     --append-eod
 
-python tools/preprocess_data.py \
+python preprocess_data.py \
     --input ${INPUT_PATH}/dataset_2.json \
     --output-prefix ${OUTPUT_PATH}/dataset-2 \
     --vocab ${BASE_DATA_PATH}/gpt2-vocab.json \
@@ -35,7 +35,7 @@ python tools/preprocess_data.py \
     --merge-file ${BASE_DATA_PATH}/gpt2-merges.txt \
     --append-eod
 
-python tools/preprocess_data.py \
+python preprocess_data.py \
     --input ${INPUT_PATH}/dataset_3.json \
     --output-prefix ${OUTPUT_PATH}/dataset-3 \
     --vocab ${BASE_DATA_PATH}/gpt2-vocab.json \
@@ -44,7 +44,7 @@ python tools/preprocess_data.py \
     --merge-file ${BASE_DATA_PATH}/gpt2-merges.txt \
     --append-eod
 
-python tools/preprocess_data.py \
+python preprocess_data.py \
     --input ${INPUT_PATH}/dataset_4.json \
     --output-prefix ${OUTPUT_PATH}/dataset-4 \
     --vocab ${BASE_DATA_PATH}/gpt2-vocab.json \
@@ -55,7 +55,7 @@ python tools/preprocess_data.py \
 
 DIR=`pwd`
 DATETIME=`date +'date_%y-%m-%d_time_%H-%M-%S'`
-mkdir -p $DIR/logs
+mkdir -p ${BASE_DATA_PATH}/logs
 
 DATASET_0="${OUTPUT_PATH}/dataset-0_text_document"
 DATASET_1="${OUTPUT_PATH}/dataset-1_text_document"
@@ -68,9 +68,9 @@ VOCAB_PATH=${BASE_DATA_PATH}/gpt2-vocab.json
 MERGE_PATH=${BASE_DATA_PATH}/gpt2-merges.txt
 
 
-script_path=$(realpath $0)
-script_dir=$(dirname $script_path)
-CONFIG_JSON="$script_dir/ds_config.json"
+#script_path=$(realpath $0)
+#script_dir=$(dirname $script_path)
+#CONFIG_JSON="$script_dir/ds_config.json"
 
 USE_DEEPSPEED=1
 ZERO_STAGE=0
