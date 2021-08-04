@@ -16,9 +16,9 @@
 """
 Processing data script for pretraining.
 This preprocessing script should be used only when there's a high number of cpu cores available.
-It's a faster version compared to vanilla `preprocess_data.py` in high number of worker regime.
+It's a faster version compared to `tools/preprocess_data.py` in high number of worker regime.
 
-Rule of thumb for using this script instead of its vanilla version:
+Rule of thumb for using this script instead of `tools/preprocess_data.py`:
  - workers >= 20
  - cpus >= 20 (logical cores)
  - large inputs: size >= 1GB
