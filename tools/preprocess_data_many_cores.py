@@ -14,9 +14,14 @@
 # limitations under the License.
 
 """
-Processing data for pretraining.
+Processing data script for pretraining.
 This preprocessing script should be used only when there's a high number of cpus available.
-It's a faster version compared to vanilla preprocess.py in high number of worker regime
+It's a faster version compared to vanilla preprocess.py in high number of worker regime.
+
+Rule of thumb for using this script:
+ - workers >= 20
+ - cpus >= 20 (logical cores)
+ - large inputs: size >= 1GB
 """
 
 import argparse
