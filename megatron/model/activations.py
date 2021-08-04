@@ -18,23 +18,19 @@ class _GLUVariant(nn.Module):
 
 class Bilinear(_GLUVariant):
     def __init__(self):
-        super().__init__(lambda x: x)()
+        super().__init__(lambda x: x)
 
 
 class GEGLU(_GLUVariant):
     def __init__(self):
-        super().__init__(F.gelu)()
+        super().__init__(F.gelu)
 
 
 class ReGLU(_GLUVariant):
     def __init__(self):
-        super().__init__(F.relu)()
+        super().__init__(F.relu)
 
 
 class SwiGLU(_GLUVariant):
     def __init__(self):
-        super().__init__(F.silu)()
-
-
-
-    
+        super().__init__(F.silu)
