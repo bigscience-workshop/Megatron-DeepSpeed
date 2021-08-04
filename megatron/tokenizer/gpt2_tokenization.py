@@ -254,10 +254,10 @@ class GPT2Tokenizer(object):
               bpe_tokens.extend(bpe_token for bpe_token in self.bpe(token).split(' '))
           return bpe_tokens
         for token in re.findall(self.pat, text):
-           if len(token) <= max_token_len_cache:
-                bpe_tokens.extend(self.normalize_token_and_cache(token))
-           else: 
-                bpe_tokens.extend(self.normalize_token(token))
+          if len(token) <= max_token_len_cache:
+              bpe_tokens.extend(self.normalize_token_and_cache(token))
+          else: 
+              bpe_tokens.extend(self.normalize_token(token))
         return bpe_tokens
       
     def convert_tokens_to_ids(self, tokens):
