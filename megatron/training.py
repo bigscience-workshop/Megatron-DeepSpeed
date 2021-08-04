@@ -331,8 +331,7 @@ def setup_model_and_optimizer(model_provider_func):
             model=model[0],
             optimizer=optimizer,
             args=args,
-            lr_scheduler=lr_scheduler,
-            mpu=mpu if pp == 1 else None,
+            lr_scheduler=lr_scheduler
         )
         if isinstance(model, deepspeed.PipelineEngine):
             # hack to get batch_fn from pretrain_gpt.py
@@ -377,13 +376,13 @@ def train_step(forward_step_func, data_iterator,
     args = get_args()
     timers = get_timers()
 
-    if args.deepspeed and mpu.get_pipeline_model_parallel_world_size() > 1:
+    if args.deepspeed:
         assert isinstance(model[0], deepspeed.PipelineEngine), model
         loss = model[0].train_batch(data_iter=data_iterator)
         skipped_iter = 0
         grad_norm = 0.
         num_zeros_in_grad = 0
-        return {'lm-loss' : loss}, skipped_iter, grad_norm, num_zeros_in_grad
+        return {'lm loss' : loss}, skipped_iter, grad_norm, num_zeros_in_grad
 
     # Set grad to zero.
     if not args.deepspeed:
@@ -446,6 +445,7 @@ def train_step(forward_step_func, data_iterator,
                     args.micro_batch_size * \
                     args.data_parallel_size
         model[0].step(lr_kwargs={'increment': increment})
+        update_successful = model[0].was_step_applied()
     else:
         update_successful, grad_norm, num_zeros_in_grad = optimizer.step()
     timers('optimizer').stop()
@@ -663,6 +663,14 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
     report_memory_flag = True
     while iteration < args.train_iters:
         update_num_microbatches(args.consumed_train_samples)
+        if args.deepspeed:
+            # inform deepspeed of any batch size changes
+            global_batch_size = mpu.get_data_parallel_world_size() * \
+                                args.micro_batch_size * \
+                                get_num_microbatches()
+            model[0].set_train_batch_size(global_batch_size)
+
+
         loss_dict, skipped_iter, grad_norm, num_zeros_in_grad = \
             train_step(forward_step_func,
                        train_data_iterator,
@@ -676,7 +684,7 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
 
         # Logging.
         if args.deepspeed:
-            loss_scale = -1
+            loss_scale = model[0].optimizer.cur_scale
         else:
             loss_scale = optimizer.get_loss_scale().item()
         params_norm = None
@@ -764,10 +772,17 @@ def evaluate(forward_step_func, data_iterator, model, verbose=False):
                     forward_backward_func = forward_backward_pipelining_without_interleaving
             else:
                 forward_backward_func = forward_backward_no_pipelining
-            loss_dicts = forward_backward_func(
-                forward_step_func, data_iterator, model, optimizer=None,
-                timers=None, forward_only=True)
-
+            
+            if args.deepspeed:
+                # DeepSpeed uses eval_batch() and already aggregates losses.
+                assert isinstance(model, list) and len(model) == 1
+                loss = model[0].eval_batch(data_iterator)
+                loss_dicts = [{'lm loss' : loss}] * get_num_microbatches()
+            else:
+                loss_dicts = forward_backward_func(
+                    forward_step_func, data_iterator, model, optimizer=None,
+                    timers=None, forward_only=True)
+            
             if mpu.is_pipeline_last_stage(ignore_virtual=True):
                 # Reduce across processes.
                 for loss_dict in loss_dicts:
@@ -838,7 +853,10 @@ def build_train_valid_test_data_iterators(
         assert args.train_samples is None, \
             'only backward compatiblity support for iteration-based training'
         args.consumed_train_samples = args.iteration * args.global_batch_size
-    if args.iteration > 0 and args.consumed_valid_samples == 0:
+    # it's possible that train was run, but not eval and it's valid if
+    # args.consumed_valid_samples == 0
+    # TODO: eval_interval could have changed between runs, so this might still be wrong
+    if args.iteration // args.eval_interval > 0 and args.consumed_valid_samples == 0:
         assert args.train_samples is None, \
             'only backward compatiblity support for iteration-based training'
         args.consumed_valid_samples = (args.iteration // args.eval_interval) * \

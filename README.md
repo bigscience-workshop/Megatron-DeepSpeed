@@ -1,18 +1,16 @@
 # What is this fork of Megatron-LM and Megatron-DeepSpeed
 
-This is a fork of https://github.com/microsoft/Megatron-DeepSpeed, which in itself is a fork of https://github.com/NVIDIA/Megatron-LM. The former integrates DeepSpeed into the original Megatron-LM code.
+This is a detached fork of https://github.com/microsoft/Megatron-DeepSpeed, which in itself is a fork of https://github.com/NVIDIA/Megatron-LM. The former integrates DeepSpeed into the original Megatron-LM code.
 
 This fork in turn will include direct changes to the models needed for the BigScience project. This is the repo we use for this project.
 
 In addition various code bits and lots of docs are to be found at https://github.com/bigscience-workshop/bigscience.
 
-**Important**: **Forking this repo** If you need to fork this repo to your personal account, github won't let you if you already forked either https://github.com/microsoft/Megatron-DeepSpeed or https://github.com/NVIDIA/Megatron-LM, this is a [strange limitation of github](https://stackoverflow.com/questions/6675994/is-it-possible-to-fork-a-fork-in-github) that they don't seem to plan to fix. So if you have commit access to this repo you can use a PR branch instead. If you don't, then you will need to delete the previously existing fork (first making sure you don't lose any of your work in that fork), and then you can fork this repo. This also means that one can't PR only into all 3 repos becase PR requires a fork of each and github won't let you do it. That's a problem.
-
 Please note that the rest of this page has been trimmed to only include the info relevant to the BigScience project and also updated to usage with the integrated Deepspeed. You will find the original page with all the tables and training info on Bert and T5 [here](https://github.com/NVIDIA/Megatron-LM).
 
 # Setup
 
-1. Step 1
+1. Install `bigscience-workshop/Megatron-DeepSpeed`
 ```
 git clone https://github.com/bigscience-workshop/Megatron-DeepSpeed
 cd Megatron-DeepSpeed
@@ -25,11 +23,34 @@ You can now use this repo directly by working directly from it. You don't need t
 pip install -e .
 ```
 
-2. Step 2
+2. Install `apex`
 
-Then install `apex` and `deepspeed` either via their homepages, or as explained for [apex](
-https://github.com/bigscience-workshop/bigscience/tree/master/jz/envs#apex) and
-[deepspeed](https://github.com/bigscience-workshop/bigscience/tree/master/jz/envs#deepspeed). The instructions are for JZ, so you may need to adjust the scripts to your setup.
+```
+git clone https://github.com/NVIDIA/apex
+cd apex
+pip install --global-option="--cpp_ext" --global-option="--cuda_ext" --no-cache -v --disable-pip-version-check .  2>&1 | tee build.log
+```
+
+(on JZ it's done in a special way, see [here](https://github.com/bigscience-workshop/bigscience/tree/master/jz/envs#apex).)
+
+3. Install `deepspeed` / the `big-science` branch
+
+Then install the `big-science` branch of `deepspeed`:
+
+```
+git clone https://github.com/microsoft/deepspeed deepspeed-big-science
+cd deepspeed-big-science
+git checkout big-science
+rm -rf build
+TORCH_CUDA_ARCH_LIST="7.0" DS_BUILD_CPU_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 pip install -e . --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
+```
+
+adjust `TORCH_CUDA_ARCH_LIST="7.0"` to the architecture of your NVIDIA GPU (or just remove it altogether if you are not sure how to find one).
+
+(on JZ it's done in a special way, see [here](https://github.com/bigscience-workshop/bigscience/tree/master/jz/envs#deepspeed).)
+
+
+3. CUDA kernels compilation
 
 The first time you run the training scripts several CUDA kernels will be compiled. Which means you need to have a cuda environment set up in your environment and it should match the version pytorch was built with.
 
@@ -51,6 +72,7 @@ We've provided several scripts for pretraining both BERT and GPT in [`examples`]
 ## Vocab
 
 The GPT [vocab file](https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-vocab.json) and [merge table](https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-merges.txt) can be downloaded directly.
+
 
 ## Data Preprocessing
 
@@ -74,13 +96,47 @@ python tools/preprocess_data.py \
     --dataset-impl mmap \
     --tokenizer-type GPT2BPETokenizer \
     --merge-file gpt2-merges.txt \
-    --append-eod
+    --append-eod \
+    --workers 8
 ```
 
 The output will be two files named, in this case, `my-gpt2_text_document.bin` and `my-gpt2_text_document.idx`. The `--data-path` specified in later GPT training is the full path and new filename, but without the file extension.
 
 Further command line arguments are described in the source file [`preprocess_data.py`](./tools/preprocess_data.py).
 
+
+**Merging datasets**
+
+Sometimes it's hard to work on a very large dataset at once, so one can pre-process it in chunks and then merge those datasets into a single combined indexed dataset. Here is an example:
+
+```
+python tools/merge_preprocessed_data.py \
+    --datasets \
+    meg-gpt2-oscar-en-500-p1_text_document \
+    meg-gpt2-oscar-en-500-p2_text_document \
+    meg-gpt2-oscar-en-500-p3_text_document \
+    --output-prefix meg-gpt2_oscar_text_document
+```
+
+## Quick pre-processing to start training with
+
+Here is how you can get ready to train quickly, using a 1GB 79K-record jsonl dataset.
+
+```
+wget https://huggingface.co/bigscience/misc-test-data/resolve/main/stas/oscar-1GB.jsonl.xz
+wget https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-vocab.json
+wget https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-merges.txt
+xz -d oscar-1GB.jsonl.xz
+python tools/preprocess_data.py \
+    --input oscar-1GB.jsonl \
+    --output-prefix my-gpt2 \
+    --vocab gpt2-vocab.json \
+    --dataset-impl mmap \
+    --tokenizer-type GPT2BPETokenizer \
+    --merge-file gpt2-merges.txt \
+    --append-eod \
+    --workers 8
+```
 
 ## GPT Pretraining
 

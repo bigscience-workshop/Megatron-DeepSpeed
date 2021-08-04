@@ -9,7 +9,7 @@ DATA_PATH=GPT2/c4_en_partial_gpt2_text_document
 CHECKPOINT_PATH=GPT2
 
 
-python pretrain_gpt.py \
+deepspeed --num_gpus 1 pretrain_gpt.py \
        --num-layers 2 \
        --hidden-size 128 \
        --num-attention-heads 4 \
