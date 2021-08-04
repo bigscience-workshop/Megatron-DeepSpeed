@@ -548,32 +548,32 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
     if writer and (iteration % args.tensorboard_log_interval == 0 ) and \
        is_last_rank():
         if args.log_learning_rate_to_tensorboard:
-            writer.add_scalar('learning-rate', learning_rate, iteration)
-            writer.add_scalar('learning-rate vs samples', learning_rate,
+            writer.add_scalar('learning-rate/learning-rate', learning_rate, iteration)
+            writer.add_scalar('learning-rate/learning-rate vs samples', learning_rate,
                               args.consumed_train_samples)
         if args.log_batch_size_to_tensorboard:
-            writer.add_scalar('batch-size', batch_size, iteration)
-            writer.add_scalar('batch-size vs samples', batch_size,
+            writer.add_scalar('batch-size/batch-size', batch_size, iteration)
+            writer.add_scalar('batch-size/batch-size vs samples', batch_size,
                               args.consumed_train_samples)
         for key in loss_dict:
-            writer.add_scalar(key , loss_dict[key], iteration)
-            writer.add_scalar(key + ' vs samples', loss_dict[key],
+            writer.add_scalar(f"lm-loss-training/{key}", loss_dict[key], iteration)
+            writer.add_scalar(f"lm-loss-training/{key}" + ' vs samples', loss_dict[key],
                               args.consumed_train_samples)
         if args.log_loss_scale_to_tensorboard:
-            writer.add_scalar('loss-scale', loss_scale, iteration)
-            writer.add_scalar('loss-scale vs samples', loss_scale,
+            writer.add_scalar('loss-scale/loss-scale', loss_scale, iteration)
+            writer.add_scalar('loss-scale/loss-scale vs samples', loss_scale,
                               args.consumed_train_samples)
         if grad_norm is not None:
-            writer.add_scalar('grad-norm', grad_norm, iteration)
-            writer.add_scalar('grad-norm vs samples', grad_norm,
+            writer.add_scalar('grad-norm/grad-norm', grad_norm, iteration)
+            writer.add_scalar('grad-norm/grad-norm vs samples', grad_norm,
                               args.consumed_train_samples)
         if num_zeros_in_grad is not None:
-            writer.add_scalar('num-zeros', num_zeros_in_grad, iteration)
-            writer.add_scalar('num-zeros vs samples', num_zeros_in_grad,
+            writer.add_scalar('num-zeros/num-zeros', num_zeros_in_grad, iteration)
+            writer.add_scalar('num-zeros/num-zeros vs samples', num_zeros_in_grad,
                               args.consumed_train_samples)
         if params_norm is not None:
-            writer.add_scalar('params-norm', params_norm, iteration)
-            writer.add_scalar('params-norm vs samples', params_norm,
+            writer.add_scalar('params-norm/params-norm', params_norm, iteration)
+            writer.add_scalar('params-norm/params-norm vs samples', params_norm,
                               args.consumed_train_samples)
         if args.log_timers_to_tensorboard:
             timers.write(timers_to_log, writer, iteration,
@@ -772,7 +772,7 @@ def evaluate(forward_step_func, data_iterator, model, verbose=False):
                     forward_backward_func = forward_backward_pipelining_without_interleaving
             else:
                 forward_backward_func = forward_backward_no_pipelining
-            
+
             if args.deepspeed:
                 # DeepSpeed uses eval_batch() and already aggregates losses.
                 assert isinstance(model, list) and len(model) == 1
@@ -782,7 +782,7 @@ def evaluate(forward_step_func, data_iterator, model, verbose=False):
                 loss_dicts = forward_backward_func(
                     forward_step_func, data_iterator, model, optimizer=None,
                     timers=None, forward_only=True)
-            
+
             if mpu.is_pipeline_last_stage(ignore_virtual=True):
                 # Reduce across processes.
                 for loss_dict in loss_dicts:
