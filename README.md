@@ -104,7 +104,7 @@ The output will be two files named, in this case, `my-gpt2_text_document.bin` an
 
 Further command line arguments are described in the source file [`preprocess_data.py`](./tools/preprocess_data.py).
 
-You can also use `tools/preprocess_data_many_cores.py` in the case of high amount of cpu cores available. Typically in JZ setup where cpu nodes have up to 40 physical cpu cores, you should run this script with around 60 workers instead of the `tools/preprocess_data.py`. The same command line arguments are available. 
+You can also use `tools/preprocess_data_many_cores.py` in the case of high amount of cpu cores available. Typically in JZ setup where cpu nodes have up to 40 physical cpu cores, you should run this script with around 60 workers instead of the `tools/preprocess_data.py`. The same command line arguments are available.
 
 **Merging datasets**
 
@@ -140,6 +140,8 @@ python tools/preprocess_data.py \
 ```
 
 ## GPT Pretraining
+
+**note**: you may want to skip to the next section, since it describes what we actually use at the moment.
 
 The `examples/pretrain_gpt.sh` script runs single GPU 345M parameter GPT pretraining. Debugging is the primary use for single GPU training, as the code base and command line arguments are optimized for highly distributed training. Most of the arguments are fairly self-explanatory. By default, the learning rate decays linearly over the training iterations starting at `--lr` to a minimum set by `--min-lr` over `--lr-decay-iters` iterations. The fraction of training iterations used for warmup is set by `--lr-warmup-fraction`. While this is single GPU training, the batch size specified by `--micro-batch-size` is a single forward-backward path batch-size and the code will perform gradient accumulation steps until it reaches `global-batch-size` whcih is the batch size per iteration.
 
@@ -226,6 +228,93 @@ MASTER_ADDR=localhost MASTER_PORT=9994 RANK=0 LOCAL_RANK=0 python pretrain_gpt.p
 ```
 
 Further command line arguments are described in the source file [`arguments.py`](./megatron/arguments.py).
+
+
+### Deepspeed PP and ZeRO-DP
+
+To allow further flexibility we are using Deepspeed PP (pipeline parallelism) and ZeRO-DP along with Megatron normal functionality. That is we replace Megatron's PP with Deepspeed's PP, and we use ZERO-DP for DP.
+
+It's similar to the normal Megatron-LM launcher, plus it has a deepspeed config file and a few params:
+
+```
+CHECKPOINT_PATH=checkpoints/gpt2
+VOCAB_FILE=data/gpt2-vocab.json
+MERGE_FILE=data/gpt2-merges.txt
+DATA_PATH=data/meg-gpt2_oscar-combined_text_document
+TENSORBOARD_PATH=output_dir/tensorboard
+CODECARBON_PATH=output_dir/codecarbon
+SAVE_INTERVAL=1500
+
+
+#    --train-samples 10_000 \
+#    --exit-interval $EXIT_INTERVAL \
+
+#    --exit-interval 100 \
+GPT_ARGS=" \
+    --num-layers 2 \
+    --hidden-size 64 \
+    --num-attention-heads 2 \
+    --seq-length 1024 \
+    --max-position-embeddings 1024 \
+    --micro-batch-size 2 \
+    --rampup-batch-size 4 4 1_000 \
+    --global-batch-size 16 \
+    --train-samples 100 \
+    --optimizer adam \
+    --adam-beta1 0.9 \
+    --adam-beta2 0.95 \
+    --adam-eps 1e-8 \
+    --lr 1e-4 \
+    --lr-warmup-samples 5 \
+    --clip-grad 1.0 \
+    --weight-decay 1e-1 \
+    --vocab-file $VOCAB_FILE \
+    --merge-file $MERGE_FILE \
+    --fp16 \
+    "
+#    --train-iters 500 \
+
+OUTPUT_ARGS=" \
+    --log-interval 10 \
+    --save-interval $SAVE_INTERVAL \
+    --eval-interval 100 \
+    --eval-iters 10 \
+    --checkpoint-activations \
+    "
+
+#    --codecarbon-dir $CODECARBON_PATH \
+DATA_ARGS=" \
+    --save $CHECKPOINT_PATH \
+    --load $CHECKPOINT_PATH \
+    --data-path $DATA_PATH \
+    --tensorboard-dir $TENSORBOARD_PATH \
+    --tensorboard-queue-size 5 \
+    --log-timers-to-tensorboard \
+    --log-batch-size-to-tensorboard \
+    --log-validation-ppl-to-tensorboard \
+    "
+
+ALL_ARGS="$GPT_ARGS $OUTPUT_ARGS $DATA_ARGS"
+
+N_GPUS=2
+
+# if you can't stand pt-1.9 launcher noise
+export LOGLEVEL=WARNING
+
+LAUNCHER="deepspeed --num_gpus $N_GPUS"
+
+CMD="$LAUNCHER pretrain_gpt.py $ALL_ARGS"
+
+echo $CMD
+
+#rm -rf $CHECKPOINT_PATH
+$CMD
+
+```
+
+on JZ we use a different launching command, see for example the end of  [tr1-13B-round1.slurm](https://github.com/bigscience-workshop/bigscience/blob/master/train/tr1-13B-base/tr1-13B-round1.slurm), but this is also a good fully functional script that you can use. Except it's written for SLURM environment.
+
+```
 
 
 ## Using any pretrained tokenizer
