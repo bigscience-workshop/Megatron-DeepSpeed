@@ -152,8 +152,12 @@ class GPT2Tokenizer(object):
             **kwargs)
         return tokenizer
 
+    #max_token_len_cache determines whether a normalized token will be cached. Increasing
+    #this may make things faster but will also take more memory. The upper bound of
+    #the normalized token cache is fixed at 1000000 tokens, but could be less than 
+    #this depending on the max_token_len_cache.
     def __init__(self, vocab_file, merges_file, errors='replace',
-                 special_tokens=None, max_len=None):
+                 special_tokens=None, max_len=None, max_token_len_cache=9):
         self.max_len = max_len if max_len is not None else int(1e12)
         self.encoder = json.load(open(vocab_file))
         self.decoder = {v: k for k, v in self.encoder.items()}
@@ -171,6 +175,7 @@ class GPT2Tokenizer(object):
         self.special_tokens = {}
         self.special_tokens_decoder = {}
         self.set_special_tokens(special_tokens)
+        self.max_token_len_cache=max_token_len_cache
 
     def __len__(self):
         return len(self.encoder) + len(self.special_tokens)
@@ -239,8 +244,9 @@ class GPT2Tokenizer(object):
           ret = [bpe_token for bpe_token in self.bpe(token).split(' ')]
           return ret
 
-    def tokenize(self, text, max_token_len_cache=9, tokenize_chinese_chars=False):
+    def tokenize(self, text):
         """ Tokenize a string. """
+        max_token_len_cache = self.max_token_len_cache
         bpe_tokens = []
         if sys.version_info[0] == 2:
           for token in re.findall(self.pat, text):        
