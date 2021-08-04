@@ -582,10 +582,12 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
     if iteration % args.log_interval == 0:
         elapsed_time = timers('interval-time').elapsed()
         elapsed_time_per_iteration = elapsed_time / total_iterations
-        if writer and torch.distributed.get_rank() == 0:
+        if writer and is_last_rank():
             if args.log_timers_to_tensorboard:
-                writer.add_scalar('iteration-time',
+                writer.add_scalar('iteration-time/iteration-time (s)',
                                   elapsed_time_per_iteration, iteration)
+                writer.add_scalar('iteration-time/iteration-time (s) vs samples',
+                                  elapsed_time_per_iteration, args.consumed_train_samples)
         log_string = ' iteration {:8d}/{:8d} |'.format(
             iteration, args.train_iters)
         log_string += ' consumed samples: {:12d} |'.format(
