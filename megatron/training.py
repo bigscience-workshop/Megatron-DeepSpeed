@@ -820,7 +820,7 @@ def evaluate_and_print_results(prefix, forward_step_func,
         ppl = math.exp(min(20, total_loss_dict[key].item()))
         string += '{} PPL: {:.6E} | '.format(key, ppl)
         if writer and is_last_rank():
-            writer.add_scalar('lm-loss-validation/{} validation'.format(key),
+            writer.add_scalar(f'lm-loss-validation/{key} validation',
                               total_loss_dict[key].item(),
                               iteration)
             writer.add_scalar('lm-loss-validation/{} validation vs samples'.format(key),
