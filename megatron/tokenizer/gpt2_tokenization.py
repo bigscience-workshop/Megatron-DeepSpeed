@@ -197,8 +197,6 @@ class GPT2Tokenizer(object):
     
     @lru_cache(1_000_000)
     def bpe(self, token):
-        #if token in self.cache:
-        #    return self.cache[token]
         word = tuple(token)
         pairs = get_pairs(word)
 
