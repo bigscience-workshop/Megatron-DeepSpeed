@@ -57,16 +57,11 @@ DIR=`pwd`
 DATETIME=`date +'date_%y-%m-%d_time_%H-%M-%S'`
 mkdir -p $DIR/logs
 
-DATASET_0="/workspace/data/dataset-0_text_document"
-DATASET_1="/workspace/data/dataset-1_text_document"
-DATASET_2="/workspace/data/dataset-2_text_document"
-DATASET_3="/workspace/data/dataset-3_text_document"
-DATASET_4="/workspace/data/dataset-4_text_document"
-# DATASET_5="/workspace/data/dataset-5_text_document"
-# DATASET_6="/workspace/data/dataset-6_text_document"
-# DATASET_7="/workspace/data/dataset-7_text_document"
-# DATASET_8="/workspace/data/dataset-8_text_document"
-# DATASET_9="/workspace/data/dataset-9_text_document"
+DATASET_0="${OUTPUT_PATH}/dataset-0_text_document"
+DATASET_1="${OUTPUT_PATH}/dataset-1_text_document"
+DATASET_2="${OUTPUT_PATH}/dataset-2_text_document"
+DATASET_3="${OUTPUT_PATH}/dataset-3_text_document"
+DATASET_4="${OUTPUT_PATH}/dataset-4_text_document"
 DATASET="0.1 ${DATASET_0} 0.25 ${DATASET_1} 0.2 ${DATASET_2} 0.15 ${DATASET_3} 0.3 ${DATASET_4}"
 
 VOCAB_PATH=${BASE_DATA_PATH}/gpt2-vocab.json
@@ -195,7 +190,7 @@ cat <<EOT > $CONFIG_JSON
 EOT
 
 # run_cmd="deepspeed $WORKER_STR ${DIR}/test_sampling.py $@ ${options}"
-run_cmd="deepspeed $WORKER_STR tests/test_sampling.py $@ ${options}"
+run_cmd="deepspeed $WORKER_STR test_sampling.py $@ ${options}"
 
 echo ${run_cmd}
 eval ${run_cmd}
