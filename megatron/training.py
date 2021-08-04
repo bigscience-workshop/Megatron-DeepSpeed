@@ -584,7 +584,7 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
     if iteration % args.log_interval == 0:
         elapsed_time = timers('interval-time').elapsed()
         elapsed_time_per_iteration = elapsed_time / total_iterations
-        if writer and is_last_rank():
+        if writer and is_last_rank(): # Changed `torch.distributed.get_rank() == 0` to `is_last_rank()` as a writing condition
             if args.log_timers_to_tensorboard:
                 writer.add_scalar('iteration-time/iteration-time (s)',
                                   elapsed_time_per_iteration, iteration)
