@@ -152,10 +152,11 @@ class GPT2Tokenizer(object):
             **kwargs)
         return tokenizer
 
-    #max_token_len_cache determines whether a normalized token will be cached. Increasing
-    #this may make things faster but will also take more memory. The upper bound of
-    #the normalized token cache is fixed at 1000000 tokens, but could be less than 
-    #this depending on the max_token_len_cache.
+    """
+    max_token_len_cache determines whether a normalized token will be cached. It tries to only store shorter token in the cache, with the heuristic that they are more frequent. Increasing
+    this may make tokenization faster but will also take more memory. The upper bound of
+    the normalized token cache is fixed at 1 000 000 tokens.
+    """
     def __init__(self, vocab_file, merges_file, errors='replace',
                  special_tokens=None, max_len=None, max_token_len_cache=9):
         self.max_len = max_len if max_len is not None else int(1e12)
