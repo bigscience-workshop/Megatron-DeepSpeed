@@ -270,7 +270,7 @@ def get_prefix_indices(data, eod_token, partial_prefix_indices):
         # Compute the index of all eod tokens in data.
         eod_indices = (data[batch_id] == eod_token).nonzero()
         prev_index = 0
-        assert len(partial_prefix_indices[batch_id]) == len(eod_indices), f"The nu,ber of prefixes has to match the number of documents. Got {len(partial_prefix_indices[batch_id])} prefixes and {len(eod_indices)} documents"
+        assert partial_prefix_indices is None or len(partial_prefix_indices[batch_id]) == len(eod_indices), f"The number of prefixes has to match the number of documents. Got {len(partial_prefix_indices[batch_id])} prefixes and {len(eod_indices)} documents"
         for doc_id, eod_index in enumerate(eod_indices):
             if partial_prefix_indices is None or partial_prefix_indices[batch_id][doc_id] is None:
                 # We need to randomly generate aa prefix index that satisfies the interleave condition in the docstring
