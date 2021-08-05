@@ -4,4 +4,3 @@ six
 regex
 numpy
 transformers
-deepspeed
