@@ -24,8 +24,8 @@ The implementation requires MPI and mpi4py, and it assumes that
 files are written to a global file system, such that one process
 can read a file written by another process.
 
-A list of sample index values for the source dataset are shuffled by rank 0,
-and the shuffled sequence is then broadcast to all ranks.
+A list of sample index values from the source dataset are selected
+by rank 0 and broadcast to all ranks.
 Each process tokenizes a subset of samples and writes its output to a part file.
 After all ranks have finished, rank 0 merges and deletes the part files.
 
@@ -33,6 +33,8 @@ To run:
 
 mpiexec -np 320 python preprocess_dataset_mpi.py \
        --input openwebtext \
+       --shuffle \
+       --seed 100 \
        --output-prefix openwebtext-bert \
        --vocab bert-large-uncased-vocab.txt \
        --dataset-impl mmap \
@@ -170,17 +172,17 @@ def get_args():
     group.add_argument('--split', type=str, default='train',
                        help='Dataset split to select.')
     group.add_argument('--columns', nargs='+', default=['text'],
-                       help='space separate listed of column names to extract from dataset')
-    group.add_argument('--split-sentences', action='store_true',
-                       help='Split documents into sentences.')
-    group.add_argument('--keep-newlines', action='store_true',
-                       help='Keep newlines between sentences when splitting.')
+                       help='Space separate listed of column names to extract from dataset')
     group.add_argument('--count', type=int, default=None,
-                       help='Number of samples to select.')
+                       help='Limit the number of samples to select.')
     group.add_argument('--shuffle', action='store_true',
                        help='Shuffle samples before writing output files.')
     group.add_argument('--seed', type=int, default=None,
                        help='Seed to pass to random.seed for shuffle operations.')
+    group.add_argument('--split-sentences', action='store_true',
+                       help='Split documents into sentences.')
+    group.add_argument('--keep-newlines', action='store_true',
+                       help='Keep newlines between sentences when splitting.')
 
     group = parser.add_argument_group(title='tokenizer')
     group.add_argument('--tokenizer-type', type=str, required=True,
