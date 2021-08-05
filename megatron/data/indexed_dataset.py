@@ -365,15 +365,16 @@ class MMapIndexedDataset(torch.utils.data.Dataset):
                     # create numpy array of desired numpy datatype
                     pointers = np.array(sizes, dtype=npdtype)
 
-                    # scale each element by its dtype size
-                    dtype_size = dtype().itemsize
-                    pointers *= dtype_size
+                    if len(sizes) > 0:
+                        # scale each element by its dtype size
+                        dtype_size = dtype().itemsize
+                        pointers *= dtype_size
 
-                    # in-place prefix scan to compute byte offsets
-                    np.cumsum(pointers, axis=0, out=pointers)
+                        # in-place prefix scan to compute byte offsets
+                        np.cumsum(pointers, axis=0, out=pointers)
 
-                    # zero-base the prefix scan (exclusive scan)
-                    pointers -= pointers[0]
+                        # zero-base the prefix scan (exclusive scan)
+                        pointers -= pointers[0]
 
                     return pointers
 
