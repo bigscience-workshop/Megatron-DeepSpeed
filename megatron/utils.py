@@ -197,10 +197,13 @@ def get_ltor_masks_and_position_ids(
 
             # If the last eod token is not the last token of the sequence, we suppose that there is a partial document
             # We treat this case as if we add an eod token at the end of the sequence.
-            if data[b][-1] == eod_token:
-                eod_index = torch.cat(
-                    (eod_index, torch.tensor(len(data[b]), dtype=eod_index.dtype, device=eod_index.device))
-                )
+            if data[b][-1] != eod_token:
+                if len(eod_index) == 0:
+                    eod_index = torch.tensor(len(data[b]), dtype=eod_index.dtype, device=eod_index.device)
+                else:
+                    eod_index = torch.cat(
+                        (eod_index, torch.tensor(len(data[b]), dtype=eod_index.dtype, device=eod_index.device))
+                    )
 
             # Detach indecies from positions if going to modify positions.
             if reset_position_ids:
@@ -300,10 +303,13 @@ def get_prefix_indices(data, eod_token, partial_prefix_indices, reset_attention_
 
         # If the last eod token is not the last token of the sequence, we suppose that there is a partial document
         # We treat this case as if we add an eod token at the end of the sequence.
-        if data[batch_id][-1] == eod_token:
-            eod_indices = torch.cat(
-                (eod_indices, torch.tensor(len(data[batch_id]), dtype = eod_indices.dtype, device = eod_indices.device))
-            )
+        if data[batch_id][-1] != eod_token:
+            if len(eod_indices) == 0:
+                eod_indices = torch.tensor(len(data[batch_id]), dtype = eod_indices.dtype, device = eod_indices.device)
+            else:
+                eod_indices = torch.cat(
+                    (eod_indices, torch.tensor(len(data[batch_id]), dtype = eod_indices.dtype, device = eod_indices.device))
+                )
 
         # Prefix lm per document.
         if reset_attention_mask:
