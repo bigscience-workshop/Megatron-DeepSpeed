@@ -357,7 +357,7 @@ $CMD
 
 on JZ we use a different launching command, see for example the end of  [tr1-13B-round1.slurm](https://github.com/bigscience-workshop/bigscience/blob/master/train/tr1-13B-base/tr1-13B-round1.slurm), but this is also a good fully functional script that you can use. Except it's written for SLURM environment.
 
-```
+
 
 
 ## Using any pretrained tokenizer
