@@ -47,6 +47,7 @@ import os
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
                                              os.path.pardir)))
+import stat
 import time
 
 import torch
@@ -64,11 +65,12 @@ from megatron.data.indexed_dataset import infer_dataset_impl, MMapIndexedDataset
 
 import numpy as np
 import random
-from mpi4py import MPI
 
-mpi_comm = MPI.COMM_WORLD
-mpi_rank = mpi_comm.Get_rank()
-mpi_size = mpi_comm.Get_size()
+use_mpi = True
+if use_mpi:
+    from mpi4py import MPI
+else:
+    import torch.distributed as dist
 
 # compute start and end index values based on rank
 # evenly divide file count among procs
@@ -217,14 +219,67 @@ def get_args():
 
     return args
 
-def all_true(val):
-    """Returns True if all procs input True, False otherwise"""
-    inval = np.zeros((1,), dtype=np.int32)
-    inval[0] = int(val)
+def get_rank_size(args):
+    if args.mpi_comm:
+        rank = args.mpi_comm.Get_rank()
+        size = args.mpi_comm.Get_size()
+        return rank, size
+    else:
+        rank = dist.get_rank()
+        size = dist.get_world_size()
+        return rank, size
 
-    outval = np.zeros(inval.shape, inval.dtype)
-    mpi_comm.Allreduce(inval, outval, op=MPI.LAND)
-    return bool(outval[0])
+def barrier(args):
+    if args.mpi_comm:
+        args.mpi_comm.barrier()
+    else:
+        dist.barrier()
+
+def bcast(args, vals, root=0):
+    """Broadcast list of vals from root to all ranks, returns newly allocated list"""
+    if args.mpi_comm:
+        vals = args.mpi_comm.bcast(vals, root=root)
+        return vals
+    else:
+        # broadcast length of vals list
+        length = [len(vals)]
+        dist.broadcast_object_list(length, src=root)
+
+        # allocate a tensor of appropriate size
+        # initialize tensor with list values on root
+        rank, size = get_rank_size(args)
+        if rank == root:
+            tvals = torch.tensor(vals, dtype=torch.int64)
+        else:
+            tvals = torch.zeros([length[0]], dtype=torch.int64)
+
+        # broadcast tensor from root, and return as a new list
+        dist.broadcast(tvals, src=root)
+        return tvals.tolist()
+
+def all_sum(args, vals):
+    """Sums values in vals element-wise and updates vals with final result on all ranks"""
+    if args.mpi_comm:
+        outval = np.zeros(vals.shape, vals.dtype)
+        args.mpi_comm.Allreduce(vals, outval, op=MPI.SUM)
+        vals[:] = outval
+    else:
+        tensor = torch.tensor(vals)
+        dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
+        vals[:] = tensor.tolist()
+
+def all_true(args, val):
+    """Returns True if all procs input True, False otherwise"""
+    if args.mpi_comm:
+        inval = np.array([int(val)], dtype=np.int32)
+        outval = np.zeros(inval.shape, inval.dtype)
+        args.mpi_comm.Allreduce(inval, outval, op=MPI.LAND)
+        return bool(outval[0])
+    else:
+        rank, size = get_rank_size(args)
+        tensor = torch.tensor([int(val)], dtype=torch.int32)
+        dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
+        return (tensor.tolist()[0] == size)
 
 def select_sample_list(args, dset_size):
     """Given the total number of samples, select a list of sample index values"""
@@ -232,7 +287,7 @@ def select_sample_list(args, dset_size):
     # optionally shuffle the list,
     # and optionally limit the sample count
     idx = []
-    if mpi_rank == 0:
+    if args.rank == 0:
         # generate a list of all index values
         idx = [int(x) for x in range(dset_size)]
 
@@ -247,31 +302,42 @@ def select_sample_list(args, dset_size):
             idx = idx[:args.count]
 
     # broadcast sample index values from rank 0 to all procs
-    idx = mpi_comm.bcast(idx, root=0)
+    idx = bcast(args, idx, root=0)
     return idx
 
 def main():
     args = get_args()
     startup_start = time.time()
 
+    # select our distributed runtime (MPI or torch.distributed)
+    # and lookup our process rank and the group size
+    args.mpi_comm = None
+    if use_mpi:
+        args.mpi_comm = MPI.COMM_WORLD
+    else:
+        proc_rank = int(os.environ['OMPI_COMM_WORLD_RANK'])
+        proc_size = int(os.environ['OMPI_COMM_WORLD_SIZE'])
+        dist.init_process_group("gloo", init_method="env://",
+            rank=proc_rank, world_size=proc_size)
+    proc_rank, proc_size = get_rank_size(args)
+
+    # some functions like build_tokenizer use args.rank to filter stdout messages
+    args.rank = proc_rank
+
     # typically: ['text']
     columns = args.columns
 
-    # some functions like build_tokenizer use args.rank to filter stdout messages
-    args.rank = mpi_rank
-
     # silence info messages from all procs except rank 0 
-    if mpi_rank != 0:
+    if proc_rank != 0:
         logging.set_verbosity(logging.ERROR)
 
-    # load the specified HuggingFace dataset and get its size
+    # load the specified HuggingFace dataset
     dsetname = args.input
-    if mpi_rank == 0:
+    if proc_rank == 0:
         print("Opening dataset", dsetname)
     dset = load_dataset(dsetname, split=args.split, keep_in_memory=None)
-    dset_size = len(dset)
-    mpi_comm.barrier()
-    if mpi_rank == 0:
+    barrier(args)
+    if proc_rank == 0:
         print(dset)
 
     # create sample index list,
@@ -280,7 +346,7 @@ def main():
     idx = select_sample_list(args, len(dset))
     
     # divide index list evenly among ranks
-    start, end = get_start_end(len(idx), mpi_rank, mpi_size)
+    start, end = get_start_end(len(idx), proc_rank, proc_size)
 
     if nltk_available and args.split_sentences:
         nltk.download("punkt", quiet=True)
@@ -292,49 +358,52 @@ def main():
     if args.split_sentences:
         level = "sentence"
 
+    # wait for all ranks before stopping timer
+    barrier(args)
+    startup_end = time.time()
+    if proc_rank == 0:
+        print("Seconds to startup:", startup_end - startup_start)
+
     # TODO: skip write phase and report success if rank has nothing to do
 
     # set this to false on any problem so we can inform rank 0
+    tokenize_start = time.time()
+    dset_stats = np.zeros((3,), dtype=np.int64) # docs, sentences, bytes
     success = True
     try:
         # create data file for each rank
-        if mpi_rank == 0:
+        if proc_rank == 0:
             print(f"Vocab size: {tokenizer.vocab_size}")
             print(f"Output prefix: {args.output_prefix}")
         output_bin_files = {}
         output_idx_files = {}
         builders = {}
         for key in columns:
-            filebase = "{}_{}_{}_{}".format(args.output_prefix, key, level, mpi_rank)
+            filebase = "{}_{}_{}_{}".format(args.output_prefix, key, level, proc_rank)
             output_bin_files[key] = data_file_path(filebase)
             output_idx_files[key] = index_file_path(filebase)
             builders[key] = indexed_dataset.make_builder(output_bin_files[key],
                                                    impl=args.dataset_impl,
                                                    vocab_size=tokenizer.vocab_size)
 
-        # wait for all ranks to create file before stopping timer
-        mpi_comm.barrier()
-        startup_end = time.time()
-        if mpi_rank == 0:
-            print("Seconds to startup:", startup_end - startup_start)
-
         # each rank tokenizes its samples and writes its own file
-        proc_start = time.time()
-        count = 0
-        total_bytes_processed = 0
         encoder.initializer()
         for i in range(start, end):
-            # tokenize text for the given sample index
+            # get current sample index
             j = idx[i]
-            text = dset[j]['text']
-            doc, bytes_processed = encoder.encode_text(text)
+            for key in columns:
+                # tokenize text for the given sample index
+                text = dset[j][key]
+                doc, bytes_processed = encoder.encode_text(text)
 
-            # add tokenized sequence to our data file
-            total_bytes_processed += bytes_processed
-            for key, sentences in doc.items():
-                for sentence in sentences:
-                    builders[key].add_item(torch.IntTensor(sentence))
-                builders[key].end_document()
+                # add tokenized sequence to our data file
+                for key, sentences in doc.items():
+                    for sentence in sentences:
+                        builders[key].add_item(torch.IntTensor(sentence))
+                    builders[key].end_document()
+                    dset_stats[0] += 1
+                    dset_stats[1] += len(sentences)
+                dset_stats[2] += bytes_processed
 
         # finalize file of each rank
         for key in columns:
@@ -344,21 +413,29 @@ def main():
         success = False
 
     # wait for all ranks to finish their files
-    mpi_comm.barrier()
-    proc_end = time.time()
-    if mpi_rank == 0:
-        print("Seconds to tokenize:", proc_end - proc_start)
-        print("Documents:", len(idx), "docs/sec: ", len(idx) / (proc_end - proc_start))
+    barrier(args)
+    tokenize_end = time.time()
+    all_sum(args, dset_stats)
+    if proc_rank == 0:
+        secs = tokenize_end - tokenize_start
+        docrate = dset_stats[0] / secs if secs > 0.0 else 0.0
+        sentrate = dset_stats[1] / secs if secs > 0.0 else 0.0
+        byterate = dset_stats[2] / secs if secs > 0.0 else 0.0
+        print("Seconds to tokenize:", secs)
+        print("Documents=", dset_stats[0], "docs/sec=", docrate)
+        print("Sentences=", dset_stats[1], "sent/sec=", sentrate)
+        print("Bytes=", dset_stats[2], "bytes/sec=", byterate)
 
     # allreduce to check whether all ranks wrote their part successfully
-    success = all_true(success)
+    success = all_true(args, success)
 
     # rank 0 merges and deletes all per-rank files
-    if mpi_rank == 0:
+    if proc_rank == 0:
         # merge files if all ranks were successful
         if success:
             print("Merging rank files ...", flush=True)
             merge_start = time.time()
+            numbytes = 0
 
             # define name of single file
             for key in columns:
@@ -370,10 +447,14 @@ def main():
                                                              vocab_size=tokenizer.vocab_size)
 
             # merge all ranks into one file
-            for rank in range(mpi_size):
-                infile = "{}_{}_{}_{}".format(args.output_prefix, key, level, rank)
-                print("Merging file", infile, flush=True)
-                builders[key].merge_file_(infile)
+            for rank in range(proc_size):
+                for key in columns:
+                    infile = "{}_{}_{}_{}".format(args.output_prefix, key, level, rank)
+                    print("Merging file", infile, flush=True)
+                    binfile = data_file_path(infile)
+                    filesize = os.stat(binfile)[stat.ST_SIZE]
+                    numbytes += filesize
+                    builders[key].merge_file_(infile)
 
             # finalize the merged file
             print("Finalizing merged file ...", flush=True)
@@ -382,20 +463,24 @@ def main():
                 del builders[key] # file closed in __del__
 
             merge_end = time.time()
+            secs = merge_end - merge_start
+            byterate = numbytes / secs if secs > 0.0 else 0.0
             print("Seconds to merge:", merge_end - merge_start)
-            print(f"Merged {mpi_size} files into {args.output_prefix}")
+            print(f"Merged {proc_size} files into {args.output_prefix}")
+            print(f"Bytes=", numbytes, "bytes/sec=", byterate)
 
         # delete per-rank files, do this even on error
         print("Deleting rank files ...", flush=True)
-        for rank in range(mpi_size):
-            filebase = "{}_{}_{}_{}".format(args.output_prefix, key, level, rank)
-            binfile = data_file_path(filebase)
-            idxfile = index_file_path(filebase)
-            os.remove(binfile)
-            os.remove(idxfile)
+        for rank in range(proc_size):
+            for key in columns:
+                filebase = "{}_{}_{}_{}".format(args.output_prefix, key, level, rank)
+                binfile = data_file_path(filebase)
+                idxfile = index_file_path(filebase)
+                os.remove(binfile)
+                os.remove(idxfile)
 
     # hold everyone until rank 0 is done
-    mpi_comm.barrier()
+    barrier(args)
 
 if __name__ == '__main__':
     main()
