@@ -151,8 +151,8 @@ def get_ltor_masks_and_position_ids(
         reset_position_ids,
         reset_attention_mask,
         eod_mask_loss,
-        prefix_indices=None,
-        loss_on_targets_only=False,
+        prefix_indices,
+        loss_on_targets_only,
     ):
     """
     Build masks and position id for left to right model.
@@ -198,9 +198,6 @@ def get_ltor_masks_and_position_ids(
             # If the last eod token is not the last token of the sequence, we suppose that there is a partial document
             # We treat this case as if we add an eod token at the end of the sequence.
             if data[b][-1] != eod_token:
-                # if len(eod_index) == 0:
-                #     eod_index = torch.tensor(len(data[b]), dtype=eod_index.dtype, device=eod_index.device)
-                # else:
                 eod_index = torch.cat(
                     (eod_index, torch.tensor([len(data[b])], dtype=eod_index.dtype, device=eod_index.device))
                 )
@@ -304,10 +301,6 @@ def get_prefix_indices(data, eod_token, partial_prefix_indices, reset_attention_
         # If the last eod token is not the last token of the sequence, we suppose that there is a partial document
         # We treat this case as if we add an eod token at the end of the sequence.
         if data[batch_id][-1] != eod_token:
-            # print(eod_indices.shape)
-            # if len(eod_indices) == 0:
-            #     eod_indices = torch.tensor(len(data[batch_id]), dtype = eod_indices.dtype, device = eod_indices.device)
-            # else:
             eod_indices = torch.cat(
                 (eod_indices, torch.tensor([len(data[batch_id])], dtype = eod_indices.dtype, device = eod_indices.device))
             )

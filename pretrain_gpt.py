@@ -107,8 +107,8 @@ def get_batch(data_iterator):
         prefix_indices = get_prefix_indices(
             tokens,
             tokenizer.eod,
-            partial_prefix_indices = None,
-            reset_attention_mask = args.reset_attention_mask
+            partial_prefix_indices=None,
+            reset_attention_mask=args.reset_attention_mask
         )
     else:
         prefix_indices = None
@@ -120,7 +120,8 @@ def get_batch(data_iterator):
         args.reset_position_ids,
         args.reset_attention_mask,
         args.eod_mask_loss,
-        prefix_indices = prefix_indices
+        prefix_indices=prefix_indices,
+        loss_on_targets_only=args.loss_on_targets_only
     )
 
     return tokens, labels, loss_mask, attention_mask, position_ids
@@ -160,7 +161,8 @@ def get_batch_pipe(data):
         args.reset_position_ids,
         args.reset_attention_mask,
         args.eod_mask_loss,
-        prefix_indices=prefix_indices
+        prefix_indices=prefix_indices,
+        loss_on_targets_only=args.loss_on_targets_only
     )
 
     return (tokens, position_ids, attention_mask), (labels, loss_mask)
