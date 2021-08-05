@@ -296,7 +296,7 @@ def get_prefix_indices(data, eod_token, partial_prefix_indices, reset_attention_
     for batch_id in range(micro_batch_size):
         prefix_indices.append([])
         # Compute the index of all eod tokens in data.
-        eod_indices = (data[batch_id] == eod_token).nonzero()
+        eod_indices = (data[batch_id] == eod_token).nonzero().squeeze(-1)
 
         # If the last eod token is not the last token of the sequence, we suppose that there is a partial document
         # We treat this case as if we add an eod token at the end of the sequence.
