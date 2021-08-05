@@ -172,6 +172,10 @@ def get_args():
                        help='Split documents into sentences.')
     group.add_argument('--keep-newlines', action='store_true',
                        help='Keep newlines between sentences when splitting.')
+    group.add_argument('--shuffle', action='store_true',
+                       help='Shuffle samples before writing output files.')
+    group.add_argument('--seed', type=int, default=None,
+                       help='Seed to pass to random.seed for shuffle operations.')
 
     group = parser.add_argument_group(title='tokenizer')
     group.add_argument('--tokenizer-type', type=str, required=True,
@@ -220,7 +224,7 @@ def main():
     if mpi_rank != 0:
         logging.set_verbosity(logging.ERROR)
 
-    # open the specified HuggingFace dataset
+    # load the specified HuggingFace dataset and get its size
     dsetname = args.input
     if mpi_rank == 0:
         print("Opening dataset", dsetname)
@@ -230,11 +234,16 @@ def main():
     if mpi_rank == 0:
         print(dset)
 
-    # shuffle sample index list on rank 0, bcast to all ranks
+    # create sample index list on rank 0,
+    # optionally shuffle the list,
+    # and bcast to all ranks
     idx = []
     if mpi_rank == 0:
-      idx = [int(x) for x in range(dset_size)]
-      random.shuffle(idx)
+        idx = [int(x) for x in range(dset_size)]
+        if args.shuffle:
+            if args.seed is not None:
+                random.seed(args.seed)
+            random.shuffle(idx)
     idx = mpi_comm.bcast(idx, root=0)
     
     # divide index list evenly among ranks
@@ -267,13 +276,13 @@ def main():
                                                impl=args.dataset_impl,
                                                vocab_size=tokenizer.vocab_size)
 
-    # wait to start timer until all ranks are ready
+    # wait for all ranks to create file before stopping timer
     mpi_comm.barrier()
     startup_end = time.time()
     if mpi_rank == 0:
-        print("Time to startup:", startup_end - startup_start)
+        print("Seconds to startup:", startup_end - startup_start)
 
-    # each rank writes its own file
+    # each rank tokenizes its samples and writes its own file
     proc_start = time.time()
     count = 0
     total_bytes_processed = 0
@@ -300,12 +309,12 @@ def main():
     mpi_comm.barrier()
     proc_end = time.time()
     if mpi_rank == 0:
-        print("Time to tokenize:", proc_end - proc_start)
+        print("Seconds to tokenize:", proc_end - proc_start)
         print("Documents:", dset_size, "docs/sec: ", dset_size / (proc_end - proc_start))
 
     # TODO: allreduce to ensure all ranks wrote their part successfully
 
-    # have rank 0 merge all files into one, and delete per rank files
+    # rank 0 merges and deletes all per-rank files
     if mpi_rank == 0:
         print("Merging rank files ...", flush=True)
         merge_start = time.time()
@@ -341,7 +350,7 @@ def main():
             os.remove(idxfile)
 
         merge_end = time.time()
-        print("Time to merge:", merge_end - merge_start)
+        print("Seconds to merge:", merge_end - merge_start)
         print(f"Merged {mpi_size} datasets to {args.output_prefix}")
 
     # hold everyone until rank 0 is done
