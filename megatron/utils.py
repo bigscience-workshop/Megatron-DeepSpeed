@@ -145,7 +145,7 @@ def check_adlr_autoresume_termination(iteration, model,
         sys.exit(0)
 
 
-def get_masks_and_position_ids(
+def get_ltor_masks_and_position_ids(
         data,
         eod_token,
         reset_position_ids,
@@ -205,19 +205,19 @@ def get_masks_and_position_ids(
             for j in range(eod_index.size()[0]):
                 i = eod_index[j]
 
-                # Mask attention loss.
                 if reset_attention_mask:
+                    # Prevent cross document interactions.
                     attention_mask[b, 0, (i + 1):, :(i + 1)] = 0
+
+                    # Prefix lm.
+                    if prefix_indices:
+                        attention_mask[b, 0, prev_index: prefix_indices[b][j], prev_index: i + 1] = 1
+                        if loss_on_targets_only:
+                            loss_mask[b, prev_index: prefix_indices[b][j]] = 0.0
 
                 # Reset positions.
                 if reset_position_ids:
                     position_ids[b, (i + 1):] -= (i + 1 - prev_index)
-
-                # Prefix lm.
-                if prefix_indices:
-                    attention_mask[b, 0, prev_index: prefix_indices[b][j], prev_index: i+1] = 1
-                    if loss_on_targets_only:
-                        loss_mask[b, prev_index: prefix_indices[b][j]] = 0.0
 
                 prev_index = i + 1
 
