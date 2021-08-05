@@ -313,6 +313,7 @@ def _add_network_size_args(parser):
                        default=PositionEmbeddingType.absolute,
                        help='Define position embedding type ("absolute" | "rotary"). "absolute" by default.'
                        )
+    group.add_argument('--prefix-lm', action="store_true", help="Use prefix mask on attention matrices.")
 
     return parser
 
