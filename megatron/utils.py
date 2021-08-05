@@ -304,6 +304,7 @@ def get_prefix_indices(data, eod_token, partial_prefix_indices, reset_attention_
         # If the last eod token is not the last token of the sequence, we suppose that there is a partial document
         # We treat this case as if we add an eod token at the end of the sequence.
         if data[batch_id][-1] != eod_token:
+            print(eod_indices.shape)
             if len(eod_indices) == 0:
                 eod_indices = torch.tensor(len(data[batch_id]), dtype = eod_indices.dtype, device = eod_indices.device)
             else:
