@@ -151,7 +151,8 @@ def get_masks_and_position_ids(
         reset_position_ids,
         reset_attention_mask,
         eod_mask_loss,
-        prefix_indices=None
+        prefix_indices=None,
+        loss_on_targets_only=False,
     ):
     """
     Build masks and position id for left to right model.
@@ -159,6 +160,7 @@ def get_masks_and_position_ids(
         - None signifies that the model is fully autoregressive.
         - else the argument holds all prefix indices that split documents between input and target.
         - Note we also mask the loss to only predict target.
+    :param loss_on_targets_only: bool to determine if we should mask loss on prefix.
     """
 
     # Extract batch size and sequence length.
@@ -186,6 +188,8 @@ def get_masks_and_position_ids(
     if reset_position_ids:
         position_ids = position_ids.clone()
 
+    assert prefix_indices is None or reset_attention_mask, "Prefix lm is supported only on the when reset_attention_mask is on."
+
     if reset_position_ids or reset_attention_mask:
         # Loop through the batches:
         for b in range(micro_batch_size):
@@ -211,7 +215,8 @@ def get_masks_and_position_ids(
 
                 if prefix_indices:
                     attention_mask[b, 0, prev_index: prefix_indices[b][j], prev_index: i+1] = 1
-                    loss_mask[b, prev_index: prefix_indices[b][j]] = 0.0
+                    if loss_on_targets_only:
+                        loss_mask[b, prev_index: prefix_indices[b][j]] = 0.0
 
                 prev_index = i + 1
 
@@ -274,7 +279,7 @@ def get_prefix_indices(data, eod_token, partial_prefix_indices):
         for doc_id, eod_index in enumerate(eod_indices):
             if partial_prefix_indices is None or partial_prefix_indices[batch_id][doc_id] is None:
                 # We need to randomly generate aa prefix index that satisfies the interleave condition in the docstring
-                prefix_index = randint(prev_index, eod_index - 1)
+                prefix_index = randint(prev_index, eod_index)
             else:
                 prefix_index = partial_prefix_indices[batch_id][doc_id]
                 assert prefix_index >= prev_index and prefix_index < eod_index, f"Prefix index needs to be between documents indices, {prev_index} <= {prefix_index} < {eod_index} should be True."
