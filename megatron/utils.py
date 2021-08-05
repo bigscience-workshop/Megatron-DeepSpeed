@@ -276,12 +276,14 @@ def get_prefix_indices(data, eod_token, partial_prefix_indices, reset_attention_
     :param partial_prefix_indices: this agument can have multiple types:
         - None, it signals that all prefix indices are randomly sampled.
         - List[Optional[int]], its length has to be equal to mini batch size. It stores all the indices for per row prefix.
+            Optional means that if set to None, we allows ourselves to sample one randomly.
         - List[List[Optional[int]]], it follows the following rules:
             - The first dimension refers to that sample, ie len(partial_prefix_indices) == len(data)
             - The second dimension refers to the number of document of that sample, ie
                 len(partial_prefix_indices[b]) == (data[b] == eod_token).sum() (+1 for the last partial document).
             - partial_prefix_indices have to be interleaved with eod_indices, ie
                 eod_indices[b][d-1] < partial_prefix_indices[b][d] < eod_indices[b][d] + 1 or is None.
+            - Optional means that if set to None, we allows ourselves to sample one randomly.
     :param reset_attention_mask: bool, determines if prefixes are to be per document or per row.
     :return Depending if prefix is per document or per row, the method returns:
         - List[List[int]]: prefix indices for each document in case of per document prefix
