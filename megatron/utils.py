@@ -16,6 +16,7 @@
 """General utilities."""
 
 import sys
+from random import randint
 
 import torch
 from torch.nn.parallel import DistributedDataParallel as torchDDP
@@ -144,12 +145,21 @@ def check_adlr_autoresume_termination(iteration, model,
         sys.exit(0)
 
 
-def get_ltor_masks_and_position_ids(data,
-                                    eod_token,
-                                    reset_position_ids,
-                                    reset_attention_mask,
-                                    eod_mask_loss):
-    """Build masks and position id for left to right model."""
+def get_masks_and_position_ids(
+        data,
+        eod_token,
+        reset_position_ids,
+        reset_attention_mask,
+        eod_mask_loss,
+        prefix_indices=None
+    ):
+    """
+    Build masks and position id for left to right model.
+    :param prefix_indices: Optional[List[List[int]]]:
+        - None signifies that the model is fully autoregressive.
+        - else the argument holds all prefix indices that split documents between input and target.
+        - Note we also mask the loss to only predict target.
+    """
 
     # Extract batch size and sequence length.
     micro_batch_size, seq_length = data.size()
@@ -190,13 +200,20 @@ def get_ltor_masks_and_position_ids(data,
             prev_index = 0
             for j in range(eod_index.size()[0]):
                 i = eod_index[j]
+
                 # Mask attention loss.
                 if reset_attention_mask:
                     attention_mask[b, 0, (i + 1):, :(i + 1)] = 0
+
                 # Reset positions.
                 if reset_position_ids:
                     position_ids[b, (i + 1):] -= (i + 1 - prev_index)
-                    prev_index = i + 1
+
+                if prefix_indices:
+                    attention_mask[b, 0, prev_index: prefix_indices[b][j], prev_index: i+1] = 1
+                    loss_mask[b, prev_index: prefix_indices[b][j]] = 0.0
+
+                prev_index = i + 1
 
     # Convert attention mask to binary:
     attention_mask = (attention_mask < 0.5)
@@ -226,3 +243,42 @@ def flops_calculator(model, args, iteration_time):
     effective_tera_flops_per_gpu = giga_flops_per_model_per_train_step / (iteration_time * 1000.0 * gpus_per_model)
 
     print_rank_0(f"Effective Tera Flops per GPU: {round(effective_tera_flops_per_gpu, 2)} and total parameters {round(approx_parameters_in_billions, 3)} B")
+
+def get_prefix_indices(data, eod_token, partial_prefix_indices):
+    """
+    Helper function in order to:
+     - randomly choose prefix index when there's no constraint
+     - check that prefix are compatible with convention.
+
+    :param data: torch.Tensor
+    :param eod_token: int, token_id used to signal end of document
+    :param partial_prefix_indices: Optional[List[List[Optional[int]]]]:
+        - If it's None it signals that all prefix indices are randomly sampled. (equivalent to feeding double list filled with None)
+        - The first dimension refers to that sample, ie len(partial_prefix_indices) == len(data)
+        - The second dimension refers to the number of document of that sample, ie
+            len(partial_prefix_indices[b]) == (data[b] == eod_token).sum().
+        - partial_prefix_indices have to be interleaved with eod_indices, ie
+            eod_indices[b][d-1] < partial_prefix_indices[b][d] < eod_indices[b][d] or is None.
+    :return List[List[int]]: prefix indices
+    """
+    micro_batch_size, seq_length = data.size()
+    prefix_indices = []
+
+    assert partial_prefix_indices is None or len(partial_prefix_indices) == micro_batch_size, f"partial_prefix_indices has to be None or its length equal to {micro_batch_size}, got {len(partial_prefix_indices)}"
+    for batch_id in range(micro_batch_size):
+        prefix_indices.append([])
+        # Compute the index of all eod tokens in data.
+        eod_indices = (data[batch_id] == eod_token).nonzero()
+        prev_index = 0
+        assert len(partial_prefix_indices[batch_id]) == len(eod_indices), f"The nu,ber of prefixes has to match the number of documents. Got {len(partial_prefix_indices[batch_id])} prefixes and {len(eod_indices)} documents"
+        for doc_id, eod_index in enumerate(eod_indices):
+            if partial_prefix_indices is None or partial_prefix_indices[batch_id][doc_id] is None:
+                # We need to randomly generate aa prefix index that satisfies the interleave condition in the docstring
+                prefix_index = randint(prev_index, eod_index - 1)
+            else:
+                prefix_index = partial_prefix_indices[batch_id][doc_id]
+                assert prefix_index >= prev_index and prefix_index < eod_index, f"Prefix index needs to be between documents indices, {prev_index} <= {prefix_index} < {eod_index} should be True."
+            prefix_indices[batch_id].append(prefix_index)
+            prev_index = eod_index + 1
+
+    return prefix_indices

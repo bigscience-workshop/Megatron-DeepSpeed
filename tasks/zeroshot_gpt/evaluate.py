@@ -26,7 +26,7 @@ from megatron import mpu
 from megatron.checkpointing import load_checkpoint
 from megatron.model import GPTModel
 from megatron.training import get_model
-from megatron.utils import get_ltor_masks_and_position_ids, unwrap_model
+from megatron.utils import get_masks_and_position_ids, unwrap_model
 from megatron.p2p_communication import recv_forward, send_forward
 from tasks.finetune_utils import build_data_loader
 
@@ -72,12 +72,8 @@ def process_batch(batch):
     tokens = tokens_[:, :-1].contiguous()
 
     # Get the masks and postition ids.
-    attention_mask, _, position_ids = get_ltor_masks_and_position_ids(
-        tokens,
-        tokenizer.eod,
-        args.reset_position_ids,
-        args.reset_attention_mask,
-        args.eod_mask_loss)
+    attention_mask, _, position_ids = get_masks_and_position_ids(tokens, tokenizer.eod, args.reset_position_ids,
+                                                                 args.reset_attention_mask, args.eod_mask_loss)
 
     return tokens, labels, attention_mask, position_ids, loss_mask
 

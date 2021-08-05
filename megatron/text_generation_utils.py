@@ -26,7 +26,7 @@ import torch.nn.functional as F
 from megatron import get_args
 from megatron import get_tokenizer
 from megatron import mpu
-from megatron.utils import get_ltor_masks_and_position_ids, unwrap_model
+from megatron.utils import get_masks_and_position_ids, unwrap_model
 from megatron.p2p_communication import recv_forward, send_forward
 
 # These are needed to unwrap the model, would be nice to put these in megatron.utils if possible?
@@ -42,12 +42,8 @@ def get_batch(context_tokens):
     # Move to GPU.
     tokens = context_tokens.view(args.micro_batch_size, -1).contiguous().cuda()
     # Get the attention mask and postition ids.
-    attention_mask, _, position_ids = get_ltor_masks_and_position_ids(
-        tokens,
-        tokenizer.eod,
-        args.reset_position_ids,
-        args.reset_attention_mask,
-        args.eod_mask_loss)
+    attention_mask, _, position_ids = get_masks_and_position_ids(tokens, tokenizer.eod, args.reset_position_ids,
+                                                                 args.reset_attention_mask, args.eod_mask_loss)
 
     return tokens, attention_mask, position_ids
 
