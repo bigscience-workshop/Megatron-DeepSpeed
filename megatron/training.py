@@ -588,9 +588,9 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
         # Bug fix as detailed in this issue: https://github.com/NVIDIA/Megatron-LM/issues/129
         if writer and is_last_rank():
             if args.log_timers_to_tensorboard:
-                writer.add_scalar('iteration-time/iteration-time (s)',
+                writer.add_scalar('iteration-time/iteration-time',
                                   elapsed_time_per_iteration, iteration)
-                writer.add_scalar('iteration-time/iteration-time (s) vs samples',
+                writer.add_scalar('iteration-time/iteration-time vs samples',
                                   elapsed_time_per_iteration, args.consumed_train_samples)
         log_string = ' iteration {:8d}/{:8d} |'.format(
             iteration, args.train_iters)
