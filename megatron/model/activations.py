@@ -1,36 +1,39 @@
+import torch
 from torch import nn
 from torch.nn import functional as F
 
 
-class _GLUVariant(nn.Module):
+class _GLUBaseModule(nn.Module):
     def __init__(self, activation_fn):
         super().__init__()
         self.activation_fn = activation_fn
     
-    def forward(self, x, bias=None):
+    def forward(self, x):
         x1, x2 = x.chunk(2, dim=-1)
-        if bias is not None:
-            b1, b2 = bias.chunk(2, dim=-1)
-            x1 = x1 + b1
-            x2 = x2 + b2
         return x1 * self.activation_fn(x2)
 
 
-class Bilinear(_GLUVariant):
+class LiGLU(_GLUBaseModule):
     def __init__(self):
-        super().__init__(lambda x: x)
+        super().__init__(nn.Identity())
 
 
-class GEGLU(_GLUVariant):
+class GEGLU(_GLUBaseModule):
     def __init__(self):
         super().__init__(F.gelu)
 
 
-class ReGLU(_GLUVariant):
+class ReGLU(_GLUBaseModule):
     def __init__(self):
         super().__init__(F.relu)
 
 
-class SwiGLU(_GLUVariant):
+class SwiGLU(_GLUBaseModule):
     def __init__(self):
         super().__init__(F.silu)
+
+
+liglu = torch.jit.script(LiGLU())
+geglu = torch.jit.script(GEGLU())
+reglu = torch.jit.script(ReGLU())
+swiglu = torch.jit.script(SwiGLU())
