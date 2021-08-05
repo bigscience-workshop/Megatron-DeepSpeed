@@ -9,7 +9,7 @@ class _GLUBaseModule(nn.Module):
         self.activation_fn = activation_fn
     
     def forward(self, x):
-        x1, x2 = x.chunk(2, dim=-1)
+        x1, x2 = x.chunk(2, dim=2)
         return x1 * self.activation_fn(x2)
 
 
