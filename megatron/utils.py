@@ -213,6 +213,7 @@ def get_masks_and_position_ids(
                 if reset_position_ids:
                     position_ids[b, (i + 1):] -= (i + 1 - prev_index)
 
+                # Prefix lm.
                 if prefix_indices:
                     attention_mask[b, 0, prev_index: prefix_indices[b][j], prev_index: i+1] = 1
                     if loss_on_targets_only:
@@ -263,7 +264,7 @@ def get_prefix_indices(data, eod_token, partial_prefix_indices):
         - The second dimension refers to the number of document of that sample, ie
             len(partial_prefix_indices[b]) == (data[b] == eod_token).sum().
         - partial_prefix_indices have to be interleaved with eod_indices, ie
-            eod_indices[b][d-1] < partial_prefix_indices[b][d] < eod_indices[b][d] or is None.
+            eod_indices[b][d-1] < partial_prefix_indices[b][d] < eod_indices[b][d] + 1 or is None.
     :return List[List[int]]: prefix indices
     """
     micro_batch_size, seq_length = data.size()

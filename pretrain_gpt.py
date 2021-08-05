@@ -102,13 +102,21 @@ def get_batch(data_iterator):
     labels = tokens_[:, 1:].contiguous()
     tokens = tokens_[:, :-1].contiguous()
 
-    # Get the masks and postition ids.
+    # Prefix
     if args.prefix_lm:
         prefix_indices = get_prefix_indices(tokens, tokenizer.eod, partial_prefix_indices = None)
     else:
         prefix_indices = None
-    attention_mask, loss_mask, position_ids = get_masks_and_position_ids(tokens, tokenizer.eod, args.reset_position_ids,
-                                                                         args.reset_attention_mask, args.eod_mask_loss, prefix_indices = prefix_indices)
+
+    # Get the masks and postition ids.
+    attention_mask, loss_mask, position_ids = get_masks_and_position_ids(
+        tokens,
+        tokenizer.eod,
+        args.reset_position_ids,
+        args.reset_attention_mask,
+        args.eod_mask_loss,
+        prefix_indices = prefix_indices
+    )
 
     return tokens, labels, loss_mask, attention_mask, position_ids
 
@@ -129,9 +137,21 @@ def get_batch_pipe(data):
     labels = tokens_[:, 1:].contiguous()
     tokens = tokens_[:, :-1].contiguous()
 
-    # Get the masks and postition ids.
-    attention_mask, loss_mask, position_ids = get_masks_and_position_ids(tokens, tokenizer.eod, args.reset_position_ids,
-                                                                         args.reset_attention_mask, args.eod_mask_loss)
+    # Prefix
+    if args.prefix_lm:
+        prefix_indices = get_prefix_indices(tokens, tokenizer.eod, partial_prefix_indices=None)
+    else:
+        prefix_indices = None
+
+    # Get the masks and position ids.
+    attention_mask, loss_mask, position_ids = get_masks_and_position_ids(
+        tokens,
+        tokenizer.eod,
+        args.reset_position_ids,
+        args.reset_attention_mask,
+        args.eod_mask_loss,
+        prefix_indices=prefix_indices
+    )
 
     return (tokens, position_ids, attention_mask), (labels, loss_mask)
 
