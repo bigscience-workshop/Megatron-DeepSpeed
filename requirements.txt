@@ -4,3 +4,4 @@ six
 regex
 numpy
 transformers
+# git+https://github.com/microsoft/DeepSpeed.git@big-science
