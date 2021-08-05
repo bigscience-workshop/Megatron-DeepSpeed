@@ -9,6 +9,7 @@ class _GLUBaseModule(nn.Module):
         self.activation_fn = activation_fn
     
     def forward(self, x):
+        # dim=-1 breaks in pt<1.10
         x1, x2 = x.chunk(2, dim=(x.ndim-1))
         return x1 * self.activation_fn(x2)
 
