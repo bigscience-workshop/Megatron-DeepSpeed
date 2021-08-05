@@ -60,6 +60,7 @@ from megatron.tokenizer import build_tokenizer
 from megatron.data import indexed_dataset
 from megatron.data.indexed_dataset import infer_dataset_impl, MMapIndexedDataset, data_file_path, index_file_path
 
+import numpy as np
 import random
 from mpi4py import MPI
 
@@ -166,12 +167,16 @@ def get_args():
     group = parser.add_argument_group(title='input data')
     group.add_argument('--input', type=str, required=True,
                        help='Dataset name')
+    group.add_argument('--split', type=str, default='train',
+                       help='Dataset split to select.')
     group.add_argument('--columns', nargs='+', default=['text'],
                        help='space separate listed of column names to extract from dataset')
     group.add_argument('--split-sentences', action='store_true',
                        help='Split documents into sentences.')
     group.add_argument('--keep-newlines', action='store_true',
                        help='Keep newlines between sentences when splitting.')
+    group.add_argument('--count', type=int, default=None,
+                       help='Number of samples to select.')
     group.add_argument('--shuffle', action='store_true',
                        help='Shuffle samples before writing output files.')
     group.add_argument('--seed', type=int, default=None,
@@ -210,6 +215,39 @@ def get_args():
 
     return args
 
+def all_true(val):
+    """Returns True if all procs input True, False otherwise"""
+    inval = np.zeros((1,), dtype=np.int32)
+    inval[0] = int(val)
+
+    outval = np.zeros(inval.shape, inval.dtype)
+    mpi_comm.Allreduce(inval, outval, op=MPI.LAND)
+    return bool(outval[0])
+
+def select_sample_list(args, dset_size):
+    """Given the total number of samples, select a list of sample index values"""
+    # create sample index list on rank 0,
+    # optionally shuffle the list,
+    # and optionally limit the sample count
+    idx = []
+    if mpi_rank == 0:
+        # generate a list of all index values
+        idx = [int(x) for x in range(dset_size)]
+
+        # optionally shuffle
+        if args.shuffle:
+            if args.seed is not None:
+                random.seed(args.seed)
+            random.shuffle(idx)
+
+        # optionally limit the sample count
+        if args.count is not None:
+            idx = idx[:args.count]
+
+    # broadcast sample index values from rank 0 to all procs
+    idx = mpi_comm.bcast(idx, root=0)
+    return idx
+
 def main():
     args = get_args()
     startup_start = time.time()
@@ -228,23 +266,16 @@ def main():
     dsetname = args.input
     if mpi_rank == 0:
         print("Opening dataset", dsetname)
-    dset = load_dataset(dsetname, split="train", keep_in_memory=None)
+    dset = load_dataset(dsetname, split=args.split, keep_in_memory=None)
     dset_size = len(dset)
     mpi_comm.barrier()
     if mpi_rank == 0:
         print(dset)
 
-    # create sample index list on rank 0,
+    # create sample index list,
     # optionally shuffle the list,
-    # and bcast to all ranks
-    idx = []
-    if mpi_rank == 0:
-        idx = [int(x) for x in range(dset_size)]
-        if args.shuffle:
-            if args.seed is not None:
-                random.seed(args.seed)
-            random.shuffle(idx)
-    idx = mpi_comm.bcast(idx, root=0)
+    # and optionally limit the sample count
+    idx = select_sample_list(args, len(dset))
     
     # divide index list evenly among ranks
     start, end = get_start_end(len(idx), mpi_rank, mpi_size)
@@ -261,86 +292,98 @@ def main():
 
     # TODO: skip write phase and report success if rank has nothing to do
 
-    # create data file for each rank
-    if mpi_rank == 0:
-        print(f"Vocab size: {tokenizer.vocab_size}")
-        print(f"Output prefix: {args.output_prefix}")
-    output_bin_files = {}
-    output_idx_files = {}
-    builders = {}
-    for key in columns:
-        filebase = "{}_{}_{}_{}".format(args.output_prefix, key, level, mpi_rank)
-        output_bin_files[key] = data_file_path(filebase)
-        output_idx_files[key] = index_file_path(filebase)
-        builders[key] = indexed_dataset.make_builder(output_bin_files[key],
-                                               impl=args.dataset_impl,
-                                               vocab_size=tokenizer.vocab_size)
-
-    # wait for all ranks to create file before stopping timer
-    mpi_comm.barrier()
-    startup_end = time.time()
-    if mpi_rank == 0:
-        print("Seconds to startup:", startup_end - startup_start)
-
-    # each rank tokenizes its samples and writes its own file
-    proc_start = time.time()
-    count = 0
-    total_bytes_processed = 0
-    encoder.initializer()
-    for i in range(start, end):
-        # tokenize text for the given sample index
-        j = idx[i]
-        text = dset[j]['text']
-        doc, bytes_processed = encoder.encode_text(text)
-
-        # add tokenized sequence to our data file
-        total_bytes_processed += bytes_processed
-        for key, sentences in doc.items():
-            for sentence in sentences:
-                builders[key].add_item(torch.IntTensor(sentence))
-            builders[key].end_document()
-
-    # finalize file of each rank
-    for key in columns:
-        builders[key].finalize(output_idx_files[key])
-        del builders[key] # file closed in __del__
-
-    # wait for all ranks to finish their files
-    mpi_comm.barrier()
-    proc_end = time.time()
-    if mpi_rank == 0:
-        print("Seconds to tokenize:", proc_end - proc_start)
-        print("Documents:", dset_size, "docs/sec: ", dset_size / (proc_end - proc_start))
-
-    # TODO: allreduce to ensure all ranks wrote their part successfully
-
-    # rank 0 merges and deletes all per-rank files
-    if mpi_rank == 0:
-        print("Merging rank files ...", flush=True)
-        merge_start = time.time()
-
-        # define name of single file
+    # set this to false on any problem so we can inform rank 0
+    success = True
+    try:
+        # create data file for each rank
+        if mpi_rank == 0:
+            print(f"Vocab size: {tokenizer.vocab_size}")
+            print(f"Output prefix: {args.output_prefix}")
+        output_bin_files = {}
+        output_idx_files = {}
+        builders = {}
         for key in columns:
-            filebase = "{}_{}_{}".format(args.output_prefix, key, level)
+            filebase = "{}_{}_{}_{}".format(args.output_prefix, key, level, mpi_rank)
             output_bin_files[key] = data_file_path(filebase)
             output_idx_files[key] = index_file_path(filebase)
             builders[key] = indexed_dataset.make_builder(output_bin_files[key],
                                                    impl=args.dataset_impl,
                                                    vocab_size=tokenizer.vocab_size)
 
-        # merge all ranks into one file
-        for rank in range(mpi_size):
-            infile = "{}_{}_{}_{}".format(args.output_prefix, key, level, rank)
-            print("Merging file", infile, flush=True)
-            builders[key].merge_file_(infile)
+        # wait for all ranks to create file before stopping timer
+        mpi_comm.barrier()
+        startup_end = time.time()
+        if mpi_rank == 0:
+            print("Seconds to startup:", startup_end - startup_start)
 
-        # finalize the merged file
-        print("Finalizing merged file ...", flush=True)
+        # each rank tokenizes its samples and writes its own file
+        proc_start = time.time()
+        count = 0
+        total_bytes_processed = 0
+        encoder.initializer()
+        for i in range(start, end):
+            # tokenize text for the given sample index
+            j = idx[i]
+            text = dset[j]['text']
+            doc, bytes_processed = encoder.encode_text(text)
+
+            # add tokenized sequence to our data file
+            total_bytes_processed += bytes_processed
+            for key, sentences in doc.items():
+                for sentence in sentences:
+                    builders[key].add_item(torch.IntTensor(sentence))
+                builders[key].end_document()
+
+        # finalize file of each rank
         for key in columns:
             builders[key].finalize(output_idx_files[key])
             del builders[key] # file closed in __del__
+    except:
+        success = False
 
-        # delete per ranks files
+    # wait for all ranks to finish their files
+    mpi_comm.barrier()
+    proc_end = time.time()
+    if mpi_rank == 0:
+        print("Seconds to tokenize:", proc_end - proc_start)
+        print("Documents:", len(idx), "docs/sec: ", len(idx) / (proc_end - proc_start))
+
+    # allreduce to check whether all ranks wrote their part successfully
+    success = all_true(success)
+
+    # rank 0 merges and deletes all per-rank files
+    if mpi_rank == 0:
+        # merge files if all ranks were successful
+        if success:
+            print("Merging rank files ...", flush=True)
+            merge_start = time.time()
+
+            # define name of single file
+            for key in columns:
+                filebase = "{}_{}_{}".format(args.output_prefix, key, level)
+                output_bin_files[key] = data_file_path(filebase)
+                output_idx_files[key] = index_file_path(filebase)
+                builders[key] = indexed_dataset.make_builder(output_bin_files[key],
+                                                             impl=args.dataset_impl,
+                                                             vocab_size=tokenizer.vocab_size)
+
+            # merge all ranks into one file
+            for rank in range(mpi_size):
+                infile = "{}_{}_{}_{}".format(args.output_prefix, key, level, rank)
+                print("Merging file", infile, flush=True)
+                builders[key].merge_file_(infile)
+
+            # finalize the merged file
+            print("Finalizing merged file ...", flush=True)
+            for key in columns:
+                builders[key].finalize(output_idx_files[key])
+                del builders[key] # file closed in __del__
+
+            merge_end = time.time()
+            print("Seconds to merge:", merge_end - merge_start)
+            print(f"Merged {mpi_size} files into {args.output_prefix}")
+
+        # delete per-rank files, do this even on error
         print("Deleting rank files ...", flush=True)
         for rank in range(mpi_size):
             filebase = "{}_{}_{}_{}".format(args.output_prefix, key, level, rank)
@@ -348,10 +391,6 @@ def main():
             idxfile = index_file_path(filebase)
             os.remove(binfile)
             os.remove(idxfile)
-
-        merge_end = time.time()
-        print("Seconds to merge:", merge_end - merge_start)
-        print(f"Merged {mpi_size} datasets to {args.output_prefix}")
 
     # hold everyone until rank 0 is done
     mpi_comm.barrier()
