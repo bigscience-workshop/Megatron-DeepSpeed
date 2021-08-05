@@ -104,7 +104,12 @@ def get_batch(data_iterator):
 
     # Prefix
     if args.prefix_lm:
-        prefix_indices = get_prefix_indices(tokens, tokenizer.eod, partial_prefix_indices = None)
+        prefix_indices = get_prefix_indices(
+            tokens,
+            tokenizer.eod,
+            partial_prefix_indices = None,
+            reset_attention_mask = args.reset_attention_mask
+        )
     else:
         prefix_indices = None
 
@@ -139,7 +144,12 @@ def get_batch_pipe(data):
 
     # Prefix
     if args.prefix_lm:
-        prefix_indices = get_prefix_indices(tokens, tokenizer.eod, partial_prefix_indices=None)
+        prefix_indices = get_prefix_indices(
+            tokens,
+            tokenizer.eod,
+            partial_prefix_indices=None,
+            reset_attention_mask=args.reset_attention_mask
+        )
     else:
         prefix_indices = None
 
