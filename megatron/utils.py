@@ -196,6 +196,14 @@ def get_ltor_masks_and_position_ids(
 
             # Find indecies where EOD token is.
             eod_index = position_ids[b, data[b] == eod_token]
+
+            # If the last eod token is not the last token of the sequence, we suppose that there is a partial document
+            # We treat this case as if we add an eod token at the end of the sequence.
+            if eod_index[-1] < len(data[b]) - 1:
+                eod_index = torch.cat(
+                    (eod_index, torch.tensor(len(data[b]), dtype=eod_index.dtype, device=eod_index.device))
+                )
+
             # Detach indecies from positions if going to modify positions.
             if reset_position_ids:
                 eod_index = eod_index.clone()
@@ -275,11 +283,19 @@ def get_prefix_indices(data, eod_token, partial_prefix_indices):
         prefix_indices.append([])
         # Compute the index of all eod tokens in data.
         eod_indices = (data[batch_id] == eod_token).nonzero()
+
+        # If the last eod token is not the last token of the sequence, we suppose that there is a partial document
+        # We treat this case as if we add an eod token at the end of the sequence.
+        if eod_indices[-1] < len(data[batch_id]) - 1:
+            eod_indices = torch.cat(
+                (eod_indices, torch.tensor(len(data[batch_id]), dtype = eod_indices.dtype, device = eod_indices.device))
+            )
+
         prev_index = 0
-        assert partial_prefix_indices is None or len(partial_prefix_indices[batch_id]) == len(eod_indices), f"The number of prefixes has to match the number of documents. Got {len(partial_prefix_indices[batch_id])} prefixes and {len(eod_indices)} documents"
+        assert partial_prefix_indices is None or len(partial_prefix_indices[batch_id]) == len(eod_indices), f"The number of prefixes has to match the number of documents, complete or partial. Got {len(partial_prefix_indices[batch_id])} prefixes and {len(eod_indices)} documents"
         for doc_id, eod_index in enumerate(eod_indices):
             if partial_prefix_indices is None or partial_prefix_indices[batch_id][doc_id] is None:
-                # We need to randomly generate aa prefix index that satisfies the interleave condition in the docstring
+                # We need to randomly generate a prefix index that satisfies the interleave condition in the docstring
                 prefix_index = randint(prev_index, eod_index)
             else:
                 prefix_index = partial_prefix_indices[batch_id][doc_id]
