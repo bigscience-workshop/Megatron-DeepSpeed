@@ -251,7 +251,7 @@ def bcast(args, vals, root=0):
         if rank == root:
             tvals = torch.tensor(vals, dtype=torch.int64)
         else:
-            tvals = torch.zeros([length[0]], dtype=torch.int64)
+            tvals = torch.zeros(length[0], dtype=torch.int64)
 
         # broadcast tensor from root, and return as a new list
         dist.broadcast(tvals, src=root)
