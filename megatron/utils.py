@@ -218,7 +218,7 @@ def get_ltor_masks_and_position_ids(
                     # Prefix lm per document.
                     if prefix_indices:
                         assert isinstance(prefix_indices[b], list), f"prefix for a row has to be document specific, and consequently return a list, got {prefix_indices[b]}"
-                        attention_mask[b, 0, prev_index: prefix_indices[b][j], prev_index: i + 1] = 1
+                        attention_mask[b, 0, prev_index: prefix_indices[b][j], prev_index: prefix_indices[b][j]] = 1
                         if loss_on_targets_only:
                             loss_mask[b, prev_index: prefix_indices[b][j]] = 0.0
 
@@ -232,7 +232,7 @@ def get_ltor_masks_and_position_ids(
             if prefix_indices is not None and (reset_attention_mask is False):
                 assert isinstance(prefix_indices[b], int), \
                     f"prefix for a row has to be row specific, and consequently return an int, got {prefix_indices[b]}"
-                attention_mask[b, 0, :prefix_indices[b], :] = 1
+                attention_mask[b, 0, :prefix_indices[b], :prefix_indices[b]] = 1
                 if loss_on_targets_only:
                     loss_mask[b, :prefix_indices[b]] = 0.0
 
