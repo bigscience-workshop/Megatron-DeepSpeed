@@ -61,8 +61,6 @@ try:
 except ImportError:
     nltk_available = False
 
-from datasets import load_dataset, logging
-
 from megatron.tokenizer import build_tokenizer
 from megatron.data import indexed_dataset
 from megatron.data.indexed_dataset import infer_dataset_impl, MMapIndexedDataset, data_file_path, index_file_path
@@ -147,7 +145,7 @@ class Encoder(object):
 
     def encode_text(self, text):
         ids = {}
-        for key in ['text']:
+        for key in self.args.columns:
             doc_ids = []
             for sentence in Encoder.splitter.tokenize(text):
                 sentence_ids = Encoder.tokenizer.tokenize(sentence)
@@ -174,6 +172,8 @@ def get_args():
                        help='Shuffle samples before writing output files.')
     group.add_argument('--seed', type=int, default=None,
                        help='Seed to pass to random.seed for shuffle operations.')
+    group.add_argument('--download', action='store_true',
+                       help='Enable dataset download if not already cached.')
     group.add_argument('--split-sentences', action='store_true',
                        help='Split documents into sentences.')
     group.add_argument('--keep-newlines', action='store_true',
@@ -202,7 +202,7 @@ def get_args():
     group.add_argument('--torch-backend', type=str, default='gloo', choices = ['gloo', 'mpi'],
                        help='Select torch.distributed backend.')
     group.add_argument('--mpi4py', action='store_true',
-                       help='Assumed script launched as an MPI job, and use MPI for communication.')
+                       help='Assume script has been launched as an MPI job, and use MPI for communication.')
     group.add_argument('--log-interval', type=int, default=None,
                        help='Interval between progress updates')
 
@@ -280,6 +280,65 @@ def all_true(args, val):
         dist.all_reduce(tensor, op=dist.ReduceOp.BAND)
         return bool(tensor[0])
 
+def load_dset(args):
+    # Avoid downloading datasets unless explicitly requested.
+    # The environment variable is processed when datasets is imported,
+    # so we must set it before the import statement.
+    # Alternatively, one could set datasets.config.HF_DATASETS_OFFLINE
+    # directly, but that feels like a bigger hack.
+    if not args.download and 'HF_DATASETS_OFFLINE' not in os.environ:
+        os.environ['HF_DATASETS_OFFLINE'] = "1"
+        #datasets.config.HF_DATASETS_OFFLINE = 1
+
+    # import datasets after potentially setting environment variables
+    from datasets import load_dataset, logging
+    from datasets.utils.file_utils import OfflineModeIsEnabled
+
+    # silence info messages from all procs except rank 0 
+    proc_rank, _ = get_rank_size(args)
+    if proc_rank != 0:
+        logging.set_verbosity(logging.ERROR)
+
+    # Load the specified HuggingFace dataset.
+    # Give rank 0 a head start in case the dataset is not already cached.
+    success = True
+    dsetname = args.input
+    if proc_rank == 0:
+        print("Opening dataset", dsetname)
+        try:
+            dset = load_dataset(dsetname, split=args.split, keep_in_memory=None)
+        except OfflineModeIsEnabled:
+            print(f"ERROR: Cannot download {dsetname} since running in offline mode, force with --download")
+            success = False
+        except:
+            print("ERROR: Unexpected error:", sys.exc_info()[0])
+            success = False
+
+    # determine whether rank 0 succeeded in loading the dataset
+    success = all_true(args, success)
+    if not success:
+        if proc_rank == 0:
+            print(f"ERROR: Rank 0 failed to load {dsetname}")
+        return None
+
+    # rank 0 succeeded, attempt to load dataset on all other ranks
+    if proc_rank != 0:
+        try:
+            dset = load_dataset(dsetname, split=args.split, keep_in_memory=None)
+        except:
+            # this print might be noisy, but better than nothing
+            print("ERROR: Unexpected error:", sys.exc_info()[0])
+            success = False
+
+    # verify that all ranks loaded the dataset
+    success = all_true(args, success)
+    if not success:
+        if proc_rank == 0:
+            print(f"ERROR: At least one process failed to load {dsetname}")
+        return None
+
+    return dset
+
 def select_sample_list(args, dset_size):
     """Given the total number of samples, select a list of sample index values"""
     # create sample index list on rank 0,
@@ -333,31 +392,10 @@ def main():
     # some functions like build_tokenizer use args.rank to filter stdout messages
     args.rank = proc_rank
 
-    # typically: ['text']
-    columns = args.columns
-
-    # silence info messages from all procs except rank 0 
-    if proc_rank != 0:
-        logging.set_verbosity(logging.ERROR)
-
-    # Load the specified HuggingFace dataset.
-    # Give rank 0 a head start in case the dataset is not already cached.
-    dsetname = args.input
-    if proc_rank == 0:
-        print("Opening dataset", dsetname)
-        dset = load_dataset(dsetname, split=args.split, keep_in_memory=None)
-        barrier(args)
-    else:
-        # TODO: If the dataset is large and has to be downloaded and extracted,
-        # this is probably not great.  All ranks will busy spin on the CPU,
-        # wasting CPU time while also stealing CPU cores from rank 0 which is
-        # doing the extraction.  It may be better to print a message to inform
-        # the user to load the dataset with a single process as a separate step
-        # to get a cached version.  And if we know it is cached, we could safely
-        # load in parallel.
-        barrier(args)
-        dset = load_dataset(dsetname, split=args.split, keep_in_memory=None)
-    barrier(args)
+    # load the dataset
+    dset = load_dset(args)
+    if dset is None:
+        return
     if proc_rank == 0:
         print(dset)
 
@@ -366,6 +404,9 @@ def main():
     # and optionally limit the sample count
     idx = select_sample_list(args, len(dset))
     
+    # identify list of features (column names) to use, e.g., ['text']
+    columns = args.columns
+
     if nltk_available and args.split_sentences:
         nltk.download("punkt", quiet=True)
 
@@ -432,8 +473,7 @@ def main():
                 mbs = dset_stats[2] / elapsed / 1024 / 1024 if elapsed > 0.0 else 0.0
                 docs = dset_stats[0]
                 print(f"Rank 0 processed {docs} documents",
-                      f"({docs/elapsed} docs/s, {mbs} MB/s).",
-                      flush=True)
+                      f"({docs/elapsed} docs/s, {mbs} MB/s).")
                 print(f"Estimated total processed {docs * proc_size} documents",
                       f"({docs * proc_size / elapsed} docs/s, {mbs * proc_size} MB/s).",
                       flush=True)
@@ -512,12 +552,14 @@ def main():
         for rank in range(proc_size):
             for key in columns:
                 filebase = "{}_{}_{}_{}".format(args.output_prefix, key, level, rank)
+
                 binfile = data_file_path(filebase)
-                idxfile = index_file_path(filebase)
                 try:
                     os.remove(binfile)
                 except:
                     pass
+
+                idxfile = index_file_path(filebase)
                 try:
                     os.remove(idxfile)
                 except:
