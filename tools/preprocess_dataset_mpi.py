@@ -368,7 +368,7 @@ def main():
 
     # set this to false on any problem so we can inform rank 0
     tokenize_start = time.time()
-    dset_stats = np.zeros((3,), dtype=np.int64) # docs, sentences, bytes
+    dset_stats = np.zeros(3, dtype=np.int64) # docs, sentences, bytes
     success = True
     try:
         # create data file for each rank
