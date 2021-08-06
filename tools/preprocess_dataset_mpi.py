@@ -20,7 +20,7 @@ This builds data files from a source HuggingFace dataset, e.g,
   from datasets import load_dataset
   dset = load_dataset('openwebtext')
 
-The implementation requires MPI and mpi4py, and it assumes that
+The implementation can use `mpi4py` or `torch.distributed` for node communication, and it assumes that
 files are written to a global file system, such that one process
 can read a file written by another process.
 
