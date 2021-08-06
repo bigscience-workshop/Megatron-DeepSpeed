@@ -584,8 +584,7 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
     if iteration % args.log_interval == 0:
         elapsed_time = timers('interval-time').elapsed()
         elapsed_time_per_iteration = elapsed_time / total_iterations
-        # Changed `torch.distributed.get_rank() == 0` to `is_last_rank()` as a writing condition.
-        # Bug fix as detailed in this issue: https://github.com/NVIDIA/Megatron-LM/issues/129
+        # only the last rank process has a non-None _GLOBAL_TENSORBOARD_WRITER
         if writer and is_last_rank():
             if args.log_timers_to_tensorboard:
                 writer.add_scalar('iteration-time/iteration-time',
