@@ -83,6 +83,7 @@ class GPTModel(MegatronModule):
         self.language_model, self._language_model_key = get_language_model(
             num_tokentypes=num_tokentypes,
             add_pooler=False,
+            # TODO: Change naming of class from GPT to something that encapsulate prefix lm.
             encoder_attn_mask_type=AttnMaskType.prefix if args.prefix_lm else AttnMaskType.causal,
             init_method=init_method_normal(args.init_method_std),
             scaled_init_method=scaled_init_method_normal(args.init_method_std,
@@ -199,6 +200,7 @@ class GPTModelPipe(PipelineModule,MegatronModule):
                     output_layer_init_method=scaled_init_method_normal(args.init_method_std,
                                                                        args.num_layers),
                     layer_number=layer_idx,
+                    # TODO: Change naming of class from GPT to something that encapsulate prefix lm.
                     self_attn_mask_type=AttnMaskType.prefix if args.prefix_lm else AttnMaskType.causal))
                 
         

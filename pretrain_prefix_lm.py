@@ -53,23 +53,6 @@ def model_provider(pre_process=True, post_process=True):
             # We need to call model.set_batch_fn after deepspeed.initialize
             model._megatron_batch_fn = get_batch_pipe
 
-            # Precompute the attention mask and store it in args. This avoids having to
-            # pipeline it as an activation during training. The mask is constant, and thus
-            # we can reuse it.
-            attention_mask = torch.tril(torch.ones(
-                (1, args.seq_length, args.seq_length), device=torch.cuda.current_device())).view(
-                    1, 1, args.seq_length, args.seq_length)
-
-            # Convert attention mask to binary:
-            attention_mask = (attention_mask < 0.5)
-            if args.fp16:
-                attention_mask = attention_mask.half()
-            elif args.bf16:
-                attention_mask = attention_mask.bfloat16()
-
-            # must be bool or the training crashes expecting bool, but getting Half
-            args.attn_mask = attention_mask.to(torch.bool)
-
         else:
             model = GPTModel(
                 num_tokentypes=0,
@@ -102,6 +85,17 @@ def get_batch(data_iterator):
     labels = tokens_[:, 1:].contiguous()
     tokens = tokens_[:, :-1].contiguous()
 
+    # Prefix
+    if args.prefix_lm:
+        prefix_indices = get_prefix_indices(
+            tokens,
+            tokenizer.eod,
+            partial_prefix_indices=None,
+            reset_attention_mask=args.reset_attention_mask
+        )
+    else:
+        prefix_indices = None
+
     # Get the masks and postition ids.
     attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
         tokens,
@@ -109,7 +103,7 @@ def get_batch(data_iterator):
         args.reset_position_ids,
         args.reset_attention_mask,
         args.eod_mask_loss,
-        prefix_indices=None,
+        prefix_indices=prefix_indices,
         loss_on_targets_only=args.loss_on_targets_only
     )
 
@@ -132,6 +126,17 @@ def get_batch_pipe(data):
     labels = tokens_[:, 1:].contiguous()
     tokens = tokens_[:, :-1].contiguous()
 
+    # Prefix
+    if args.prefix_lm:
+        prefix_indices = get_prefix_indices(
+            tokens,
+            tokenizer.eod,
+            partial_prefix_indices=None,
+            reset_attention_mask=args.reset_attention_mask
+        )
+    else:
+        prefix_indices = None
+
     # Get the masks and position ids.
     attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
         tokens,
@@ -139,7 +144,7 @@ def get_batch_pipe(data):
         args.reset_position_ids,
         args.reset_attention_mask,
         args.eod_mask_loss,
-        prefix_indices=None,
+        prefix_indices=prefix_indices,
         loss_on_targets_only=args.loss_on_targets_only
     )
 
