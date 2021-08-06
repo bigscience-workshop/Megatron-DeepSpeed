@@ -101,7 +101,7 @@ def get_start_end(num, rank, num_ranks):
     """
 
     num_per_rank = num // num_ranks
-    remainder = num - num_per_rank * num_ranks
+    remainder = num % num_per_rank
     if rank < remainder:
         start = (num_per_rank + 1) * rank;
         end = start + (num_per_rank+1)
