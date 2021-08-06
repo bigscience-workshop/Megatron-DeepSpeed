@@ -21,7 +21,6 @@ GPT_ARGS=" \
     --micro-batch-size 4 \
     --global-batch-size 8 \
     --lr-decay-iters 320000 \
-    --lr-decay-style cosine \
     --lr 0.00015 \
     --min-lr 1.0e-5 \
     --lr-decay-style cosine \
