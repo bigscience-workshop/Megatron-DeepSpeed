@@ -1,5 +1,5 @@
-import unittest
 import math
+import unittest
 
 import torch
 
@@ -23,7 +23,7 @@ class TestActivations(unittest.TestCase):
 
     def test_liglu(self):
         expected = torch.tensor([-0.07])
-        self.assertEqual(liglu(self.x), expected)
+        torch.testing.assert_equal(liglu(self.x), expected)
     
     def test_geglu(self):
         """compute gelu output according to its definition"""
@@ -31,10 +31,10 @@ class TestActivations(unittest.TestCase):
         gelu_output = self.x[1] * normal_cdf(self.x[1].item())
         expected = self.x[0] * gelu_output
         self.assertAlmostEqual(geglu(self.x).item(), expected.item())
-
+        
     def test_reglu(self):
         expected = torch.tensor([0.])
-        self.assertEqual(reglu(self.x), expected)
+        torch.testing.assert_equal(reglu(self.x), expected)
 
     def test_swiglu(self):
         """compute swish output according to its definition"""
