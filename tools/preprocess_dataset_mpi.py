@@ -276,7 +276,7 @@ def all_true(args, val):
         args.mpi_comm.Allreduce(inval, outval, op=MPI.LAND)
         return bool(outval[0])
     else:
-        rank, size = get_rank_size(args)
+        _, size = get_rank_size(args)
         tensor = torch.tensor([int(val)], dtype=torch.int32)
         dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
         return (tensor.tolist()[0] == size)
