@@ -50,7 +50,11 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
 import stat
 import time
 
+import numpy as np
+import random
+
 import torch
+import torch.distributed as dist
 try:
     import nltk
     nltk_available = True
@@ -63,17 +67,6 @@ from megatron.tokenizer import build_tokenizer
 from megatron.data import indexed_dataset
 from megatron.data.indexed_dataset import infer_dataset_impl, MMapIndexedDataset, data_file_path, index_file_path
 
-import numpy as np
-import random
-
-use_mpi = True
-if use_mpi:
-    from mpi4py import MPI
-else:
-    import torch.distributed as dist
-
-# compute start and end index values based on rank
-# evenly divide file count among procs
 def get_start_end(num, rank, num_ranks):
     """Compute start and end index values to evenly divide num items
     among ranks.
@@ -205,6 +198,14 @@ def get_args():
     group.add_argument('--dataset-impl', type=str, default='mmap',
                        choices=['lazy', 'cached', 'mmap'])
 
+    group = parser.add_argument_group(title='runtime')
+    group.add_argument('--torch-backend', type=str, default='gloo', choices = ['gloo', 'mpi'],
+                       help='Select torch.distributed backend.')
+    group.add_argument('--mpi4py', action='store_true',
+                       help='Assumed script launched as an MPI job, and use MPI for communication.')
+    group.add_argument('--log-interval', type=int, default=None,
+                       help='Interval between progress updates')
+
     args = parser.parse_args()
     args.keep_empty = False
 
@@ -247,7 +248,7 @@ def bcast(args, vals, root=0):
 
         # allocate a tensor of appropriate size
         # initialize tensor with list values on root
-        rank, size = get_rank_size(args)
+        rank, _ = get_rank_size(args)
         if rank == root:
             tvals = torch.tensor(vals, dtype=torch.int64)
         else:
@@ -257,29 +258,27 @@ def bcast(args, vals, root=0):
         dist.broadcast(tvals, src=root)
         return tvals.tolist()
 
-def all_sum(args, vals):
+def all_sum_(args, vals):
     """Sums values in vals element-wise and updates vals with final result on all ranks"""
     if args.mpi_comm:
-        outval = np.zeros(vals.shape, vals.dtype)
-        args.mpi_comm.Allreduce(vals, outval, op=MPI.SUM)
+        outval = np.zeros_like(vals)
+        args.mpi_comm.Allreduce(vals, outval, op=args.MPI.SUM)
         vals[:] = outval
     else:
-        tensor = torch.tensor(vals)
+        tensor = torch.from_numpy(vals)
         dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
-        vals[:] = tensor.tolist()
 
 def all_true(args, val):
     """Returns True if all procs input True, False otherwise"""
     if args.mpi_comm:
-        inval = np.array([int(val)], dtype=np.int32)
+        inval = np.array([bool(val)], dtype=np.bool_)
         outval = np.zeros_like(inval)
-        args.mpi_comm.Allreduce(inval, outval, op=MPI.LAND)
+        args.mpi_comm.Allreduce(inval, outval, op=args.MPI.LAND)
         return bool(outval[0])
     else:
-        _, size = get_rank_size(args)
         tensor = torch.tensor([int(val)], dtype=torch.int32)
-        dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
-        return (tensor.tolist()[0] == size)
+        dist.all_reduce(tensor, op=dist.ReduceOp.BAND)
+        return bool(tensor[0])
 
 def select_sample_list(args, dset_size):
     """Given the total number of samples, select a list of sample index values"""
@@ -309,15 +308,25 @@ def main():
     args = get_args()
     startup_start = time.time()
 
+    # use mpi4py instead of torch.distributed if requested
+    if args.mpi4py:
+        try:
+            from mpi4py import MPI
+            use_mpi = True
+        except:
+            print(f"ERROR: mpi4py requested, but failed to import, falling back to torch.distributed.")
+            use_mpi = False
+
     # select our distributed runtime (MPI or torch.distributed)
     # and lookup our process rank and the group size
     args.mpi_comm = None
     if use_mpi:
+        args.MPI = MPI
         args.mpi_comm = MPI.COMM_WORLD
     else:
         proc_rank = int(os.environ['OMPI_COMM_WORLD_RANK'])
         proc_size = int(os.environ['OMPI_COMM_WORLD_SIZE'])
-        dist.init_process_group("gloo", init_method="env://",
+        dist.init_process_group(args.torch_backend, init_method="env://",
             rank=proc_rank, world_size=proc_size)
     proc_rank, proc_size = get_rank_size(args)
 
@@ -331,11 +340,23 @@ def main():
     if proc_rank != 0:
         logging.set_verbosity(logging.ERROR)
 
-    # load the specified HuggingFace dataset
+    # Load the specified HuggingFace dataset.
+    # Give rank 0 a head start in case the dataset is not already cached.
     dsetname = args.input
     if proc_rank == 0:
         print("Opening dataset", dsetname)
-    dset = load_dataset(dsetname, split=args.split, keep_in_memory=None)
+        dset = load_dataset(dsetname, split=args.split, keep_in_memory=None)
+        barrier(args)
+    else:
+        # TODO: If the dataset is large and has to be downloaded and extracted,
+        # this is probably not great.  All ranks will busy spin on the CPU,
+        # wasting CPU time while also stealing CPU cores from rank 0 which is
+        # doing the extraction.  It may be better to print a message to inform
+        # the user to load the dataset with a single process as a separate step
+        # to get a cached version.  And if we know it is cached, we could safely
+        # load in parallel.
+        barrier(args)
+        dset = load_dataset(dsetname, split=args.split, keep_in_memory=None)
     barrier(args)
     if proc_rank == 0:
         print(dset)
@@ -345,9 +366,6 @@ def main():
     # and optionally limit the sample count
     idx = select_sample_list(args, len(dset))
     
-    # divide index list evenly among ranks
-    start, end = get_start_end(len(idx), proc_rank, proc_size)
-
     if nltk_available and args.split_sentences:
         nltk.download("punkt", quiet=True)
 
@@ -386,9 +404,12 @@ def main():
                                                    impl=args.dataset_impl,
                                                    vocab_size=tokenizer.vocab_size)
 
+        # divide index list evenly among ranks
+        idx_start, idx_end = get_start_end(len(idx), proc_rank, proc_size)
+
         # each rank tokenizes its samples and writes its own file
         encoder.initializer()
-        for i in range(start, end):
+        for count, i in enumerate(range(idx_start, idx_end)):
             # get current sample index
             j = idx[i]
             for key in columns:
@@ -405,17 +426,30 @@ def main():
                     dset_stats[1] += len(sentences)
                 dset_stats[2] += bytes_processed
 
+            if proc_rank == 0 and args.log_interval and count > 0 and count % args.log_interval == 0:
+                current = time.time()
+                elapsed = current - tokenize_start
+                mbs = dset_stats[2] / elapsed / 1024 / 1024 if elapsed > 0.0 else 0.0
+                docs = dset_stats[0]
+                print(f"Rank 0 processed {docs} documents",
+                      f"({docs/elapsed} docs/s, {mbs} MB/s).",
+                      flush=True)
+                print(f"Estimated total processed {docs * proc_size} documents",
+                      f"({docs * proc_size / elapsed} docs/s, {mbs * proc_size} MB/s).",
+                      flush=True)
+
         # finalize file of each rank
         for key in columns:
             builders[key].finalize(output_idx_files[key])
             del builders[key] # file closed in __del__
     except:
+        # caught an exception, assume our file is invalid
         success = False
 
     # wait for all ranks to finish their files
     barrier(args)
     tokenize_end = time.time()
-    all_sum(args, dset_stats)
+    all_sum_(args, dset_stats)
     if proc_rank == 0:
         secs = tokenize_end - tokenize_start
         docrate = dset_stats[0] / secs if secs > 0.0 else 0.0
@@ -468,6 +502,10 @@ def main():
             print("Seconds to merge:", merge_end - merge_start)
             print(f"Merged {proc_size} files into {args.output_prefix}")
             print(f"Bytes=", numbytes, "bytes/sec=", byterate)
+        else:
+            # If any process fails, we skip the merge since the resulting file would be invalid.
+            # We still delete files to clean up, since those might be invalid anyway.
+            print(f"ERROR: At least one process failed to write its file, skipping merge and cleaning up")
 
         # delete per-rank files, do this even on error
         print("Deleting rank files ...", flush=True)
@@ -476,8 +514,14 @@ def main():
                 filebase = "{}_{}_{}_{}".format(args.output_prefix, key, level, rank)
                 binfile = data_file_path(filebase)
                 idxfile = index_file_path(filebase)
-                os.remove(binfile)
-                os.remove(idxfile)
+                try:
+                    os.remove(binfile)
+                except:
+                    pass
+                try:
+                    os.remove(idxfile)
+                except:
+                    pass
 
     # hold everyone until rank 0 is done
     barrier(args)
