@@ -272,7 +272,7 @@ def all_true(args, val):
     """Returns True if all procs input True, False otherwise"""
     if args.mpi_comm:
         inval = np.array([int(val)], dtype=np.int32)
-        outval = np.zeros(inval.shape, inval.dtype)
+        outval = np.zeros_like(inval)
         args.mpi_comm.Allreduce(inval, outval, op=MPI.LAND)
         return bool(outval[0])
     else:
