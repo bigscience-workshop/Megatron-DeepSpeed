@@ -289,7 +289,7 @@ def select_sample_list(args, dset_size):
     idx = []
     if args.rank == 0:
         # generate a list of all index values
-        idx = [int(x) for x in range(dset_size)]
+        idx = list(range(dset_size))
 
         # optionally shuffle
         if args.shuffle:
