@@ -1,18 +1,16 @@
 # What is this fork of Megatron-LM and Megatron-DeepSpeed
 
-This is a fork of https://github.com/microsoft/Megatron-DeepSpeed, which in itself is a fork of https://github.com/NVIDIA/Megatron-LM. The former integrates DeepSpeed into the original Megatron-LM code.
+This is a detached fork of https://github.com/microsoft/Megatron-DeepSpeed, which in itself is a fork of https://github.com/NVIDIA/Megatron-LM. The former integrates DeepSpeed into the original Megatron-LM code.
 
 This fork in turn will include direct changes to the models needed for the BigScience project. This is the repo we use for this project.
 
 In addition various code bits and lots of docs are to be found at https://github.com/bigscience-workshop/bigscience.
 
-**Important**: **Forking this repo** If you need to fork this repo to your personal account, github won't let you if you already forked either https://github.com/microsoft/Megatron-DeepSpeed or https://github.com/NVIDIA/Megatron-LM, this is a [strange limitation of github](https://stackoverflow.com/questions/6675994/is-it-possible-to-fork-a-fork-in-github) that they don't seem to plan to fix. So if you have commit access to this repo you can use a PR branch instead. If you don't, then you will need to delete the previously existing fork (first making sure you don't lose any of your work in that fork), and then you can fork this repo. This also means that one can't PR only into all 3 repos becase PR requires a fork of each and github won't let you do it. That's a problem.
-
 Please note that the rest of this page has been trimmed to only include the info relevant to the BigScience project and also updated to usage with the integrated Deepspeed. You will find the original page with all the tables and training info on Bert and T5 [here](https://github.com/NVIDIA/Megatron-LM).
 
 # Setup
 
-1. Step 1
+1. Install `bigscience-workshop/Megatron-DeepSpeed`
 ```
 git clone https://github.com/bigscience-workshop/Megatron-DeepSpeed
 cd Megatron-DeepSpeed
@@ -25,11 +23,34 @@ You can now use this repo directly by working directly from it. You don't need t
 pip install -e .
 ```
 
-2. Step 2
+2. Install `apex`
 
-Then install `apex` and `deepspeed` either via their homepages, or as explained for [apex](
-https://github.com/bigscience-workshop/bigscience/tree/master/jz/envs#apex) and
-[deepspeed](https://github.com/bigscience-workshop/bigscience/tree/master/jz/envs#deepspeed). The instructions are for JZ, so you may need to adjust the scripts to your setup.
+```
+git clone https://github.com/NVIDIA/apex
+cd apex
+pip install --global-option="--cpp_ext" --global-option="--cuda_ext" --no-cache -v --disable-pip-version-check .  2>&1 | tee build.log
+```
+
+(on JZ it's done in a special way, see [here](https://github.com/bigscience-workshop/bigscience/tree/master/jz/envs#apex).)
+
+3. Install `deepspeed` / the `big-science` branch
+
+Then install the `big-science` branch of `deepspeed`:
+
+```
+git clone https://github.com/microsoft/deepspeed deepspeed-big-science
+cd deepspeed-big-science
+git checkout big-science
+rm -rf build
+TORCH_CUDA_ARCH_LIST="7.0" DS_BUILD_CPU_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 pip install -e . --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
+```
+
+adjust `TORCH_CUDA_ARCH_LIST="7.0"` to the architecture of your NVIDIA GPU (or just remove it altogether if you are not sure how to find one).
+
+(on JZ it's done in a special way, see [here](https://github.com/bigscience-workshop/bigscience/tree/master/jz/envs#deepspeed).)
+
+
+3. CUDA kernels compilation
 
 The first time you run the training scripts several CUDA kernels will be compiled. Which means you need to have a cuda environment set up in your environment and it should match the version pytorch was built with.
 
@@ -51,6 +72,7 @@ We've provided several scripts for pretraining both BERT and GPT in [`examples`]
 ## Vocab
 
 The GPT [vocab file](https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-vocab.json) and [merge table](https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-merges.txt) can be downloaded directly.
+
 
 ## Data Preprocessing
 
@@ -74,15 +96,52 @@ python tools/preprocess_data.py \
     --dataset-impl mmap \
     --tokenizer-type GPT2BPETokenizer \
     --merge-file gpt2-merges.txt \
-    --append-eod
+    --append-eod \
+    --workers 8
 ```
 
 The output will be two files named, in this case, `my-gpt2_text_document.bin` and `my-gpt2_text_document.idx`. The `--data-path` specified in later GPT training is the full path and new filename, but without the file extension.
 
 Further command line arguments are described in the source file [`preprocess_data.py`](./tools/preprocess_data.py).
 
+You can also use `tools/preprocess_data_many_cores.py` in the case of high amount of cpu cores available. Typically in JZ setup where cpu nodes have up to 40 physical cpu cores, you should run this script with around 60 workers instead of the `tools/preprocess_data.py`. The same command line arguments are available.
+
+**Merging datasets**
+
+Sometimes it's hard to work on a very large dataset at once, so one can pre-process it in chunks and then merge those datasets into a single combined indexed dataset. Here is an example:
+
+```
+python tools/merge_preprocessed_data.py \
+    --datasets \
+    meg-gpt2-oscar-en-500-p1_text_document \
+    meg-gpt2-oscar-en-500-p2_text_document \
+    meg-gpt2-oscar-en-500-p3_text_document \
+    --output-prefix meg-gpt2_oscar_text_document
+```
+
+## Quick pre-processing to start training with
+
+Here is how you can get ready to train quickly, using a 1GB 79K-record jsonl dataset.
+
+```
+wget https://huggingface.co/bigscience/misc-test-data/resolve/main/stas/oscar-1GB.jsonl.xz
+wget https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-vocab.json
+wget https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-merges.txt
+xz -d oscar-1GB.jsonl.xz
+python tools/preprocess_data.py \
+    --input oscar-1GB.jsonl \
+    --output-prefix my-gpt2 \
+    --vocab gpt2-vocab.json \
+    --dataset-impl mmap \
+    --tokenizer-type GPT2BPETokenizer \
+    --merge-file gpt2-merges.txt \
+    --append-eod \
+    --workers 8
+```
 
 ## GPT Pretraining
+
+**note**: you may want to skip to the next section, since it describes what we actually use at the moment.
 
 The `examples/pretrain_gpt.sh` script runs single GPU 345M parameter GPT pretraining. Debugging is the primary use for single GPU training, as the code base and command line arguments are optimized for highly distributed training. Most of the arguments are fairly self-explanatory. By default, the learning rate decays linearly over the training iterations starting at `--lr` to a minimum set by `--min-lr` over `--lr-decay-iters` iterations. The fraction of training iterations used for warmup is set by `--lr-warmup-fraction`. While this is single GPU training, the batch size specified by `--micro-batch-size` is a single forward-backward path batch-size and the code will perform gradient accumulation steps until it reaches `global-batch-size` whcih is the batch size per iteration.
 
@@ -169,6 +228,136 @@ MASTER_ADDR=localhost MASTER_PORT=9994 RANK=0 LOCAL_RANK=0 python pretrain_gpt.p
 ```
 
 Further command line arguments are described in the source file [`arguments.py`](./megatron/arguments.py).
+
+
+### Deepspeed PP and ZeRO-DP
+
+To allow further flexibility we are using Deepspeed PP (pipeline parallelism) and ZeRO-DP along with Megatron normal functionality. That is we replace Megatron's PP with Deepspeed's PP, and we use ZERO-DP for DP.
+
+It's similar to the normal Megatron-LM launcher, plus it has a deepspeed config file and a few params:
+
+```
+CHECKPOINT_PATH=checkpoints/gpt2
+VOCAB_FILE=data/gpt2-vocab.json
+MERGE_FILE=data/gpt2-merges.txt
+DATA_PATH=data/meg-gpt2_oscar-combined_text_document
+TENSORBOARD_PATH=output_dir/tensorboard
+CODECARBON_PATH=output_dir/codecarbon
+
+MICRO_BATCH_SIZE=1
+GLOBAL_BATCH_SIZE=16
+TP_SIZE=1
+PP_SIZE=1
+
+N_GPUS=2
+SAVE_INTERVAL=100
+
+#    --train-samples 10_000 \
+#    --exit-interval $EXIT_INTERVAL \
+
+#    --exit-interval 100 \
+GPT_ARGS=" \
+    --num-layers 2 \
+    --hidden-size 64 \
+    --num-attention-heads 2 \
+    --seq-length 1024 \
+    --max-position-embeddings 1024 \
+    --micro-batch-size $MICRO_BATCH_SIZE \
+    --rampup-batch-size 2 2 1_000 \
+    --global-batch-size $GLOBAL_BATCH_SIZE \
+    --train-samples 100 \
+    --optimizer adam \
+    --adam-beta1 0.9 \
+    --adam-beta2 0.95 \
+    --adam-eps 1e-8 \
+    --lr 1e-4 \
+    --lr-warmup-samples 5 \
+    --clip-grad 1.0 \
+    --weight-decay 1e-1 \
+    --vocab-file $VOCAB_FILE \
+    --merge-file $MERGE_FILE \
+    --fp16 \
+    "
+#    --train-iters 500 \
+
+OUTPUT_ARGS=" \
+    --log-interval 10 \
+    --save-interval $SAVE_INTERVAL \
+    --eval-interval 100 \
+    --eval-iters 10 \
+    --checkpoint-activations \
+    "
+
+#    --codecarbon-dir $CODECARBON_PATH \
+DATA_ARGS=" \
+    --save $CHECKPOINT_PATH \
+    --load $CHECKPOINT_PATH \
+    --data-path $DATA_PATH \
+    --tensorboard-dir $TENSORBOARD_PATH \
+    --tensorboard-queue-size 5 \
+    --log-timers-to-tensorboard \
+    --log-batch-size-to-tensorboard \
+    --log-validation-ppl-to-tensorboard \
+    "
+
+
+ZERO_STAGE=1
+
+config_json="./ds_config.json"
+
+# Deepspeed figures out GAS dynamically from dynamic GBS via set_train_batch_size()
+cat <<EOT > $config_json
+{
+  "train_micro_batch_size_per_gpu": $MICRO_BATCH_SIZE,
+  "train_batch_size": $GLOBAL_BATCH_SIZE,
+  "gradient_clipping": 1.0,
+  "zero_optimization": {
+    "stage": $ZERO_STAGE
+  },
+  "fp16": {
+    "enabled": true,
+    "loss_scale": 0,
+    "loss_scale_window": 500,
+    "hysteresis": 2,
+    "min_loss_scale": 1,
+    "initial_scale_power": 12
+  },
+  "steps_per_print": 2000,
+  "wall_clock_breakdown": false
+}
+EOT
+
+
+DEEPSPEED_ARGS=" \
+    --deepspeed \
+    --deepspeed_config ${config_json} \
+    --zero-stage ${ZERO_STAGE} \
+    --deepspeed-activation-checkpointing \
+    "
+
+ALL_ARGS="$GPT_ARGS $OUTPUT_ARGS $DATA_ARGS $DEEPSPEED_ARGS"
+
+# if you can't stand pt-1.9 launcher noise
+export LOGLEVEL=WARNING
+
+LAUNCHER="deepspeed --num_gpus $N_GPUS"
+export CMD=" \
+    $LAUNCHER pretrain_gpt.py \
+    --tensor-model-parallel-size $TP_SIZE \
+    --pipeline-model-parallel-size $PP_SIZE \
+    --distributed-backend nccl \
+    $ALL_ARGS \
+    "
+
+echo $CMD
+
+$CMD
+
+```
+
+on JZ we use a different launching command, see for example the end of  [tr1-13B-round1.slurm](https://github.com/bigscience-workshop/bigscience/blob/master/train/tr1-13B-base/tr1-13B-round1.slurm), but this is also a good fully functional script that you can use. Except it's written for SLURM environment.
+
+
 
 
 ## Using any pretrained tokenizer

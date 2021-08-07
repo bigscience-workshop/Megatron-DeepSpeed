@@ -20,8 +20,10 @@ import json
 import multiprocessing
 import os
 import sys
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
                                              os.path.pardir)))
+from megatron.data.indexed_dataset import best_fitting_dtype
 import time
 
 import torch
@@ -93,8 +95,10 @@ class Encoder(object):
 def get_args():
     parser = argparse.ArgumentParser()
     group = parser.add_argument_group(title='input data')
-    group.add_argument('--input', type=str, required=True,
+    group.add_argument('--input', type=str,
                        help='Path to input JSON')
+    group.add_argument('--datasets', nargs='+', default=None,
+                       help='Paths to one or more input datasets to merge')
     group.add_argument('--json-keys', nargs='+', default=['text'],
                        help='space separate listed of keys to extract from json')
     group.add_argument('--split-sentences', action='store_true',
@@ -113,7 +117,7 @@ def get_args():
                        help='Path to the BPE merge file (if necessary).')
     group.add_argument('--append-eod', action='store_true',
                        help='Append an <eod> token to the end of a document.')
-    group.add_argument("--tokenizer-name-or-path", type=str, default=None, 
+    group.add_argument("--tokenizer-name-or-path", type=str, default=None,
                        help="Name or path of the huggingface tokenizer.")
 
     group = parser.add_argument_group(title='output data')
@@ -169,12 +173,12 @@ def main():
     builders = {}
     for key in args.json_keys:
         output_bin_files[key] = "{}_{}_{}.bin".format(args.output_prefix,
-                                                      key, level)
+                                                    key, level)
         output_idx_files[key] = "{}_{}_{}.idx".format(args.output_prefix,
-                                                      key, level)
+                                                    key, level)
         builders[key] = indexed_dataset.make_builder(output_bin_files[key],
-                                               impl=args.dataset_impl,
-                                               vocab_size=tokenizer.vocab_size)
+                                                     impl=args.dataset_impl,
+                                                     dtype=best_fitting_dtype(tokenizer.vocab_size))
 
     startup_end = time.time()
     proc_start = time.time()
@@ -194,8 +198,8 @@ def main():
             elapsed = current - proc_start
             mbs = total_bytes_processed/elapsed/1024/1024
             print(f"Processed {i} documents",
-                  f"({i/elapsed} docs/s, {mbs} MB/s).",
-                  file=sys.stderr)
+                f"({i/elapsed} docs/s, {mbs} MB/s).",
+                file=sys.stderr)
 
     for key in args.json_keys:
         builders[key].finalize(output_idx_files[key])
