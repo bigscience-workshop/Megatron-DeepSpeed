@@ -198,10 +198,7 @@ def init_distributed(args):
         args.rank = args.mpi_comm.Get_rank()
         args.numranks = args.mpi_comm.Get_size()
     else:
-        proc_rank = int(os.environ['OMPI_COMM_WORLD_RANK'])
-        proc_size = int(os.environ['OMPI_COMM_WORLD_SIZE'])
-        dist.init_process_group(args.torch_backend, init_method="env://",
-            rank=proc_rank, world_size=proc_size)
+        dist.init_process_group(args.torch_backend, init_method="env://")
         args.rank = dist.get_rank()
         args.numranks = dist.get_world_size()
 
