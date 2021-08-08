@@ -157,10 +157,12 @@ def get_args():
                        choices=['lazy', 'cached', 'mmap'])
 
     group = parser.add_argument_group(title='runtime')
-    group.add_argument('--torch-backend', type=str, default='gloo', choices = ['gloo', 'mpi'],
-                       help='Select torch.distributed backend.')
     group.add_argument('--mpi4py', action='store_true',
                        help='Assume script has been launched as an MPI job, and use MPI for communication.')
+    group.add_argument('--torch-backend', type=str, default='gloo', choices = ['gloo', 'mpi'],
+                       help='Select torch.distributed backend.')
+    group.add_argument('--local_rank', type=int, default=None,
+                       help='Local rank of calling process on its node (from torch.distributed.launch).')
     group.add_argument('--log-interval', type=int, default=30,
                        help='Seconds between progress updates (0 to disable)')
 
