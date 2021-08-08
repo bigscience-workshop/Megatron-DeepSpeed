@@ -95,7 +95,7 @@ def get_start_end(num, rank, num_ranks):
     remainder = num % num_per_rank
     if rank < remainder:
         start = (num_per_rank + 1) * rank;
-        end = start + (num_per_rank+1)
+        end = start + (num_per_rank + 1)
     else:
         start = (num_per_rank + 1) * remainder + num_per_rank * (rank - remainder);
         end = start + num_per_rank
