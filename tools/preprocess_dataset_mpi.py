@@ -161,8 +161,8 @@ def get_args():
                        help='Select torch.distributed backend.')
     group.add_argument('--mpi4py', action='store_true',
                        help='Assume script has been launched as an MPI job, and use MPI for communication.')
-    group.add_argument('--log-interval', type=int, default=None,
-                       help='Interval between progress updates')
+    group.add_argument('--log-interval', type=int, default=30,
+                       help='Seconds between progress updates (0 to disable)')
 
     args = parser.parse_args()
     args.keep_empty = False
@@ -369,7 +369,7 @@ def get_start_end(num, rank, num_ranks):
     """
 
     num_per_rank = num // num_ranks
-    remainder = num - num_per_rank * num_ranks
+    remainder = num % num_ranks
     if rank < remainder:
         start = (num_per_rank + 1) * rank;
         end = start + (num_per_rank + 1)
@@ -408,7 +408,8 @@ def rank_files_write(args, dset, idx, encoder):
         idx_start, idx_end = get_start_end(len(idx), args.rank, args.numranks)
 
         # each rank tokenizes its samples and writes its own file
-        for count, i in enumerate(idx[idx_start: idx_end]):
+        progress_next = time.time() + float(args.log_interval)
+        for i in idx[idx_start:idx_end]:
             for key in args.columns:
                 # tokenize text for the given sample index
                 text = dset[i][key]
@@ -423,15 +424,20 @@ def rank_files_write(args, dset, idx, encoder):
                     dset_stats[1] += len(sentences)
                 dset_stats[2] += bytes_processed
 
-            if args.rank == 0 and args.log_interval and count % args.log_interval == 0:
+            if args.rank == 0 and args.log_interval > 0 and time.time() > progress_next:
                 current = time.time()
+                progress_next = current + float(args.log_interval)
+
                 elapsed = current - tokenize_start
-                mbs = dset_stats[2] / elapsed / 1024 / 1024 if elapsed > 0.0 else 0.0
-                docs = dset_stats[0]
-                print(f"Rank 0 processed {docs} documents",
-                      f"({docs/elapsed} docs/s, {mbs} MB/s).")
-                print(f"Estimated total processed {docs * args.numranks} documents",
-                      f"({docs * args.numranks / elapsed} docs/s, {mbs * args.numranks} MB/s).",
+                timestamp = time.strftime("%Y/%m/%dT%H:%M:%S")
+                docs = dset_stats[0] * args.numranks
+                percent = docs / len(idx) * 100.0
+                docrate = docs / elapsed if elapsed > 0.0 else 0.0
+                mbs = dset_stats[2] * args.numranks / elapsed / 1024 / 1024 if elapsed > 0.0 else 0.0
+                secs_left = int((len(idx) - docs) / docrate if docrate > 0.0 else 0.0)
+                print(f"{timestamp}: Processed (estimated) {docs} of {len(idx)} docs ({percent:0.2f}%),",
+                      f"{docrate:0.3f} docs/s, {mbs:0.3f} MiB/s,",
+                      f"{secs_left} secs left ...",
                       flush=True)
 
         # finalize file of each rank
