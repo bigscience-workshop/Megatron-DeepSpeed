@@ -63,7 +63,7 @@ except ImportError:
 
 from megatron.tokenizer import build_tokenizer
 from megatron.data import indexed_dataset
-from megatron.data.indexed_dataset import infer_dataset_impl, MMapIndexedDataset, data_file_path, index_file_path
+from megatron.data.indexed_dataset import data_file_path, index_file_path, make_builder
 
 def get_start_end(num, rank, num_ranks):
     """Compute start and end index values to evenly divide num items
