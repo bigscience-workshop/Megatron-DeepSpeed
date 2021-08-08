@@ -176,26 +176,25 @@ def get_args():
     args.make_vocab_size_divisible_by = 128
     args.model_parallel_size = 1
 
+    # use mpi4py instead of torch.distributed if requested
+    args.use_mpi = False
+    if args.mpi4py:
+        try:
+            from mpi4py import MPI
+            args.MPI = MPI
+            args.use_mpi = True
+        except:
+            print(f"ERROR: mpi4py requested, but failed to import, falling back to torch.distributed.")
+
     return args
 
 def init_distributed(args):
     """Determine which distributed runtime to use and connect up processes"""
-    # use mpi4py instead of torch.distributed if requested
-    use_mpi = False
-    if args.mpi4py:
-        try:
-            from mpi4py import MPI
-            use_mpi = True
-        except:
-            print(f"ERROR: mpi4py requested, but failed to import, falling back to torch.distributed.")
-
     # select our distributed runtime (MPI or torch.distributed)
     # lookup our process rank and the group size
     # some functions like build_tokenizer use args.rank to filter stdout messages
-    args.mpi_comm = None
-    if use_mpi:
-        args.MPI = MPI
-        args.mpi_comm = MPI.COMM_WORLD
+    if args.use_mpi:
+        args.mpi_comm = args.MPI.COMM_WORLD
         args.rank = args.mpi_comm.Get_rank()
         args.numranks = args.mpi_comm.Get_size()
     else:
@@ -208,14 +207,14 @@ def init_distributed(args):
 
 def barrier(args):
     """Globally synchronize all processes."""
-    if args.mpi_comm:
+    if args.use_mpi:
         args.mpi_comm.barrier()
     else:
         dist.barrier()
 
 def bcast(args, vals, root=0):
     """Broadcast list of vals from root to all ranks, returns newly allocated list"""
-    if args.mpi_comm:
+    if args.use_mpi:
         vals = args.mpi_comm.bcast(vals, root=root)
         return vals
     else:
@@ -236,7 +235,7 @@ def bcast(args, vals, root=0):
 
 def all_sum_(args, vals):
     """Sums values in vals element-wise and updates vals with final result on all ranks"""
-    if args.mpi_comm:
+    if args.use_mpi:
         outval = np.zeros_like(vals)
         args.mpi_comm.Allreduce(vals, outval, op=args.MPI.SUM)
         vals[:] = outval
@@ -246,7 +245,7 @@ def all_sum_(args, vals):
 
 def all_true(args, val):
     """Returns True if all procs input True, False otherwise"""
-    if args.mpi_comm:
+    if args.use_mpi:
         inval = np.array([val], dtype=np.bool_)
         outval = np.zeros_like(inval)
         args.mpi_comm.Allreduce(inval, outval, op=args.MPI.LAND)
