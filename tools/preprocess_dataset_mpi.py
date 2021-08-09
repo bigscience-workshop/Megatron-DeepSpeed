@@ -131,8 +131,6 @@ def get_args():
                        help='Shuffle samples before writing output files.')
     group.add_argument('--seed', type=int, default=None,
                        help='Seed to pass to random.seed for shuffle operations.')
-    group.add_argument('--download', action='store_true',
-                       help='Enable dataset download if not already cached.')
     group.add_argument('--split-sentences', action='store_true',
                        help='Split documents into sentences.')
     group.add_argument('--keep-newlines', action='store_true',
@@ -263,14 +261,15 @@ def load_dset(args):
     # The HF_DATASETS_OFFLINE environment variable is processed when datasets is imported,
     # so we must set it before the import statement.
     # We allow the user to override default behavior if they explictly set $HF_DATASETS_OFFLINE.
-    if not args.download and 'HF_DATASETS_OFFLINE' not in os.environ:
+    if 'HF_DATASETS_OFFLINE' not in os.environ:
         # sets HF_DATASETS_OFFLINE within the environment of this script
-        os.environ['HF_DATASETS_OFFLINE'] = "1"
+        #os.environ['HF_DATASETS_OFFLINE'] = "1"
 
         # Alternatively, one could set datasets.config.HF_DATASETS_OFFLINE.
         # This seems to work even after the import statement,
         # but it feels like a bigger hack.
-        #datasets.config.HF_DATASETS_OFFLINE = 1
+        import datasets
+        datasets.config.HF_DATASETS_OFFLINE = 1
 
     # import datasets after potentially setting environment variables
     from datasets import load_dataset, logging
@@ -290,7 +289,11 @@ def load_dset(args):
         try:
             dset = load_dataset(dsetname, split=args.split, keep_in_memory=None)
         except OfflineModeIsEnabled as e:
-            print(f"ERROR: Cannot download {dsetname} since running in offline mode, force with --download", flush=True)
+            print(f"ERROR: Cannot download '{dsetname}' since running in offline mode.")
+            print(f"ERROR: If the dataset is large, it may be more efficient to download with a single process:")
+            print(f"ERROR:     from datasets import load_datasets")
+            print(f"ERROR:     dset = load_dataset('{dsetname}')")
+            print(f"ERROR: Alternatively, one can force this script to download by setting $HF_DATASETS_OFFLINE=0", flush=True)
             success = False
             err = e
         except Exception as e:
