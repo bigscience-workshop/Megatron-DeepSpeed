@@ -189,7 +189,7 @@ def get_args():
             args.MPI = MPI
             args.use_mpi = True
         except:
-            print(f"ERROR: mpi4py requested, but failed to import, falling back to torch.distributed.")
+            print(f"ERROR: mpi4py requested, but failed to import, falling back to torch.distributed.", flush=True)
 
     return args
 
@@ -283,41 +283,45 @@ def load_dset(args):
     # Load the specified HuggingFace dataset.
     # Give rank 0 a head start in case the dataset is not already cached.
     success = True
+    err = None
     dsetname = args.input
     if args.rank == 0:
         print(f"Opening dataset {dsetname}")
         try:
             dset = load_dataset(dsetname, split=args.split, keep_in_memory=None)
-        except OfflineModeIsEnabled:
-            print(f"ERROR: Cannot download {dsetname} since running in offline mode, force with --download")
+        except OfflineModeIsEnabled as e:
+            print(f"ERROR: Cannot download {dsetname} since running in offline mode, force with --download", flush=True)
             success = False
-        except:
-            print("ERROR: Unexpected error:", sys.exc_info()[0])
+            err = e
+        except Exception as e:
+            print("ERROR: Unexpected error:", sys.exc_info()[0], flush=True)
             success = False
+            err = e
 
     # determine whether rank 0 succeeded in loading the dataset
     success = all_true(args, success)
     if not success:
-        return None
+        return None, err
 
     # Rank 0 succeeded, attempt to load dataset on all other ranks.
     # This should load from cache now.
     if args.rank != 0:
         try:
             dset = load_dataset(dsetname, split=args.split, keep_in_memory=None)
-        except:
+        except Exception as e:
             # this print might be noisy, but better than nothing
-            print("ERROR: Unexpected error:", sys.exc_info()[0])
+            print("ERROR: Unexpected error:", sys.exc_info()[0], flush=True)
             success = False
+            err = e
 
     # verify that all ranks loaded the dataset
     success = all_true(args, success)
     if not success:
         if args.rank == 0:
-            print(f"ERROR: At least one process failed to load {dsetname}")
-        return None
+            print(f"ERROR: At least one process failed to load {dsetname}", flush=True)
+        return None, err
 
-    return dset
+    return dset, err
 
 def select_sample_list(args, dset_size):
     """Given the total number of samples, select a list of sample index values"""
@@ -398,7 +402,7 @@ def rank_files_write(args, dset, idx, encoder):
 
     # we'll set this to false on any problem
     success = True
-
+    err = None
     try:
         # create data file for each rank
         if args.rank == 0:
@@ -455,9 +459,10 @@ def rank_files_write(args, dset, idx, encoder):
         for key in args.columns:
             builders[key].finalize(output_idx_files[key])
             del builders[key] # file closed in __del__
-    except:
+    except Exception as e:
         # caught an exception, assume our file is invalid
         success = False
+        err = e
 
     # In case rank 0 finishes early and stops printing progress messages,
     # inform user that it's waiting for other ranks to finish.
@@ -483,7 +488,7 @@ def rank_files_write(args, dset, idx, encoder):
 
     # allreduce to check whether all ranks wrote their part successfully
     success = all_true(args, success)
-    return success
+    return success, err
 
 def rank_files_merge(args):
     # rank 0 merges all per-rank files
@@ -560,8 +565,10 @@ def main():
     init_distributed(args)
 
     # load the dataset
-    dset = load_dset(args)
+    dset, err = load_dset(args)
     if dset is None:
+        if err is not None:
+            raise err
         return
     if args.rank == 0:
         print(dset)
@@ -589,17 +596,25 @@ def main():
         print("Seconds to startup:", startup_end - startup_start)
 
     # have each rank write its file, returns False if any rank had a problem
-    success = rank_files_write(args, dset, idx, encoder)
+    success, err = rank_files_write(args, dset, idx, encoder)
+    if not success:
+        if args.rank == 0:
+            # If any process fails, we skip the merge since the resulting file would be invalid.
+            # We still delete files to clean up, since those might be invalid anyway.
+            print(f"ERROR: At least one process failed to write its file, skipping merge and cleaning up", flush=True)
 
-    # merge files if all ranks were successful writing their file
-    if success:
-        rank_files_merge(args)
-    elif args.rank == 0:
-        # If any process fails, we skip the merge since the resulting file would be invalid.
-        # We still delete files to clean up, since those might be invalid anyway.
-        print(f"ERROR: At least one process failed to write its file, skipping merge and cleaning up")
+        # delete per-rank files, do this even on error
+        rank_files_delete(args)
 
-    # delete per-rank files, do this even on error
+        # raise exception caught during write phase
+        if err is not None:
+            raise err
+        return
+
+    # all ranks were successful writing their file, merge them into one
+    rank_files_merge(args)
+
+    # delete per-rank files
     rank_files_delete(args)
 
 if __name__ == '__main__':
