@@ -62,7 +62,7 @@ except ImportError:
     nltk_available = False
 
 from megatron.tokenizer import build_tokenizer
-from megatron.data.indexed_dataset import data_file_path, index_file_path, make_builder
+from megatron.data.indexed_dataset import data_file_path, index_file_path, make_builder, best_fitting_dtype
 
 # https://stackoverflow.com/questions/33139531/preserve-empty-lines-with-nltks-punkt-tokenizer
 class CustomLanguageVars(nltk.tokenize.punkt.PunktLanguageVars):
@@ -141,8 +141,10 @@ def get_args():
     group = parser.add_argument_group(title='tokenizer')
     group.add_argument('--tokenizer-type', type=str, required=True,
                        choices=['BertWordPieceLowerCase','BertWordPieceCase',
-                                'GPT2BPETokenizer'],
+                                'GPT2BPETokenizer', 'PretrainedFromHF'],
                        help='What type of tokenizer to use.')
+    group.add_argument("--tokenizer-name-or-path", type=str, default=None, 
+                       help="Name or path of the huggingface tokenizer.")
     group.add_argument('--vocab-file', type=str, default=None,
                        help='Path to the vocab file')
     group.add_argument('--merge-file', type=str, default=None,
@@ -176,7 +178,8 @@ def get_args():
     # some default/dummy values for the tokenizer
     args.rank = 0
     args.make_vocab_size_divisible_by = 128
-    args.model_parallel_size = 1
+    args.tensor_model_parallel_size = 1
+    args.vocab_extra_ids = 0
 
     # use mpi4py instead of torch.distributed if requested
     args.use_mpi = False
@@ -376,6 +379,16 @@ def get_start_end(num, rank, num_ranks):
         end = start + num_per_rank
     return start, end
 
+def get_filename(args, key, rank=None):
+    pathname = args.output_prefix
+
+    if rank is not None:
+        filename = f"{pathname}_{key}_{args.level}_{rank}"
+    else:
+        filename = f"{pathname}_{key}_{args.level}"
+
+    return filename
+
 def rank_files_write(args, dset, idx, encoder):
     tokenize_start = time.time()
 
@@ -395,12 +408,12 @@ def rank_files_write(args, dset, idx, encoder):
         output_idx_files = {}
         builders = {}
         for key in args.columns:
-            filebase = f"{args.output_prefix}_{key}_{args.level}_{args.rank}"
+            filebase = get_filename(args, key, args.rank)
             output_bin_files[key] = data_file_path(filebase)
             output_idx_files[key] = index_file_path(filebase)
             builders[key] = make_builder(output_bin_files[key],
                                          impl=args.dataset_impl,
-                                         vocab_size=args.vocab_size)
+                                         dtype=best_fitting_dtype(args.vocab_size))
 
         # divide index list evenly among ranks
         idx_start, idx_end = get_start_end(len(idx), args.rank, args.numranks)
@@ -427,7 +440,7 @@ def rank_files_write(args, dset, idx, encoder):
                 progress_next = current + float(args.log_interval)
 
                 elapsed = current - tokenize_start
-                timestamp = time.strftime("%Y/%m/%dT%H:%M:%S")
+                timestamp = time.strftime("%Y-%m-%dT%H:%M:%S")
                 docs = dset_stats[0] * args.numranks
                 percent = docs / len(idx) * 100.0
                 docrate = docs / elapsed if elapsed > 0.0 else 0.0
@@ -445,6 +458,12 @@ def rank_files_write(args, dset, idx, encoder):
     except:
         # caught an exception, assume our file is invalid
         success = False
+
+    # In case rank 0 finishes early and stops printing progress messages,
+    # inform user that it's waiting for other ranks to finish.
+    if args.rank == 0 and args.log_interval > 0:
+        timestamp = time.strftime("%Y-%m-%dT%H:%M:%S")
+        print(f"{timestamp}: Waiting for ranks to finalize files ...", flush=True)
 
     # wait for all ranks to finish their files
     barrier(args)
@@ -478,17 +497,18 @@ def rank_files_merge(args):
         output_idx_files = {}
         builders = {}
         for key in args.columns:
-            filebase = f"{args.output_prefix}_{key}_{args.level}"
+            filebase = get_filename(args, key)
             output_bin_files[key] = data_file_path(filebase)
             output_idx_files[key] = index_file_path(filebase)
             builders[key] = make_builder(output_bin_files[key],
                                          impl=args.dataset_impl,
-                                         vocab_size=args.vocab_size)
+                                         dtype=best_fitting_dtype(args.vocab_size))
 
         # merge all ranks into one file
         for rank in range(args.numranks):
             for key in args.columns:
-                infile = f"{args.output_prefix}_{key}_{args.level}_{rank}"
+                infile = get_filename(args, key, rank)
+
                 print(f"Merging file {infile}", flush=True)
                 builders[key].merge_file_(infile)
 
@@ -519,7 +539,7 @@ def rank_files_delete(args):
         print("Deleting rank files ...", flush=True)
 
     for key in args.columns:
-        filebase = f"{args.output_prefix}_{key}_{args.level}_{args.rank}"
+        filebase = get_filename(args, key, args.rank)
 
         binfile = data_file_path(filebase)
         if os.path.exists(binfile):
@@ -545,6 +565,7 @@ def main():
         return
     if args.rank == 0:
         print(dset)
+        print("Selecting features:", args.columns)
 
     # create sample index list,
     # optionally shuffle the list,
