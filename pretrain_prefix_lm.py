@@ -41,8 +41,6 @@ def model_provider(pre_process=True, post_process=True):
 
     args = get_args()
 
-    assert args.prefix_lm is True, "Use `pretrain_gpt.py` instead"
-
     with deepspeed.zero.Init(data_parallel_group=mpu.get_data_parallel_group(),
                              remote_device=None if args.remote_device=='none' else args.remote_device,
                              config=args.deepspeed_config,
@@ -50,7 +48,8 @@ def model_provider(pre_process=True, post_process=True):
         if args.deepspeed:
             model = GPTModelPipe(
                 num_tokentypes=0,
-                parallel_output=True
+                parallel_output=True,
+                prefix_lm=True
             )
             # This is a hack to give us a reference to get_batch_pipe from within training.py
             # We need to call model.set_batch_fn after deepspeed.initialize
@@ -61,7 +60,8 @@ def model_provider(pre_process=True, post_process=True):
                 num_tokentypes=0,
                 parallel_output=True,
                 pre_process=pre_process,
-                post_process=post_process
+                post_process=post_process,
+                prefix_lm=True
             )
     see_memory_usage(f"After Building Model", force=True)
     return model
@@ -89,15 +89,12 @@ def get_batch(data_iterator):
     tokens = tokens_[:, :-1].contiguous()
 
     # Prefix
-    if args.prefix_lm:
-        prefix_indices = get_prefix_indices(
-            tokens,
-            tokenizer.eod,
-            partial_prefix_indices=None,
-            reset_attention_mask=args.reset_attention_mask
-        )
-    else:
-        prefix_indices = None
+    prefix_indices = get_prefix_indices(
+        tokens,
+        tokenizer.eod,
+        partial_prefix_indices=None,
+        reset_attention_mask=args.reset_attention_mask
+    )
 
     # Get the masks and postition ids.
     attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
@@ -130,15 +127,12 @@ def get_batch_pipe(data):
     tokens = tokens_[:, :-1].contiguous()
 
     # Prefix
-    if args.prefix_lm:
-        prefix_indices = get_prefix_indices(
-            tokens,
-            tokenizer.eod,
-            partial_prefix_indices=None,
-            reset_attention_mask=args.reset_attention_mask
-        )
-    else:
-        prefix_indices = None
+    prefix_indices = get_prefix_indices(
+        tokens,
+        tokenizer.eod,
+        partial_prefix_indices=None,
+        reset_attention_mask=args.reset_attention_mask
+    )
 
     # Get the masks and position ids.
     attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(

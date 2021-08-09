@@ -313,7 +313,6 @@ def _add_network_size_args(parser):
                        default=PositionEmbeddingType.absolute,
                        help='Define position embedding type ("absolute" | "rotary"). "absolute" by default.'
                        )
-    group.add_argument('--prefix-lm', action="store_true", help="Use prefix mask on attention matrices.")
 
     return parser
 
@@ -690,7 +689,7 @@ def _add_data_args(parser):
                        help='Reset posistion ids after end-of-document token.')
     group.add_argument('--reset-attention-mask', action='store_true',
                        help='Reset self attention maske after '
-                       'end-of-document token.')
+                       'end-of-document token. Attention between tokens from different documents is null.')
     group.add_argument('--eod-mask-loss', action='store_true',
                        help='Mask loss for the end of document tokens.')
     group.add_argument('--loss-on-targets-only', action='store_true',

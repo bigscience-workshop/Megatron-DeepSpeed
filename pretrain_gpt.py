@@ -41,7 +41,6 @@ def model_provider(pre_process=True, post_process=True):
 
     args = get_args()
 
-    assert args.prefix_lm is False, "Use `pretrain_prefix_lm.py` instead"
     with deepspeed.zero.Init(data_parallel_group=mpu.get_data_parallel_group(),
                              remote_device=None if args.remote_device=='none' else args.remote_device,
                              config=args.deepspeed_config,
