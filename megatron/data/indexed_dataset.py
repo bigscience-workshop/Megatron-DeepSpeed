@@ -417,21 +417,21 @@ class MMapIndexedDataset(torch.utils.data.Dataset):
                 offset = stream.tell()
 
             if not skip_warmup:
-                print_rank_0("    warming up index mmap file...")
+#                print_rank_0("    warming up index mmap file...")
                 _warmup_mmap_file(path)
 
             self._bin_buffer_mmap = np.memmap(path, mode='r', order='C')
             self._bin_buffer = memoryview(self._bin_buffer_mmap)
-            print_rank_0("    reading sizes...")
+#            print_rank_0("    reading sizes...")
             self._sizes = np.frombuffer(
                 self._bin_buffer,
                 dtype=np.int32,
                 count=self._len,
                 offset=offset)
-            print_rank_0("    reading pointers...")
+#            print_rank_0("    reading pointers...")
             self._pointers = np.frombuffer(self._bin_buffer, dtype=np.int64, count=self._len,
                                            offset=offset + self._sizes.nbytes)
-            print_rank_0("    reading document index...")
+#            print_rank_0("    reading document index...")
             self._doc_idx = np.frombuffer(self._bin_buffer, dtype=np.int64, count=self._doc_count,
                                           offset=offset + self._sizes.nbytes + self._pointers.nbytes)
 
@@ -576,8 +576,8 @@ class MMapIndexedDatasetBuilder(object):
         index = MMapIndexedDataset.Index(index_file_path(another_file))
         assert index.dtype == self._dtype
 
-        total_len = len(index.sizes)+len(self._sizes)
-        print(f"    concat {another_file} size={len(index.sizes)} for a total size of {total_len}")
+#        total_len = len(index.sizes)+len(self._sizes)
+#        print(f"    concat {another_file} size={len(index.sizes)} for a total size of {total_len}")
 
         offset = len(self._sizes)
         self._sizes.extend(index.sizes)
@@ -592,3 +592,131 @@ class MMapIndexedDatasetBuilder(object):
 
         with MMapIndexedDataset.Index.writer(index_file, self._dtype) as index:
             index.write(self._sizes, self._doc_idx)
+
+def mpi_get_sum(val, mpi, comm):
+    insize = np.array([val], dtype=np.int64)
+    outsize = np.zeros_like(insize)
+    comm.Allreduce(insize, outsize, op=mpi.SUM)
+    return outsize[0]
+
+def mpi_get_offset(val, mpi, comm):
+    insize = np.array([val], dtype=np.int64)
+    outsize = np.zeros_like(insize)
+    comm.Scan(insize, outsize, op=mpi.SUM)
+    offset = outsize[0] - insize[0]
+    return offset
+
+def merge_files_mpi_bin(outfile, infile, mpi, comm):
+    import stat
+    import shutil
+
+    comm.barrier()
+
+    # wait for rank 0 to open (and truncate) file,
+    # then have all ranks open file for writing
+    rank = comm.Get_rank()
+    if rank == 0:
+        f = open(outfile, 'wb')
+    comm.barrier()
+    if rank != 0:
+        f = open(outfile, 'r+b')
+
+    # get file size of binary file for this rank
+    filesize = os.stat(infile)[stat.ST_SIZE]
+
+    # compute offset this rank should start copying
+    # its data into the merged file
+    offset = mpi_get_offset(filesize, mpi, comm)
+    #print(rank, infile, filesize, offset)
+
+    # seek to appropriate offset and copy data
+    f.seek(offset)
+    with open(infile, "rb") as fsrc:
+        shutil.copyfileobj(fsrc, f)
+
+    f.close()
+
+    comm.barrier()
+
+def merge_files_mpi_idx(outfile, infile, mpi, comm, dtype):
+    rank = comm.Get_rank()
+
+    comm.barrier()
+
+    # wait for rank 0 to open (and truncate) file,
+    # then have all ranks open file for writing
+    rank = comm.Get_rank()
+    if rank == 0:
+        f = open(outfile, 'wb')
+    comm.barrier()
+    if rank != 0:
+        f = open(outfile, 'r+b')
+
+    index = MMapIndexedDataset.Index(infile)
+    sizes = index.sizes
+    if rank == 0:
+        docs = index.doc_idx
+    if rank != 0:
+        docs = index.doc_idx[1:]
+
+    numsizes = len(sizes)
+    numdocs = len(docs)
+    size_count = mpi_get_sum(numsizes, mpi, comm)
+    docs_count = mpi_get_sum(numdocs, mpi, comm)
+    size_offset = mpi_get_offset(numsizes, mpi, comm)
+    docs_offset = mpi_get_offset(numdocs, mpi, comm)
+
+    # have rank 0 write the file header
+    if rank == 0:
+        f.write(MMapIndexedDataset.Index._HDR_MAGIC)
+        f.write(struct.pack('<Q', 1))
+        f.write(struct.pack('<B', code(dtype)))
+        f.write(struct.pack('<Q', size_count))
+        #f.write(struct.pack('<Q', 0xeeeeeeeeeeeeeeee))
+        f.write(struct.pack('<Q', docs_count))
+        #f.write(struct.pack('<Q', 0xffffffffffffffff))
+
+    # TODO: better to have rank 0 lseek to get pos and bcast?
+    # advance position past file header
+    pos = 8 + 8 + 2 + 2 * 8
+
+    f.seek(pos + size_offset * np.int32().itemsize)
+    sizes32 = np.array(sizes, dtype=np.int32)
+    f.write(sizes32.tobytes(order='C'))
+    del sizes32
+    pos += size_count * np.int32().itemsize
+
+    pointers = np.array(sizes, dtype=np.int64)
+    pointer_last = 0
+    if len(sizes) > 0:
+        np.cumsum(pointers, axis=0, out=pointers)
+        pointers *= dtype().itemsize
+        pointer_last = pointers[-1]
+    pointer_offset = mpi_get_offset(pointer_last, mpi, comm)
+    pointers += pointer_offset
+
+    pointers_shift = 0
+    if rank == 0 and len(sizes) > 0:
+        pointers_shift = pointers[0]
+    pointers_shift = mpi_get_sum(pointers_shift, mpi, comm)
+    pointers -= pointers_shift
+
+    f.seek(pos + size_offset * np.int64().itemsize)
+    f.write(pointers.tobytes(order='C'))
+    del pointers
+    pos += size_count * np.int64().itemsize
+
+    doc_idx = np.array(docs, dtype=np.int64)
+    doc_idx += size_offset
+
+    f.seek(pos + docs_offset * np.int64().itemsize)
+    f.write(doc_idx.tobytes(order='C'))
+    del doc_idx
+
+    f.close()
+
+    comm.barrier()
+
+def merge_files_mpi(filemain, filerank, mpi, comm, dtype=np.int64):
+    merge_files_mpi_bin(data_file_path(filemain), data_file_path(filerank), mpi, comm)
+    merge_files_mpi_idx(index_file_path(filemain), index_file_path(filerank), mpi, comm, dtype)

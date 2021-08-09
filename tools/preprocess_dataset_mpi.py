@@ -65,7 +65,7 @@ from datasets import config, logging, load_dataset
 from datasets.utils.file_utils import OfflineModeIsEnabled
 
 from megatron.tokenizer import build_tokenizer
-from megatron.data.indexed_dataset import data_file_path, index_file_path, make_builder, best_fitting_dtype
+from megatron.data.indexed_dataset import data_file_path, index_file_path, make_builder, best_fitting_dtype, merge_files_mpi
 
 # https://stackoverflow.com/questions/33139531/preserve-empty-lines-with-nltks-punkt-tokenizer
 class CustomLanguageVars(nltk.tokenize.punkt.PunktLanguageVars):
@@ -166,6 +166,8 @@ def get_args():
                        help='Select torch.distributed backend.')
     group.add_argument('--local_rank', type=int, default=None,
                        help='Local rank of calling process on its node (from torch.distributed.launch).')
+    group.add_argument('--scratch', type=str, default='/dev/shm',
+                       help='Path to local storage on compute nodes to write per-rank files before merging.')
     group.add_argument('--log-interval', type=int, default=30,
                        help='Seconds between progress updates (0 to disable)')
 
@@ -281,6 +283,23 @@ def load_dset(args):
     if args.rank != 0:
         logging.set_verbosity(logging.ERROR)
 
+    success = True
+    dsetname = args.input
+    if not download:
+        try:
+            dset = load_dataset(dsetname, split=args.split, keep_in_memory=None)
+        except:
+            # this print might be noisy, but better than nothing
+            print("ERROR: Unexpected error:", sys.exc_info()[0])
+            success = False
+
+        # determine whether everyone succeeded in loading the dataset
+        success = all_true(args, success)
+        if not success:
+            return None
+
+        return dset
+
     # Load the specified HuggingFace dataset.
     # Give rank 0 a head start in case the dataset is not already cached.
     success = True
@@ -391,6 +410,11 @@ def get_start_end(num, rank, num_ranks):
 def get_filename(args, key, rank=None):
     pathname = args.output_prefix
 
+    # redirect per-rank file to scratch dir if defined
+    if args.scratch and rank is not None:
+        basename = os.path.basename(pathname)
+        pathname = os.path.join(args.scratch, basename)
+
     if rank is not None:
         filename = f"{pathname}_{key}_{args.level}_{rank}"
     else:
@@ -408,6 +432,7 @@ def rank_files_write(args, dset, idx, encoder):
     # we'll set this to false on any problem
     success = True
     err = None
+    times = np.zeros(2, dtype=np.float32)
     try:
         # create data file for each rank
         if args.rank == 0:
@@ -432,8 +457,13 @@ def rank_files_write(args, dset, idx, encoder):
         for i in idx[idx_start:idx_end]:
             for key in args.columns:
                 # tokenize text for the given sample index
+                start_read = time.time()
                 text = dset[i][key]
+                start_encode = time.time()
                 doc, bytes_processed = encoder.encode_text(text)
+                end_encode = time.time()
+                times[0] += start_encode - start_read
+                times[1] += end_encode - start_encode
 
                 # add tokenized sequence to our data file
                 for key, sentences in doc.items():
@@ -443,6 +473,9 @@ def rank_files_write(args, dset, idx, encoder):
                     dset_stats[0] += 1
                     dset_stats[1] += len(sentences)
                 dset_stats[2] += bytes_processed
+
+#                dset_stats[0] += 1
+#                dset_stats[2] += len(text)
 
             if args.rank == 0 and args.log_interval > 0 and time.time() > progress_next:
                 current = time.time()
@@ -480,6 +513,7 @@ def rank_files_write(args, dset, idx, encoder):
     tokenize_end = time.time()
 
     # compute total stats across all processes
+    all_sum_(args, times)
     all_sum_(args, dset_stats)
     if args.rank == 0:
         secs = tokenize_end - tokenize_start
@@ -497,6 +531,25 @@ def rank_files_write(args, dset, idx, encoder):
     return success, err
 
 def rank_files_merge(args):
+    merge_start = time.time()
+    numbytes = np.zeros(1, dtype=np.int64)
+    for key in args.columns:
+        filemain = get_filename(args, key)
+        filerank = get_filename(args, key, args.rank)
+        binfile = data_file_path(filerank)
+        numbytes[0] += os.stat(binfile)[stat.ST_SIZE]
+        merge_files_mpi(filemain, filerank, args.MPI, args.mpi_comm, dtype=best_fitting_dtype(args.vocab_size))
+    barrier(args)
+    all_sum_(args, numbytes)
+    merge_end = time.time()
+    if args.rank == 0:
+        secs = merge_end - merge_start
+        byterate = numbytes[0] / secs if secs > 0.0 else 0.0
+        print("Seconds to merge (parallel):", secs, flush=True)
+        print("Bytes=", numbytes[0], "bytes/sec=", byterate, flush=True)
+    if args.scratch:
+        return
+
     # rank 0 merges all per-rank files
     if args.rank == 0:
         print("Merging rank files ...", flush=True)
@@ -520,7 +573,7 @@ def rank_files_merge(args):
             for key in args.columns:
                 infile = get_filename(args, key, rank)
 
-                print(f"Merging file {infile}", flush=True)
+#                print(f"Merging file {infile}", flush=True)
                 builders[key].merge_file_(infile)
 
                 # sum up the number of merged bytes
