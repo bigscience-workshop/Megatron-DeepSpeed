@@ -295,7 +295,7 @@ def load_dset(args):
         except OfflineModeIsEnabled as e:
             print(f"ERROR: Cannot download '{dsetname}' since running in offline mode.")
             print(f"ERROR: If the dataset is large, it may be more efficient to download with a single process:")
-            print(f"ERROR:     from datasets import load_datasets")
+            print(f"ERROR:     from datasets import load_dataset")
             print(f"ERROR:     dset = load_dataset('{dsetname}')")
             print(f"ERROR: Alternatively, one can force this script to download by setting $HF_DATASETS_OFFLINE=0", flush=True)
             success = False
