@@ -64,6 +64,8 @@ except ImportError:
 from datasets import config, logging, load_dataset
 from datasets.utils.file_utils import OfflineModeIsEnabled
 
+from indexed_json import IndexedJSON
+
 from megatron.tokenizer import build_tokenizer
 from megatron.data.indexed_dataset import data_file_path, index_file_path, make_builder, best_fitting_dtype, gather_files_dist
 from megatron.data.distdata import DistData
@@ -606,11 +608,15 @@ def main():
     startup_start = time.time()
 
     # load the dataset
-    dset, err = load_dset(args)
-    if dset is None:
-        if err is not None:
-            raise err
-        return
+    if args.input.endswith(".json"):
+        # assume file is JSONL format
+        dset = IndexedJSON(args.input, args.mpi_comm)
+    else:
+        dset, err = load_dset(args)
+        if dset is None:
+            if err is not None:
+                raise err
+            return
     if args.rank == 0:
         print(dset)
         msg(f"Processing features: {args.columns}")
