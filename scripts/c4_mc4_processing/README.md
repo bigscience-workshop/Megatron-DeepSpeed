@@ -87,7 +87,7 @@ Note that `multi_shard_data_process.sh` also merge the shard into a single `*.bi
 ## Calculate iterator probability for each of the datasets.
 
 ```
-bash scripts/c4_mc4_processing/calc_iterator_prob.sh > iterator_samplig_prob.out.txt 
+bash scripts/c4_mc4_processing/calc_iterator_prob.sh > iterator_selection_prob.out.txt 
 ```
 
 The scripts expect all the language processed (`*.bin`, and `*.idx`) to be in a same folder in the following format, 
