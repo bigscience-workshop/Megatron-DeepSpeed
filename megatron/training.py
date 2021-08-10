@@ -582,10 +582,12 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
     if iteration % args.log_interval == 0:
         elapsed_time = timers('interval-time').elapsed()
         elapsed_time_per_iteration = elapsed_time / total_iterations
-        if writer and torch.distributed.get_rank() == 0:
+        if writer and is_last_rank():
             if args.log_timers_to_tensorboard:
                 writer.add_scalar('iteration-time',
                                   elapsed_time_per_iteration, iteration)
+                writer.add_scalar('iteration-time vs samples',
+                                  elapsed_time_per_iteration, args.consumed_train_samples)
         log_string = ' iteration {:8d}/{:8d} |'.format(
             iteration, args.train_iters)
         log_string += ' consumed samples: {:12d} |'.format(
@@ -772,7 +774,7 @@ def evaluate(forward_step_func, data_iterator, model, verbose=False):
                     forward_backward_func = forward_backward_pipelining_without_interleaving
             else:
                 forward_backward_func = forward_backward_no_pipelining
-            
+
             if args.deepspeed:
                 # DeepSpeed uses eval_batch() and already aggregates losses.
                 assert isinstance(model, list) and len(model) == 1
@@ -782,7 +784,7 @@ def evaluate(forward_step_func, data_iterator, model, verbose=False):
                 loss_dicts = forward_backward_func(
                     forward_step_func, data_iterator, model, optimizer=None,
                     timers=None, forward_only=True)
-            
+
             if mpu.is_pipeline_last_stage(ignore_virtual=True):
                 # Reduce across processes.
                 for loss_dict in loss_dicts:
