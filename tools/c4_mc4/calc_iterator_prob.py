@@ -1,6 +1,7 @@
 import os
 import math
 import json
+import pyfiglet
 import argparse
 import subprocess
 from collections import OrderedDict
@@ -79,13 +80,14 @@ def main():
                         help='Extension of the file to match. Combination of `--name-prefix` and --extension-name will be used to select file')
 
     args = parser.parse_args()
+    alpha_banner = pyfiglet.figlet_format("alpha = {}".format(args.alpha))
+    print(alpha_banner)
     size_dict = get_size_stats(args)
     print_stat(args, size_dict, value_name=args.size_format)
     sampling_probability = calc_multinomial_sampling_prob_with_penalty(
         size_dict, alpha=args.alpha
     )
     print_stat(args, sampling_probability, 'probability')
-    
     total_contrib = 0
     print("\nLanguage : Per epoch contribution in {}".format(args.size_format))
     print("-"*50)
