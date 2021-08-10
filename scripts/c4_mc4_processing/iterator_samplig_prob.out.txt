@@ -8,69 +8,75 @@
 
 Language : (GB)
 --------------------
-zh-Latn :   0.75
-am :   1.27
-ru-Latn :   3.15
-sw :   3.73
-bn :   7.5
-hi :   8.49
-ur :   9.11
-ca :   14.07
-zh :   21.64
-ar :   27.09
-id :   32.75
-pt :   58.89
-ja :   62.95
-ru :   68.09
-es :   108.21
-fr :   119.4
-en :   754.79
+dumped/mc4_processed_data/zh-Latn/train_text_document.bin :   0.75
+dumped/mc4_processed_data/am/train_text_document.bin :   1.27
+dumped/mc4_processed_data/ru-Latn/train_text_document.bin :   3.15
+dumped/mc4_processed_data/sw/train_text_document.bin :   3.73
+dumped/mc4_processed_data/bn/train_text_document.bin :   7.5
+dumped/mc4_processed_data/hi/train_text_document.bin :   8.49
+dumped/mc4_processed_data/ur/train_text_document.bin :   9.11
+dumped/mc4_processed_data/ca/train_text_document.bin :   14.07
+dumped/mc4_processed_data/zh/train_text_document.bin :   21.64
+dumped/mc4_processed_data/ar/train_text_document.bin :   27.09
+dumped/mc4_processed_data/id/train_text_document.bin :   32.75
+dumped/mc4_processed_data/pt/train_text_document.bin :   58.89
+dumped/mc4_processed_data/ja/train_text_document.bin :   62.95
+dumped/mc4_processed_data/ru/train_text_document.bin :   68.09
+dumped/mc4_processed_data/es/train_text_document.bin :   108.21
+dumped/mc4_processed_data/fr/train_text_document.bin :   119.4
+dumped/mc4_processed_data/en/train_text_document_2.bin :   250.58
+dumped/mc4_processed_data/en/train_text_document_1.bin :   250.64
+dumped/mc4_processed_data/en/train_text_document_3.bin :   253.57
 --------------------
 Total size : 1301.88
 
 Language : (probability)
 --------------------
-zh-Latn :   0.0420076055739
-am :   0.04427944546
-ru-Latn :   0.0484900750817
-sw :   0.0493165496588
-bn :   0.0528844421456
-hi :   0.0535442167713
-ur :   0.0539229494373
-ca :   0.0563185170852
-zh :   0.05879596556
-ar :   0.0601315919499
-id :   0.0612834112464
-pt :   0.064986920328
-ja :   0.0654216321294
-ru :   0.0659371443675
-es :   0.0690634931862
-fr :   0.0697464702944
-en :   0.0838695697243
+dumped/mc4_processed_data/zh-Latn/train_text_document.bin :   0.0367983865781
+dumped/mc4_processed_data/am/train_text_document.bin :   0.0387885033969
+dumped/mc4_processed_data/ru-Latn/train_text_document.bin :   0.0424769872902
+dumped/mc4_processed_data/sw/train_text_document.bin :   0.0432009735916
+dumped/mc4_processed_data/bn/train_text_document.bin :   0.0463264239762
+dumped/mc4_processed_data/hi/train_text_document.bin :   0.0469043822149
+dumped/mc4_processed_data/ur/train_text_document.bin :   0.0472361495428
+dumped/mc4_processed_data/ca/train_text_document.bin :   0.0493346510684
+dumped/mc4_processed_data/zh/train_text_document.bin :   0.0515048796605
+dumped/mc4_processed_data/ar/train_text_document.bin :   0.0526748796057
+dumped/mc4_processed_data/id/train_text_document.bin :   0.0536838657443
+dumped/mc4_processed_data/pt/train_text_document.bin :   0.0569281153752
+dumped/mc4_processed_data/ja/train_text_document.bin :   0.0573089200581
+dumped/mc4_processed_data/ru/train_text_document.bin :   0.0577605053928
+dumped/mc4_processed_data/es/train_text_document.bin :   0.0604991664243
+dumped/mc4_processed_data/fr/train_text_document.bin :   0.0610974498853
+dumped/mc4_processed_data/en/train_text_document_2.bin :   0.065798696727
+dumped/mc4_processed_data/en/train_text_document_1.bin :   0.0658002720708
+dumped/mc4_processed_data/en/train_text_document_3.bin :   0.0658767913971
 --------------------
 Total size : 1.0
 
 Language : Per epoch contribution in GB
 --------------------------------------------------
-ru :   0.0659371443675  (68.09  ->  4.49)
-fr :   0.0697464702944  (119.4  ->  8.33)
-en :   0.0838695697243  (754.79  ->  63.3)
-zh :   0.05879596556  (21.64  ->  1.27)
-pt :   0.064986920328  (58.89  ->  3.83)
-am :   0.04427944546  (1.27  ->  0.06)
-bn :   0.0528844421456  (7.5  ->  0.4)
-sw :   0.0493165496588  (3.73  ->  0.18)
-zh-Latn :   0.0420076055739  (0.75  ->  0.03)
-ja :   0.0654216321294  (62.95  ->  4.12)
-hi :   0.0535442167713  (8.49  ->  0.45)
-id :   0.0612834112464  (32.75  ->  2.01)
-ur :   0.0539229494373  (9.11  ->  0.49)
-ar :   0.0601315919499  (27.09  ->  1.63)
-ca :   0.0563185170852  (14.07  ->  0.79)
-es :   0.0690634931862  (108.21  ->  7.47)
-ru-Latn :   0.0484900750817  (3.15  ->  0.15)
+dumped/mc4_processed_data/en/train_text_document_1.bin :   0.0658002720708  (250.64  ->  16.49)
+dumped/mc4_processed_data/zh/train_text_document.bin :   0.0515048796605  (21.64  ->  1.11)
+dumped/mc4_processed_data/pt/train_text_document.bin :   0.0569281153752  (58.89  ->  3.35)
+dumped/mc4_processed_data/zh-Latn/train_text_document.bin :   0.0367983865781  (0.75  ->  0.03)
+dumped/mc4_processed_data/ur/train_text_document.bin :   0.0472361495428  (9.11  ->  0.43)
+dumped/mc4_processed_data/bn/train_text_document.bin :   0.0463264239762  (7.5  ->  0.35)
+dumped/mc4_processed_data/sw/train_text_document.bin :   0.0432009735916  (3.73  ->  0.16)
+dumped/mc4_processed_data/hi/train_text_document.bin :   0.0469043822149  (8.49  ->  0.4)
+dumped/mc4_processed_data/en/train_text_document_2.bin :   0.065798696727  (250.58  ->  16.49)
+dumped/mc4_processed_data/id/train_text_document.bin :   0.0536838657443  (32.75  ->  1.76)
+dumped/mc4_processed_data/fr/train_text_document.bin :   0.0610974498853  (119.4  ->  7.3)
+dumped/mc4_processed_data/am/train_text_document.bin :   0.0387885033969  (1.27  ->  0.05)
+dumped/mc4_processed_data/ru/train_text_document.bin :   0.0577605053928  (68.09  ->  3.93)
+dumped/mc4_processed_data/ja/train_text_document.bin :   0.0573089200581  (62.95  ->  3.61)
+dumped/mc4_processed_data/es/train_text_document.bin :   0.0604991664243  (108.21  ->  6.55)
+dumped/mc4_processed_data/ca/train_text_document.bin :   0.0493346510684  (14.07  ->  0.69)
+dumped/mc4_processed_data/ar/train_text_document.bin :   0.0526748796057  (27.09  ->  1.43)
+dumped/mc4_processed_data/en/train_text_document_3.bin :   0.0658767913971  (253.57  ->  16.7)
+dumped/mc4_processed_data/ru-Latn/train_text_document.bin :   0.0424769872902  (3.15  ->  0.13)
 --------------------------------------------------
-Total size : 99.0
+Total size : 80.96
        _       _                      ___   ____  
   __ _| |_ __ | |__   __ _   _____   / _ \ |___ \ 
  / _` | | '_ \| '_ \ / _` | |_____| | | | |  __) |
@@ -81,69 +87,75 @@ Total size : 99.0
 
 Language : (GB)
 --------------------
-zh-Latn :   0.75
-am :   1.27
-ru-Latn :   3.15
-sw :   3.73
-bn :   7.5
-hi :   8.49
-ur :   9.11
-ca :   14.07
-zh :   21.64
-ar :   27.09
-id :   32.75
-pt :   58.89
-ja :   62.95
-ru :   68.09
-es :   108.21
-fr :   119.4
-en :   754.79
+dumped/mc4_processed_data/zh-Latn/train_text_document.bin :   0.75
+dumped/mc4_processed_data/am/train_text_document.bin :   1.27
+dumped/mc4_processed_data/ru-Latn/train_text_document.bin :   3.15
+dumped/mc4_processed_data/sw/train_text_document.bin :   3.73
+dumped/mc4_processed_data/bn/train_text_document.bin :   7.5
+dumped/mc4_processed_data/hi/train_text_document.bin :   8.49
+dumped/mc4_processed_data/ur/train_text_document.bin :   9.11
+dumped/mc4_processed_data/ca/train_text_document.bin :   14.07
+dumped/mc4_processed_data/zh/train_text_document.bin :   21.64
+dumped/mc4_processed_data/ar/train_text_document.bin :   27.09
+dumped/mc4_processed_data/id/train_text_document.bin :   32.75
+dumped/mc4_processed_data/pt/train_text_document.bin :   58.89
+dumped/mc4_processed_data/ja/train_text_document.bin :   62.95
+dumped/mc4_processed_data/ru/train_text_document.bin :   68.09
+dumped/mc4_processed_data/es/train_text_document.bin :   108.21
+dumped/mc4_processed_data/fr/train_text_document.bin :   119.4
+dumped/mc4_processed_data/en/train_text_document_2.bin :   250.58
+dumped/mc4_processed_data/en/train_text_document_1.bin :   250.64
+dumped/mc4_processed_data/en/train_text_document_3.bin :   253.57
 --------------------
 Total size : 1301.88
 
 Language : (probability)
 --------------------
-zh-Latn :   0.0291195536936
-am :   0.032354389235
-ru-Latn :   0.038800254342
-sw :   0.0401341646546
-bn :   0.0461513824166
-hi :   0.0473101145693
-ur :   0.0479817559125
-ca :   0.0523397062881
-zh :   0.0570458312655
-ar :   0.0596670082768
-id :   0.0619747413009
-pt :   0.0696916541249
-ja :   0.070627138125
-ru :   0.0717445851246
-es :   0.078709280264
-fr :   0.0802737085031
-en :   0.116074731903
+dumped/mc4_processed_data/zh-Latn/train_text_document.bin :   0.0250284395888
+dumped/mc4_processed_data/am/train_text_document.bin :   0.0278088010868
+dumped/mc4_processed_data/ru-Latn/train_text_document.bin :   0.0333490626968
+dumped/mc4_processed_data/sw/train_text_document.bin :   0.034495567002
+dumped/mc4_processed_data/bn/train_text_document.bin :   0.0396674035223
+dumped/mc4_processed_data/hi/train_text_document.bin :   0.0406633410971
+dumped/mc4_processed_data/ur/train_text_document.bin :   0.0412406210568
+dumped/mc4_processed_data/ca/train_text_document.bin :   0.0449863068202
+dumped/mc4_processed_data/zh/train_text_document.bin :   0.0490312508442
+dumped/mc4_processed_data/ar/train_text_document.bin :   0.0512841689751
+dumped/mc4_processed_data/id/train_text_document.bin :   0.0532676800271
+dumped/mc4_processed_data/pt/train_text_document.bin :   0.0599004151458
+dumped/mc4_processed_data/ja/train_text_document.bin :   0.060704469529
+dumped/mc4_processed_data/ru/train_text_document.bin :   0.061664922255
+dumped/mc4_processed_data/es/train_text_document.bin :   0.0676511215417
+dumped/mc4_processed_data/fr/train_text_document.bin :   0.0689957574549
+dumped/mc4_processed_data/en/train_text_document_2.bin :   0.0800222581234
+dumped/mc4_processed_data/en/train_text_document_1.bin :   0.0800260899341
+dumped/mc4_processed_data/en/train_text_document_3.bin :   0.0802123232989
 --------------------
 Total size : 1.0
 
 Language : Per epoch contribution in GB
 --------------------------------------------------
-ru :   0.0717445851246  (68.09  ->  4.89)
-fr :   0.0802737085031  (119.4  ->  9.58)
-en :   0.116074731903  (754.79  ->  87.61)
-zh :   0.0570458312655  (21.64  ->  1.23)
-pt :   0.0696916541249  (58.89  ->  4.1)
-am :   0.032354389235  (1.27  ->  0.04)
-bn :   0.0461513824166  (7.5  ->  0.35)
-sw :   0.0401341646546  (3.73  ->  0.15)
-zh-Latn :   0.0291195536936  (0.75  ->  0.02)
-ja :   0.070627138125  (62.95  ->  4.45)
-hi :   0.0473101145693  (8.49  ->  0.4)
-id :   0.0619747413009  (32.75  ->  2.03)
-ur :   0.0479817559125  (9.11  ->  0.44)
-ar :   0.0596670082768  (27.09  ->  1.62)
-ca :   0.0523397062881  (14.07  ->  0.74)
-es :   0.078709280264  (108.21  ->  8.52)
-ru-Latn :   0.038800254342  (3.15  ->  0.12)
+dumped/mc4_processed_data/en/train_text_document_1.bin :   0.0800260899341  (250.64  ->  20.06)
+dumped/mc4_processed_data/zh/train_text_document.bin :   0.0490312508442  (21.64  ->  1.06)
+dumped/mc4_processed_data/pt/train_text_document.bin :   0.0599004151458  (58.89  ->  3.53)
+dumped/mc4_processed_data/zh-Latn/train_text_document.bin :   0.0250284395888  (0.75  ->  0.02)
+dumped/mc4_processed_data/ur/train_text_document.bin :   0.0412406210568  (9.11  ->  0.38)
+dumped/mc4_processed_data/bn/train_text_document.bin :   0.0396674035223  (7.5  ->  0.3)
+dumped/mc4_processed_data/sw/train_text_document.bin :   0.034495567002  (3.73  ->  0.13)
+dumped/mc4_processed_data/hi/train_text_document.bin :   0.0406633410971  (8.49  ->  0.35)
+dumped/mc4_processed_data/en/train_text_document_2.bin :   0.0800222581234  (250.58  ->  20.05)
+dumped/mc4_processed_data/id/train_text_document.bin :   0.0532676800271  (32.75  ->  1.74)
+dumped/mc4_processed_data/fr/train_text_document.bin :   0.0689957574549  (119.4  ->  8.24)
+dumped/mc4_processed_data/am/train_text_document.bin :   0.0278088010868  (1.27  ->  0.04)
+dumped/mc4_processed_data/ru/train_text_document.bin :   0.061664922255  (68.09  ->  4.2)
+dumped/mc4_processed_data/ja/train_text_document.bin :   0.060704469529  (62.95  ->  3.82)
+dumped/mc4_processed_data/es/train_text_document.bin :   0.0676511215417  (108.21  ->  7.32)
+dumped/mc4_processed_data/ca/train_text_document.bin :   0.0449863068202  (14.07  ->  0.63)
+dumped/mc4_processed_data/ar/train_text_document.bin :   0.0512841689751  (27.09  ->  1.39)
+dumped/mc4_processed_data/en/train_text_document_3.bin :   0.0802123232989  (253.57  ->  20.34)
+dumped/mc4_processed_data/ru-Latn/train_text_document.bin :   0.0333490626968  (3.15  ->  0.11)
 --------------------------------------------------
-Total size : 126.29
+Total size : 93.71
        _       _                      ___   _____ 
   __ _| |_ __ | |__   __ _   _____   / _ \ |___ / 
  / _` | | '_ \| '_ \ / _` | |_____| | | | |  |_ \ 
@@ -154,69 +166,75 @@ Total size : 126.29
 
 Language : (GB)
 --------------------
-zh-Latn :   0.75
-am :   1.27
-ru-Latn :   3.15
-sw :   3.73
-bn :   7.5
-hi :   8.49
-ur :   9.11
-ca :   14.07
-zh :   21.64
-ar :   27.09
-id :   32.75
-pt :   58.89
-ja :   62.95
-ru :   68.09
-es :   108.21
-fr :   119.4
-en :   754.79
+dumped/mc4_processed_data/zh-Latn/train_text_document.bin :   0.75
+dumped/mc4_processed_data/am/train_text_document.bin :   1.27
+dumped/mc4_processed_data/ru-Latn/train_text_document.bin :   3.15
+dumped/mc4_processed_data/sw/train_text_document.bin :   3.73
+dumped/mc4_processed_data/bn/train_text_document.bin :   7.5
+dumped/mc4_processed_data/hi/train_text_document.bin :   8.49
+dumped/mc4_processed_data/ur/train_text_document.bin :   9.11
+dumped/mc4_processed_data/ca/train_text_document.bin :   14.07
+dumped/mc4_processed_data/zh/train_text_document.bin :   21.64
+dumped/mc4_processed_data/ar/train_text_document.bin :   27.09
+dumped/mc4_processed_data/id/train_text_document.bin :   32.75
+dumped/mc4_processed_data/pt/train_text_document.bin :   58.89
+dumped/mc4_processed_data/ja/train_text_document.bin :   62.95
+dumped/mc4_processed_data/ru/train_text_document.bin :   68.09
+dumped/mc4_processed_data/es/train_text_document.bin :   108.21
+dumped/mc4_processed_data/fr/train_text_document.bin :   119.4
+dumped/mc4_processed_data/en/train_text_document_2.bin :   250.58
+dumped/mc4_processed_data/en/train_text_document_1.bin :   250.64
+dumped/mc4_processed_data/en/train_text_document_3.bin :   253.57
 --------------------
 Total size : 1301.88
 
 Language : (probability)
 --------------------
-zh-Latn :   0.019598369903
-am :   0.02295317076
-ru-Latn :   0.0301435735786
-sw :   0.0317113127529
-bn :   0.0391038889023
-hi :   0.0405857782728
-ur :   0.0414531067151
-ca :   0.047226939299
-zh :   0.0537376596366
-ar :   0.0574836415836
-id :   0.0608506137052
-pt :   0.0725628008395
-ja :   0.0740287287671
-ru :   0.0757925591929
-es :   0.0870927072059
-fr :   0.0897021535006
-en :   0.155972995385
+dumped/mc4_processed_data/zh-Latn/train_text_document.bin :   0.0166008525584
+dumped/mc4_processed_data/am/train_text_document.bin :   0.0194425457536
+dumped/mc4_processed_data/ru-Latn/train_text_document.bin :   0.025533196028
+dumped/mc4_processed_data/sw/train_text_document.bin :   0.0268611537617
+dumped/mc4_processed_data/bn/train_text_document.bin :   0.0331230555061
+dumped/mc4_processed_data/hi/train_text_document.bin :   0.03437829393
+dumped/mc4_processed_data/ur/train_text_document.bin :   0.0351129668473
+dumped/mc4_processed_data/ca/train_text_document.bin :   0.0400037074495
+dumped/mc4_processed_data/zh/train_text_document.bin :   0.0455186308288
+dumped/mc4_processed_data/ar/train_text_document.bin :   0.0486916750307
+dumped/mc4_processed_data/id/train_text_document.bin :   0.0515436779287
+dumped/mc4_processed_data/pt/train_text_document.bin :   0.0614645179126
+dumped/mc4_processed_data/ja/train_text_document.bin :   0.0627062361528
+dumped/mc4_processed_data/ru/train_text_document.bin :   0.0642002935148
+dumped/mc4_processed_data/es/train_text_document.bin :   0.0737721146398
+dumped/mc4_processed_data/fr/train_text_document.bin :   0.0759824532246
+dumped/mc4_processed_data/en/train_text_document_2.bin :   0.0949064950214
+dumped/mc4_processed_data/en/train_text_document_1.bin :   0.0949133119013
+dumped/mc4_processed_data/en/train_text_document_3.bin :   0.09524482201
 --------------------
 Total size : 1.0
 
 Language : Per epoch contribution in GB
 --------------------------------------------------
-ru :   0.0757925591929  (68.09  ->  5.16)
-fr :   0.0897021535006  (119.4  ->  10.71)
-en :   0.155972995385  (754.79  ->  117.73)
-zh :   0.0537376596366  (21.64  ->  1.16)
-pt :   0.0725628008395  (58.89  ->  4.27)
-am :   0.02295317076  (1.27  ->  0.03)
-bn :   0.0391038889023  (7.5  ->  0.29)
-sw :   0.0317113127529  (3.73  ->  0.12)
-zh-Latn :   0.019598369903  (0.75  ->  0.01)
-ja :   0.0740287287671  (62.95  ->  4.66)
-hi :   0.0405857782728  (8.49  ->  0.34)
-id :   0.0608506137052  (32.75  ->  1.99)
-ur :   0.0414531067151  (9.11  ->  0.38)
-ar :   0.0574836415836  (27.09  ->  1.56)
-ca :   0.047226939299  (14.07  ->  0.66)
-es :   0.0870927072059  (108.21  ->  9.42)
-ru-Latn :   0.0301435735786  (3.15  ->  0.09)
+dumped/mc4_processed_data/en/train_text_document_1.bin :   0.0949133119013  (250.64  ->  23.79)
+dumped/mc4_processed_data/zh/train_text_document.bin :   0.0455186308288  (21.64  ->  0.99)
+dumped/mc4_processed_data/pt/train_text_document.bin :   0.0614645179126  (58.89  ->  3.62)
+dumped/mc4_processed_data/zh-Latn/train_text_document.bin :   0.0166008525584  (0.75  ->  0.01)
+dumped/mc4_processed_data/ur/train_text_document.bin :   0.0351129668473  (9.11  ->  0.32)
+dumped/mc4_processed_data/bn/train_text_document.bin :   0.0331230555061  (7.5  ->  0.25)
+dumped/mc4_processed_data/sw/train_text_document.bin :   0.0268611537617  (3.73  ->  0.1)
+dumped/mc4_processed_data/hi/train_text_document.bin :   0.03437829393  (8.49  ->  0.29)
+dumped/mc4_processed_data/en/train_text_document_2.bin :   0.0949064950214  (250.58  ->  23.78)
+dumped/mc4_processed_data/id/train_text_document.bin :   0.0515436779287  (32.75  ->  1.69)
+dumped/mc4_processed_data/fr/train_text_document.bin :   0.0759824532246  (119.4  ->  9.07)
+dumped/mc4_processed_data/am/train_text_document.bin :   0.0194425457536  (1.27  ->  0.02)
+dumped/mc4_processed_data/ru/train_text_document.bin :   0.0642002935148  (68.09  ->  4.37)
+dumped/mc4_processed_data/ja/train_text_document.bin :   0.0627062361528  (62.95  ->  3.95)
+dumped/mc4_processed_data/es/train_text_document.bin :   0.0737721146398  (108.21  ->  7.98)
+dumped/mc4_processed_data/ca/train_text_document.bin :   0.0400037074495  (14.07  ->  0.56)
+dumped/mc4_processed_data/ar/train_text_document.bin :   0.0486916750307  (27.09  ->  1.32)
+dumped/mc4_processed_data/en/train_text_document_3.bin :   0.09524482201  (253.57  ->  24.15)
+dumped/mc4_processed_data/ru-Latn/train_text_document.bin :   0.025533196028  (3.15  ->  0.08)
 --------------------------------------------------
-Total size : 158.58
+Total size : 106.34
        _       _                      ___  _  _   
   __ _| |_ __ | |__   __ _   _____   / _ \| || |  
  / _` | | '_ \| '_ \ / _` | |_____| | | | | || |_ 
@@ -227,69 +245,75 @@ Total size : 158.58
 
 Language : (GB)
 --------------------
-zh-Latn :   0.75
-am :   1.27
-ru-Latn :   3.15
-sw :   3.73
-bn :   7.5
-hi :   8.49
-ur :   9.11
-ca :   14.07
-zh :   21.64
-ar :   27.09
-id :   32.75
-pt :   58.89
-ja :   62.95
-ru :   68.09
-es :   108.21
-fr :   119.4
-en :   754.79
+dumped/mc4_processed_data/zh-Latn/train_text_document.bin :   0.75
+dumped/mc4_processed_data/am/train_text_document.bin :   1.27
+dumped/mc4_processed_data/ru-Latn/train_text_document.bin :   3.15
+dumped/mc4_processed_data/sw/train_text_document.bin :   3.73
+dumped/mc4_processed_data/bn/train_text_document.bin :   7.5
+dumped/mc4_processed_data/hi/train_text_document.bin :   8.49
+dumped/mc4_processed_data/ur/train_text_document.bin :   9.11
+dumped/mc4_processed_data/ca/train_text_document.bin :   14.07
+dumped/mc4_processed_data/zh/train_text_document.bin :   21.64
+dumped/mc4_processed_data/ar/train_text_document.bin :   27.09
+dumped/mc4_processed_data/id/train_text_document.bin :   32.75
+dumped/mc4_processed_data/pt/train_text_document.bin :   58.89
+dumped/mc4_processed_data/ja/train_text_document.bin :   62.95
+dumped/mc4_processed_data/ru/train_text_document.bin :   68.09
+dumped/mc4_processed_data/es/train_text_document.bin :   108.21
+dumped/mc4_processed_data/fr/train_text_document.bin :   119.4
+dumped/mc4_processed_data/en/train_text_document_2.bin :   250.58
+dumped/mc4_processed_data/en/train_text_document_1.bin :   250.64
+dumped/mc4_processed_data/en/train_text_document_3.bin :   253.57
 --------------------
 Total size : 1301.88
 
 Language : (probability)
 --------------------
-zh-Latn :   0.0128125905925
-am :   0.0158173575584
-ru-Latn :   0.0227476566939
-sw :   0.0243386214797
-bn :   0.0321837724619
-hi :   0.0338201492531
-ur :   0.034787225672
-ca :   0.0413933030199
-zh :   0.0491717139318
-ar :   0.0537942733896
-id :   0.0580359323109
-pt :   0.0733886781638
-ja :   0.0753721211551
-ru :   0.0777760311093
-es :   0.0936093872816
-fr :   0.0973675348062
-en :   0.20358365112
+dumped/mc4_processed_data/zh-Latn/train_text_document.bin :   0.0107670714303
+dumped/mc4_processed_data/am/train_text_document.bin :   0.0132921299124
+dumped/mc4_processed_data/ru-Latn/train_text_document.bin :   0.0191160127007
+dumped/mc4_processed_data/sw/train_text_document.bin :   0.0204529813151
+dumped/mc4_processed_data/bn/train_text_document.bin :   0.0270456606329
+dumped/mc4_processed_data/hi/train_text_document.bin :   0.0284207912648
+dumped/mc4_processed_data/ur/train_text_document.bin :   0.0292334747581
+dumped/mc4_processed_data/ca/train_text_document.bin :   0.0347848974907
+dumped/mc4_processed_data/zh/train_text_document.bin :   0.0413214917335
+dumped/mc4_processed_data/ar/train_text_document.bin :   0.0452060635158
+dumped/mc4_processed_data/id/train_text_document.bin :   0.0487705452074
+dumped/mc4_processed_data/pt/train_text_document.bin :   0.0616722382768
+dumped/mc4_processed_data/ja/train_text_document.bin :   0.0633390262859
+dumped/mc4_processed_data/ru/train_text_document.bin :   0.0653591540659
+dumped/mc4_processed_data/es/train_text_document.bin :   0.0786647284271
+dumped/mc4_processed_data/fr/train_text_document.bin :   0.0818228909042
+dumped/mc4_processed_data/en/train_text_document_2.bin :   0.110065611517
+dumped/mc4_processed_data/en/train_text_document_1.bin :   0.110076152601
+dumped/mc4_processed_data/en/train_text_document_3.bin :   0.110589077961
 --------------------
 Total size : 1.0
 
 Language : Per epoch contribution in GB
 --------------------------------------------------
-ru :   0.0777760311093  (68.09  ->  5.3)
-fr :   0.0973675348062  (119.4  ->  11.63)
-en :   0.20358365112  (754.79  ->  153.66)
-zh :   0.0491717139318  (21.64  ->  1.06)
-pt :   0.0733886781638  (58.89  ->  4.32)
-am :   0.0158173575584  (1.27  ->  0.02)
-bn :   0.0321837724619  (7.5  ->  0.24)
-sw :   0.0243386214797  (3.73  ->  0.09)
-zh-Latn :   0.0128125905925  (0.75  ->  0.01)
-ja :   0.0753721211551  (62.95  ->  4.74)
-hi :   0.0338201492531  (8.49  ->  0.29)
-id :   0.0580359323109  (32.75  ->  1.9)
-ur :   0.034787225672  (9.11  ->  0.32)
-ar :   0.0537942733896  (27.09  ->  1.46)
-ca :   0.0413933030199  (14.07  ->  0.58)
-es :   0.0936093872816  (108.21  ->  10.13)
-ru-Latn :   0.0227476566939  (3.15  ->  0.07)
+dumped/mc4_processed_data/en/train_text_document_1.bin :   0.110076152601  (250.64  ->  27.59)
+dumped/mc4_processed_data/zh/train_text_document.bin :   0.0413214917335  (21.64  ->  0.89)
+dumped/mc4_processed_data/pt/train_text_document.bin :   0.0616722382768  (58.89  ->  3.63)
+dumped/mc4_processed_data/zh-Latn/train_text_document.bin :   0.0107670714303  (0.75  ->  0.01)
+dumped/mc4_processed_data/ur/train_text_document.bin :   0.0292334747581  (9.11  ->  0.27)
+dumped/mc4_processed_data/bn/train_text_document.bin :   0.0270456606329  (7.5  ->  0.2)
+dumped/mc4_processed_data/sw/train_text_document.bin :   0.0204529813151  (3.73  ->  0.08)
+dumped/mc4_processed_data/hi/train_text_document.bin :   0.0284207912648  (8.49  ->  0.24)
+dumped/mc4_processed_data/en/train_text_document_2.bin :   0.110065611517  (250.58  ->  27.58)
+dumped/mc4_processed_data/id/train_text_document.bin :   0.0487705452074  (32.75  ->  1.6)
+dumped/mc4_processed_data/fr/train_text_document.bin :   0.0818228909042  (119.4  ->  9.77)
+dumped/mc4_processed_data/am/train_text_document.bin :   0.0132921299124  (1.27  ->  0.02)
+dumped/mc4_processed_data/ru/train_text_document.bin :   0.0653591540659  (68.09  ->  4.45)
+dumped/mc4_processed_data/ja/train_text_document.bin :   0.0633390262859  (62.95  ->  3.99)
+dumped/mc4_processed_data/es/train_text_document.bin :   0.0786647284271  (108.21  ->  8.51)
+dumped/mc4_processed_data/ca/train_text_document.bin :   0.0347848974907  (14.07  ->  0.49)
+dumped/mc4_processed_data/ar/train_text_document.bin :   0.0452060635158  (27.09  ->  1.22)
+dumped/mc4_processed_data/en/train_text_document_3.bin :   0.110589077961  (253.57  ->  28.04)
+dumped/mc4_processed_data/ru-Latn/train_text_document.bin :   0.0191160127007  (3.15  ->  0.06)
 --------------------------------------------------
-Total size : 195.82
+Total size : 118.64
        _       _                      ___   ____  
   __ _| |_ __ | |__   __ _   _____   / _ \ | ___| 
  / _` | | '_ \| '_ \ / _` | |_____| | | | ||___ \ 
@@ -300,69 +324,75 @@ Total size : 195.82
 
 Language : (GB)
 --------------------
-zh-Latn :   0.75
-am :   1.27
-ru-Latn :   3.15
-sw :   3.73
-bn :   7.5
-hi :   8.49
-ur :   9.11
-ca :   14.07
-zh :   21.64
-ar :   27.09
-id :   32.75
-pt :   58.89
-ja :   62.95
-ru :   68.09
-es :   108.21
-fr :   119.4
-en :   754.79
+dumped/mc4_processed_data/zh-Latn/train_text_document.bin :   0.75
+dumped/mc4_processed_data/am/train_text_document.bin :   1.27
+dumped/mc4_processed_data/ru-Latn/train_text_document.bin :   3.15
+dumped/mc4_processed_data/sw/train_text_document.bin :   3.73
+dumped/mc4_processed_data/bn/train_text_document.bin :   7.5
+dumped/mc4_processed_data/hi/train_text_document.bin :   8.49
+dumped/mc4_processed_data/ur/train_text_document.bin :   9.11
+dumped/mc4_processed_data/ca/train_text_document.bin :   14.07
+dumped/mc4_processed_data/zh/train_text_document.bin :   21.64
+dumped/mc4_processed_data/ar/train_text_document.bin :   27.09
+dumped/mc4_processed_data/id/train_text_document.bin :   32.75
+dumped/mc4_processed_data/pt/train_text_document.bin :   58.89
+dumped/mc4_processed_data/ja/train_text_document.bin :   62.95
+dumped/mc4_processed_data/ru/train_text_document.bin :   68.09
+dumped/mc4_processed_data/es/train_text_document.bin :   108.21
+dumped/mc4_processed_data/fr/train_text_document.bin :   119.4
+dumped/mc4_processed_data/en/train_text_document_2.bin :   250.58
+dumped/mc4_processed_data/en/train_text_document_1.bin :   250.64
+dumped/mc4_processed_data/en/train_text_document_3.bin :   253.57
 --------------------
 Total size : 1301.88
 
 Language : (probability)
 --------------------
-zh-Latn :   0.00814218013071
-am :   0.0105952677202
-ru-Latn :   0.0166865037854
-sw :   0.018157852768
-bn :   0.0257478343324
-hi :   0.0273945341486
-ur :   0.0283771818246
-ca :   0.0352660747035
-zh :   0.0437359639223
-ar :   0.0489344348469
-id :   0.0538041440281
-pt :   0.0721490889651
-ja :   0.0745946948411
-ru :   0.0775803512397
-es :   0.0978011075382
-fr :   0.102733536331
-en :   0.258299248874
+dumped/mc4_processed_data/zh-Latn/train_text_document.bin :   0.00684742483323
+dumped/mc4_processed_data/am/train_text_document.bin :   0.00891042670848
+dumped/mc4_processed_data/ru-Latn/train_text_document.bin :   0.014033045028
+dumped/mc4_processed_data/sw/train_text_document.bin :   0.015270422659
+dumped/mc4_processed_data/bn/train_text_document.bin :   0.0216534585798
+dumped/mc4_processed_data/hi/train_text_document.bin :   0.0230383030605
+dumped/mc4_processed_data/ur/train_text_document.bin :   0.0238646918152
+dumped/mc4_processed_data/ca/train_text_document.bin :   0.0296581249516
+dumped/mc4_processed_data/zh/train_text_document.bin :   0.0367811471448
+dumped/mc4_processed_data/ar/train_text_document.bin :   0.0411529662808
+dumped/mc4_processed_data/id/train_text_document.bin :   0.045248302793
+dumped/mc4_processed_data/pt/train_text_document.bin :   0.0606760665503
+dumped/mc4_processed_data/ja/train_text_document.bin :   0.0627327764411
+dumped/mc4_processed_data/ru/train_text_document.bin :   0.0652436589613
+dumped/mc4_processed_data/es/train_text_document.bin :   0.0822489458258
+dumped/mc4_processed_data/fr/train_text_document.bin :   0.0863970283865
+dumped/mc4_processed_data/en/train_text_document_2.bin :   0.125161236296
+dumped/mc4_processed_data/en/train_text_document_1.bin :   0.125176219983
+dumped/mc4_processed_data/en/train_text_document_3.bin :   0.125905753702
 --------------------
 Total size : 1.0
 
 Language : Per epoch contribution in GB
 --------------------------------------------------
-ru :   0.0775803512397  (68.09  ->  5.28)
-fr :   0.102733536331  (119.4  ->  12.27)
-en :   0.258299248874  (754.79  ->  194.96)
-zh :   0.0437359639223  (21.64  ->  0.95)
-pt :   0.0721490889651  (58.89  ->  4.25)
-am :   0.0105952677202  (1.27  ->  0.01)
-bn :   0.0257478343324  (7.5  ->  0.19)
-sw :   0.018157852768  (3.73  ->  0.07)
-zh-Latn :   0.00814218013071  (0.75  ->  0.01)
-ja :   0.0745946948411  (62.95  ->  4.7)
-hi :   0.0273945341486  (8.49  ->  0.23)
-id :   0.0538041440281  (32.75  ->  1.76)
-ur :   0.0283771818246  (9.11  ->  0.26)
-ar :   0.0489344348469  (27.09  ->  1.33)
-ca :   0.0352660747035  (14.07  ->  0.5)
-es :   0.0978011075382  (108.21  ->  10.58)
-ru-Latn :   0.0166865037854  (3.15  ->  0.05)
+dumped/mc4_processed_data/en/train_text_document_1.bin :   0.125176219983  (250.64  ->  31.37)
+dumped/mc4_processed_data/zh/train_text_document.bin :   0.0367811471448  (21.64  ->  0.8)
+dumped/mc4_processed_data/pt/train_text_document.bin :   0.0606760665503  (58.89  ->  3.57)
+dumped/mc4_processed_data/zh-Latn/train_text_document.bin :   0.00684742483323  (0.75  ->  0.01)
+dumped/mc4_processed_data/ur/train_text_document.bin :   0.0238646918152  (9.11  ->  0.22)
+dumped/mc4_processed_data/bn/train_text_document.bin :   0.0216534585798  (7.5  ->  0.16)
+dumped/mc4_processed_data/sw/train_text_document.bin :   0.015270422659  (3.73  ->  0.06)
+dumped/mc4_processed_data/hi/train_text_document.bin :   0.0230383030605  (8.49  ->  0.2)
+dumped/mc4_processed_data/en/train_text_document_2.bin :   0.125161236296  (250.58  ->  31.36)
+dumped/mc4_processed_data/id/train_text_document.bin :   0.045248302793  (32.75  ->  1.48)
+dumped/mc4_processed_data/fr/train_text_document.bin :   0.0863970283865  (119.4  ->  10.32)
+dumped/mc4_processed_data/am/train_text_document.bin :   0.00891042670848  (1.27  ->  0.01)
+dumped/mc4_processed_data/ru/train_text_document.bin :   0.0652436589613  (68.09  ->  4.44)
+dumped/mc4_processed_data/ja/train_text_document.bin :   0.0627327764411  (62.95  ->  3.95)
+dumped/mc4_processed_data/es/train_text_document.bin :   0.0822489458258  (108.21  ->  8.9)
+dumped/mc4_processed_data/ca/train_text_document.bin :   0.0296581249516  (14.07  ->  0.42)
+dumped/mc4_processed_data/ar/train_text_document.bin :   0.0411529662808  (27.09  ->  1.11)
+dumped/mc4_processed_data/en/train_text_document_3.bin :   0.125905753702  (253.57  ->  31.93)
+dumped/mc4_processed_data/ru-Latn/train_text_document.bin :   0.014033045028  (3.15  ->  0.04)
 --------------------------------------------------
-Total size : 237.4
+Total size : 130.35
        _       _                      ___   __   
   __ _| |_ __ | |__   __ _   _____   / _ \ / /_  
  / _` | | '_ \| '_ \ / _` | |_____| | | | | '_ \ 
@@ -373,69 +403,75 @@ Total size : 237.4
 
 Language : (GB)
 --------------------
-zh-Latn :   0.75
-am :   1.27
-ru-Latn :   3.15
-sw :   3.73
-bn :   7.5
-hi :   8.49
-ur :   9.11
-ca :   14.07
-zh :   21.64
-ar :   27.09
-id :   32.75
-pt :   58.89
-ja :   62.95
-ru :   68.09
-es :   108.21
-fr :   119.4
-en :   754.79
+dumped/mc4_processed_data/zh-Latn/train_text_document.bin :   0.75
+dumped/mc4_processed_data/am/train_text_document.bin :   1.27
+dumped/mc4_processed_data/ru-Latn/train_text_document.bin :   3.15
+dumped/mc4_processed_data/sw/train_text_document.bin :   3.73
+dumped/mc4_processed_data/bn/train_text_document.bin :   7.5
+dumped/mc4_processed_data/hi/train_text_document.bin :   8.49
+dumped/mc4_processed_data/ur/train_text_document.bin :   9.11
+dumped/mc4_processed_data/ca/train_text_document.bin :   14.07
+dumped/mc4_processed_data/zh/train_text_document.bin :   21.64
+dumped/mc4_processed_data/ar/train_text_document.bin :   27.09
+dumped/mc4_processed_data/id/train_text_document.bin :   32.75
+dumped/mc4_processed_data/pt/train_text_document.bin :   58.89
+dumped/mc4_processed_data/ja/train_text_document.bin :   62.95
+dumped/mc4_processed_data/ru/train_text_document.bin :   68.09
+dumped/mc4_processed_data/es/train_text_document.bin :   108.21
+dumped/mc4_processed_data/fr/train_text_document.bin :   119.4
+dumped/mc4_processed_data/en/train_text_document_2.bin :   250.58
+dumped/mc4_processed_data/en/train_text_document_1.bin :   250.64
+dumped/mc4_processed_data/en/train_text_document_3.bin :   253.57
 --------------------
 Total size : 1301.88
 
 Language : (probability)
 --------------------
-zh-Latn :   0.00503438993095
-am :   0.00690545540026
-ru-Latn :   0.0119095794056
-sw :   0.0131806063963
-bn :   0.0200422673087
-hi :   0.0215901026028
-ur :   0.0225227345476
-ca :   0.0292338861004
-zh :   0.0378498746847
-ar :   0.0433107291335
-id :   0.0485329706356
-pt :   0.0690136543965
-ja :   0.071830275602
-ru :   0.0752939519618
-es :   0.0994192609278
-fr :   0.105466051798
-en :   0.318864209168
+dumped/mc4_processed_data/zh-Latn/train_text_document.bin :   0.00428108223009
+dumped/mc4_processed_data/am/train_text_document.bin :   0.00587217573731
+dumped/mc4_processed_data/ru-Latn/train_text_document.bin :   0.010127520804
+dumped/mc4_processed_data/sw/train_text_document.bin :   0.0112083610128
+dumped/mc4_processed_data/bn/train_text_document.bin :   0.0170432953353
+dumped/mc4_processed_data/hi/train_text_document.bin :   0.0183595243647
+dumped/mc4_processed_data/ur/train_text_document.bin :   0.0191526043805
+dumped/mc4_processed_data/ca/train_text_document.bin :   0.0248595504157
+dumped/mc4_processed_data/zh/train_text_document.bin :   0.0321863082014
+dumped/mc4_processed_data/ar/train_text_document.bin :   0.0368300420525
+dumped/mc4_processed_data/id/train_text_document.bin :   0.0412708671778
+dumped/mc4_processed_data/pt/train_text_document.bin :   0.0586869776721
+dumped/mc4_processed_data/ja/train_text_document.bin :   0.061082141169
+dumped/mc4_processed_data/ru/train_text_document.bin :   0.0640275394233
+dumped/mc4_processed_data/es/train_text_document.bin :   0.0845429212127
+dumped/mc4_processed_data/fr/train_text_document.bin :   0.0896849164291
+dumped/mc4_processed_data/en/train_text_document_2.bin :   0.139921565207
+dumped/mc4_processed_data/en/train_text_document_1.bin :   0.139941666313
+dumped/mc4_processed_data/en/train_text_document_3.bin :   0.140920940862
 --------------------
 Total size : 1.0
 
 Language : Per epoch contribution in GB
 --------------------------------------------------
-ru :   0.0752939519618  (68.09  ->  5.13)
-fr :   0.105466051798  (119.4  ->  12.59)
-en :   0.318864209168  (754.79  ->  240.68)
-zh :   0.0378498746847  (21.64  ->  0.82)
-pt :   0.0690136543965  (58.89  ->  4.06)
-am :   0.00690545540026  (1.27  ->  0.01)
-bn :   0.0200422673087  (7.5  ->  0.15)
-sw :   0.0131806063963  (3.73  ->  0.05)
-zh-Latn :   0.00503438993095  (0.75  ->  0.0)
-ja :   0.071830275602  (62.95  ->  4.52)
-hi :   0.0215901026028  (8.49  ->  0.18)
-id :   0.0485329706356  (32.75  ->  1.59)
-ur :   0.0225227345476  (9.11  ->  0.21)
-ar :   0.0433107291335  (27.09  ->  1.17)
-ca :   0.0292338861004  (14.07  ->  0.41)
-es :   0.0994192609278  (108.21  ->  10.76)
-ru-Latn :   0.0119095794056  (3.15  ->  0.04)
+dumped/mc4_processed_data/en/train_text_document_1.bin :   0.139941666313  (250.64  ->  35.07)
+dumped/mc4_processed_data/zh/train_text_document.bin :   0.0321863082014  (21.64  ->  0.7)
+dumped/mc4_processed_data/pt/train_text_document.bin :   0.0586869776721  (58.89  ->  3.46)
+dumped/mc4_processed_data/zh-Latn/train_text_document.bin :   0.00428108223009  (0.75  ->  0.0)
+dumped/mc4_processed_data/ur/train_text_document.bin :   0.0191526043805  (9.11  ->  0.17)
+dumped/mc4_processed_data/bn/train_text_document.bin :   0.0170432953353  (7.5  ->  0.13)
+dumped/mc4_processed_data/sw/train_text_document.bin :   0.0112083610128  (3.73  ->  0.04)
+dumped/mc4_processed_data/hi/train_text_document.bin :   0.0183595243647  (8.49  ->  0.16)
+dumped/mc4_processed_data/en/train_text_document_2.bin :   0.139921565207  (250.58  ->  35.06)
+dumped/mc4_processed_data/id/train_text_document.bin :   0.0412708671778  (32.75  ->  1.35)
+dumped/mc4_processed_data/fr/train_text_document.bin :   0.0896849164291  (119.4  ->  10.71)
+dumped/mc4_processed_data/am/train_text_document.bin :   0.00587217573731  (1.27  ->  0.01)
+dumped/mc4_processed_data/ru/train_text_document.bin :   0.0640275394233  (68.09  ->  4.36)
+dumped/mc4_processed_data/ja/train_text_document.bin :   0.061082141169  (62.95  ->  3.85)
+dumped/mc4_processed_data/es/train_text_document.bin :   0.0845429212127  (108.21  ->  9.15)
+dumped/mc4_processed_data/ca/train_text_document.bin :   0.0248595504157  (14.07  ->  0.35)
+dumped/mc4_processed_data/ar/train_text_document.bin :   0.0368300420525  (27.09  ->  1.0)
+dumped/mc4_processed_data/en/train_text_document_3.bin :   0.140920940862  (253.57  ->  35.73)
+dumped/mc4_processed_data/ru-Latn/train_text_document.bin :   0.010127520804  (3.15  ->  0.03)
 --------------------------------------------------
-Total size : 282.37
+Total size : 141.33
        _       _                      ___  _____ 
   __ _| |_ __ | |__   __ _   _____   / _ \|___  |
  / _` | | '_ \| '_ \ / _` | |_____| | | | |  / / 
@@ -446,69 +482,75 @@ Total size : 282.37
 
 Language : (GB)
 --------------------
-zh-Latn :   0.75
-am :   1.27
-ru-Latn :   3.15
-sw :   3.73
-bn :   7.5
-hi :   8.49
-ur :   9.11
-ca :   14.07
-zh :   21.64
-ar :   27.09
-id :   32.75
-pt :   58.89
-ja :   62.95
-ru :   68.09
-es :   108.21
-fr :   119.4
-en :   754.79
+dumped/mc4_processed_data/zh-Latn/train_text_document.bin :   0.75
+dumped/mc4_processed_data/am/train_text_document.bin :   1.27
+dumped/mc4_processed_data/ru-Latn/train_text_document.bin :   3.15
+dumped/mc4_processed_data/sw/train_text_document.bin :   3.73
+dumped/mc4_processed_data/bn/train_text_document.bin :   7.5
+dumped/mc4_processed_data/hi/train_text_document.bin :   8.49
+dumped/mc4_processed_data/ur/train_text_document.bin :   9.11
+dumped/mc4_processed_data/ca/train_text_document.bin :   14.07
+dumped/mc4_processed_data/zh/train_text_document.bin :   21.64
+dumped/mc4_processed_data/ar/train_text_document.bin :   27.09
+dumped/mc4_processed_data/id/train_text_document.bin :   32.75
+dumped/mc4_processed_data/pt/train_text_document.bin :   58.89
+dumped/mc4_processed_data/ja/train_text_document.bin :   62.95
+dumped/mc4_processed_data/ru/train_text_document.bin :   68.09
+dumped/mc4_processed_data/es/train_text_document.bin :   108.21
+dumped/mc4_processed_data/fr/train_text_document.bin :   119.4
+dumped/mc4_processed_data/en/train_text_document_2.bin :   250.58
+dumped/mc4_processed_data/en/train_text_document_1.bin :   250.64
+dumped/mc4_processed_data/en/train_text_document_3.bin :   253.57
 --------------------
 Total size : 1301.88
 
 Language : (probability)
 --------------------
-zh-Latn :   0.00303245789326
-am :   0.00438444371825
-ru-Latn :   0.00828074254964
-sw :   0.00932069028489
-bn :   0.0151982918261
-hi :   0.0165762877859
-ur :   0.0174146503342
-ca :   0.0236079220807
-zh :   0.0319103798842
-ar :   0.0373437733399
-id :   0.0426481117906
-pt :   0.0643103662479
-ja :   0.0673827775729
-ru :   0.0711885633881
-es :   0.0984552938699
-fr :   0.105476308949
-en :   0.383468938485
+dumped/mc4_processed_data/zh-Latn/train_text_document.bin :   0.00263760705847
+dumped/mc4_processed_data/am/train_text_document.bin :   0.00381355326463
+dumped/mc4_processed_data/ru-Latn/train_text_document.bin :   0.00720252210157
+dumped/mc4_processed_data/sw/train_text_document.bin :   0.00810706013095
+dumped/mc4_processed_data/bn/train_text_document.bin :   0.0132193498503
+dumped/mc4_processed_data/hi/train_text_document.bin :   0.0144179194588
+dumped/mc4_processed_data/ur/train_text_document.bin :   0.0151471203423
+dumped/mc4_processed_data/ca/train_text_document.bin :   0.0205339774228
+dumped/mc4_processed_data/zh/train_text_document.bin :   0.0277553872745
+dumped/mc4_processed_data/ar/train_text_document.bin :   0.0324813084363
+dumped/mc4_processed_data/id/train_text_document.bin :   0.037094978611
+dumped/mc4_processed_data/pt/train_text_document.bin :   0.0559366302579
+dumped/mc4_processed_data/ja/train_text_document.bin :   0.0586089884844
+dumped/mc4_processed_data/ru/train_text_document.bin :   0.0619192298406
+dumped/mc4_processed_data/es/train_text_document.bin :   0.0856356088676
+dumped/mc4_processed_data/fr/train_text_document.bin :   0.0917424303243
+dumped/mc4_processed_data/en/train_text_document_2.bin :   0.154145089911
+dumped/mc4_processed_data/en/train_text_document_1.bin :   0.154170925418
+dumped/mc4_processed_data/en/train_text_document_3.bin :   0.155430312945
 --------------------
 Total size : 1.0
 
 Language : Per epoch contribution in GB
 --------------------------------------------------
-ru :   0.0711885633881  (68.09  ->  4.85)
-fr :   0.105476308949  (119.4  ->  12.59)
-en :   0.383468938485  (754.79  ->  289.44)
-zh :   0.0319103798842  (21.64  ->  0.69)
-pt :   0.0643103662479  (58.89  ->  3.79)
-am :   0.00438444371825  (1.27  ->  0.01)
-bn :   0.0151982918261  (7.5  ->  0.11)
-sw :   0.00932069028489  (3.73  ->  0.03)
-zh-Latn :   0.00303245789326  (0.75  ->  0.0)
-ja :   0.0673827775729  (62.95  ->  4.24)
-hi :   0.0165762877859  (8.49  ->  0.14)
-id :   0.0426481117906  (32.75  ->  1.4)
-ur :   0.0174146503342  (9.11  ->  0.16)
-ar :   0.0373437733399  (27.09  ->  1.01)
-ca :   0.0236079220807  (14.07  ->  0.33)
-es :   0.0984552938699  (108.21  ->  10.65)
-ru-Latn :   0.00828074254964  (3.15  ->  0.03)
+dumped/mc4_processed_data/en/train_text_document_1.bin :   0.154170925418  (250.64  ->  38.64)
+dumped/mc4_processed_data/zh/train_text_document.bin :   0.0277553872745  (21.64  ->  0.6)
+dumped/mc4_processed_data/pt/train_text_document.bin :   0.0559366302579  (58.89  ->  3.29)
+dumped/mc4_processed_data/zh-Latn/train_text_document.bin :   0.00263760705847  (0.75  ->  0.0)
+dumped/mc4_processed_data/ur/train_text_document.bin :   0.0151471203423  (9.11  ->  0.14)
+dumped/mc4_processed_data/bn/train_text_document.bin :   0.0132193498503  (7.5  ->  0.1)
+dumped/mc4_processed_data/sw/train_text_document.bin :   0.00810706013095  (3.73  ->  0.03)
+dumped/mc4_processed_data/hi/train_text_document.bin :   0.0144179194588  (8.49  ->  0.12)
+dumped/mc4_processed_data/en/train_text_document_2.bin :   0.154145089911  (250.58  ->  38.63)
+dumped/mc4_processed_data/id/train_text_document.bin :   0.037094978611  (32.75  ->  1.21)
+dumped/mc4_processed_data/fr/train_text_document.bin :   0.0917424303243  (119.4  ->  10.95)
+dumped/mc4_processed_data/am/train_text_document.bin :   0.00381355326463  (1.27  ->  0.0)
+dumped/mc4_processed_data/ru/train_text_document.bin :   0.0619192298406  (68.09  ->  4.22)
+dumped/mc4_processed_data/ja/train_text_document.bin :   0.0586089884844  (62.95  ->  3.69)
+dumped/mc4_processed_data/es/train_text_document.bin :   0.0856356088676  (108.21  ->  9.27)
+dumped/mc4_processed_data/ca/train_text_document.bin :   0.0205339774228  (14.07  ->  0.29)
+dumped/mc4_processed_data/ar/train_text_document.bin :   0.0324813084363  (27.09  ->  0.88)
+dumped/mc4_processed_data/en/train_text_document_3.bin :   0.155430312945  (253.57  ->  39.41)
+dumped/mc4_processed_data/ru-Latn/train_text_document.bin :   0.00720252210157  (3.15  ->  0.02)
 --------------------------------------------------
-Total size : 329.47
+Total size : 151.49
        _       _                      ___   ___  
   __ _| |_ __ | |__   __ _   _____   / _ \ ( _ ) 
  / _` | | '_ \| '_ \ / _` | |_____| | | | |/ _ \ 
@@ -519,69 +561,75 @@ Total size : 329.47
 
 Language : (GB)
 --------------------
-zh-Latn :   0.75
-am :   1.27
-ru-Latn :   3.15
-sw :   3.73
-bn :   7.5
-hi :   8.49
-ur :   9.11
-ca :   14.07
-zh :   21.64
-ar :   27.09
-id :   32.75
-pt :   58.89
-ja :   62.95
-ru :   68.09
-es :   108.21
-fr :   119.4
-en :   754.79
+dumped/mc4_processed_data/zh-Latn/train_text_document.bin :   0.75
+dumped/mc4_processed_data/am/train_text_document.bin :   1.27
+dumped/mc4_processed_data/ru-Latn/train_text_document.bin :   3.15
+dumped/mc4_processed_data/sw/train_text_document.bin :   3.73
+dumped/mc4_processed_data/bn/train_text_document.bin :   7.5
+dumped/mc4_processed_data/hi/train_text_document.bin :   8.49
+dumped/mc4_processed_data/ur/train_text_document.bin :   9.11
+dumped/mc4_processed_data/ca/train_text_document.bin :   14.07
+dumped/mc4_processed_data/zh/train_text_document.bin :   21.64
+dumped/mc4_processed_data/ar/train_text_document.bin :   27.09
+dumped/mc4_processed_data/id/train_text_document.bin :   32.75
+dumped/mc4_processed_data/pt/train_text_document.bin :   58.89
+dumped/mc4_processed_data/ja/train_text_document.bin :   62.95
+dumped/mc4_processed_data/ru/train_text_document.bin :   68.09
+dumped/mc4_processed_data/es/train_text_document.bin :   108.21
+dumped/mc4_processed_data/fr/train_text_document.bin :   119.4
+dumped/mc4_processed_data/en/train_text_document_2.bin :   250.58
+dumped/mc4_processed_data/en/train_text_document_1.bin :   250.64
+dumped/mc4_processed_data/en/train_text_document_3.bin :   253.57
 --------------------
 Total size : 1301.88
 
 Language : (probability)
 --------------------
-zh-Latn :   0.00178219343647
-am :   0.0027161190775
-ru-Latn :   0.00561764475652
-sw :   0.00643091685477
-bn :   0.0112448803802
-hi :   0.0124174374605
-ur :   0.013137736006
-ca :   0.0186012062027
-zh :   0.0262489317903
-ar :   0.0314161551617
-id :   0.0365657825823
-pt :   0.0584708049447
-ja :   0.0616740426451
-ru :   0.0656708286765
-es :   0.0951304928673
-fr :   0.102922254454
-en :   0.449952572703
+dumped/mc4_processed_data/zh-Latn/train_text_document.bin :   0.00160476154634
+dumped/mc4_processed_data/am/train_text_document.bin :   0.00244570727377
+dumped/mc4_processed_data/ru-Latn/train_text_document.bin :   0.00505836240993
+dumped/mc4_processed_data/sw/train_text_document.bin :   0.00579066663868
+dumped/mc4_processed_data/bn/train_text_document.bin :   0.010125360838
+dumped/mc4_processed_data/hi/train_text_document.bin :   0.0111811802989
+dumped/mc4_processed_data/ur/train_text_document.bin :   0.0118297672503
+dumped/mc4_processed_data/ca/train_text_document.bin :   0.0167493044351
+dumped/mc4_processed_data/zh/train_text_document.bin :   0.0236356365744
+dumped/mc4_processed_data/ar/train_text_document.bin :   0.0282884207212
+dumped/mc4_processed_data/id/train_text_document.bin :   0.0329253607376
+dumped/mc4_processed_data/pt/train_text_document.bin :   0.0526495594915
+dumped/mc4_processed_data/ja/train_text_document.bin :   0.0555338887569
+dumped/mc4_processed_data/ru/train_text_document.bin :   0.0591327621456
+dumped/mc4_processed_data/es/train_text_document.bin :   0.085659476527
+dumped/mc4_processed_data/fr/train_text_document.bin :   0.0926755047072
+dumped/mc4_processed_data/en/train_text_document_2.bin :   0.16769442408
+dumped/mc4_processed_data/en/train_text_document_1.bin :   0.167726546115
+dumped/mc4_processed_data/en/train_text_document_3.bin :   0.169293309453
 --------------------
 Total size : 1.0
 
 Language : Per epoch contribution in GB
 --------------------------------------------------
-ru :   0.0656708286765  (68.09  ->  4.47)
-fr :   0.102922254454  (119.4  ->  12.29)
-en :   0.449952572703  (754.79  ->  339.62)
-zh :   0.0262489317903  (21.64  ->  0.57)
-pt :   0.0584708049447  (58.89  ->  3.44)
-am :   0.0027161190775  (1.27  ->  0.0)
-bn :   0.0112448803802  (7.5  ->  0.08)
-sw :   0.00643091685477  (3.73  ->  0.02)
-zh-Latn :   0.00178219343647  (0.75  ->  0.0)
-ja :   0.0616740426451  (62.95  ->  3.88)
-hi :   0.0124174374605  (8.49  ->  0.11)
-id :   0.0365657825823  (32.75  ->  1.2)
-ur :   0.013137736006  (9.11  ->  0.12)
-ar :   0.0314161551617  (27.09  ->  0.85)
-ca :   0.0186012062027  (14.07  ->  0.26)
-es :   0.0951304928673  (108.21  ->  10.29)
-ru-Latn :   0.00561764475652  (3.15  ->  0.02)
+dumped/mc4_processed_data/en/train_text_document_1.bin :   0.167726546115  (250.64  ->  42.04)
+dumped/mc4_processed_data/zh/train_text_document.bin :   0.0236356365744  (21.64  ->  0.51)
+dumped/mc4_processed_data/pt/train_text_document.bin :   0.0526495594915  (58.89  ->  3.1)
+dumped/mc4_processed_data/zh-Latn/train_text_document.bin :   0.00160476154634  (0.75  ->  0.0)
+dumped/mc4_processed_data/ur/train_text_document.bin :   0.0118297672503  (9.11  ->  0.11)
+dumped/mc4_processed_data/bn/train_text_document.bin :   0.010125360838  (7.5  ->  0.08)
+dumped/mc4_processed_data/sw/train_text_document.bin :   0.00579066663868  (3.73  ->  0.02)
+dumped/mc4_processed_data/hi/train_text_document.bin :   0.0111811802989  (8.49  ->  0.09)
+dumped/mc4_processed_data/en/train_text_document_2.bin :   0.16769442408  (250.58  ->  42.02)
+dumped/mc4_processed_data/id/train_text_document.bin :   0.0329253607376  (32.75  ->  1.08)
+dumped/mc4_processed_data/fr/train_text_document.bin :   0.0926755047072  (119.4  ->  11.07)
+dumped/mc4_processed_data/am/train_text_document.bin :   0.00244570727377  (1.27  ->  0.0)
+dumped/mc4_processed_data/ru/train_text_document.bin :   0.0591327621456  (68.09  ->  4.03)
+dumped/mc4_processed_data/ja/train_text_document.bin :   0.0555338887569  (62.95  ->  3.5)
+dumped/mc4_processed_data/es/train_text_document.bin :   0.085659476527  (108.21  ->  9.27)
+dumped/mc4_processed_data/ca/train_text_document.bin :   0.0167493044351  (14.07  ->  0.24)
+dumped/mc4_processed_data/ar/train_text_document.bin :   0.0282884207212  (27.09  ->  0.77)
+dumped/mc4_processed_data/en/train_text_document_3.bin :   0.169293309453  (253.57  ->  42.93)
+dumped/mc4_processed_data/ru-Latn/train_text_document.bin :   0.00505836240993  (3.15  ->  0.02)
 --------------------------------------------------
-Total size : 377.22
+Total size : 160.88
        _       _                      ___   ___  
   __ _| |_ __ | |__   __ _   _____   / _ \ / _ \ 
  / _` | | '_ \| '_ \ / _` | |_____| | | | | (_) |
@@ -592,66 +640,72 @@ Total size : 377.22
 
 Language : (GB)
 --------------------
-zh-Latn :   0.75
-am :   1.27
-ru-Latn :   3.15
-sw :   3.73
-bn :   7.5
-hi :   8.49
-ur :   9.11
-ca :   14.07
-zh :   21.64
-ar :   27.09
-id :   32.75
-pt :   58.89
-ja :   62.95
-ru :   68.09
-es :   108.21
-fr :   119.4
-en :   754.79
+dumped/mc4_processed_data/zh-Latn/train_text_document.bin :   0.75
+dumped/mc4_processed_data/am/train_text_document.bin :   1.27
+dumped/mc4_processed_data/ru-Latn/train_text_document.bin :   3.15
+dumped/mc4_processed_data/sw/train_text_document.bin :   3.73
+dumped/mc4_processed_data/bn/train_text_document.bin :   7.5
+dumped/mc4_processed_data/hi/train_text_document.bin :   8.49
+dumped/mc4_processed_data/ur/train_text_document.bin :   9.11
+dumped/mc4_processed_data/ca/train_text_document.bin :   14.07
+dumped/mc4_processed_data/zh/train_text_document.bin :   21.64
+dumped/mc4_processed_data/ar/train_text_document.bin :   27.09
+dumped/mc4_processed_data/id/train_text_document.bin :   32.75
+dumped/mc4_processed_data/pt/train_text_document.bin :   58.89
+dumped/mc4_processed_data/ja/train_text_document.bin :   62.95
+dumped/mc4_processed_data/ru/train_text_document.bin :   68.09
+dumped/mc4_processed_data/es/train_text_document.bin :   108.21
+dumped/mc4_processed_data/fr/train_text_document.bin :   119.4
+dumped/mc4_processed_data/en/train_text_document_2.bin :   250.58
+dumped/mc4_processed_data/en/train_text_document_1.bin :   250.64
+dumped/mc4_processed_data/en/train_text_document_3.bin :   253.57
 --------------------
 Total size : 1301.88
 
 Language : (probability)
 --------------------
-zh-Latn :   0.00102381518979
-am :   0.00164471169463
-ru-Latn :   0.00372516856951
-sw :   0.00433714937861
-bn :   0.00813245312388
-hi :   0.0090925009022
-ur :   0.00968797413992
-ca :   0.0143262036116
-zh :   0.021105612606
-ar :   0.0258341713702
-id :   0.0306447868877
-pt :   0.051964150329
-ja :   0.0551775728212
-ru :   0.0592163224151
-es :   0.0898477258182
-fr :   0.0981680864862
-en :   0.516071594656
+dumped/mc4_processed_data/zh-Latn/train_text_document.bin :   0.000965929839612
+dumped/mc4_processed_data/am/train_text_document.bin :   0.00155172155996
+dumped/mc4_processed_data/ru-Latn/train_text_document.bin :   0.00351455176165
+dumped/mc4_processed_data/sw/train_text_document.bin :   0.00409193186958
+dumped/mc4_processed_data/bn/train_text_document.bin :   0.00767265344367
+dumped/mc4_processed_data/hi/train_text_document.bin :   0.00857842120897
+dumped/mc4_processed_data/ur/train_text_document.bin :   0.00914022706489
+dumped/mc4_processed_data/ca/train_text_document.bin :   0.0135162163004
+dumped/mc4_processed_data/zh/train_text_document.bin :   0.0199123251958
+dumped/mc4_processed_data/ar/train_text_document.bin :   0.024373536608
+dumped/mc4_processed_data/id/train_text_document.bin :   0.0289121653777
+dumped/mc4_processed_data/pt/train_text_document.bin :   0.0490261561789
+dumped/mc4_processed_data/ja/train_text_document.bin :   0.0520578954063
+dumped/mc4_processed_data/ru/train_text_document.bin :   0.0558682986767
+dumped/mc4_processed_data/es/train_text_document.bin :   0.084767837257
+dumped/mc4_processed_data/fr/train_text_document.bin :   0.0926177741652
+dumped/mc4_processed_data/en/train_text_document_2.bin :   0.180485455528
+dumped/mc4_processed_data/en/train_text_document_1.bin :   0.180524349685
+dumped/mc4_processed_data/en/train_text_document_3.bin :   0.182422552872
 --------------------
 Total size : 1.0
 
 Language : Per epoch contribution in GB
 --------------------------------------------------
-ru :   0.0592163224151  (68.09  ->  4.03)
-fr :   0.0981680864862  (119.4  ->  11.72)
-en :   0.516071594656  (754.79  ->  389.53)
-zh :   0.021105612606  (21.64  ->  0.46)
-pt :   0.051964150329  (58.89  ->  3.06)
-am :   0.00164471169463  (1.27  ->  0.0)
-bn :   0.00813245312388  (7.5  ->  0.06)
-sw :   0.00433714937861  (3.73  ->  0.02)
-zh-Latn :   0.00102381518979  (0.75  ->  0.0)
-ja :   0.0551775728212  (62.95  ->  3.47)
-hi :   0.0090925009022  (8.49  ->  0.08)
-id :   0.0306447868877  (32.75  ->  1.0)
-ur :   0.00968797413992  (9.11  ->  0.09)
-ar :   0.0258341713702  (27.09  ->  0.7)
-ca :   0.0143262036116  (14.07  ->  0.2)
-es :   0.0898477258182  (108.21  ->  9.72)
-ru-Latn :   0.00372516856951  (3.15  ->  0.01)
+dumped/mc4_processed_data/en/train_text_document_1.bin :   0.180524349685  (250.64  ->  45.25)
+dumped/mc4_processed_data/zh/train_text_document.bin :   0.0199123251958  (21.64  ->  0.43)
+dumped/mc4_processed_data/pt/train_text_document.bin :   0.0490261561789  (58.89  ->  2.89)
+dumped/mc4_processed_data/zh-Latn/train_text_document.bin :   0.000965929839612  (0.75  ->  0.0)
+dumped/mc4_processed_data/ur/train_text_document.bin :   0.00914022706489  (9.11  ->  0.08)
+dumped/mc4_processed_data/bn/train_text_document.bin :   0.00767265344367  (7.5  ->  0.06)
+dumped/mc4_processed_data/sw/train_text_document.bin :   0.00409193186958  (3.73  ->  0.02)
+dumped/mc4_processed_data/hi/train_text_document.bin :   0.00857842120897  (8.49  ->  0.07)
+dumped/mc4_processed_data/en/train_text_document_2.bin :   0.180485455528  (250.58  ->  45.23)
+dumped/mc4_processed_data/id/train_text_document.bin :   0.0289121653777  (32.75  ->  0.95)
+dumped/mc4_processed_data/fr/train_text_document.bin :   0.0926177741652  (119.4  ->  11.06)
+dumped/mc4_processed_data/am/train_text_document.bin :   0.00155172155996  (1.27  ->  0.0)
+dumped/mc4_processed_data/ru/train_text_document.bin :   0.0558682986767  (68.09  ->  3.8)
+dumped/mc4_processed_data/ja/train_text_document.bin :   0.0520578954063  (62.95  ->  3.28)
+dumped/mc4_processed_data/es/train_text_document.bin :   0.084767837257  (108.21  ->  9.17)
+dumped/mc4_processed_data/ca/train_text_document.bin :   0.0135162163004  (14.07  ->  0.19)
+dumped/mc4_processed_data/ar/train_text_document.bin :   0.024373536608  (27.09  ->  0.66)
+dumped/mc4_processed_data/en/train_text_document_3.bin :   0.182422552872  (253.57  ->  46.26)
+dumped/mc4_processed_data/ru-Latn/train_text_document.bin :   0.00351455176165  (3.15  ->  0.01)
 --------------------------------------------------
-Total size : 424.15
+Total size : 169.41

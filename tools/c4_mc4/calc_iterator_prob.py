@@ -33,7 +33,6 @@ def get_size_stats(args):
             if not (filename.startswith(args.name_prefix) and filename.endswith(args.extension_name)):
                 continue
             full_file_path = os.path.join(dirpath, filename)
-            lang = os.path.basename(dirpath)
             lang_size = subprocess.check_output("du -s {}".format(full_file_path), shell=True)
             lang_size = int(lang_size.decode("utf-8").split("\t")[0])
             if args.size_format == 'B':
@@ -45,9 +44,7 @@ def get_size_stats(args):
             elif args.size_format == 'TB':
                 _conv = 1024*1024*1024
             lang_size_ = round(lang_size/float(_conv), 2)
-            if lang not in lang_size_dict:
-                lang_size_dict[lang] = 0
-            lang_size_dict[lang] += lang_size_
+            lang_size_dict[full_file_path] = lang_size_
     return lang_size_dict
 
 
@@ -99,7 +96,7 @@ def main():
     print("-"*50)
     print("Total size : {}".format(total_contrib))
 
-    open(os.path.join(args.output_dir, 'iterator_selection_prob.{}.json'.format(args.alpha)), "w").write(
+    open(os.path.join(args.output_dir, 'iterator_selection_prob.{}.{}.json'.format(args.alpha, args.name_prefix)), "w").write(
         json.dumps(sampling_probability, indent=4)
     )
     
