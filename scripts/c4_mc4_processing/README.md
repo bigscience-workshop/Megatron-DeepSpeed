@@ -10,7 +10,7 @@ HF-dataset host full `c4` (around 1TB) and `mC4` (around 27TB) dataset. To prepa
 ```
 bash scripts/c4_mc4_processing/cache_c4_mc4.sh
 ```
-Running this script may require bandwidth `~30MB/s` per language. You may run this script multiple times to make the caching faster. The script `tools/c4_mc4/c4_mc4_cache.py` will perform caching if a caching folder for a language doesn't exist. So running the script multiple times with the same cache folder will be ok. Make sure you add your desired language in the script.
+Running this script may require bandwidth `~30MB/s` per language. You may run this script multiple times. Sometimes there is cap for a single download request. So in that case you can just run the script multiple time to do parallel downloading and processing. Also once the data is downloaded, it starts caching. Caching may take a lot of time. In that time other process can keep downloading their stuffs. The script `tools/c4_mc4/c4_mc4_cache.py` will perform caching if a caching folder for a language doesn't exist. So running the script multiple times with the same cache folder will be ok. Make sure you add your desired language in the script.
 
 
 > :warning: **Caching failure**: There are lots of ways your caching mechanism may fail. Some of the common reason is hard disk space and per-day bandwidth limitation to your broadband provider. Make sure that you have a reasonable amount of HD space and your system supports downloading a large chunk of data from the internet. If caching fails sometimes it's difficult to recover. Please follow this [issue](https://github.com/huggingface/datasets/issues/1706).
@@ -87,11 +87,7 @@ Note that `multi_shard_data_process.sh` also merge the shard into a single `*.bi
 ## Calculate iterator probability for each of the datasets.
 
 ```
-<<<<<<< HEAD
 bash scripts/c4_mc4_processing/calc_iterator_prob.sh
-=======
-bash scripts/c4_mc4_processing/calc_iterator_prob.sh > iterator_selection_prob.out.txt 
->>>>>>> 5f8d7d63e603424a0ab132911471844827506b61
 ```
 
 The scripts expect all the language processed (`*.bin`, and `*.idx`) to be in a same folder in the following format, 
