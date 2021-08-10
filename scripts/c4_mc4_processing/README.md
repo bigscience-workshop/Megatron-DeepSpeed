@@ -140,6 +140,6 @@ If you tokenize english with `t5` tokenizer, `784G` raw data becomes `344G` (`*.
 |sw|3.3G|3.8G|
 |ur|28G|9.2G|
 |zh|43G|22G|
-|zh-Latn|738MB|779M|
+|zh-Latn|738M|779M|
 
 All the sizes are `*.bin` + `*.idx` file size.
