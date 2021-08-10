@@ -151,9 +151,9 @@ def main():
     parser.add_argument('--alpha', type=float, required=True,
                         help='Sampling penalty.')
     parser.add_argument('--min_high_resource_size', type=int, required=True,
-                        help='Sampling penalty.')
+                        help='Minimum size of the high resource language.')
     parser.add_argument('--max_high_resource_size', type=int, required=True,
-                        help='Sampling penalty.')
+                        help='Maximum size of the high resource langugae.')
     args = parser.parse_args()
     
     total_size_capacity = args.new_expected_size
