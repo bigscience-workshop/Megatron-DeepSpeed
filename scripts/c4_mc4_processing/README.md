@@ -1,4 +1,4 @@
-# mC4 Data Processing for Megatron
+# C4 & mC4 Data Processing for Megatron
 
 We export text data in `*.jsonl` for Megatron-LM script `tools/preprocess_data.py`.
 
@@ -64,7 +64,9 @@ Downlaod the data by,
 GIT_LFS_SKIP_SMUDGE=1 git clone https://huggingface.co/datasets/allenai/c4
 cd c4
 git lfs pull --include "en/*"   # for C4 data
-git lfs pull --include "multilingual/c4-nl.*.json.gz" # for mC4 data
+for lang in "ar" "sw" "zh" "zh-Latn" "ca" "fr" "hi" "ur" "bn" "id" "pt" "es" "ru" "ru-Latn" "ja" "am"; do
+    git lfs pull --include "multilingual/c4-nl.*.json.gz" # for mC4 data
+done
 ``` 
 
 What I did is to process smaller shards with multi-process and sample data based on the sampling probability from each of the shard by the following script. 
@@ -116,9 +118,9 @@ data_folder_path/
 ```
 
 
-# Compression Stat 
+# Data Binarization Stat 
 
-If you tokenize english with `t5` tokenizer, `784G` raw data becomes `344G` (`*.bin` size, including validation). But if you tokenize same `784G` raw data with `mt5` it becomes `756G` This is not what we were expecting. Earlier we were expecting 50\% english and 50\% remaining language, but now after binarization (a.k.a. tokenization) that calculation doesn't hold. For all other languages, after binarization the size reduced drastically. The stats are below, 
+If you tokenize english with `t5` tokenizer, `784G` raw data becomes `344G` (`*.bin` size, including validation). But if you tokenize same `784G` raw data with `mt5` it becomes `756G` This is not what we were expecting at first. Earlier we were expecting 50\% english and 50\% remaining language, but now after binarization (a.k.a. tokenization) that calculation doesn't hold. For most of the languages, after binarization the size reduced drastically. The stats are below, 
 
 |Language|Raw Size|Binary Size|
 |--|--|--|
