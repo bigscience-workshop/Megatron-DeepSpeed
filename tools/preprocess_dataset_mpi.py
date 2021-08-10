@@ -61,9 +61,7 @@ try:
 except ImportError:
     nltk_available = False
 
-# import datasets after potentially setting environment variables
-import datasets
-from datasets import load_dataset, logging
+from datasets import config, logging, load_dataset
 from datasets.utils.file_utils import OfflineModeIsEnabled
 
 from megatron.tokenizer import build_tokenizer
@@ -277,7 +275,7 @@ def load_dset(args):
         # Alternatively, one can set datasets.config.HF_DATASETS_OFFLINE=1.
         # That seems to work even after the import statement,
         # though this usage is not documented.
-        datasets.config.HF_DATASETS_OFFLINE = 1
+        config.HF_DATASETS_OFFLINE = 1
 
     # silence info messages from all procs except rank 0 
     if args.rank != 0:
