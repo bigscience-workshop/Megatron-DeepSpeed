@@ -191,6 +191,10 @@ def get_args():
 
     return args
 
+def format_byterate(byterate):
+    mbps = byterate / (1024.0 * 1024.0)
+    return f"{mbps:0.3f} MB/s"
+
 def init_distributed(args):
     """Determine which distributed runtime to use and connect up processes"""
     # select our distributed runtime (MPI or torch.distributed)
@@ -454,7 +458,7 @@ def rank_files_write(args, dset, idx, encoder):
                 mbs = dset_stats[2] * args.numranks / elapsed / 1024 / 1024 if elapsed > 0.0 else 0.0
                 secs_left = int((len(idx) - docs) / docrate if docrate > 0.0 else 0.0)
                 print(f"{timestamp}: Processed (estimated) {docs} of {len(idx)} docs ({percent:0.2f}%),",
-                      f"{docrate:0.3f} docs/s, {mbs:0.3f} MiB/s,",
+                      f"{docrate:0.3f} docs/s, {mbs:0.3f} MB/s,",
                       f"{secs_left} secs left ...",
                       flush=True)
 
@@ -484,10 +488,11 @@ def rank_files_write(args, dset, idx, encoder):
         docrate = dset_stats[0] / secs if secs > 0.0 else 0.0
         sentrate = dset_stats[1] / secs if secs > 0.0 else 0.0
         byterate = dset_stats[2] / secs if secs > 0.0 else 0.0
-        print("Seconds to tokenize:", secs)
-        print("Documents=", dset_stats[0], "docs/sec=", docrate)
-        print("Sentences=", dset_stats[1], "sent/sec=", sentrate)
-        print("Bytes=", dset_stats[2], "bytes/sec=", byterate)
+        print("Tokenize stats:", secs)
+        print(f"    Seconds to tokenize: {secs}")
+        print(f"    {dset_stats[0]} docs {docrate} docs/sec")
+        print(f"    {dset_stats[1]} sents {sentrate} sents/sec")
+        print(f"    {dset_stats[2]} bytes {format_byterate(byterate)}")
 
     # allreduce to check whether all ranks wrote their part successfully
     success = all_true(args, success)
@@ -534,9 +539,10 @@ def rank_files_merge(args):
         merge_end = time.time()
         secs = merge_end - merge_start
         byterate = numbytes / secs if secs > 0.0 else 0.0
-        print("Seconds to merge:", merge_end - merge_start)
         print(f"Merged {args.numranks} files into {args.output_prefix}")
-        print(f"Bytes=", numbytes, "bytes/sec=", byterate)
+        print("Merge stats:")
+        print(f"    Seconds to merge: {secs}")
+        print(f"    {numbytes} bytes {format_byterate(byterate)}")
 
     # hold everyone until rank 0 is done
     barrier(args)
