@@ -593,20 +593,40 @@ class MMapIndexedDatasetBuilder(object):
         with MMapIndexedDataset.Index.writer(index_file, self._dtype) as index:
             index.write(self._sizes, self._doc_idx)
 
+
 def mpi_get_sum(val, mpi, comm):
+    """Compute sum of val, and return total on all ranks."""
     insize = np.array([val], dtype=np.int64)
     outsize = np.zeros_like(insize)
     comm.Allreduce(insize, outsize, op=mpi.SUM)
     return outsize[0]
 
+
 def mpi_get_offset(val, mpi, comm):
+    """Compute preifx sum (exclusive scan) of val, and return offset of each rank."""
     insize = np.array([val], dtype=np.int64)
     outsize = np.zeros_like(insize)
     comm.Scan(insize, outsize, op=mpi.SUM)
     offset = outsize[0] - insize[0]
     return offset
 
+
+def mpi_get_min(val, mpi, comm):
+    """Return minimum val to all ranks."""
+    insize = np.array([val], dtype=np.int64)
+    outsize = np.zeros_like(insize)
+    comm.Allreduce(insize, outsize, op=mpi.MIN)
+    return outsize[0]
+
+
+# To create the binary files given a set of per-rank binary
+# files, one simply concatenates the data from the per-rank
+# binary files in rank order.  We stat each rank file to determine
+# its size, execute a scan to compute the byte offset where
+# the calling rank should write its data, seek to proper
+# spot, and copy the full file.
 def merge_files_mpi_bin(outfile, infile, mpi, comm):
+    """Concatenate per-rank binary files into a new file given by outfile"""
     import stat
     import shutil
 
@@ -627,7 +647,6 @@ def merge_files_mpi_bin(outfile, infile, mpi, comm):
     # compute offset this rank should start copying
     # its data into the merged file
     offset = mpi_get_offset(filesize, mpi, comm)
-    #print(rank, infile, filesize, offset)
 
     # seek to appropriate offset and copy data
     f.seek(offset)
@@ -638,8 +657,10 @@ def merge_files_mpi_bin(outfile, infile, mpi, comm):
 
     comm.barrier()
 
+
 def merge_files_mpi_idx(outfile, infile, mpi, comm, dtype):
     rank = comm.Get_rank()
+    numranks = comm.Get_size()
 
     comm.barrier()
 
@@ -652,6 +673,7 @@ def merge_files_mpi_idx(outfile, infile, mpi, comm, dtype):
     if rank != 0:
         f = open(outfile, 'r+b')
 
+    # read the index file for the calling rank
     index = MMapIndexedDataset.Index(infile)
     sizes = index.sizes
     if rank == 0:
@@ -659,6 +681,11 @@ def merge_files_mpi_idx(outfile, infile, mpi, comm, dtype):
     if rank != 0:
         docs = index.doc_idx[1:]
 
+    # Compute total number of size and document index
+    # values across all ranks.  Also compute the offset
+    # of the calling rank for each value considering
+    # the values of sizes/docs for all ranks before the
+    # calling rank.
     numsizes = len(sizes)
     numdocs = len(docs)
     size_count = mpi_get_sum(numsizes, mpi, comm)
@@ -667,48 +694,88 @@ def merge_files_mpi_idx(outfile, infile, mpi, comm, dtype):
     docs_offset = mpi_get_offset(numdocs, mpi, comm)
 
     # have rank 0 write the file header
+    pos = 0
     if rank == 0:
         f.write(MMapIndexedDataset.Index._HDR_MAGIC)
         f.write(struct.pack('<Q', 1))
         f.write(struct.pack('<B', code(dtype)))
         f.write(struct.pack('<Q', size_count))
-        #f.write(struct.pack('<Q', 0xeeeeeeeeeeeeeeee))
         f.write(struct.pack('<Q', docs_count))
-        #f.write(struct.pack('<Q', 0xffffffffffffffff))
+        pos = f.tell()
 
-    # TODO: better to have rank 0 lseek to get pos and bcast?
-    # advance position past file header
-    pos = 8 + 8 + 2 + 2 * 8
+    # advance position past file header on all ranks
+    pos = mpi_get_sum(pos, mpi, comm)
 
+    # The list of size values from each rank are
+    # concatenated and stored as int32.
     f.seek(pos + size_offset * np.int32().itemsize)
     sizes32 = np.array(sizes, dtype=np.int32)
     f.write(sizes32.tobytes(order='C'))
     del sizes32
     pos += size_count * np.int32().itemsize
 
+    # The pointer values store the byte offset to each sentence.
+    # A sentence has a variable number of tokens, given by
+    # its corresponding entry in the size array.  Each token
+    # of a sentence is stored in units of type dtype, which consumes
+    # dtype().itemsize bytes (often a standard type that is just
+    # large enough to represent all elements of the vocabulary).
+
+    # First compute byte offsets for each sentence of our
+    # local set of sentences.
     pointers = np.array(sizes, dtype=np.int64)
     pointer_last = 0
     if len(sizes) > 0:
         np.cumsum(pointers, axis=0, out=pointers)
         pointers *= dtype().itemsize
         pointer_last = pointers[-1]
+
+    # Then account for bytes for all sentences on ranks
+    # before the calling rank.
     pointer_offset = mpi_get_offset(pointer_last, mpi, comm)
     pointers += pointer_offset
 
-    pointers_shift = 0
-    if rank == 0 and len(sizes) > 0:
-        pointers_shift = pointers[0]
-    pointers_shift = mpi_get_sum(pointers_shift, mpi, comm)
-    pointers -= pointers_shift
+    # Finally, zero-base the offset values by subtracting
+    # the number of bytes of the first sentence.  To do that
+    # we first need to find the rank having the first sentence,
+    # then bcast that size to all ranks.
+    if size_count > 0:
+        # There is at least one sentence across all ranks,
+        # figure out which rank has the first sentence which
+        # is not necessarily rank 0.
+        minrank = numranks
+        if len(sizes) > 0:
+            minrank = rank
+        minrank = mpi_get_min(minrank, mpi, comm)
 
+        # Broadcast size of the first sentence from minrank.
+        # We "bcast" using all allreduce.
+        pointers_shift = 0
+        if minrank == rank:
+            pointers_shift = pointers[0]
+        pointers_shift = mpi_get_sum(pointers_shift, mpi, comm)
+
+        # Zero-base pointers by subtracting size of first
+        # sentence from all values.
+        pointers -= pointers_shift
+
+    # Seek to proper offset for this rank and write
+    # pointer values into file, stored as int64.
     f.seek(pos + size_offset * np.int64().itemsize)
     f.write(pointers.tobytes(order='C'))
     del pointers
     pos += size_count * np.int64().itemsize
 
+    # The document index points to the position in the sizes
+    # array for the starting sentence of each document.
+    # A variable number of sentences can be in each document.
+    # Adjust document index for number of sentences that
+    # come before the calling rank.
     doc_idx = np.array(docs, dtype=np.int64)
     doc_idx += size_offset
 
+    # Seek to proper offset for this rank and write
+    # document index into file, stored as int64.
     f.seek(pos + docs_offset * np.int64().itemsize)
     f.write(doc_idx.tobytes(order='C'))
     del doc_idx
@@ -716,6 +783,7 @@ def merge_files_mpi_idx(outfile, infile, mpi, comm, dtype):
     f.close()
 
     comm.barrier()
+
 
 def merge_files_mpi(filemain, filerank, mpi, comm, dtype=np.int64):
     merge_files_mpi_bin(data_file_path(filemain), data_file_path(filerank), mpi, comm)

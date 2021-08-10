@@ -166,8 +166,8 @@ def get_args():
                        help='Select torch.distributed backend.')
     group.add_argument('--local_rank', type=int, default=None,
                        help='Local rank of calling process on its node (from torch.distributed.launch).')
-    group.add_argument('--scratch', type=str, default='/dev/shm',
-                       help='Path to local storage on compute nodes to write per-rank files before merging.')
+    group.add_argument('--scratch', type=str, default=None,
+                       help='Path to local storage on compute nodes to write per-rank files before merging, like /dev/shm.')
     group.add_argument('--log-interval', type=int, default=30,
                        help='Seconds between progress updates (0 to disable)')
 
@@ -284,27 +284,11 @@ def load_dset(args):
         logging.set_verbosity(logging.ERROR)
 
     success = True
+    err = None
     dsetname = args.input
-    if not download:
-        try:
-            dset = load_dataset(dsetname, split=args.split, keep_in_memory=None)
-        except:
-            # this print might be noisy, but better than nothing
-            print("ERROR: Unexpected error:", sys.exc_info()[0])
-            success = False
-
-        # determine whether everyone succeeded in loading the dataset
-        success = all_true(args, success)
-        if not success:
-            return None
-
-        return dset
 
     # Load the specified HuggingFace dataset.
     # Give rank 0 a head start in case the dataset is not already cached.
-    success = True
-    err = None
-    dsetname = args.input
     if args.rank == 0:
         print(f"Opening dataset {dsetname}")
         try:
@@ -539,6 +523,13 @@ def rank_files_merge(args):
         binfile = data_file_path(filerank)
         numbytes[0] += os.stat(binfile)[stat.ST_SIZE]
         merge_files_mpi(filemain, filerank, args.MPI, args.mpi_comm, dtype=best_fitting_dtype(args.vocab_size))
+
+        # rename files for now and also do regular merge so we can time both and "cmp" them
+        if args.rank == 0:
+            binfile = data_file_path(filemain)
+            idxfile = index_file_path(filemain)
+            os.rename(binfile, binfile + ".par")
+            os.rename(idxfile, idxfile + ".par")
     barrier(args)
     all_sum_(args, numbytes)
     merge_end = time.time()
