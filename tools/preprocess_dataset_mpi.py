@@ -18,7 +18,7 @@
 This builds data files from a source HuggingFace dataset, e.g,
 
   from datasets import load_dataset
-  dset = load_dataset('openwebtext')
+  dset = load_dataset('openwebtext', split='train')
 
 The implementation can use `mpi4py` or `torch.distributed` for node communication, and it assumes that
 files are written to a global file system, such that one process
@@ -60,6 +60,11 @@ try:
     nltk_available = True
 except ImportError:
     nltk_available = False
+
+# import datasets after potentially setting environment variables
+import datasets
+from datasets import load_dataset, logging
+from datasets.utils.file_utils import OfflineModeIsEnabled
 
 from megatron.tokenizer import build_tokenizer
 from megatron.data.indexed_dataset import data_file_path, index_file_path, make_builder, best_fitting_dtype
@@ -261,23 +266,18 @@ def all_true(args, val):
 
 def load_dset(args):
     # Avoid downloading datasets unless explicitly requested.
-    # To disable downloads, we set $HF_DATASETS_OFFLINE=1.
-    # The HF_DATASETS_OFFLINE environment variable is processed when datasets is imported,
-    # so we must set it before the import statement.
-    # We allow the user to override default behavior if they explictly set $HF_DATASETS_OFFLINE.
+    # We allow the user to override this behavior if they set $HF_DATASETS_OFFLINE.
     if 'HF_DATASETS_OFFLINE' not in os.environ:
+        # To disable downloads, we could set $HF_DATASETS_OFFLINE=1.
+        # However, the HF_DATASETS_OFFLINE environment variable is processed
+        # when the datasets module is imported, so it must be set before the import statement.
         # sets HF_DATASETS_OFFLINE within the environment of this script
         #os.environ['HF_DATASETS_OFFLINE'] = "1"
 
-        # Alternatively, one could set datasets.config.HF_DATASETS_OFFLINE.
-        # This seems to work even after the import statement,
-        # but it feels like a bigger hack.
-        import datasets
+        # Alternatively, one can set datasets.config.HF_DATASETS_OFFLINE=1.
+        # That seems to work even after the import statement,
+        # though this usage is not documented.
         datasets.config.HF_DATASETS_OFFLINE = 1
-
-    # import datasets after potentially setting environment variables
-    from datasets import load_dataset, logging
-    from datasets.utils.file_utils import OfflineModeIsEnabled
 
     # silence info messages from all procs except rank 0 
     if args.rank != 0:
