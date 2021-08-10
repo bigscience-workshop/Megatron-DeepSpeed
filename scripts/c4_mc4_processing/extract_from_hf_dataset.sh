@@ -1,4 +1,12 @@
 DATASET_NAME="mc4"
+# LANG_SAMPLE_DICT_PATH comes from `tools/c4_mc4/data_resize.py` or you can provide your own dictionary. 
+# a sample format :
+#  {
+#     "lang_1": 0.08326127485012655, 
+#     "lan_2": 0.17134281486521744, 
+#     ...
+#     "lang_n": 0.0331139678013787
+# } 
 LANG_SAMPLE_DICT_PATH="dumped/c4_mc4_raw_data_resized-576/lang_dict.json"
 CACHE_DIR="c4/mc4_splits/"
 OUTPUT_DIR="dumped/mc4_json_data/"
