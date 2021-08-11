@@ -188,9 +188,17 @@ def get_args():
     args.use_mpi = False
     if args.mpi4py:
         try:
+            start_mpi = time.time()
+
             from mpi4py import MPI
             args.MPI = MPI
             args.use_mpi = True
+
+            if args.use_mpi:
+                args.MPI.COMM_WORLD.barrier()
+                end_mpi = time.time()
+                if args.MPI.COMM_WORLD.Get_rank() == 0:
+                    print(f"Seconds to import MPI: {end_mpi - start_mpi}")
         except:
             print(f"ERROR: mpi4py requested, but failed to import, falling back to torch.distributed.", flush=True)
 
@@ -210,9 +218,16 @@ def init_distributed(args):
         args.rank = args.mpi_comm.Get_rank()
         args.numranks = args.mpi_comm.Get_size()
     else:
+        time_start = time.time()
+
         dist.init_process_group(args.torch_backend, init_method="env://")
         args.rank = dist.get_rank()
         args.numranks = dist.get_world_size()
+
+        barrier(args)
+        time_end = time.time()
+        if args.rank == 0:
+            print(f"Seconds to init_process_group: {time_end - time_start}")
 
 def barrier(args):
     """Globally synchronize all processes."""
@@ -297,12 +312,13 @@ def load_dset(args):
     if args.rank != 0:
         logging.set_verbosity(logging.ERROR)
 
-    success = True
-    err = None
-    dsetname = args.input
+    time_start = time.time()
 
     # Load the specified HuggingFace dataset.
     # Give rank 0 a head start in case the dataset is not already cached.
+    success = True
+    err = None
+    dsetname = args.input
     if args.rank == 0:
         print(f"Opening dataset {dsetname}")
         try:
@@ -343,6 +359,10 @@ def load_dset(args):
             print(f"ERROR: At least one process failed to load {dsetname}", flush=True)
         return None, err
 
+    time_end = time.time()
+    if args.rank == 0:
+        print(f"Seconds to load dataset: {time_end - time_start}", flush=True)
+
     return dset, err
 
 def select_sample_list(args, dset_size):
@@ -350,6 +370,7 @@ def select_sample_list(args, dset_size):
     # create sample index list on rank 0,
     # optionally shuffle the list,
     # and optionally limit the sample count
+    time_select = time.time()
     idx = []
     if args.rank == 0:
         # generate a list of all index values
@@ -366,7 +387,18 @@ def select_sample_list(args, dset_size):
             idx = idx[:args.count]
 
     # broadcast sample index values from rank 0 to all procs
+    time_bcast = time.time()
     idx = bcast(args, idx, root=0)
+
+    barrier(args)
+    time_end = time.time()
+    if args.rank == 0:
+        print(f"Select index stats:")
+        print(f"    Shuffle: {args.shuffle}")
+        print(f"    Seconds to select: {time_bcast - time_select}")
+        print(f"    Seconds to broadcast: {time_end - time_bcast}")
+        print(f"    Seconds total: {time_end - time_select}", flush=True)
+
     return idx
 
 def get_start_end(num, rank, num_ranks):
@@ -430,7 +462,7 @@ def rank_files_write(args, dset, idx, encoder):
     # we'll set this to false on any problem
     success = True
     err = None
-    times = np.zeros(2, dtype=np.float32)
+    times = np.zeros(3, dtype=np.float32) # read, tokenize, write
     try:
         # create data file for each rank
         if args.rank == 0:
@@ -459,11 +491,9 @@ def rank_files_write(args, dset, idx, encoder):
                 text = dset[i][key]
                 start_encode = time.time()
                 doc, bytes_processed = encoder.encode_text(text)
-                end_encode = time.time()
-                times[0] += start_encode - start_read
-                times[1] += end_encode - start_encode
 
                 # add tokenized sequence to our data file
+                start_write = time.time()
                 for key, sentences in doc.items():
                     for sentence in sentences:
                         builders[key].add_item(torch.IntTensor(sentence))
@@ -471,7 +501,11 @@ def rank_files_write(args, dset, idx, encoder):
                     dset_stats[0] += 1
                     dset_stats[1] += len(sentences)
                 dset_stats[2] += bytes_processed
+                end_write = time.time()
 
+                times[0] += start_encode - start_read
+                times[1] += start_write - start_encode
+                times[2] += end_write - start_write
 #                dset_stats[0] += 1
 #                dset_stats[2] += len(text)
 
@@ -518,42 +552,56 @@ def rank_files_write(args, dset, idx, encoder):
         docrate = dset_stats[0] / secs if secs > 0.0 else 0.0
         sentrate = dset_stats[1] / secs if secs > 0.0 else 0.0
         byterate = dset_stats[2] / secs if secs > 0.0 else 0.0
-        print("Tokenize stats:", secs)
-        print(f"    Seconds to tokenize: {secs}")
+        print("Process stats:")
+        print(f"    Seconds to process: {secs}")
         print(f"    {dset_stats[0]} docs {docrate} docs/sec")
         print(f"    {dset_stats[1]} sents {sentrate} sents/sec")
         print(f"    {dset_stats[2]} bytes {format_byterate(byterate)}")
+        print(f"    Total read seconds {times[0]}, {times[0]/dset_stats[0]} sec/sample")
+        print(f"    Total encode seconds {times[1]}, {times[1]/dset_stats[0]} sec/sample")
+        print(f"    Total write seconds {times[2]}, {times[2]/dset_stats[0]} sec/sample")
 
     # allreduce to check whether all ranks wrote their part successfully
     success = all_true(args, success)
     return success, err
 
 def rank_files_merge(args):
-    merge_start = time.time()
-    numbytes = np.zeros(1, dtype=np.int64)
-    for key in args.columns:
-        filemain = get_filename(args, key)
-        filerank = get_filename(args, key, args.rank)
-        binfile = data_file_path(filerank)
-        numbytes[0] += os.stat(binfile)[stat.ST_SIZE]
-        merge_files_mpi(filemain, filerank, args.MPI, args.mpi_comm, dtype=best_fitting_dtype(args.vocab_size))
+    # only try parallel merge when using MPI
+    if args.use_mpi:
+        merge_start = time.time()
+        numbytes = np.zeros(1, dtype=np.int64)
+        for key in args.columns:
+            filemain = get_filename(args, key)
+            filerank = get_filename(args, key, args.rank)
+            merge_files_mpi(filemain, filerank, args.MPI, args.mpi_comm, dtype=best_fitting_dtype(args.vocab_size))
 
-        # rename files for now and also do regular merge so we can time both and "cmp" them
+            # total up bytes read in merge
+            binfile = data_file_path(filerank)
+            idxfile = data_file_path(filerank)
+            numbytes[0] += os.stat(binfile)[stat.ST_SIZE]
+            numbytes[0] += os.stat(idxfile)[stat.ST_SIZE]
+
+            # rename files for now and also do regular merge so we can time both and "cmp" them
+            if args.rank == 0:
+                binfile = data_file_path(filemain)
+                idxfile = index_file_path(filemain)
+                os.rename(binfile, binfile + ".par")
+                os.rename(idxfile, idxfile + ".par")
+
+        barrier(args)
+        all_sum_(args, numbytes)
+        merge_end = time.time()
         if args.rank == 0:
-            binfile = data_file_path(filemain)
-            idxfile = index_file_path(filemain)
-            os.rename(binfile, binfile + ".par")
-            os.rename(idxfile, idxfile + ".par")
-    barrier(args)
-    all_sum_(args, numbytes)
-    merge_end = time.time()
-    if args.rank == 0:
-        secs = merge_end - merge_start
-        byterate = numbytes[0] / secs if secs > 0.0 else 0.0
-        print("Seconds to merge (parallel):", secs, flush=True)
-        print("Bytes=", numbytes[0], "bytes/sec=", byterate, flush=True)
-    if args.scratch:
-        return
+            secs = merge_end - merge_start
+            byterate = numbytes[0] / secs if secs > 0.0 else 0.0
+            print("Parallel merge stats:")
+            print(f"    Scratch: {args.scratch}")
+            print(f"    Seconds to merge: {secs}")
+            print(f"    {int(numbytes)} bytes {format_byterate(byterate)}")
+
+        # if using node-local storage, skip sequential merge test
+        if args.scratch:
+            return
 
     # rank 0 merges all per-rank files
     if args.rank == 0:
@@ -658,7 +706,7 @@ def main():
     barrier(args)
     startup_end = time.time()
     if args.rank == 0:
-        print("Seconds to startup:", startup_end - startup_start)
+        print(f"Seconds to startup: {startup_end - startup_start}")
 
     # have each rank write its file, returns False if any rank had a problem
     success, err = rank_files_write(args, dset, idx, encoder)

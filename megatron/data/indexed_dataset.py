@@ -619,6 +619,26 @@ def mpi_get_min(val, mpi, comm):
     return outsize[0]
 
 
+def mpi_create_file(filename, mpi, comm):
+    """Create, truncate, and open a file shared by all ranks."""
+    # Don't truncate file until all ranks reach this point
+    comm.barrier()
+
+    # Wait for rank 0 to open (and truncate) file,
+    # then have all ranks open file for writing.
+    rank = comm.Get_rank()
+    if rank == 0:
+        f = open(filename, 'wb')
+    comm.barrier()
+    if rank != 0:
+        f = open(filename, 'r+b')
+
+    # TODO: verify that all ranks successfully opened the file
+    comm.barrier()
+
+    return f
+
+
 # To create the binary files given a set of per-rank binary
 # files, one simply concatenates the data from the per-rank
 # binary files in rank order.  We stat each rank file to determine
@@ -632,14 +652,8 @@ def merge_files_mpi_bin(outfile, infile, mpi, comm):
 
     comm.barrier()
 
-    # wait for rank 0 to open (and truncate) file,
-    # then have all ranks open file for writing
-    rank = comm.Get_rank()
-    if rank == 0:
-        f = open(outfile, 'wb')
-    comm.barrier()
-    if rank != 0:
-        f = open(outfile, 'r+b')
+    # Create shared output file.
+    f = mpi_create_file(outfile, mpi, comm)
 
     # get file size of binary file for this rank
     filesize = os.stat(infile)[stat.ST_SIZE]
@@ -655,6 +669,7 @@ def merge_files_mpi_bin(outfile, infile, mpi, comm):
 
     f.close()
 
+    # TODO: check that all ranks wrote successfully
     comm.barrier()
 
 
@@ -664,16 +679,10 @@ def merge_files_mpi_idx(outfile, infile, mpi, comm, dtype):
 
     comm.barrier()
 
-    # wait for rank 0 to open (and truncate) file,
-    # then have all ranks open file for writing
-    rank = comm.Get_rank()
-    if rank == 0:
-        f = open(outfile, 'wb')
-    comm.barrier()
-    if rank != 0:
-        f = open(outfile, 'r+b')
+    # Create shared output file
+    f = mpi_create_file(outfile, mpi, comm)
 
-    # read the index file for the calling rank
+    # Read the index file for the calling rank
     index = MMapIndexedDataset.Index(infile)
     sizes = index.sizes
     if rank == 0:
@@ -693,7 +702,7 @@ def merge_files_mpi_idx(outfile, infile, mpi, comm, dtype):
     size_offset = mpi_get_offset(numsizes, mpi, comm)
     docs_offset = mpi_get_offset(numdocs, mpi, comm)
 
-    # have rank 0 write the file header
+    # Have rank 0 write the file header
     pos = 0
     if rank == 0:
         f.write(MMapIndexedDataset.Index._HDR_MAGIC)
@@ -703,7 +712,8 @@ def merge_files_mpi_idx(outfile, infile, mpi, comm, dtype):
         f.write(struct.pack('<Q', docs_count))
         pos = f.tell()
 
-    # advance position past file header on all ranks
+    # Broadcast value of pos from rank 0,
+    # and advance file position past file header on all ranks.
     pos = mpi_get_sum(pos, mpi, comm)
 
     # The list of size values from each rank are
@@ -782,9 +792,13 @@ def merge_files_mpi_idx(outfile, infile, mpi, comm, dtype):
 
     f.close()
 
+    # TODO: check that all ranks wrote successfully
     comm.barrier()
 
 
 def merge_files_mpi(filemain, filerank, mpi, comm, dtype=np.int64):
+    # Concatenate the data files
     merge_files_mpi_bin(data_file_path(filemain), data_file_path(filerank), mpi, comm)
+
+    # Combine index files into a single index file
     merge_files_mpi_idx(index_file_path(filemain), index_file_path(filerank), mpi, comm, dtype)
