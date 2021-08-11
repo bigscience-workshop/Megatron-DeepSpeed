@@ -35,13 +35,13 @@ def get_size_stats(args):
             full_file_path = os.path.join(dirpath, filename)
             lang_size = subprocess.check_output("du -s {}".format(full_file_path), shell=True)
             lang_size = int(lang_size.decode("utf-8").split("\t")[0])
-            if args.size_format == 'B':
+            if args.size_format == 'KB':
                 _conv = 1
-            elif args.size_format == 'M':
+            elif args.size_format == 'MB':
                 _conv = 1024
-            elif args.size_format == 'G':
+            elif args.size_format == 'GB':
                 _conv = 1024*1024
-            elif args.size_format == 'T':
+            elif args.size_format == 'TB':
                 _conv = 1024*1024*1024
             lang_size_ = round(lang_size/float(_conv), 2)
             lang_size_dict[full_file_path] = lang_size_
@@ -66,7 +66,7 @@ def main():
                         help='Path to the data folder')
     parser.add_argument('--size-format', type=str, required=True,
                         help='Calculation will be done in byte, mega-byte, giga-byte or tera-byte',
-                        choices=['B', 'M', 'G', 'T'])
+                        choices=['KB', 'MB', 'GB', 'TB'])
     parser.add_argument('--alpha', type=float, required=True,
                         help='Sampling penalty.')
     parser.add_argument('--output-dir', type=str, required=True,

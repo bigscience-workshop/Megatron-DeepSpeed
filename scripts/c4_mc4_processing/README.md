@@ -5,7 +5,7 @@ We export text data in `*.jsonl` for Megatron-LM script `tools/preprocess_data.p
 ## Processing data with HF-Datasets
 
 ### Caching Data
-HF-`datasets` host full `c4` (around 1T) and `mC4` (around 27T) dataset. To prepare that dataset for Megatron, at first, we cache them using, 
+HF-`datasets` host full `c4` (around 1TB) and `mC4` (around 27TB) dataset. To prepare that dataset for Megatron, at first, we cache them using, 
 
 ```
 bash scripts/c4_mc4_processing/cache_c4_mc4.sh
@@ -19,7 +19,7 @@ Running this script may require bandwidth `~30MiB/s` per language. You may run t
 
 ### Calculate Sampling Probability
 
-Most of the time we are not going to train the language model with the full data (27T data in this case). Following [Raffel et al.](https://arxiv.org/abs/1910.10683), [Lample et al.](https://arxiv.org/abs/1901.07291) we sample our selected data using a multinomial distribution with some additional conditions.
+Most of the time we are not going to train the language model with the full data (27TB data in this case). Following [Raffel et al.](https://arxiv.org/abs/1910.10683), [Lample et al.](https://arxiv.org/abs/1901.07291) we sample our selected data using a multinomial distribution with some additional conditions.
 
 Notes, 
 
@@ -29,7 +29,7 @@ Notes,
 4. We set a parameter `new-expected-size` which is the estimated size of data that will be sampled from the full datasets (dataset combining all the languages).
 5. Finally we calculate the sampling probability for each of the datasets.
 
-> :warning: **Dataset Size**: It is to be noted that datasets are cached in `gzip (level 6)` format and after writing them in a preferable encoding method, the size may vary a lot. But regardless of this, it gives a comparable estimation of the dataset to be sampled. This step is done without the `english` language. For english, we sample the full data (sampling prob `1.0`) from `c4`. Please note that we didn't use English mC4 which is around `~10T` of data.
+> :warning: **Dataset Size**: It is to be noted that datasets are cached in `gzip (level 6)` format and after writing them in a preferable encoding method, the size may vary a lot. But regardless of this, it gives a comparable estimation of the dataset to be sampled. This step is done without the `english` language. For english, we sample the full data (sampling prob `1.0`) from `c4`. Please note that we didn't use English mC4 which is around `~10TB` of data.
 
 The processing script for this is, 
 
@@ -56,7 +56,7 @@ bash scripts/c4_mc4_processing/single_shard_data_process.sh
 
 ## Processing data from git lfs
 
-For some unknown reason (???) I was stuck (in the `Extract data from cache.` stage) processing `russian` language (~3T of data) in my system. So in the later stage, I focus on the source of the data. In the original [git lfs repo](https://huggingface.co/datasets/allenai/c4), data is stored in smaller shards.  
+For some unknown reason (???) I was stuck (in the `Extract data from cache.` stage) processing `russian` language (~3TB of data) in my system. So in the later stage, I focus on the source of the data. In the original [git lfs repo](https://huggingface.co/datasets/allenai/c4), data is stored in smaller shards.  
 
 Download the data by, 
 
@@ -120,26 +120,26 @@ data_folder_path/
 
 # Data Binarization Stat 
 
-If you tokenize English with `t5` tokenizer, `784G` raw data becomes `344G` (`*.bin` size, including validation). But if you tokenize the same `784G` raw data with `mt5` it becomes `756G` This is not what we were expecting at first. Earlier we were expecting 50\% English and 50\% remaining language, but now after binarization (a.k.a. tokenization) that calculation doesn't hold. For most of the languages, after binarization, the size reduced drastically. The stats are below, 
+If you tokenize English with `t5` tokenizer, `784GB` raw data becomes `344GB` (`*.bin` size, including validation). But if you tokenize the same `784GB` raw data with `mt5` it becomes `756GB` This is not what we were expecting at first. Earlier we were expecting 50\% English and 50\% remaining language, but now after binarization (a.k.a. tokenization) that calculation doesn't hold. For most of the languages, after binarization, the size reduced drastically. The stats are below, 
 
 |Language|Raw Size|Binary Size|
 |--|--|--|
-|am|2.4G|1.3G|
-|ar|86G| 28G |
-|bn|23G|7.6G|
-|ca|14G|15G|
-|en|784G|763G|
-|es|110G|111G|
-|fr|120G|112G|
-|hi|23G|8.7G|
-|id|33G|34G|
-|ja|148G|64G|
-|pt|59G|60G|
-|ru|339G|69G|
-|ru-Latn|3.5G|3.2G|
-|sw|3.3G|3.8G|
-|ur|28G|9.2G|
-|zh|43G|22G|
-|zh-Latn|738M|779M|
+|am|2.4GB|1.3GB|
+|ar|86GB| 28GB |
+|bn|23GB|7.6GB|
+|ca|14GB|15GB|
+|en|784GB|763GB|
+|es|110GB|111GB|
+|fr|120GB|112GB|
+|hi|23GB|8.7GB|
+|id|33GB|34GB|
+|ja|148GB|64GB|
+|pt|59GB|60GB|
+|ru|339GB|69GB|
+|ru-Latn|3.5GB|3.2GB|
+|sw|3.3GB|3.8GB|
+|ur|28GB|9.2GB|
+|zh|43GB|22GB|
+|zh-Latn|738MB|779MB|
 
 All the sizes are `*.bin` + `*.idx` file size.
