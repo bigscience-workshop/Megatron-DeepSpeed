@@ -252,6 +252,20 @@ def all_sum_(args, vals):
         tensor = torch.from_numpy(vals)
         dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
 
+def prefix_sum(args, val):
+    """Returns result of an inclusive scan prefix sum of val across ranks"""
+    if args.use_mpi:
+        inval = np.array([val], dtype=np.int64)
+        outval = np.zeros_like(inval)
+        args.mpi_comm.Scan(inval, outval, op=args.MPI.SUM)
+        return outval[0]
+    else:
+        # torch.distributed doesn't have a scan, so fallback to allreduce
+        tensor = torch.zeros(args.numranks, dtype=torch.int64)
+        tensor[args.rank:args.numranks] = val
+        dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
+        return int(tensor[args.rank])
+
 def all_true(args, val):
     """Returns True if all procs input True, False otherwise"""
     if args.use_mpi:
