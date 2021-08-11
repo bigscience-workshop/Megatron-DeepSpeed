@@ -5,7 +5,7 @@ We export text data in `*.jsonl` for Megatron-LM script `tools/preprocess_data.p
 ## Processing data with HF-Datasets
 
 ### Caching Data
-HF-dataset host full `c4` (around 1T) and `mC4` (around 27T) dataset. To prepare that dataset for Megatron, at first, we cache them using, 
+HF-`datasets` host full `c4` (around 1T) and `mC4` (around 27T) dataset. To prepare that dataset for Megatron, at first, we cache them using, 
 
 ```
 bash scripts/c4_mc4_processing/cache_c4_mc4.sh
@@ -13,7 +13,7 @@ bash scripts/c4_mc4_processing/cache_c4_mc4.sh
 Running this script may require bandwidth `~30MiB/s` per language. You may run this script multiple times. Sometimes there is cap for a single download request. So in that case you can just run the script multiple time to do parallel downloading and processing. Also once the data is downloaded, it starts caching. Caching may take a lot of time. In that time other process can keep downloading their stuffs. The script `tools/c4_mc4/c4_mc4_cache.py` will perform caching if a caching folder for a language doesn't exist. So running the script multiple times with the same cache folder will be ok. Make sure you add your desired language in the script.
 
 
-> :warning: **Caching failure**: There are lots of ways your caching mechanism may fail. Some of the common reason is hard disk space and per-day bandwidth limitation to your broadband provider. Make sure that you have a reasonable amount of HD space and your system supports downloading a large chunk of data from the internet. If caching fails sometimes it's difficult to recover. Please follow this [issue](https://github.com/huggingface/datasets/issues/1706).
+> :warning: **Caching failure**: There are lots of ways the caching mechanism may fail. Some of the common reason is hard disk space and per-day bandwidth limitation to your broadband provider. Make sure that you have a reasonable amount of HD space and your system supports downloading a large chunk of data from the internet. If caching fails sometimes it's difficult to recover. Please follow this [issue](https://github.com/huggingface/datasets/issues/1706).
 
 > :warning: **Caching Time**: Please note that at this moment, caching is a sequential process in HF-datasets. After downloading the data, it takes a lot of time to do the caching. It may require 2-5 days to complete the caching. But if you want to perform an additional operation (tokenization, additional pre-processing stuffs etc) on the data, caching is very preferable.
 
@@ -25,7 +25,7 @@ Notes,
 
 1. At first we define a low resource language. We sum up the total size of the dataset and take the mean size for each of the languages. The language which has a low amount of data compared to the mean size is considered low resource language.
 2. For low resource language, we take the full datasets (sampling probability 1.0).
-3. For high resource language, we set two parameter, `min_high_resource_size` and `max_high_resource_size`. 
+3. For high resource language, we set two parameters, `min_high_resource_size` and `max_high_resource_size`. 
 4. We set a parameter `new-expected-size` which is the estimated size of data that will be sampled from the full datasets (dataset combining all the languages).
 5. Finally we calculate the sampling probability for each of the datasets.
 
@@ -40,7 +40,7 @@ The script will export a `*.json` file to `--output-dir` which will contain the 
 
 ### Extract data from the cache.
 
-In this step, we extract data from Hf-data and write them in a `*.jsonl`. 
+In this step, we extract data from Hf-`datasets` and write them in a `*.jsonl`. 
 
 ```
 bash scripts/c4_mc4_processing/extract_from_hf_dataset.sh
@@ -82,7 +82,7 @@ Preprocess data using,
 bash scripts/c4_mc4_processing/multi_shard_data_process.sh
 ```
 
-Note that `multi_shard_data_process.sh` also merge the shard into a single `*.bin` and `*.idx` files.
+Note that `multi_shard_data_process.sh` also merge the shards into single `*.bin` and `*.idx` files.
 
 ## Calculate iterator probability for each of the datasets.
 
