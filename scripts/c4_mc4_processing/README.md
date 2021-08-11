@@ -56,7 +56,7 @@ bash scripts/c4_mc4_processing/single_shard_data_process.sh
 
 ## Processing data from git lfs
 
-For some unknown reason (???) I was stuck (in the `Extract data from cache.` stage) processing `russian` language (~3TB of data) in my system. So in the later stage, I focus on the source of the data. In the original [git lfs repo](https://huggingface.co/datasets/allenai/c4), data is stored in smaller shards.  
+For some unknown reason (???) I was stuck (in the `Extract data from cache.` stage) processing `russian` language (~3TB of data) in my system. So in the later stage, I focus on the source of the data and low level integration. In the original [git lfs repo](https://huggingface.co/datasets/allenai/c4), data is stored in smaller shards.  If you are unable to process data using HF-`datasets` (due to download error, caching error etc.), you can use this method. But you will need a `--sampling-ratio` or `--lang-sampling-dict-path` as a input for this process.
 
 Download the data by, 
 
