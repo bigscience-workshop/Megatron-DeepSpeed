@@ -10,7 +10,7 @@ MAX_HIGH_RESOURCE_SIZE=100
 
 python3 -u tools/c4_mc4/data_resize.py \
   --dataset-name $DATASET_NAME \
-  --size-format "GB" \
+  --size-format "G" \
   --languages "ar" "sw" "zh" "zh-Latn" "ca" "fr" "hi" "ur" "bn" "id" "pt" "es" "ru" "ru-Latn" "ja" "am"  \
   --cache-dir $CACHE_DIR \
   --new-expected-size $NEW_EXPECTED_SIZE \

@@ -18,15 +18,15 @@ def get_size_stats(args):
         lang_size = int(lang_size.decode("utf-8").split("\t")[0])
         if args.size_format == 'B':
             _conv = 1
-        elif args.size_format == 'MB':
+        elif args.size_format == 'M':
             _conv = 1024
-        elif args.size_format == 'GB':
+        elif args.size_format == 'G':
             _conv = 1024*1024
-        elif args.size_format == 'TB':
+        elif args.size_format == 'T':
             _conv = 1024*1024*1024
-        lang_size_gb = round(lang_size/float(_conv), 2)
-        tot_size += lang_size_gb
-        lang_size_dict[lang] = lang_size_gb
+        lang_size__ = round(lang_size/float(_conv), 2)
+        tot_size += lang_size__
+        lang_size_dict[lang] = lang_size__
     return lang_size_dict
 
 def print_stat(args, lang_size_dict):
@@ -103,7 +103,7 @@ def distribute_high_resoure_language(args, lang_dict, sampling_probability, tota
         high_resource_sampling_prob[lang] = new_prob
         high_resource_size[lang] = new_size
         sampling_probability[lang] = prob
-        print("Language : {}, Sampling prob : {} {}, ({} -> {} GB)".format(
+        print("Language : {}, Sampling prob : {} {}, ({} -> {})".format(
             lang, round(prob,2), new_prob_str, lang_size_dict[lang], round(new_size) )
         )
         total_size_capacity -= new_size
@@ -143,7 +143,7 @@ def main():
                         help='Path to the cache dir. (The directory may require very large space)')
     parser.add_argument('--size-format', type=str, required=True,
                         help='Calculation will be done in byte, mega-byte, giga-byte or tera-byte',
-                        choices=['B', 'MB', 'GB', 'TB'])
+                        choices=['B', 'M', 'G', 'T'])
     parser.add_argument('--new-expected-size', type=int, required=True,
                         help='Total amount of data to be selected.')
     parser.add_argument('--output-dir', type=str, required=True,
@@ -171,7 +171,7 @@ def main():
     print("-"*15)
     for lang, prob in sampling_probability.items():
         _size = lang_size_dict[lang]*prob
-        print("Language : {}, Sampling prob : {}, Data resized : ({} -> {} GB)".format(
+        print("Language : {}, Sampling prob : {}, Data resized : ({} -> {} G)".format(
             lang, round(prob,2), lang_size_dict[lang], round(_size, 2) )
         )
         total_size += _size

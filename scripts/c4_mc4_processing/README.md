@@ -5,12 +5,12 @@ We export text data in `*.jsonl` for Megatron-LM script `tools/preprocess_data.p
 ## Processing data with HF-Datasets
 
 ### Caching Data
-HF-dataset host full `c4` (around 1TB) and `mC4` (around 27TB) dataset. To prepare that dataset for Megatron, at first, we cache them using, 
+HF-dataset host full `c4` (around 1T) and `mC4` (around 27T) dataset. To prepare that dataset for Megatron, at first, we cache them using, 
 
 ```
 bash scripts/c4_mc4_processing/cache_c4_mc4.sh
 ```
-Running this script may require bandwidth `~30MB/s` per language. You may run this script multiple times. Sometimes there is cap for a single download request. So in that case you can just run the script multiple time to do parallel downloading and processing. Also once the data is downloaded, it starts caching. Caching may take a lot of time. In that time other process can keep downloading their stuffs. The script `tools/c4_mc4/c4_mc4_cache.py` will perform caching if a caching folder for a language doesn't exist. So running the script multiple times with the same cache folder will be ok. Make sure you add your desired language in the script.
+Running this script may require bandwidth `~30MiB/s` per language. You may run this script multiple times. Sometimes there is cap for a single download request. So in that case you can just run the script multiple time to do parallel downloading and processing. Also once the data is downloaded, it starts caching. Caching may take a lot of time. In that time other process can keep downloading their stuffs. The script `tools/c4_mc4/c4_mc4_cache.py` will perform caching if a caching folder for a language doesn't exist. So running the script multiple times with the same cache folder will be ok. Make sure you add your desired language in the script.
 
 
 > :warning: **Caching failure**: There are lots of ways your caching mechanism may fail. Some of the common reason is hard disk space and per-day bandwidth limitation to your broadband provider. Make sure that you have a reasonable amount of HD space and your system supports downloading a large chunk of data from the internet. If caching fails sometimes it's difficult to recover. Please follow this [issue](https://github.com/huggingface/datasets/issues/1706).
@@ -19,7 +19,7 @@ Running this script may require bandwidth `~30MB/s` per language. You may run th
 
 ### Calculate Sampling Probability
 
-Most of the time we are not going to train the language model with the full data (27TB data in this case). Following [Raffel et al.](https://arxiv.org/abs/1910.10683), [Lample et al.](https://arxiv.org/abs/1901.07291) we sample our selected data using a multinomial distribution with some additional conditions.
+Most of the time we are not going to train the language model with the full data (27T data in this case). Following [Raffel et al.](https://arxiv.org/abs/1910.10683), [Lample et al.](https://arxiv.org/abs/1901.07291) we sample our selected data using a multinomial distribution with some additional conditions.
 
 Notes, 
 
@@ -29,7 +29,7 @@ Notes,
 4. We set a parameter `new-expected-size` which is the estimated size of data that will be sampled from the full datasets (dataset combining all the languages).
 5. Finally we calculate the sampling probability for each of the datasets.
 
-> :warning: **Dataset Size**: It is to be noted that datasets are cached in `gzip (level 6)` format and after writing them in a preferable encoding method, the size may vary a lot. But regardless of this, it gives a comparable estimation of the dataset to be sampled. This step is done without the `english` language. For english, we sample the full data (sampling prob `1.0`) from `c4`. Please note that we didn't use English mC4 which is around `~10TB` of data.
+> :warning: **Dataset Size**: It is to be noted that datasets are cached in `gzip (level 6)` format and after writing them in a preferable encoding method, the size may vary a lot. But regardless of this, it gives a comparable estimation of the dataset to be sampled. This step is done without the `english` language. For english, we sample the full data (sampling prob `1.0`) from `c4`. Please note that we didn't use English mC4 which is around `~10T` of data.
 
 The processing script for this is, 
 
@@ -56,7 +56,7 @@ bash scripts/c4_mc4_processing/single_shard_data_process.sh
 
 ## Processing data from git lfs
 
-For some unknown reason (???) I was stuck (in the `Extract data from cache.` stage) processing `russian` language (~3TB of data) in my system. So in the later stage, I focus on the source of the data. In the original [git lfs repo](https://huggingface.co/datasets/allenai/c4), data is stored in smaller shards.  
+For some unknown reason (???) I was stuck (in the `Extract data from cache.` stage) processing `russian` language (~3T of data) in my system. So in the later stage, I focus on the source of the data. In the original [git lfs repo](https://huggingface.co/datasets/allenai/c4), data is stored in smaller shards.  
 
 Download the data by, 
 
