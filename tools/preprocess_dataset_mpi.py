@@ -219,26 +219,21 @@ def barrier(args):
     else:
         dist.barrier()
 
-def bcast(args, vals, root=0):
-    """Broadcast list of vals from root to all ranks, returns newly allocated list"""
+def scatterv_(args, invals, counts, outval, root=0):
+    """Scatter values from invals according to counts array, receive values in outval"""
     if args.use_mpi:
-        vals = args.mpi_comm.bcast(vals, root=root)
-        return vals
+        displ = [sum(counts[:rank]) for rank in range(args.numranks)]
+        args.mpi_comm.Scatterv([invals, np.array(counts), np.array(displ), args.MPI.INT64_T], outval, root=root)
     else:
-        # broadcast length of vals list
-        length = [len(vals)]
-        dist.broadcast_object_list(length, src=root)
-
-        # allocate a tensor of appropriate size
-        # initialize tensor with list values on root
+        tensors = []
         if args.rank == root:
-            tvals = torch.tensor(vals, dtype=torch.int64)
-        else:
-            tvals = torch.zeros(length[0], dtype=torch.int64)
+            for rank in range(args.numranks):
+                start = sum(counts[:rank])
+                end = start + counts[rank]
+                tensors.append(torch.tensor(invals[start:end]))
 
-        # broadcast tensor from root, and return as a new list
-        dist.broadcast(tvals, src=root)
-        return tvals.tolist()
+        tensor = torch.from_numpy(outval)
+        dist.scatter(tensor, tensors, src=root)
 
 def all_sum_(args, vals):
     """Sums values in vals element-wise and updates vals with final result on all ranks"""
@@ -330,63 +325,75 @@ def load_dset(args):
 
 def select_sample_list(args, dset_size):
     """Given the total number of samples, select a list of sample index values"""
+    # determine total number of samples that we'll read
+    num_samples = dset_size
+    if args.count is not None and args.count < dset_size:
+        num_samples = args.count
+
     # create sample index list on rank 0,
     # optionally shuffle the list,
     # and optionally limit the sample count
-    idx = []
+    idxlist = None
     if args.rank == 0:
         # generate a list of all index values
-        idx = list(range(dset_size))
+        idxlist = np.arange(dset_size, dtype=np.int64)
 
         # optionally shuffle
         if args.shuffle:
-            if args.seed is not None:
-                random.seed(args.seed)
-            random.shuffle(idx)
+            # args.seed may be an int (to seed) or None (to not)
+            rng = np.random.default_rng(args.seed)
+            rng.shuffle(idxlist)
 
         # optionally limit the sample count
         if args.count is not None:
-            idx = idx[:args.count]
+            idxlist = idxlist[:args.count]
 
-    # broadcast sample index values from rank 0 to all procs
-    idx = bcast(args, idx, root=0)
-    return idx
+    # get a list of the number of elements each rank will hold
+    counts = get_proc_counts(num_samples, args.numranks)
+    idx_start = sum(counts[:args.rank])
+    idx_end = idx_start + counts[args.rank]
+    idx = np.zeros(counts[args.rank], np.int64)
 
-def get_start_end(num, rank, num_ranks):
-    """Compute start and end index values to evenly divide num items
-    among ranks.
-
-    If num is not evenly divisible by num_ranks, ranks from
-    [0,remainder) will each be assigned one extra item.
-    Returns a (start, end) tuple, such that the calling rank
-    should take items in a list[start:end]
-
-    Parameters
-    ----------
-    num : int
-      Number of items to be divided
-    rank : int
-      Rank of the calling process
-    num_ranks : int
-      Number of processes among which to divide items
-
-    Returns
-    -------
-    int
-      start index value
-    int
-      end index value
-    """
-
-    num_per_rank = num // num_ranks
-    remainder = num % num_ranks
-    if rank < remainder:
-        start = (num_per_rank + 1) * rank;
-        end = start + (num_per_rank + 1)
+    # scatter index list if small enough
+    scatter_limit = 20000000
+    if num_samples < scatter_limit:
+        # scatter sample index values from rank 0 to all procs
+        # based on distribution defined in counts list
+        scatterv_(args, idxlist, counts, idx, root=0)
     else:
-        start = (num_per_rank + 1) * remainder + num_per_rank * (rank - remainder);
-        end = start + num_per_rank
-    return start, end
+        # The index list is too big to send to every process.
+        # Write it to a shared file to be read by other ranks instead.
+        indexlistfile = f"{args.output_prefix}_{args.level}.sampleidx"
+        if args.rank == 0:
+            with open(indexlistfile, "wb") as f:
+                #vals = np.array(idx, dtype=np.int64)
+                f.write(idxlist.tobytes(order='C'))
+
+        # wait for rank 0 to write the file
+        barrier(args)
+
+        # All ranks read their respective portion
+        length = counts[args.rank]
+        if length > 0:
+            with open(indexlistfile, "rb") as f:
+                offset = idx_start * 8
+                f.seek(offset)
+                f.readinto(idx)
+
+        # wait for all to read
+        barrier(args)
+
+        # delete the temporary file
+        if args.rank == 0:
+            os.remove(indexlistfile)
+
+        barrier(args)
+
+    return num_samples, idx
+
+def get_proc_counts(num, num_ranks):
+    num_per_rank, remainder = divmod(num, num_ranks)
+    return [num_per_rank + 1 if rank < remainder else num_per_rank for rank in range(num_ranks)]
 
 def get_filename(args, key, rank=None):
     pathname = args.output_prefix
@@ -398,7 +405,7 @@ def get_filename(args, key, rank=None):
 
     return filename
 
-def rank_files_write(args, dset, idx, encoder):
+def rank_files_write(args, dset, num_samples, idx, encoder):
     tokenize_start = time.time()
 
     # we'll total up the number of docs, sentences, and bytes
@@ -424,15 +431,13 @@ def rank_files_write(args, dset, idx, encoder):
                                          impl=args.dataset_impl,
                                          dtype=best_fitting_dtype(args.vocab_size))
 
-        # divide index list evenly among ranks
-        idx_start, idx_end = get_start_end(len(idx), args.rank, args.numranks)
-
         # each rank tokenizes its samples and writes its own file
         progress_next = time.time() + float(args.log_interval)
-        for i in idx[idx_start:idx_end]:
+        for i in idx:
+            sample_id = int(i)
             for key in args.columns:
                 # tokenize text for the given sample index
-                text = dset[i][key]
+                text = dset[sample_id][key]
                 doc, bytes_processed = encoder.encode_text(text)
 
                 # add tokenized sequence to our data file
@@ -451,11 +456,11 @@ def rank_files_write(args, dset, idx, encoder):
                 elapsed = current - tokenize_start
                 timestamp = time.strftime("%Y-%m-%dT%H:%M:%S")
                 docs = dset_stats[0] * args.numranks
-                percent = docs / len(idx) * 100.0
+                percent = docs / num_samples * 100.0
                 docrate = docs / elapsed if elapsed > 0.0 else 0.0
                 mbs = dset_stats[2] * args.numranks / elapsed / 1024 / 1024 if elapsed > 0.0 else 0.0
-                secs_left = int((len(idx) - docs) / docrate if docrate > 0.0 else 0.0)
-                print(f"{timestamp}: Processed (estimated) {docs} of {len(idx)} docs ({percent:0.2f}%),",
+                secs_left = int((num_samples - docs) / docrate if docrate > 0.0 else 0.0)
+                print(f"{timestamp}: Processed (estimated) {docs} of {num_samples} docs ({percent:0.2f}%),",
                       f"{docrate:0.3f} docs/s, {mbs:0.3f} MB/s,",
                       f"{secs_left} secs left ...",
                       flush=True)
@@ -581,20 +586,20 @@ def main():
         print(dset)
         print("Selecting features:", args.columns)
 
+    args.level = "document"
+    if args.split_sentences:
+        args.level = "sentence"
+
     # create sample index list,
     # optionally shuffle the list,
     # and optionally limit the sample count
-    idx = select_sample_list(args, len(dset))
-    
+    num_samples, idx = select_sample_list(args, len(dset))
+
     if nltk_available and args.split_sentences:
         nltk.download("punkt", quiet=True)
 
     encoder = Encoder(args)
     args.vocab_size = encoder.tokenizer.vocab_size
-
-    args.level = "document"
-    if args.split_sentences:
-        args.level = "sentence"
 
     # wait for all ranks before stopping timer
     barrier(args)
@@ -603,7 +608,7 @@ def main():
         print("Seconds to startup:", startup_end - startup_start)
 
     # have each rank write its file, returns False if any rank had a problem
-    success, err = rank_files_write(args, dset, idx, encoder)
+    success, err = rank_files_write(args, dset, num_samples, idx, encoder)
     if not success:
         if args.rank == 0:
             # If any process fails, we skip the merge since the resulting file would be invalid.
