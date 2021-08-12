@@ -7,6 +7,10 @@ import subprocess
 from collections import OrderedDict
 
 def calc_multinomial_sampling_prob_with_penalty(dataset_size, alpha=.5):
+    """
+    Calculate multinomial probability distribution based on https://arxiv.org/pdf/1901.07291.pdf (section 3.1)
+    :dataset_size: A dictionary contains the size (value) of each of the language (key).
+    """
     tot_size = 0
     probs = OrderedDict()
     for lang, size in dataset_size.items():
@@ -27,6 +31,10 @@ def calc_multinomial_sampling_prob_with_penalty(dataset_size, alpha=.5):
 
 
 def get_size_stats(args):
+    """
+    Calculate size for each of the iterator.
+    It recusively iterate though a directory to find a specific extension file and report their size in preferred format.
+    """
     lang_size_dict = {}
     for (dirpath, dirnames, filenames) in os.walk(args.data_folder_path):
         for filename in filenames:
@@ -49,6 +57,9 @@ def get_size_stats(args):
 
 
 def print_stat(args, lang_size_dict, value_name='size'):
+    """
+    Print size statistics.
+    """
     lang_list = sorted([(k,v) for k, v in lang_size_dict.items()], key=lambda tup: tup[1])
     total_size = 0
     print("\nLanguage : ({})".format(value_name))

@@ -8,6 +8,9 @@ import subprocess
 from collections import OrderedDict
 
 def get_size_stats(args):
+    """
+    returns size of directories.
+    """
     lang_size_dict, tot_size = {}, 0
     for lang in args.languages:
         lang_folder_path = os.path.join(
@@ -30,6 +33,9 @@ def get_size_stats(args):
     return lang_size_dict
 
 def print_stat(args, lang_size_dict):
+    """
+    Print size statistics.
+    """
     lang_list = sorted([(k,v) for k, v in lang_size_dict.items()], key=lambda tup: tup[1])
     total_size = 0
     print("Language : Size ({})".format(args.size_format))
@@ -43,6 +49,9 @@ def print_stat(args, lang_size_dict):
     print("Per language allocated size : {}".format(args.new_expected_size/len(args.languages)))
 
 def find_and_distribute_low_resoure_language(args, lang_size_dict, sampling_weight):
+    """
+    Find the low resource language and set their (sampling_prob = 1.0) 
+    """
     total_size = sum([v for k, v in lang_size_dict.items()])
     mean_size_for_each_lang = args.new_expected_size/len(args.languages)
     tot_low_resource_lang_size = 0
@@ -57,6 +66,10 @@ def find_and_distribute_low_resoure_language(args, lang_size_dict, sampling_weig
     return tot_low_resource_lang_size
 
 def calc_multinomial_sampling_prob_with_penalty(dataset_size, alpha=.5):
+    """
+    Calculate multinomial probability distribution based on https://arxiv.org/pdf/1901.07291.pdf (section 3.1)
+    :dataset_size: A dictionary contains the size (value) of each of the language (key).
+    """
     tot_size = 0
     probs = OrderedDict()
     for lang, size in dataset_size.items():
@@ -76,6 +89,10 @@ def calc_multinomial_sampling_prob_with_penalty(dataset_size, alpha=.5):
     return pen_prob
 
 def distribute_high_resoure_language(args, lang_dict, sampling_probability, total_size_capacity):
+    """
+    Finds sampling probability for high resource language. 
+    Apply various condition (i.e., --min_high_resource_sizem,  --max_high_resource_size) to achieve `--new-expected-size`
+    """
     lang_size_dict = copy.deepcopy(lang_dict)
     total_high_resource_capacity = total_size_capacity
     for lang, prob in sampling_probability.items():

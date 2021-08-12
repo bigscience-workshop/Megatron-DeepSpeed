@@ -64,6 +64,7 @@ def main():
     # for _file in files:
     #     export_jsonl_data(_file, args.output_dir, args.dataset_name, sampling_ratio)
     
+    # Perform distributed processing for each of the shard.
     # TODO: log any fail
     with concurrent.futures.ProcessPoolExecutor(max_workers=args.num_proc) as executor:
         results = executor.map(
