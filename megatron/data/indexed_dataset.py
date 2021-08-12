@@ -708,8 +708,8 @@ def merge_files_mpi_idx(outfile, infile, mpi, comm, dtype):
         f.write(MMapIndexedDataset.Index._HDR_MAGIC)
         f.write(struct.pack('<Q', 1))
         f.write(struct.pack('<B', code(dtype)))
-        f.write(struct.pack('<Q', size_count))
-        f.write(struct.pack('<Q', docs_count))
+        f.write(struct.pack('<Q', total_size_count))
+        f.write(struct.pack('<Q', total_docs_count))
         pos = f.tell()
 
     # Broadcast value of pos from rank 0,
@@ -722,7 +722,9 @@ def merge_files_mpi_idx(outfile, infile, mpi, comm, dtype):
     sizes32 = np.array(sizes, dtype=np.int32)
     f.write(sizes32.tobytes(order='C'))
     del sizes32
-    pos += size_count * np.int32().itemsize
+
+    # Advance past list of size values
+    pos += total_size_count * np.int32().itemsize
 
     # The pointer values store the byte offset to each sentence.
     # A sentence has a variable number of tokens, given by
@@ -749,7 +751,7 @@ def merge_files_mpi_idx(outfile, infile, mpi, comm, dtype):
     # the number of bytes of the first sentence.  To do that
     # we first need to find the rank having the first sentence,
     # then bcast that size to all ranks.
-    if size_count > 0:
+    if total_size_count > 0:
         # There is at least one sentence across all ranks,
         # figure out which rank has the first sentence which
         # is not necessarily rank 0.
@@ -774,7 +776,9 @@ def merge_files_mpi_idx(outfile, infile, mpi, comm, dtype):
     f.seek(pos + size_offset * np.int64().itemsize)
     f.write(pointers.tobytes(order='C'))
     del pointers
-    pos += size_count * np.int64().itemsize
+
+    # Advance past list of pointer values
+    pos += total_size_count * np.int64().itemsize
 
     # The document index points to the position in the sizes
     # array for the starting sentence of each document.
