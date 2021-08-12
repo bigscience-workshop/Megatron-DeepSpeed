@@ -350,8 +350,8 @@ def select_sample_list(args, dset_size):
 
     # get a list of the number of elements each rank will hold
     counts = get_proc_counts(num_samples, args.numranks)
-    idx_start = sum(counts[:args.rank])
-    idx_end = idx_start + counts[args.rank]
+
+    # allocate space to hold its portion of the list
     idx = np.zeros(counts[args.rank], np.int64)
 
     # scatter index list if small enough
@@ -366,16 +366,16 @@ def select_sample_list(args, dset_size):
         indexlistfile = f"{args.output_prefix}_{args.level}.sampleidx"
         if args.rank == 0:
             with open(indexlistfile, "wb") as f:
-                #vals = np.array(idx, dtype=np.int64)
                 f.write(idxlist.tobytes(order='C'))
 
         # wait for rank 0 to write the file
         barrier(args)
 
         # All ranks read their respective portion
-        length = counts[args.rank]
-        if length > 0:
+        idx_count = counts[args.rank]
+        if idx_count > 0:
             with open(indexlistfile, "rb") as f:
+                idx_start = sum(counts[:args.rank])
                 offset = idx_start * 8
                 f.seek(offset)
                 f.readinto(idx)
