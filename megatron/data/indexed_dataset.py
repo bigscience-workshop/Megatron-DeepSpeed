@@ -697,8 +697,8 @@ def merge_files_mpi_idx(outfile, infile, mpi, comm, dtype):
     # calling rank.
     numsizes = len(sizes)
     numdocs = len(docs)
-    size_count = mpi_get_sum(numsizes, mpi, comm)
-    docs_count = mpi_get_sum(numdocs, mpi, comm)
+    total_size_count = mpi_get_sum(numsizes, mpi, comm)
+    total_docs_count = mpi_get_sum(numdocs, mpi, comm)
     size_offset = mpi_get_offset(numsizes, mpi, comm)
     docs_offset = mpi_get_offset(numdocs, mpi, comm)
 
