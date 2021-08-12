@@ -1,41 +1,28 @@
 import os
 import time
-import glob
+import math
+import copy
 import json
-import gzip
 import tqdm
+import datasets
 import argparse
 import subprocess
-import numpy as np
-import concurrent.futures
+from collections import OrderedDict
 
-def export_jsonl_data(source_file_path, path, dataset_name, sampling_ratio):
-    print(source_file_path, path, dataset_name, sampling_ratio)
-    serial = source_file_path.split("-of-")[0].split(".")[-1] + "-of-" + source_file_path.split("-of-")[-1].split(".")[0] 
-    tot_sample = 0
-    with gzip.open(source_file_path, 'rt', encoding='utf-8') as gzFilePtr:
-        for _ in gzFilePtr:
-            tot_sample += 1
-    indices = list(range(tot_sample))
-    np.random.shuffle(indices)
-    num_selected_samples = int(sampling_ratio*tot_sample)
-    indices = set(indices[0:num_selected_samples])
-    with gzip.open(source_file_path, 'rt', encoding='utf-8') as gzFilePtr:
-        new_dataset_name = dataset_name.replace(".jsonl", ".{}.jsonl".format(serial))
-        filePtr = open(os.path.join(path, new_dataset_name),"w")
-        for idx, dt in tqdm.tqdm(enumerate(gzFilePtr), desc='{}'.format(source_file_path)):
-            if idx in indices:
-                filePtr.write(str(dt).strip()+"\n")
-        filePtr.close()
-    return 0
-    
+def export_jsonl_data(dataset, path, dataset_name):
+    filePtr = open(os.path.join(path, dataset_name),"w")
+    wrt_lst = []
+    for dt in tqdm.tqdm(dataset, desc='{}'.format(dataset_name)):
+        filePtr.write(json.dumps(dt)+"\n")
+    filePtr.close()
+
 
 def main():
-
     parser = argparse.ArgumentParser()
+    parser.add_argument('--dataset-name', type=str, required=True,
+                        help="Name of the dataset.",
+                        choices=['c4', 'mc4'])
     parser.add_argument('--language', type=str, required=True,
-                        help="Name of the langugae.")
-    parser.add_argument('--dataset-name', type=str, default="train.jsonl",
                         help="Name of the langugae.")
     parser.add_argument('--lang-sampling-dict-path', type=str, default=None,
                         help="Path of the json where the sampling ratio is mentioned. ('key' -> language-name, 'value'-> sampling ratio)")
@@ -45,10 +32,8 @@ def main():
                         help='Path to the cache dir. (The directory may require very large space if it\'s not cached earlier.)')
     parser.add_argument('--output-dir', type=str, required=True,
                         help='Path where the jsonl data will be exported.')
-    parser.add_argument('--num-proc', type=int, default=64,
-                        help='Number of files to be processed in parallel.')
     args = parser.parse_args()
-    
+
     if args.sampling_ratio is not None and args.lang_sampling_dict_path is not None:
         raise ValueError("Both --lang-sampling-dict-path and --sampling-ratio is used. Please use either one of them.")
     if args.sampling_ratio is not None:
@@ -58,23 +43,26 @@ def main():
         sampling_ratio = sampling_dict[args.language]
     else:
         raise ValueError("Both --lang-sampling-dict-path and --sampling-ratio is None. Please use any one of them.")
-    
-    np.random.seed(1234)
-    files = sorted(glob.glob(args.cache_dir.replace("\\","")))
-    # for _file in files:
-    #     export_jsonl_data(_file, args.output_dir, args.dataset_name, sampling_ratio)
-    
-    # TODO: log any fail
-    with concurrent.futures.ProcessPoolExecutor(max_workers=args.num_proc) as executor:
-        results = executor.map(
-                    export_jsonl_data, 
-                    files, 
-                    [args.output_dir for _ in files], 
-                    [args.dataset_name for _ in files], 
-                    [sampling_ratio for _ in files]
-                )
+
+    start_time = time.time()
+    dataset = datasets.load_dataset(args.dataset_name, args.language, cache_dir=args.cache_dir)
+    load_time = time.time() - start_time
+    print("{} dataset load time : {}".format(args.language, time.strftime('%H:%M:%S', time.gmtime(load_time))))
+    print("{} dataset size : {}".format(args.language, dataset))
+    start_time = time.time()
+
+
+    sampling_ratio = 0.99999 if sampling_ratio == 1.0 else sampling_ratio
+    train_dataset = dataset['train']
+    sampled_train_dataset = train_dataset.train_test_split(train_size=float(sampling_ratio), shuffle=True)
+    shuffle_time = time.time() - start_time
+    print("{} dataset shuffle and selection time : {}".format(args.language, time.strftime('%H:%M:%S', time.gmtime(shuffle_time))))
+    print("{} dataset size after sampling: {}".format(args.language, len(dataset)))
+    print("{} sampled dataset size : {}".format(args.language, sampled_train_dataset))
+
+    export_jsonl_data(sampled_train_dataset['train'], args.output_dir, 'train.jsonl', args.write_chunk)
+    export_jsonl_data(dataset['validation'], args.output_dir, 'validation.jsonl', args.write_chunk)
 
 
 if __name__ == '__main__':
     main()
-
