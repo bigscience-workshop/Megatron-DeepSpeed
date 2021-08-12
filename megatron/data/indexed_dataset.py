@@ -603,7 +603,7 @@ def mpi_get_sum(val, mpi, comm):
 
 
 def mpi_get_offset(val, mpi, comm):
-    """Compute preifx sum (exclusive scan) of val, and return offset of each rank."""
+    """Compute prefix sum (exclusive scan) of val, and return offset of each rank."""
     insize = np.array([val], dtype=np.int64)
     outsize = np.zeros_like(insize)
     comm.Scan(insize, outsize, op=mpi.SUM)
