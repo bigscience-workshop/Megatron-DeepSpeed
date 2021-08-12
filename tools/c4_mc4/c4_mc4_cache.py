@@ -31,7 +31,7 @@ def main():
             open(lang_cache_log, 'a').write("Data caching failed.\n")
         open(lang_cache_log, 'a').write("Data caching for {} language completed.\n".format(args.lang))
     else:
-        print("Data processing ofr {} language started or completed.".format(args.lang))
+        print("Data processing for {} language started or completed.".format(args.lang))
         
 
 if __name__ == '__main__':
