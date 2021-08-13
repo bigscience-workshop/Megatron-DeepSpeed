@@ -619,22 +619,53 @@ def mpi_get_min(val, mpi, comm):
     return outsize[0]
 
 
+def mpi_alltrue(val, mpi, comm):
+    """Returns True if all procs input True, False otherwise"""
+    inval = np.array([val], dtype=np.bool_)
+    outval = np.zeros_like(inval)
+    comm.Allreduce(inval, outval, op=mpi.LAND)
+    return bool(outval[0])
+
+
 def mpi_create_file(filename, mpi, comm):
     """Create, truncate, and open a file shared by all ranks."""
-    # Don't truncate file until all ranks reach this point
+    success = True
+    err = None
+
+    # Don't truncate existing file until all ranks reach this point
     comm.barrier()
+
+    # Rank 0 creates and truncates file.
+    rank = comm.Get_rank()
+    if rank == 0:
+        try:
+            f = open(filename, 'wb')
+        except Exception as e:
+            success = False
+            err = e
+
+    # Verify that rank 0 created the file
+    success = mpi_alltrue(success, mpi, comm)
+    if not success:
+        if err is not None:
+            raise err
+        return None
 
     # Wait for rank 0 to open (and truncate) file,
     # then have all ranks open file for writing.
-    rank = comm.Get_rank()
-    if rank == 0:
-        f = open(filename, 'wb')
-    comm.barrier()
     if rank != 0:
-        f = open(filename, 'r+b')
+        try:
+            f = open(filename, 'r+b')
+        except Exception as e:
+            success = False
+            err = e
 
-    # TODO: verify that all ranks successfully opened the file
-    comm.barrier()
+    # Verify that all ranks successfully opened the file
+    success = mpi_alltrue(success, mpi, comm)
+    if not success:
+        if err is not None:
+            raise err
+        return None
 
     return f
 
@@ -919,16 +950,18 @@ def merge_files_mpi_idx_mmap(outfile, infile, mpi, comm, dtype):
 
 
 def merge_files_mpi(filemain, filerank, mpi, comm, dtype=np.int64):
-    # read index file of this rank to determine its type
+    # read header of index file of this rank to determine its type
     indexstr = infer_dataset_impl(filerank)
 
-    # check that all ranks have the same type
+    # map type string to an integer for easier bcast
     indexstrmap = {"cached": 1, "mmap": 2}
     indextype = indexstrmap[indexstr] if indexstr in indexstrmap else 0
+
+    # check that all ranks have the same type
     rank0type = comm.bcast(indextype, root=0)
-    #allsame = all_true(indextype == rank0type)
-    #if not allsame:
-    #    error
+    sametype = mpi_alltrue(indextype == rank0type and rank0type != 0, mpi, comm)
+    if not sametype:
+        assert False, "Cannot merge dataset files of different types"
 
     # Concatenate the data files
     merge_files_mpi_bin(filemain, filerank, mpi, comm)
