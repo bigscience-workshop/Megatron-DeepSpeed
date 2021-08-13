@@ -3,6 +3,7 @@ torch
 six
 regex
 numpy
-
+transformers
+# git+https://github.com/microsoft/DeepSpeed.git@big-science
 # edit to a higher SHA or future release if needed
 git+git://github.com/mlco2/codecarbon.git@d772616c4e55a710c3541469eced4cec98eff329
