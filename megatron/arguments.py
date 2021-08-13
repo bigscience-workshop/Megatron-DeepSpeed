@@ -396,14 +396,14 @@ def _add_training_args(parser):
     group.add_argument('--rampup-batch-size', nargs='*', default=None,
                        help='Batch size ramp up with the following values:'
                        '  --rampup-batch-size <start batch size> '
-                       '                      <batch size incerement> '
+                       '                      <batch size increment> '
                        '                      <ramp-up samples> '
-                       'For example:'
-                       '   --rampup-batch-size 16 8 300000 \ '
-                       '   --global-batch-size 1024'
+                       'For example: '
+                       '   --rampup-batch-size 16 8 300000 '
+                       '   --global-batch-size 1024 '
                        'will start with global batch size 16 and over '
-                       ' (1024 - 16) / 8 = 126 intervals will increase'
-                       'the batch size linearly to 1024. In each interval'
+                       ' (1024 - 16) / 8 = 126 intervals will increase '
+                       'the batch size linearly to 1024. In each interval '
                        'we will use approximately 300000 / 126 = 2380 samples.')
     group.add_argument('--checkpoint-activations', action='store_true',
                        help='Checkpoint activation to allow for training '
