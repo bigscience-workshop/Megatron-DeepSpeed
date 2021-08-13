@@ -190,18 +190,32 @@ def codecarbon_tracker_stop():
     _GLOBAL_CODECARBON_TRACKER.stop()
 
 
+def codecarbon_tracker_pause():
+    """ pause saves intermediate results """
+    global _GLOBAL_CODECARBON_TRACKER
+    if _GLOBAL_CODECARBON_TRACKER is None:
+        return
+
+    print('codecarbon STOP')
+    _GLOBAL_CODECARBON_TRACKER.pause()
+
+
+def codecarbon_tracker_resume():
+    global _GLOBAL_CODECARBON_TRACKER
+    if _GLOBAL_CODECARBON_TRACKER is None:
+        return
+
+    print('codecarbon STOP')
+    _GLOBAL_CODECARBON_TRACKER.resume()
+
+
 def codecarbon_tracker_restart():
     global _GLOBAL_CODECARBON_TRACKER
     if _GLOBAL_CODECARBON_TRACKER is None:
         return
 
-    # output_dir = _GLOBAL_CODECARBON_TRACKER._output_dir
-    # output_file = _GLOBAL_CODECARBON_TRACKER._output_file
-    # log_level = _GLOBAL_CODECARBON_TRACKER._log_level
-    # country_iso_code = _GLOBAL_CODECARBON_TRACKER._country_iso_code
-
-    codecarbon_tracker_stop()
-    codecarbon_tracker_start()
+    codecarbon_tracker_pause()
+    codecarbon_tracker_resume()
 
 
 def _set_adlr_autoresume(args):
