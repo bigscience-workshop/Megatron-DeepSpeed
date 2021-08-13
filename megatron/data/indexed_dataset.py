@@ -650,13 +650,11 @@ def merge_files_mpi_bin(outfile, infile, mpi, comm):
     import stat
     import shutil
 
-    comm.barrier()
-
     # Create shared output file.
-    f = mpi_create_file(outfile, mpi, comm)
+    f = mpi_create_file(data_file_path(outfile), mpi, comm)
 
     # get file size of binary file for this rank
-    filesize = os.stat(infile)[stat.ST_SIZE]
+    filesize = os.stat(data_file_path(infile))[stat.ST_SIZE]
 
     # compute offset this rank should start copying
     # its data into the merged file
@@ -664,7 +662,7 @@ def merge_files_mpi_bin(outfile, infile, mpi, comm):
 
     # seek to appropriate offset and copy data
     f.seek(offset)
-    with open(infile, "rb") as fsrc:
+    with open(data_file_path(infile), "rb") as fsrc:
         shutil.copyfileobj(fsrc, f)
 
     f.close()
@@ -677,13 +675,11 @@ def merge_files_mpi_idx(outfile, infile, mpi, comm, dtype):
     rank = comm.Get_rank()
     numranks = comm.Get_size()
 
-    comm.barrier()
-
     # Create shared output file
-    f = mpi_create_file(outfile, mpi, comm)
+    f = mpi_create_file(index_file_path(outfile), mpi, comm)
 
     # Read the index file for the calling rank
-    index = MMapIndexedDataset.Index(infile)
+    index = MMapIndexedDataset.Index(index_file_path(infile))
     sizes = index.sizes
     if rank == 0:
         docs = index.doc_idx
@@ -802,7 +798,7 @@ def merge_files_mpi_idx(outfile, infile, mpi, comm, dtype):
 
 def merge_files_mpi(filemain, filerank, mpi, comm, dtype=np.int64):
     # Concatenate the data files
-    merge_files_mpi_bin(data_file_path(filemain), data_file_path(filerank), mpi, comm)
+    merge_files_mpi_bin(filemain, filerank, mpi, comm)
 
     # Combine index files into a single index file
-    merge_files_mpi_idx(index_file_path(filemain), index_file_path(filerank), mpi, comm, dtype)
+    merge_files_mpi_idx(filemain, filerank, mpi, comm, dtype)

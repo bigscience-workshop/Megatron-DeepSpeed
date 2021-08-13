@@ -577,7 +577,7 @@ def rank_files_merge(args):
 
             # total up bytes read in merge
             binfile = data_file_path(filerank)
-            idxfile = data_file_path(filerank)
+            idxfile = index_file_path(filerank)
             numbytes[0] += os.stat(binfile)[stat.ST_SIZE]
             numbytes[0] += os.stat(idxfile)[stat.ST_SIZE]
 
