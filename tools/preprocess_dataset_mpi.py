@@ -475,9 +475,10 @@ def rank_files_write(args, dset, idx, encoder):
             filebase = get_filename(args, key, args.rank)
             output_bin_files[key] = data_file_path(filebase)
             output_idx_files[key] = index_file_path(filebase)
+            best_dtype = best_fitting_dtype(args.vocab_size) if args.dataset_impl == "mmap" else None
             builders[key] = make_builder(output_bin_files[key],
                                          impl=args.dataset_impl,
-                                         dtype=best_fitting_dtype(args.vocab_size))
+                                         dtype=best_dtype)
 
         # divide index list evenly among ranks
         idx_start, idx_end = get_start_end(len(idx), args.rank, args.numranks)
@@ -617,9 +618,10 @@ def rank_files_merge(args):
             filebase = get_filename(args, key)
             output_bin_files[key] = data_file_path(filebase)
             output_idx_files[key] = index_file_path(filebase)
+            best_dtype = best_fitting_dtype(args.vocab_size) if args.dataset_impl == "mmap" else None
             builders[key] = make_builder(output_bin_files[key],
                                          impl=args.dataset_impl,
-                                         dtype=best_fitting_dtype(args.vocab_size))
+                                         dtype=best_dtype)
 
         # merge all ranks into one file
         for rank in range(args.numranks):

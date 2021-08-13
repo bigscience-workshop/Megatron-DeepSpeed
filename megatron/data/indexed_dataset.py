@@ -671,7 +671,129 @@ def merge_files_mpi_bin(outfile, infile, mpi, comm):
     comm.barrier()
 
 
-def merge_files_mpi_idx(outfile, infile, mpi, comm, dtype):
+def merge_files_mpi_idx_cached(outfile, infile, mpi, comm, dtype):
+    rank = comm.Get_rank()
+    numranks = comm.Get_size()
+
+    # Create shared output file
+    f = mpi_create_file(index_file_path(outfile), mpi, comm)
+
+    # Read the index file for the calling rank
+    index = IndexedDataset(infile)
+    sizes = index.sizes
+    if rank == 0:
+        data_offsets = index.data_offsets
+        dim_offsets = index.dim_offsets
+        docs = index.doc_idx
+    if rank != 0:
+        data_offsets = index.data_offsets[1:]
+        dim_offsets = index.dim_offsets[1:]
+        docs = index.doc_idx[1:]
+
+    # Compute total number of size and document index
+    # values across all ranks.  Also compute the offset
+    # of the calling rank for each value considering
+    # the values of sizes/docs for all ranks before the
+    # calling rank.
+    numdata = len(data_offsets)
+    numsize = len(sizes)
+    numdim = len(dim_offsets)
+    numdoc = len(docs)
+
+    global_data_count = mpi_get_sum(numdata, mpi, comm)
+    global_size_count = mpi_get_sum(numsize, mpi, comm)
+    global_dim_count = mpi_get_sum(numdim, mpi, comm)
+    global_doc_count = mpi_get_sum(numdoc, mpi, comm)
+
+    global_data_offset = mpi_get_offset(numdata, mpi, comm)
+    global_size_offset = mpi_get_offset(numsize, mpi, comm)
+    global_dim_offset = mpi_get_offset(numdim, mpi, comm)
+    global_doc_offset = mpi_get_offset(numdoc, mpi, comm)
+
+    # Have rank 0 write the file header
+    pos = 0
+    if rank == 0:
+        f.write(IndexedDataset._HDR_MAGIC)
+        f.write(struct.pack('<Q', 1))
+        f.write(struct.pack('<QQ', code(index.dtype), index.element_size))
+        f.write(struct.pack('<QQ', global_data_count - 1, global_size_count))
+        f.write(struct.pack('<Q', global_doc_count))
+        pos = f.tell()
+
+    # Broadcast value of pos from rank 0,
+    # and advance file position past file header on all ranks.
+    pos = mpi_get_sum(pos, mpi, comm)
+
+    # The dimension list records the offset within
+    # the sizes list for each sentence.  Adjust dimension
+    # offset values based on the number of offsets
+    # that come before the calling rank.
+    dim_offsets64 = np.array(dim_offsets, dtype=np.int64)
+    dim_last = dim_offsets[-1] if numdim > 0 else 0
+    dim_offset = mpi_get_offset(dim_last, mpi, comm)
+    dim_offsets64 += dim_offset
+
+    # Seek to proper offset for this rank and write
+    # dom offset values into file, stored as int64.
+    f.seek(pos + global_dim_offset * np.int64().itemsize)
+    f.write(dim_offsets64.tobytes(order='C'))
+    del dim_offsets64
+
+    # Advance past list of dim offset values
+    pos += global_dim_count * np.int64().itemsize
+
+    # The data index records the byte offset to the start of each
+    # sentence within the binary data file.
+    # Adjust our data index values for number of bytes that
+    # come before the calling rank.
+    data_offsets64 = np.array(data_offsets, dtype=np.int64)
+    byte_last = data_offsets[-1] if numdata > 0 else 0
+    byte_offset = mpi_get_offset(byte_last, mpi, comm)
+    data_offsets64 += byte_offset
+
+    # Seek to proper offset for this rank and write
+    # data (byte) offset index into file, stored as int64.
+    f.seek(pos + global_data_offset * np.int64().itemsize)
+    f.write(data_offsets64.tobytes(order='C'))
+    del data_offsets64
+
+    # Advance past list of data (byte) offset values
+    pos += global_data_count * np.int64().itemsize
+
+    # Each sentence is stored as a tensor.
+    # The tensor for each sentence can be multidimensional.
+    # The number of tensor dimensions per sentence is variable,
+    # and the size of each dimension of a sentence is arbitrary.
+    # The size list records a flattened list of the sizes
+    # for each dimension of a sentence.
+    # The list of size values from each rank are
+    # concatenated and stored as int64.
+    f.seek(pos + global_size_offset * np.int64().itemsize)
+    sizes64 = np.array(sizes, dtype=np.int64)
+    f.write(sizes64.tobytes(order='C'))
+    del sizes64
+
+    # Advance past list of size values
+    pos += global_size_count * np.int64().itemsize
+
+    # The document index points to the position in the sizes
+    # array for the first sentence of the sample.
+    docs64 = np.array(docs, dtype=np.int64)
+    docs64 += global_size_offset
+
+    # Seek to proper offset for this rank and write
+    # document index into file, stored as int64.
+    f.seek(pos + global_doc_offset * np.int64().itemsize)
+    f.write(docs64.tobytes(order='C'))
+    del docs64
+
+    f.close()
+
+    # TODO: check that all ranks wrote successfully
+    comm.barrier()
+
+
+def merge_files_mpi_idx_mmap(outfile, infile, mpi, comm, dtype):
     rank = comm.Get_rank()
     numranks = comm.Get_size()
 
@@ -797,8 +919,22 @@ def merge_files_mpi_idx(outfile, infile, mpi, comm, dtype):
 
 
 def merge_files_mpi(filemain, filerank, mpi, comm, dtype=np.int64):
+    # read index file of this rank to determine its type
+    indexstr = infer_dataset_impl(filerank)
+
+    # check that all ranks have the same type
+    indexstrmap = {"cached": 1, "mmap": 2}
+    indextype = indexstrmap[indexstr] if indexstr in indexstrmap else 0
+    rank0type = comm.bcast(indextype, root=0)
+    #allsame = all_true(indextype == rank0type)
+    #if not allsame:
+    #    error
+
     # Concatenate the data files
     merge_files_mpi_bin(filemain, filerank, mpi, comm)
 
     # Combine index files into a single index file
-    merge_files_mpi_idx(filemain, filerank, mpi, comm, dtype)
+    if indexstr == "cached":
+        merge_files_mpi_idx_cached(filemain, filerank, mpi, comm, dtype)
+    elif indexstr == "mmap":
+        merge_files_mpi_idx_mmap(filemain, filerank, mpi, comm, dtype)
