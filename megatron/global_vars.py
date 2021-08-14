@@ -154,22 +154,25 @@ def _set_tensorboard_writer(args):
 
 def _set_codecarbon_tracker(args):
     global _GLOBAL_CODECARBON_TRACKER
-    if hasattr(args, 'codecarbon_dir'):
-        import codecarbon
-        print('> setting codecarbon ...')
-        output_dir = args.codecarbon_dir
-        output_file = f"emissions-{args.rank:03d}.csv"
-        #log_level = "warning"
-        log_level = "info"
-        country_iso_code="FRA"
+    if not hasattr(args, 'codecarbon_dir'):
+        return
 
-        Path(output_dir).mkdir(parents=True, exist_ok=True)
-        _GLOBAL_CODECARBON_TRACKER = codecarbon.OfflineEmissionsTracker(
-            output_dir=output_dir,
-            output_file=output_file,
-            log_level=log_level,
-            country_iso_code=country_iso_code,
-        )
+    import codecarbon
+    if args.rank == 0:
+        print('> setting codecarbon ...')
+
+    output_dir = args.codecarbon_dir
+    output_file = f"emissions-{args.rank:03d}.csv"
+    log_level = "warning"
+    country_iso_code="FRA"
+
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    _GLOBAL_CODECARBON_TRACKER = codecarbon.OfflineEmissionsTracker(
+        output_dir=output_dir,
+        output_file=output_file,
+        log_level=log_level,
+        country_iso_code=country_iso_code,
+    )
 
 
 def codecarbon_tracker_start():
@@ -177,7 +180,7 @@ def codecarbon_tracker_start():
     if _GLOBAL_CODECARBON_TRACKER is None:
         return
 
-    print('codecarbon START')
+
     _GLOBAL_CODECARBON_TRACKER.start()
 
 
@@ -186,7 +189,6 @@ def codecarbon_tracker_stop():
     if _GLOBAL_CODECARBON_TRACKER is None:
         return
 
-    print('codecarbon STOP')
     _GLOBAL_CODECARBON_TRACKER.stop()
 
 
@@ -196,7 +198,6 @@ def codecarbon_tracker_pause():
     if _GLOBAL_CODECARBON_TRACKER is None:
         return
 
-    print('codecarbon STOP')
     _GLOBAL_CODECARBON_TRACKER.pause()
 
 
@@ -205,7 +206,6 @@ def codecarbon_tracker_resume():
     if _GLOBAL_CODECARBON_TRACKER is None:
         return
 
-    print('codecarbon STOP')
     _GLOBAL_CODECARBON_TRACKER.resume()
 
 
