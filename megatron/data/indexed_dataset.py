@@ -627,8 +627,8 @@ def merge_files_dist_bin(outfile, infile, distctx):
 
 
 def merge_files_dist_idx_cached(outfile, infile, distctx, dtype):
+    # get our rank
     rank = distctx.rank
-    numranks = distctx.numranks
 
     # Create shared output file
     f = distctx.open(index_file_path(outfile))
@@ -749,8 +749,8 @@ def merge_files_dist_idx_cached(outfile, infile, distctx, dtype):
 
 
 def merge_files_dist_idx_mmap(outfile, infile, distctx, dtype):
+    # get our rank
     rank = distctx.rank
-    numranks = distctx.numranks
 
     # Create shared output file
     f = distctx.open(index_file_path(outfile))
@@ -828,7 +828,7 @@ def merge_files_dist_idx_mmap(outfile, infile, distctx, dtype):
         # There is at least one sentence across all ranks,
         # figure out which rank has the first sentence which
         # is not necessarily rank 0.
-        minrank = numranks
+        minrank = distctx.numranks
         if len(sizes) > 0:
             minrank = rank
         minrank = distctx.min(minrank)
