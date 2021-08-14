@@ -65,7 +65,8 @@ from datasets import config, logging, load_dataset
 from datasets.utils.file_utils import OfflineModeIsEnabled
 
 from megatron.tokenizer import build_tokenizer
-from megatron.data.indexed_dataset import data_file_path, index_file_path, make_builder, best_fitting_dtype, merge_files_mpi
+from megatron.data.indexed_dataset import data_file_path, index_file_path, make_builder, best_fitting_dtype, merge_files_dist
+from megatron.data.distdata import DistData
 
 # https://stackoverflow.com/questions/33139531/preserve-empty-lines-with-nltks-punkt-tokenizer
 class CustomLanguageVars(nltk.tokenize.punkt.PunktLanguageVars):
@@ -277,7 +278,7 @@ def prefix_sum(args, val):
     else:
         # torch.distributed doesn't have a scan, so fallback to allreduce
         tensor = torch.zeros(args.numranks, dtype=torch.int64)
-        tensor[args.rank:args.numranks] = val
+        tensor[args.rank:] = val
         dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
         return int(tensor[args.rank])
 
@@ -567,14 +568,16 @@ def rank_files_write(args, dset, idx, encoder):
     return success, err
 
 def rank_files_merge(args):
-    # only try parallel merge when using MPI
-    if args.use_mpi:
+    mpictx = args.MPI if args.use_mpi else None
+    distctx = DistData(mpi=mpictx)
+    args.dist_merge = True
+    if args.dist_merge:
         merge_start = time.time()
         numbytes = np.zeros(1, dtype=np.int64)
         for key in args.columns:
             filemain = get_filename(args, key)
             filerank = get_filename(args, key, args.rank)
-            merge_files_mpi(filemain, filerank, args.MPI, args.mpi_comm, dtype=best_fitting_dtype(args.vocab_size))
+            merge_files_dist(filemain, filerank, distctx, dtype=best_fitting_dtype(args.vocab_size))
 
             # total up bytes read in merge
             binfile = data_file_path(filerank)

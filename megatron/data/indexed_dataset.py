@@ -594,102 +594,26 @@ class MMapIndexedDatasetBuilder(object):
             index.write(self._sizes, self._doc_idx)
 
 
-def mpi_get_sum(val, mpi, comm):
-    """Compute sum of val, and return total on all ranks."""
-    insize = np.array([val], dtype=np.int64)
-    outsize = np.zeros_like(insize)
-    comm.Allreduce(insize, outsize, op=mpi.SUM)
-    return outsize[0]
-
-
-def mpi_get_offset(val, mpi, comm):
-    """Compute prefix sum (exclusive scan) of val, and return offset of each rank."""
-    insize = np.array([val], dtype=np.int64)
-    outsize = np.zeros_like(insize)
-    comm.Scan(insize, outsize, op=mpi.SUM)
-    offset = outsize[0] - insize[0]
-    return offset
-
-
-def mpi_get_min(val, mpi, comm):
-    """Return minimum val to all ranks."""
-    insize = np.array([val], dtype=np.int64)
-    outsize = np.zeros_like(insize)
-    comm.Allreduce(insize, outsize, op=mpi.MIN)
-    return outsize[0]
-
-
-def mpi_alltrue(val, mpi, comm):
-    """Returns True if all procs input True, False otherwise"""
-    inval = np.array([val], dtype=np.bool_)
-    outval = np.zeros_like(inval)
-    comm.Allreduce(inval, outval, op=mpi.LAND)
-    return bool(outval[0])
-
-
-def mpi_create_file(filename, mpi, comm):
-    """Create, truncate, and open a file shared by all ranks."""
-    success = True
-    err = None
-
-    # Don't truncate existing file until all ranks reach this point
-    comm.barrier()
-
-    # Rank 0 creates and truncates file.
-    rank = comm.Get_rank()
-    if rank == 0:
-        try:
-            f = open(filename, 'wb')
-        except Exception as e:
-            success = False
-            err = e
-
-    # Verify that rank 0 created the file
-    success = mpi_alltrue(success, mpi, comm)
-    if not success:
-        if err is not None:
-            raise err
-        return None
-
-    # Wait for rank 0 to open (and truncate) file,
-    # then have all ranks open file for writing.
-    if rank != 0:
-        try:
-            f = open(filename, 'r+b')
-        except Exception as e:
-            success = False
-            err = e
-
-    # Verify that all ranks successfully opened the file
-    success = mpi_alltrue(success, mpi, comm)
-    if not success:
-        if err is not None:
-            raise err
-        return None
-
-    return f
-
-
 # To create the binary files given a set of per-rank binary
 # files, one simply concatenates the data from the per-rank
 # binary files in rank order.  We stat each rank file to determine
 # its size, execute a scan to compute the byte offset where
 # the calling rank should write its data, seek to proper
 # spot, and copy the full file.
-def merge_files_mpi_bin(outfile, infile, mpi, comm):
+def merge_files_dist_bin(outfile, infile, distctx):
     """Concatenate per-rank binary files into a new file given by outfile"""
     import stat
     import shutil
 
     # Create shared output file.
-    f = mpi_create_file(data_file_path(outfile), mpi, comm)
+    f = distctx.open(data_file_path(outfile))
 
     # get file size of binary file for this rank
     filesize = os.stat(data_file_path(infile))[stat.ST_SIZE]
 
     # compute offset this rank should start copying
     # its data into the merged file
-    offset = mpi_get_offset(filesize, mpi, comm)
+    offset = distctx.exscan(filesize)
 
     # seek to appropriate offset and copy data
     f.seek(offset)
@@ -699,15 +623,15 @@ def merge_files_mpi_bin(outfile, infile, mpi, comm):
     f.close()
 
     # TODO: check that all ranks wrote successfully
-    comm.barrier()
+    distctx.barrier()
 
 
-def merge_files_mpi_idx_cached(outfile, infile, mpi, comm, dtype):
-    rank = comm.Get_rank()
-    numranks = comm.Get_size()
+def merge_files_dist_idx_cached(outfile, infile, distctx, dtype):
+    rank = distctx.rank
+    numranks = distctx.numranks
 
     # Create shared output file
-    f = mpi_create_file(index_file_path(outfile), mpi, comm)
+    f = distctx.open(index_file_path(outfile))
 
     # Read the index file for the calling rank
     index = IndexedDataset(infile)
@@ -731,15 +655,15 @@ def merge_files_mpi_idx_cached(outfile, infile, mpi, comm, dtype):
     numdim = len(dim_offsets)
     numdoc = len(docs)
 
-    global_data_count = mpi_get_sum(numdata, mpi, comm)
-    global_size_count = mpi_get_sum(numsize, mpi, comm)
-    global_dim_count = mpi_get_sum(numdim, mpi, comm)
-    global_doc_count = mpi_get_sum(numdoc, mpi, comm)
+    global_data_count = distctx.sum(numdata)
+    global_size_count = distctx.sum(numsize)
+    global_dim_count = distctx.sum(numdim)
+    global_doc_count = distctx.sum(numdoc)
 
-    global_data_offset = mpi_get_offset(numdata, mpi, comm)
-    global_size_offset = mpi_get_offset(numsize, mpi, comm)
-    global_dim_offset = mpi_get_offset(numdim, mpi, comm)
-    global_doc_offset = mpi_get_offset(numdoc, mpi, comm)
+    global_data_offset = distctx.exscan(numdata)
+    global_size_offset = distctx.exscan(numsize)
+    global_dim_offset = distctx.exscan(numdim)
+    global_doc_offset = distctx.exscan(numdoc)
 
     # Have rank 0 write the file header
     pos = 0
@@ -753,7 +677,7 @@ def merge_files_mpi_idx_cached(outfile, infile, mpi, comm, dtype):
 
     # Broadcast value of pos from rank 0,
     # and advance file position past file header on all ranks.
-    pos = mpi_get_sum(pos, mpi, comm)
+    pos = distctx.bcast(pos, root=0)
 
     # The dimension list records the offset within
     # the sizes list for each sentence.  Adjust dimension
@@ -761,7 +685,7 @@ def merge_files_mpi_idx_cached(outfile, infile, mpi, comm, dtype):
     # that come before the calling rank.
     dim_offsets64 = np.array(dim_offsets, dtype=np.int64)
     dim_last = dim_offsets[-1] if numdim > 0 else 0
-    dim_offset = mpi_get_offset(dim_last, mpi, comm)
+    dim_offset = distctx.exscan(dim_last)
     dim_offsets64 += dim_offset
 
     # Seek to proper offset for this rank and write
@@ -779,7 +703,7 @@ def merge_files_mpi_idx_cached(outfile, infile, mpi, comm, dtype):
     # come before the calling rank.
     data_offsets64 = np.array(data_offsets, dtype=np.int64)
     byte_last = data_offsets[-1] if numdata > 0 else 0
-    byte_offset = mpi_get_offset(byte_last, mpi, comm)
+    byte_offset = distctx.exscan(byte_last)
     data_offsets64 += byte_offset
 
     # Seek to proper offset for this rank and write
@@ -821,15 +745,15 @@ def merge_files_mpi_idx_cached(outfile, infile, mpi, comm, dtype):
     f.close()
 
     # TODO: check that all ranks wrote successfully
-    comm.barrier()
+    distctx.barrier()
 
 
-def merge_files_mpi_idx_mmap(outfile, infile, mpi, comm, dtype):
-    rank = comm.Get_rank()
-    numranks = comm.Get_size()
+def merge_files_dist_idx_mmap(outfile, infile, distctx, dtype):
+    rank = distctx.rank
+    numranks = distctx.numranks
 
     # Create shared output file
-    f = mpi_create_file(index_file_path(outfile), mpi, comm)
+    f = distctx.open(index_file_path(outfile))
 
     # Read the index file for the calling rank
     index = MMapIndexedDataset.Index(index_file_path(infile))
@@ -846,10 +770,10 @@ def merge_files_mpi_idx_mmap(outfile, infile, mpi, comm, dtype):
     # calling rank.
     numsizes = len(sizes)
     numdocs = len(docs)
-    total_size_count = mpi_get_sum(numsizes, mpi, comm)
-    total_docs_count = mpi_get_sum(numdocs, mpi, comm)
-    size_offset = mpi_get_offset(numsizes, mpi, comm)
-    docs_offset = mpi_get_offset(numdocs, mpi, comm)
+    global_size_count = distctx.sum(numsizes)
+    global_docs_count = distctx.sum(numdocs)
+    global_size_offset = distctx.exscan(numsizes)
+    global_docs_offset = distctx.exscan(numdocs)
 
     # Have rank 0 write the file header
     pos = 0
@@ -857,23 +781,23 @@ def merge_files_mpi_idx_mmap(outfile, infile, mpi, comm, dtype):
         f.write(MMapIndexedDataset.Index._HDR_MAGIC)
         f.write(struct.pack('<Q', 1))
         f.write(struct.pack('<B', code(dtype)))
-        f.write(struct.pack('<Q', total_size_count))
-        f.write(struct.pack('<Q', total_docs_count))
+        f.write(struct.pack('<Q', global_size_count))
+        f.write(struct.pack('<Q', global_docs_count))
         pos = f.tell()
 
     # Broadcast value of pos from rank 0,
     # and advance file position past file header on all ranks.
-    pos = mpi_get_sum(pos, mpi, comm)
+    pos = distctx.bcast(pos, root=0)
 
     # The list of size values from each rank are
     # concatenated and stored as int32.
-    f.seek(pos + size_offset * np.int32().itemsize)
+    f.seek(pos + global_size_offset * np.int32().itemsize)
     sizes32 = np.array(sizes, dtype=np.int32)
     f.write(sizes32.tobytes(order='C'))
     del sizes32
 
     # Advance past list of size values
-    pos += total_size_count * np.int32().itemsize
+    pos += global_size_count * np.int32().itemsize
 
     # The pointer values store the byte offset to each sentence.
     # A sentence has a variable number of tokens, given by
@@ -893,28 +817,27 @@ def merge_files_mpi_idx_mmap(outfile, infile, mpi, comm, dtype):
 
     # Then account for bytes for all sentences on ranks
     # before the calling rank.
-    pointer_offset = mpi_get_offset(pointer_last, mpi, comm)
+    pointer_offset = distctx.exscan(pointer_last)
     pointers += pointer_offset
 
     # Finally, zero-base the offset values by subtracting
     # the number of bytes of the first sentence.  To do that
     # we first need to find the rank having the first sentence,
     # then bcast that size to all ranks.
-    if total_size_count > 0:
+    if global_size_count > 0:
         # There is at least one sentence across all ranks,
         # figure out which rank has the first sentence which
         # is not necessarily rank 0.
         minrank = numranks
         if len(sizes) > 0:
             minrank = rank
-        minrank = mpi_get_min(minrank, mpi, comm)
+        minrank = distctx.min(minrank)
 
         # Broadcast size of the first sentence from minrank.
-        # We "bcast" using all allreduce.
         pointers_shift = 0
         if minrank == rank:
             pointers_shift = pointers[0]
-        pointers_shift = mpi_get_sum(pointers_shift, mpi, comm)
+        pointers_shift = distctx.bcast(pointers_shift, root=minrank)
 
         # Zero-base pointers by subtracting size of first
         # sentence from all values.
@@ -922,12 +845,12 @@ def merge_files_mpi_idx_mmap(outfile, infile, mpi, comm, dtype):
 
     # Seek to proper offset for this rank and write
     # pointer values into file, stored as int64.
-    f.seek(pos + size_offset * np.int64().itemsize)
+    f.seek(pos + global_size_offset * np.int64().itemsize)
     f.write(pointers.tobytes(order='C'))
     del pointers
 
     # Advance past list of pointer values
-    pos += total_size_count * np.int64().itemsize
+    pos += global_size_count * np.int64().itemsize
 
     # The document index points to the position in the sizes
     # array for the starting sentence of each document.
@@ -935,21 +858,21 @@ def merge_files_mpi_idx_mmap(outfile, infile, mpi, comm, dtype):
     # Adjust document index for number of sentences that
     # come before the calling rank.
     doc_idx = np.array(docs, dtype=np.int64)
-    doc_idx += size_offset
+    doc_idx += global_size_offset
 
     # Seek to proper offset for this rank and write
     # document index into file, stored as int64.
-    f.seek(pos + docs_offset * np.int64().itemsize)
+    f.seek(pos + global_docs_offset * np.int64().itemsize)
     f.write(doc_idx.tobytes(order='C'))
     del doc_idx
 
     f.close()
 
     # TODO: check that all ranks wrote successfully
-    comm.barrier()
+    distctx.barrier()
 
 
-def merge_files_mpi(filemain, filerank, mpi, comm, dtype=np.int64):
+def merge_files_dist(filemain, filerank, distctx, dtype=np.int64):
     # read header of index file of this rank to determine its type
     indexstr = infer_dataset_impl(filerank)
 
@@ -958,16 +881,16 @@ def merge_files_mpi(filemain, filerank, mpi, comm, dtype=np.int64):
     indextype = indexstrmap[indexstr] if indexstr in indexstrmap else 0
 
     # check that all ranks have the same type
-    rank0type = comm.bcast(indextype, root=0)
-    sametype = mpi_alltrue(indextype == rank0type and rank0type != 0, mpi, comm)
+    rank0type = distctx.bcast(indextype, root=0)
+    sametype = distctx.alltrue(indextype == rank0type and rank0type != 0)
     if not sametype:
         assert False, "Cannot merge dataset files of different types"
 
     # Concatenate the data files
-    merge_files_mpi_bin(filemain, filerank, mpi, comm)
+    merge_files_dist_bin(filemain, filerank, distctx)
 
     # Combine index files into a single index file
     if indexstr == "cached":
-        merge_files_mpi_idx_cached(filemain, filerank, mpi, comm, dtype)
+        merge_files_dist_idx_cached(filemain, filerank, distctx, dtype)
     elif indexstr == "mmap":
-        merge_files_mpi_idx_mmap(filemain, filerank, mpi, comm, dtype)
+        merge_files_dist_idx_mmap(filemain, filerank, distctx, dtype)
