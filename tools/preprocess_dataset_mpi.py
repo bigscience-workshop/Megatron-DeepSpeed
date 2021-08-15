@@ -354,40 +354,9 @@ def select_sample_list(args, dset_size):
     # allocate space to hold its portion of the list
     idx = np.zeros(counts[args.rank], np.int64)
 
-    # scatter index list if small enough
-    scatter_limit = 20000000
-    if num_samples < scatter_limit:
-        # scatter sample index values from rank 0 to all procs
-        # based on distribution defined in counts list
-        scatterv_(args, idxlist, counts, idx, root=0)
-    else:
-        # The index list is too big to send to every process.
-        # Write it to a shared file to be read by other ranks instead.
-        indexlistfile = f"{args.output_prefix}_{args.level}.sampleidx"
-        if args.rank == 0:
-            with open(indexlistfile, "wb") as f:
-                f.write(idxlist.tobytes(order='C'))
-
-        # wait for rank 0 to write the file
-        barrier(args)
-
-        # All ranks read their respective portion
-        idx_count = counts[args.rank]
-        if idx_count > 0:
-            with open(indexlistfile, "rb") as f:
-                idx_start = sum(counts[:args.rank])
-                offset = idx_start * 8
-                f.seek(offset)
-                f.readinto(idx)
-
-        # wait for all to read
-        barrier(args)
-
-        # delete the temporary file
-        if args.rank == 0:
-            os.remove(indexlistfile)
-
-        barrier(args)
+    # scatter sample index values from rank 0 to all procs
+    # based on distribution defined in counts list
+    scatterv_(args, idxlist, counts, idx, root=0)
 
     return num_samples, idx
 
