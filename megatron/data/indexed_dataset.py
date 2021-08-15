@@ -908,6 +908,21 @@ def gather_files_dist_idx_mmap(outfile, filelist, distctx, dtype):
 # Verify that all files in filelist are of the same index type.
 # Returns the identified type {cached, mmap} as a string.
 def gather_files_dist_check_type(filelist, distctx):
+    # Sanity check for typos in file names.
+    # Check that a data file exists for each of our files.
+    exists = True
+    for f in filelist:
+        binfile = data_file_path(f)
+        if not os.path.exists(binfile):
+            exists = False
+
+    # Check that all ranks have all of their files.
+    allexist = distctx.alltrue(exists)
+    if not allexist:
+        if not exists:
+            assert False, f"At least one of the following names was not found: {filelist}"
+        assert False, f"Some rank is missing its input file"
+
     # map type string to an integer for easier bcast, use 0 for unknown
     implmap = {"cached": 1, "mmap": 2}
 
@@ -925,11 +940,16 @@ def gather_files_dist_check_type(filelist, distctx):
         if implval != ourtype:
             sametype = False
 
-    # check that all ranks have the same type,
-    # and that there is no unknown type
+    # Check that all ranks have the same type,
+    # and that there is no unknown type.
+    # This checks that:
+    #   - all of our own files (if any) are of the same type AND
+    #   - either we have no files or the type of our files match the broadcast type AND
+    #   - the broadcast type is of a known type: {cached, mmap}
     bcasttype = distctx.bcast_first(ourtype)
-    sametype = distctx.alltrue(sametype and ourtype == bcasttype and bcasttype != 0)
-    if not sametype:
+    matchtype = sametype and (ourtype is None or ourtype == bcasttype) and bcasttype != 0
+    allsame = distctx.alltrue(matchtype)
+    if not allsame:
         assert False, "Cannot merge dataset files of different types"
 
     # map back to return index string name
