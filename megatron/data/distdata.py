@@ -9,7 +9,7 @@ class DistData(object):
         if self.MPI:
             self.comm = mpi.COMM_WORLD
             self.rank = self.comm.Get_rank()
-            self.numranks = self.comm.Get_rank()
+            self.numranks = self.comm.Get_size()
         else:
             self.rank = dist.get_rank()
             self.numranks = dist.get_world_size()
@@ -100,6 +100,30 @@ class DistData(object):
             tensor = torch.tensor([val], dtype=torch.int64)
             dist.all_reduce(tensor, op=dist.ReduceOp.MIN)
             return tensor[0]
+
+    def minrank(self, cond):
+        """Find first rank whose condition is True, return that rank if any, None otherwise."""
+        minrank = self.numranks
+        if cond:
+            minrank = self.rank
+        minrank = self.min(minrank)
+
+        if minrank < self.numranks:
+            return minrank
+        return None
+
+    def bcast_first(self, val):
+        """Broadcast val from first rank where it is not None, return val if any, None otherwise"""
+        # Find the first rank with a valid value.
+        minrank = self.minrank(val is not None)
+
+        # If there is no rank with a valid value, return None
+        if minrank is None:
+            return None
+
+        # Otherwise broadcast the value from the first valid rank.
+        val = self.bcast(val, root=minrank)
+        return val
 
     def open(self, filename):
         """Create, truncate, and open a file shared by all ranks."""

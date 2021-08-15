@@ -65,7 +65,7 @@ from datasets import config, logging, load_dataset
 from datasets.utils.file_utils import OfflineModeIsEnabled
 
 from megatron.tokenizer import build_tokenizer
-from megatron.data.indexed_dataset import data_file_path, index_file_path, make_builder, best_fitting_dtype, merge_files_dist
+from megatron.data.indexed_dataset import data_file_path, index_file_path, make_builder, best_fitting_dtype, gather_files_dist
 from megatron.data.distdata import DistData
 
 # https://stackoverflow.com/questions/33139531/preserve-empty-lines-with-nltks-punkt-tokenizer
@@ -563,7 +563,7 @@ def rank_files_merge(args):
         for key in args.columns:
             filemain = get_filename(args, key)
             filerank = get_filename(args, key, args.rank)
-            merge_files_dist(filemain, filerank, distctx, dtype=best_fitting_dtype(args.vocab_size))
+            gather_files_dist(filemain, [filerank], distctx, dtype=best_fitting_dtype(args.vocab_size))
 
             # total up bytes read in merge
             binfile = data_file_path(filerank)

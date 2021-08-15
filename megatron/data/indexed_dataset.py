@@ -600,50 +600,79 @@ class MMapIndexedDatasetBuilder(object):
 # its size, execute a scan to compute the byte offset where
 # the calling rank should write its data, seek to proper
 # spot, and copy the full file.
-def merge_files_dist_bin(outfile, infile, distctx):
+def gather_files_dist_bin(outfile, filelist, distctx):
     """Concatenate per-rank binary files into a new file given by outfile"""
     import stat
     import shutil
 
     # Create shared output file.
-    f = distctx.open(data_file_path(outfile))
+    fout = distctx.open(data_file_path(outfile))
 
-    # get file size of binary file for this rank
-    filesize = os.stat(data_file_path(infile))[stat.ST_SIZE]
+    # lookup size of each of our binary files
+    filesizes = []
+    for f in filelist:
+        filesize = os.stat(data_file_path(f))[stat.ST_SIZE]
+        filesizes.append(filesize)
 
     # compute offset this rank should start copying
     # its data into the merged file
-    offset = distctx.exscan(filesize)
+    numbytes = sum(filesizes)
+    offset = distctx.exscan(numbytes)
 
-    # seek to appropriate offset and copy data
-    f.seek(offset)
-    with open(data_file_path(infile), "rb") as fsrc:
-        shutil.copyfileobj(fsrc, f)
+    # seek to appropriate starting offset in the merged file
+    fout.seek(offset)
 
-    f.close()
+    # copy in contents of each of our files
+    for f in filelist:
+        with open(data_file_path(f), "rb") as fsrc:
+            shutil.copyfileobj(fsrc, fout)
+
+    fout.close()
 
     # TODO: check that all ranks wrote successfully
     distctx.barrier()
 
 
-def merge_files_dist_idx_cached(outfile, infile, distctx, dtype):
+def gather_files_dist_idx_cached(outfile, filelist, distctx, dtype):
     # get our rank
     rank = distctx.rank
 
     # Create shared output file
-    f = distctx.open(index_file_path(outfile))
+    fout = distctx.open(index_file_path(outfile))
 
     # Read the index file for the calling rank
-    index = IndexedDataset(infile)
-    sizes = index.sizes
-    if rank == 0:
-        data_offsets = index.data_offsets
-        dim_offsets = index.dim_offsets
-        docs = index.doc_idx
-    if rank != 0:
-        data_offsets = index.data_offsets[1:]
-        dim_offsets = index.dim_offsets[1:]
-        docs = index.doc_idx[1:]
+    sizes = []
+    data_offsets = [0]
+    dim_offsets = [0]
+    docs = [0]
+    for f in filelist:
+        index = IndexedDataset(f)
+
+        doc_offset = len(sizes)
+
+        sizes.extend(index.sizes.tolist())
+
+        data_offset = data_offsets[-1]
+        tmpdata_offsets = np.copy(index.data_offsets[1:])
+        tmpdata_offsets += data_offset
+        data_offsets.extend(tmpdata_offsets.tolist())
+
+        dim_offset = dim_offsets[-1]
+        tmpdim_offsets = np.copy(index.dim_offsets[1:])
+        tmpdim_offsets += dim_offset
+        dim_offsets.extend(tmpdim_offsets.tolist())
+
+        tmpdocs = np.copy(index.doc_idx[1:])
+        tmpdocs += doc_offset
+        docs.extend(tmpdocs.tolist())
+
+    # Drop first entry from the lists that start with
+    # a "0" value if we're not the first rank with some size.
+    minrank = distctx.minrank(len(sizes) > 0)
+    if rank != minrank:
+        del data_offsets[0]
+        del dim_offsets[0]
+        del docs[0]
 
     # Compute total number of size and document index
     # values across all ranks.  Also compute the offset
@@ -668,12 +697,12 @@ def merge_files_dist_idx_cached(outfile, infile, distctx, dtype):
     # Have rank 0 write the file header
     pos = 0
     if rank == 0:
-        f.write(IndexedDataset._HDR_MAGIC)
-        f.write(struct.pack('<Q', 1))
-        f.write(struct.pack('<QQ', code(index.dtype), index.element_size))
-        f.write(struct.pack('<QQ', global_data_count - 1, global_size_count))
-        f.write(struct.pack('<Q', global_doc_count))
-        pos = f.tell()
+        fout.write(IndexedDataset._HDR_MAGIC)
+        fout.write(struct.pack('<Q', 1))
+        fout.write(struct.pack('<QQ', code(index.dtype), index.element_size))
+        fout.write(struct.pack('<QQ', global_data_count - 1, global_size_count))
+        fout.write(struct.pack('<Q', global_doc_count))
+        pos = fout.tell()
 
     # Broadcast value of pos from rank 0,
     # and advance file position past file header on all ranks.
@@ -690,8 +719,8 @@ def merge_files_dist_idx_cached(outfile, infile, distctx, dtype):
 
     # Seek to proper offset for this rank and write
     # dom offset values into file, stored as int64.
-    f.seek(pos + global_dim_offset * np.int64().itemsize)
-    f.write(dim_offsets64.tobytes(order='C'))
+    fout.seek(pos + global_dim_offset * np.int64().itemsize)
+    fout.write(dim_offsets64.tobytes(order='C'))
     del dim_offsets64
 
     # Advance past list of dim offset values
@@ -708,8 +737,8 @@ def merge_files_dist_idx_cached(outfile, infile, distctx, dtype):
 
     # Seek to proper offset for this rank and write
     # data (byte) offset index into file, stored as int64.
-    f.seek(pos + global_data_offset * np.int64().itemsize)
-    f.write(data_offsets64.tobytes(order='C'))
+    fout.seek(pos + global_data_offset * np.int64().itemsize)
+    fout.write(data_offsets64.tobytes(order='C'))
     del data_offsets64
 
     # Advance past list of data (byte) offset values
@@ -723,9 +752,9 @@ def merge_files_dist_idx_cached(outfile, infile, distctx, dtype):
     # for each dimension of a sentence.
     # The list of size values from each rank are
     # concatenated and stored as int64.
-    f.seek(pos + global_size_offset * np.int64().itemsize)
+    fout.seek(pos + global_size_offset * np.int64().itemsize)
     sizes64 = np.array(sizes, dtype=np.int64)
-    f.write(sizes64.tobytes(order='C'))
+    fout.write(sizes64.tobytes(order='C'))
     del sizes64
 
     # Advance past list of size values
@@ -738,30 +767,42 @@ def merge_files_dist_idx_cached(outfile, infile, distctx, dtype):
 
     # Seek to proper offset for this rank and write
     # document index into file, stored as int64.
-    f.seek(pos + global_doc_offset * np.int64().itemsize)
-    f.write(docs64.tobytes(order='C'))
+    fout.seek(pos + global_doc_offset * np.int64().itemsize)
+    fout.write(docs64.tobytes(order='C'))
     del docs64
 
-    f.close()
+    fout.close()
 
     # TODO: check that all ranks wrote successfully
     distctx.barrier()
 
 
-def merge_files_dist_idx_mmap(outfile, infile, distctx, dtype):
+def gather_files_dist_idx_mmap(outfile, filelist, distctx, dtype):
     # get our rank
     rank = distctx.rank
 
     # Create shared output file
-    f = distctx.open(index_file_path(outfile))
+    fout = distctx.open(index_file_path(outfile))
 
-    # Read the index file for the calling rank
-    index = MMapIndexedDataset.Index(index_file_path(infile))
-    sizes = index.sizes
-    if rank == 0:
-        docs = index.doc_idx
-    if rank != 0:
-        docs = index.doc_idx[1:]
+    # Read the index file for each of our files
+    sizes = []
+    docs = [0]
+    for f in filelist:
+        index = MMapIndexedDataset.Index(index_file_path(f))
+
+        docs_offset = len(sizes)
+
+        sizes.extend(index.sizes.tolist())
+
+        tmpdocs = np.copy(index.doc_idx[1:])
+        tmpdocs += docs_offset
+        docs.extend(index.doc_idx.tolist())
+
+    # Drop first entry from the lists that start with
+    # a "0" value if we're not the first rank with some size.
+    minrank = distctx.minrank(len(sizes) > 0)
+    if rank != minrank:
+        del docs[0]
 
     # Compute total number of size and document index
     # values across all ranks.  Also compute the offset
@@ -778,12 +819,12 @@ def merge_files_dist_idx_mmap(outfile, infile, distctx, dtype):
     # Have rank 0 write the file header
     pos = 0
     if rank == 0:
-        f.write(MMapIndexedDataset.Index._HDR_MAGIC)
-        f.write(struct.pack('<Q', 1))
-        f.write(struct.pack('<B', code(dtype)))
-        f.write(struct.pack('<Q', global_size_count))
-        f.write(struct.pack('<Q', global_docs_count))
-        pos = f.tell()
+        fout.write(MMapIndexedDataset.Index._HDR_MAGIC)
+        fout.write(struct.pack('<Q', 1))
+        fout.write(struct.pack('<B', code(dtype)))
+        fout.write(struct.pack('<Q', global_size_count))
+        fout.write(struct.pack('<Q', global_docs_count))
+        pos = fout.tell()
 
     # Broadcast value of pos from rank 0,
     # and advance file position past file header on all ranks.
@@ -791,9 +832,9 @@ def merge_files_dist_idx_mmap(outfile, infile, distctx, dtype):
 
     # The list of size values from each rank are
     # concatenated and stored as int32.
-    f.seek(pos + global_size_offset * np.int32().itemsize)
+    fout.seek(pos + global_size_offset * np.int32().itemsize)
     sizes32 = np.array(sizes, dtype=np.int32)
-    f.write(sizes32.tobytes(order='C'))
+    fout.write(sizes32.tobytes(order='C'))
     del sizes32
 
     # Advance past list of size values
@@ -828,16 +869,8 @@ def merge_files_dist_idx_mmap(outfile, infile, distctx, dtype):
         # There is at least one sentence across all ranks,
         # figure out which rank has the first sentence which
         # is not necessarily rank 0.
-        minrank = distctx.numranks
-        if len(sizes) > 0:
-            minrank = rank
-        minrank = distctx.min(minrank)
-
-        # Broadcast size of the first sentence from minrank.
-        pointers_shift = 0
-        if minrank == rank:
-            pointers_shift = pointers[0]
-        pointers_shift = distctx.bcast(pointers_shift, root=minrank)
+        pointers_shift = pointers[0] if len(sizes) > 0 else None
+        pointers_shift = distctx.bcast_first(pointers_shift)
 
         # Zero-base pointers by subtracting size of first
         # sentence from all values.
@@ -845,8 +878,8 @@ def merge_files_dist_idx_mmap(outfile, infile, distctx, dtype):
 
     # Seek to proper offset for this rank and write
     # pointer values into file, stored as int64.
-    f.seek(pos + global_size_offset * np.int64().itemsize)
-    f.write(pointers.tobytes(order='C'))
+    fout.seek(pos + global_size_offset * np.int64().itemsize)
+    fout.write(pointers.tobytes(order='C'))
     del pointers
 
     # Advance past list of pointer values
@@ -862,35 +895,87 @@ def merge_files_dist_idx_mmap(outfile, infile, distctx, dtype):
 
     # Seek to proper offset for this rank and write
     # document index into file, stored as int64.
-    f.seek(pos + global_docs_offset * np.int64().itemsize)
-    f.write(doc_idx.tobytes(order='C'))
+    fout.seek(pos + global_docs_offset * np.int64().itemsize)
+    fout.write(doc_idx.tobytes(order='C'))
     del doc_idx
 
-    f.close()
+    fout.close()
 
     # TODO: check that all ranks wrote successfully
     distctx.barrier()
 
 
-def merge_files_dist(filemain, filerank, distctx, dtype=np.int64):
-    # read header of index file of this rank to determine its type
-    indexstr = infer_dataset_impl(filerank)
+# Verify that all files in filelist are of the same index type.
+# Returns the identified type {cached, mmap} as a string.
+def gather_files_dist_check_type(filelist, distctx):
+    # map type string to an integer for easier bcast, use 0 for unknown
+    implmap = {"cached": 1, "mmap": 2}
 
-    # map type string to an integer for easier bcast
-    indexstrmap = {"cached": 1, "mmap": 2}
-    indextype = indexstrmap[indexstr] if indexstr in indexstrmap else 0
+    # check that all files in filelist are of the same type
+    sametype = True
+    ourtype = None
+    for f in filelist:
+        # read header of index file to determine its type
+        impl = infer_dataset_impl(f)
+        implval = implmap[impl] if impl in implmap else 0
 
-    # check that all ranks have the same type
-    rank0type = distctx.bcast(indextype, root=0)
-    sametype = distctx.alltrue(indextype == rank0type and rank0type != 0)
+        if ourtype is None:
+            ourtype = implval
+
+        if implval != ourtype:
+            sametype = False
+
+    # check that all ranks have the same type,
+    # and that there is no unknown type
+    bcasttype = distctx.bcast_first(ourtype)
+    sametype = distctx.alltrue(sametype and ourtype == bcasttype and bcasttype != 0)
     if not sametype:
         assert False, "Cannot merge dataset files of different types"
 
+    # map back to return index string name
+    for key in implmap.keys():
+        if implmap[key] == bcasttype:
+            return key
+
+
+# Collectively merge files into a new output file specified in filemain.
+# Each rank contributes a distinct list of zero or more files in filelist.
+# Each rank merges its set of files into filemain collectively with all
+# other ranks.
+def gather_files_dist(filemain, filelist, distctx, dtype=np.int64):
+    # TODO: seems like this could be relaxed
+    # Check that files are all of the same index type
+    indexstr = gather_files_dist_check_type(filelist, distctx)
+
     # Concatenate the data files
-    merge_files_dist_bin(filemain, filerank, distctx)
+    gather_files_dist_bin(filemain, filelist, distctx)
 
     # Combine index files into a single index file
     if indexstr == "cached":
-        merge_files_dist_idx_cached(filemain, filerank, distctx, dtype)
+        gather_files_dist_idx_cached(filemain, filelist, distctx, dtype)
     elif indexstr == "mmap":
-        merge_files_dist_idx_mmap(filemain, filerank, distctx, dtype)
+        gather_files_dist_idx_mmap(filemain, filelist, distctx, dtype)
+
+
+def get_start_end(count, rank, numranks):
+    num, remainder = divmod(count, numranks)
+    if rank < remainder:
+        start = (num + 1) * rank
+        end = start + num + 1
+    else:
+        start = (num + 1) * remainder + num * (rank - remainder)
+        end = start + num
+    return start, end
+
+
+# Given a global list of files in filelist, and a set of processed defined
+# by the distributed environment in distctx, collectively merge files into
+# a new output specified in filemain.
+def merge_files_dist(filemain, filelist, distctx, dtype=np.int64):
+    # TODO: if file sizes vary significantly, it might be better to consider
+    # file size when splitting the list to different ranks.
+
+    # evenly divide list of files among ranks
+    start, end = get_start_end(len(filelist), distctx.rank, distctx.numranks)
+    sublist = filelist[start:end]
+    return gather_files_dist(filemain, sublist, distctx, dtype)
