@@ -521,7 +521,7 @@ python tasks/main.py \
 Currently the test suite is not yet plugged into CI and needs to be run manually. For more details please see [Testing](tests/README.md).
 
 
-## Contribute
+## Contributing
 
 This is a community project and we would love to have your help.
 
