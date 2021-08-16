@@ -185,100 +185,19 @@ def get_args():
     args.tensor_model_parallel_size = 1
     args.vocab_extra_ids = 0
 
+    # initialize our distributed environment
     # use mpi4py instead of torch.distributed if requested
-    args.use_mpi = False
-    if args.mpi4py:
-        try:
-            start_mpi = time.time()
+    args.distctx = DistData(use_mpi4py=args.mpi4py, backend=args.torch_backend)
 
-            from mpi4py import MPI
-            args.MPI = MPI
-            args.use_mpi = True
-
-            if args.use_mpi:
-                args.MPI.COMM_WORLD.barrier()
-                end_mpi = time.time()
-                if args.MPI.COMM_WORLD.Get_rank() == 0:
-                    print(f"Seconds to import MPI: {end_mpi - start_mpi}")
-        except:
-            print(f"ERROR: mpi4py requested, but failed to import, falling back to torch.distributed.", flush=True)
+    # some functions like build_tokenizer use args.rank to filter stdout messages
+    args.rank = args.distctx.rank
+    args.numranks = args.distctx.numranks
 
     return args
 
 def format_byterate(byterate):
     mbps = byterate / (1024.0 * 1024.0)
     return f"{mbps:0.3f} MB/s"
-
-def init_distributed(args):
-    """Determine which distributed runtime to use and connect up processes"""
-    # select our distributed runtime (MPI or torch.distributed)
-    # lookup our process rank and the group size
-    # some functions like build_tokenizer use args.rank to filter stdout messages
-    if args.use_mpi:
-        args.mpi_comm = args.MPI.COMM_WORLD
-        args.rank = args.mpi_comm.Get_rank()
-        args.numranks = args.mpi_comm.Get_size()
-    else:
-        time_start = time.time()
-
-        dist.init_process_group(args.torch_backend, init_method="env://")
-        args.rank = dist.get_rank()
-        args.numranks = dist.get_world_size()
-
-        barrier(args)
-        time_end = time.time()
-        if args.rank == 0:
-            print(f"Seconds to init_process_group: {time_end - time_start}")
-
-def barrier(args):
-    """Globally synchronize all processes."""
-    if args.use_mpi:
-        args.mpi_comm.barrier()
-    else:
-        dist.barrier()
-
-def bcast(args, vals, root=0):
-    """Broadcast list of vals from root to all ranks, returns newly allocated list"""
-    if args.use_mpi:
-        vals = args.mpi_comm.bcast(vals, root=root)
-        return vals
-    else:
-        # broadcast length of vals list
-        length = [len(vals)]
-        dist.broadcast_object_list(length, src=root)
-
-        # allocate a tensor of appropriate size
-        # initialize tensor with list values on root
-        if args.rank == root:
-            tvals = torch.tensor(vals, dtype=torch.int64)
-        else:
-            tvals = torch.zeros(length[0], dtype=torch.int64)
-
-        # broadcast tensor from root, and return as a new list
-        dist.broadcast(tvals, src=root)
-        return tvals.tolist()
-
-def all_sum_(args, vals):
-    """Sums values in vals element-wise and updates vals with final result on all ranks"""
-    if args.use_mpi:
-        outval = np.zeros_like(vals)
-        args.mpi_comm.Allreduce(vals, outval, op=args.MPI.SUM)
-        vals[:] = outval
-    else:
-        tensor = torch.from_numpy(vals)
-        dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
-
-def all_true(args, val):
-    """Returns True if all procs input True, False otherwise"""
-    if args.use_mpi:
-        inval = np.array([val], dtype=np.bool_)
-        outval = np.zeros_like(inval)
-        args.mpi_comm.Allreduce(inval, outval, op=args.MPI.LAND)
-        return bool(outval[0])
-    else:
-        tensor = torch.tensor([int(val)], dtype=torch.int32)
-        dist.all_reduce(tensor, op=dist.ReduceOp.BAND)
-        return bool(tensor[0])
 
 def load_dset(args):
     # Avoid downloading datasets unless explicitly requested.
@@ -324,7 +243,7 @@ def load_dset(args):
             err = e
 
     # determine whether rank 0 succeeded in loading the dataset
-    success = all_true(args, success)
+    success = args.distctx.alltrue(success)
     if not success:
         return None, err
 
@@ -340,7 +259,7 @@ def load_dset(args):
             err = e
 
     # verify that all ranks loaded the dataset
-    success = all_true(args, success)
+    success = args.distctx.alltrue(success)
     if not success:
         if args.rank == 0:
             print(f"ERROR: At least one process failed to load {dsetname}", flush=True)
@@ -375,9 +294,9 @@ def select_sample_list(args, dset_size):
 
     # broadcast sample index values from rank 0 to all procs
     time_bcast = time.time()
-    idx = bcast(args, idx, root=0)
+    idx = args.distctx.bcast(idx, root=0)
 
-    barrier(args)
+    args.distctx.barrier()
     time_end = time.time()
     if args.rank == 0:
         print(f"Select index stats:")
@@ -529,12 +448,12 @@ def rank_files_write(args, dset, idx, encoder):
         print(f"{timestamp}: Waiting for ranks to finalize files ...", flush=True)
 
     # wait for all ranks to finish their files
-    barrier(args)
+    args.distctx.barrier()
     tokenize_end = time.time()
 
     # compute total stats across all processes
-    all_sum_(args, times)
-    all_sum_(args, dset_stats)
+    args.distctx.all_sum_(times)
+    args.distctx.all_sum_(dset_stats)
     if args.rank == 0:
         secs = tokenize_end - tokenize_start
         docrate = dset_stats[0] / secs if secs > 0.0 else 0.0
@@ -550,12 +469,10 @@ def rank_files_write(args, dset, idx, encoder):
         print(f"    Total write seconds {times[2]}, {times[2]/dset_stats[0]} sec/sample")
 
     # allreduce to check whether all ranks wrote their part successfully
-    success = all_true(args, success)
+    success = args.distctx.alltrue(success)
     return success, err
 
 def rank_files_merge(args):
-    mpictx = args.MPI if args.use_mpi else None
-    distctx = DistData(mpi=mpictx)
     args.dist_merge = True
     if args.dist_merge:
         merge_start = time.time()
@@ -563,7 +480,7 @@ def rank_files_merge(args):
         for key in args.columns:
             filemain = get_filename(args, key)
             filerank = get_filename(args, key, args.rank)
-            gather_files_dist(filemain, [filerank], distctx, dtype=best_fitting_dtype(args.vocab_size))
+            gather_files_dist(filemain, [filerank], args.distctx, dtype=best_fitting_dtype(args.vocab_size))
 
             # total up bytes read in merge
             binfile = data_file_path(filerank)
@@ -578,8 +495,8 @@ def rank_files_merge(args):
                 os.rename(binfile, binfile + ".par")
                 os.rename(idxfile, idxfile + ".par")
 
-        barrier(args)
-        all_sum_(args, numbytes)
+        args.distctx.barrier()
+        args.distctx.all_sum_(numbytes)
         merge_end = time.time()
         if args.rank == 0:
             secs = merge_end - merge_start
@@ -640,7 +557,7 @@ def rank_files_merge(args):
         print(f"    {numbytes} bytes {format_byterate(byterate)}")
 
     # hold everyone until rank 0 is done
-    barrier(args)
+    args.distctx.barrier()
 
 def rank_files_delete(args):
     # delete per-rank files
@@ -659,14 +576,14 @@ def rank_files_delete(args):
             os.remove(idxfile)
 
     # hold everyone until all are done
-    barrier(args)
+    args.distctx.barrier()
 
 def main():
     args = get_args()
     startup_start = time.time()
 
     # connect processes and cache our rank and number of procs in args
-    init_distributed(args)
+    #init_distributed(args)
 
     # load the dataset
     dset, err = load_dset(args)
@@ -694,7 +611,7 @@ def main():
         args.level = "sentence"
 
     # wait for all ranks before stopping timer
-    barrier(args)
+    args.distctx.barrier()
     startup_end = time.time()
     if args.rank == 0:
         print(f"Seconds to startup: {startup_end - startup_start}")

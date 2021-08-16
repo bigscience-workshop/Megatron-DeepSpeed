@@ -1,16 +1,28 @@
 import numpy as np
+
 import torch
 import torch.distributed as dist
 
 class DistData(object):
-    def __init__(self, mpi=None):
-        self.MPI = mpi
+    def __init__(self, backend='gloo', use_mpi4py=False):
+        self.MPI = None
 
+        # use mpi4py instead of torch.distributed if requested
+        if use_mpi4py:
+            try:
+                from mpi4py import MPI
+                self.MPI = MPI
+            except:
+                #print(f"ERROR: mpi4py requested, but failed to import, falling back to torch.distributed.", flush=True)
+                pass
+
+        # lookup our process rank and the group size
         if self.MPI:
-            self.comm = mpi.COMM_WORLD
+            self.comm = self.MPI.COMM_WORLD
             self.rank = self.comm.Get_rank()
             self.numranks = self.comm.Get_size()
         else:
+            dist.init_process_group(backend, init_method="env://")
             self.rank = dist.get_rank()
             self.numranks = dist.get_world_size()
 
@@ -124,6 +136,16 @@ class DistData(object):
         # Otherwise broadcast the value from the first valid rank.
         val = self.bcast(val, root=minrank)
         return val
+
+    def all_sum_(self, vals):
+        """Sums values in vals element-wise and updates vals with final result on all ranks"""
+        if self.MPI:
+            outval = np.zeros_like(vals)
+            self.comm.Allreduce(vals, outval, op=self.MPI.SUM)
+            vals[:] = outval
+        else:
+            tensor = torch.from_numpy(vals)
+            dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
 
     def open(self, filename):
         """Create, truncate, and open a file shared by all ranks."""
