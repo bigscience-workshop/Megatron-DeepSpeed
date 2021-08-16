@@ -855,11 +855,13 @@ def gather_files_dist_idx_mmap(outfile, filelist, distctx, dtype):
     # we first need to find the rank having the first sentence,
     # then bcast that size to all ranks.
     if global_size_count > 0:
-        # There is at least one sentence across all ranks,
-        # figure out which rank has the first sentence which
-        # is not necessarily rank 0.
+        # Since global_size_count > 0, there is at least one sentence across all ranks.
+        # Get the value from the first rank that has a value, which may not be rank 0.
         pointers_shift = pointers[0] if len(sizes) > 0 else None
         pointers_shift = distctx.bcast_first(pointers_shift)
+
+        # Since there is at least one, bcast_first should return some value other than None.
+        assert pointers_shift is not None, "Expected at least one rank to have a valid element"
 
         # Zero-base pointers by subtracting size of first
         # sentence from all values.
