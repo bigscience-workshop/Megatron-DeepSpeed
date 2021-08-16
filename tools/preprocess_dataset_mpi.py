@@ -374,7 +374,7 @@ def get_filename(args, key, rank=None):
     return filename
 
 def rank_files_write(args, dset, idx, encoder):
-    tokenize_start = time.time()
+    time_start = time.time()
 
     # we'll total up the number of docs, sentences, and bytes
     # processed across all ranks
@@ -433,7 +433,7 @@ def rank_files_write(args, dset, idx, encoder):
                 current = time.time()
                 progress_next = current + float(args.log_interval)
 
-                elapsed = current - tokenize_start
+                elapsed = current - time_start
                 timestamp = time.strftime("%Y-%m-%dT%H:%M:%S")
                 docs = dset_stats[0] * args.numranks
                 percent = docs / len(idx) * 100.0
@@ -462,13 +462,13 @@ def rank_files_write(args, dset, idx, encoder):
 
     # wait for all ranks to finish their files
     args.distctx.barrier()
-    tokenize_end = time.time()
+    time_end = time.time()
 
     # compute total stats across all processes
     args.distctx.all_sum_(times)
     args.distctx.all_sum_(dset_stats)
     if args.rank == 0:
-        secs = tokenize_end - tokenize_start
+        secs = time_end - time_start
         docrate = dset_stats[0] / secs if secs > 0.0 else 0.0
         sentrate = dset_stats[1] / secs if secs > 0.0 else 0.0
         byterate = dset_stats[2] / secs if secs > 0.0 else 0.0
