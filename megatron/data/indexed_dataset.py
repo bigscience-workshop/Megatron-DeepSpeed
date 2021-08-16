@@ -649,9 +649,7 @@ def gather_files_dist_idx_cached(outfile, filelist, distctx, dtype):
 
         sizes.extend(index.sizes.tolist())
 
-        data_offset = data_offsets[-1]
-        tmpdata_offsets = np.copy(index.data_offsets[1:])
-        tmpdata_offsets += data_offset
+        tmpdata_offsets = index.data_offsets[1:] + data_offsets[-1]
         data_offsets.extend(tmpdata_offsets.tolist())
 
         dim_offset = dim_offsets[-1]
