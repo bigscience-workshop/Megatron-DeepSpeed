@@ -786,8 +786,7 @@ def gather_files_dist_idx_mmap(outfile, filelist, distctx, dtype):
 
         sizes.extend(index.sizes.tolist())
 
-        tmpdocs = np.copy(index.doc_idx[1:])
-        tmpdocs += docs_offset
+        tmpdocs = index.doc_idx[1:] + docs_offset
         docs.extend(tmpdocs.tolist())
 
     # Drop first entry from the lists that start with
