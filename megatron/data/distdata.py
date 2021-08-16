@@ -5,20 +5,19 @@ import torch.distributed as dist
 
 class DistData(object):
     def __init__(self, backend='gloo', use_mpi4py=False):
-        self.MPI = None
-
         # use mpi4py instead of torch.distributed if requested
+        self.mpi4py = None
         if use_mpi4py:
             try:
                 from mpi4py import MPI
-                self.MPI = MPI
+                self.mpi4py = MPI
             except:
                 #print(f"ERROR: mpi4py requested, but failed to import, falling back to torch.distributed.", flush=True)
                 pass
 
         # lookup our process rank and the group size
-        if self.MPI is not None:
-            self.comm = self.MPI.COMM_WORLD
+        if self.mpi4py is not None:
+            self.comm = self.mpi4py.COMM_WORLD
             self.rank = self.comm.Get_rank()
             self.numranks = self.comm.Get_size()
         else:
@@ -28,14 +27,14 @@ class DistData(object):
 
     def barrier(self):
         """Globally synchronize all processes"""
-        if self.MPI:
+        if self.mpi4py is not None:
             self.comm.barrier()
         else:
             dist.barrier()
 
     def bcast(self, val, root):
         """Broadcast a scalar value from root to all ranks"""
-        if self.MPI:
+        if self.mpi4py is not None:
             return self.comm.bcast(val, root=root)
         else:
             vals = [val]
@@ -44,7 +43,7 @@ class DistData(object):
 
     def bcast_list(self, vals, root=0):
         """Broadcast list of vals from root to all ranks, returns newly allocated list"""
-        if self.MPI:
+        if self.mpi4py is not None:
             return self.comm.bcast(vals, root=root)
         else:
             # broadcast length of vals list
@@ -64,10 +63,10 @@ class DistData(object):
 
     def alltrue(self, val):
         """Returns True if all procs input True, False otherwise"""
-        if self.MPI:
+        if self.mpi4py is not None:
             inval = np.array([val], dtype=np.bool_)
             outval = np.zeros_like(inval)
-            self.comm.Allreduce(inval, outval, op=self.MPI.LAND)
+            self.comm.Allreduce(inval, outval, op=self.mpi4py.LAND)
             return bool(outval[0])
         else:
             tensor = torch.tensor([int(val)], dtype=torch.int32)
@@ -76,10 +75,10 @@ class DistData(object):
 
     def sum(self, val):
         """Compute sum of val, and return total on all ranks."""
-        if self.MPI:
+        if self.mpi4py is not None:
             insize = np.array([val], dtype=np.int64)
             outsize = np.zeros_like(insize)
-            self.comm.Allreduce(insize, outsize, op=self.MPI.SUM)
+            self.comm.Allreduce(insize, outsize, op=self.mpi4py.SUM)
             return outsize[0]
         else:
             tensor = torch.tensor([val], dtype=torch.int64)
@@ -88,10 +87,10 @@ class DistData(object):
 
     def exscan(self, val):
         """Compute prefix sum (exclusive scan) of val, and return offset of each rank."""
-        if self.MPI:
+        if self.mpi4py is not None:
             insize = np.array([val], dtype=np.int64)
             outsize = np.zeros_like(insize)
-            self.comm.Scan(insize, outsize, op=self.MPI.SUM)
+            self.comm.Scan(insize, outsize, op=self.mpi4py.SUM)
             return outsize[0] - insize[0]
         else:
             # torch.distributed doesn't have a scan, so fallback to allreduce
@@ -102,10 +101,10 @@ class DistData(object):
 
     def min(self, val):
         """Return minimum val to all ranks."""
-        if self.MPI:
+        if self.mpi4py is not None:
             insize = np.array([val], dtype=np.int64)
             outsize = np.zeros_like(insize)
-            self.comm.Allreduce(insize, outsize, op=self.MPI.MIN)
+            self.comm.Allreduce(insize, outsize, op=self.mpi4py.MIN)
             return outsize[0]
         else:
             # torch.distributed doesn't have a scan, so fallback to allreduce
@@ -139,9 +138,9 @@ class DistData(object):
 
     def all_sum_(self, vals):
         """Sums values in vals element-wise and updates vals with final result on all ranks"""
-        if self.MPI:
+        if self.mpi4py is not None:
             outval = np.zeros_like(vals)
-            self.comm.Allreduce(vals, outval, op=self.MPI.SUM)
+            self.comm.Allreduce(vals, outval, op=self.mpi4py.SUM)
             vals[:] = outval
         else:
             tensor = torch.from_numpy(vals)
