@@ -609,10 +609,7 @@ def gather_files_dist_bin(outfile, filelist, distctx):
     fout = distctx.open(data_file_path(outfile))
 
     # lookup size of each of our binary files
-    filesizes = []
-    for f in filelist:
-        filesize = os.stat(data_file_path(f))[stat.ST_SIZE]
-        filesizes.append(filesize)
+    filesizes = [os.stat(data_file_path(f))[stat.ST_SIZE] for f in filelist]
 
     # compute offset this rank should start copying
     # its data into the merged file
