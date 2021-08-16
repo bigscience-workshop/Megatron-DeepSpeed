@@ -515,3 +515,24 @@ python tasks/main.py \
     --no-load-optim \
     --no-load-rng
 ```
+
+## Testing
+
+Currently the test suite is not yet plugged into CI and needs to be run manually. For more details please see [Testing](tests/README.md).
+
+
+## Contributing
+
+This is a community project and we would love to have your help.
+
+If you are inspired to contribute please see the following entries:
+
+Megatron-DeeepSpeed:
+
+- [Megatron-DeepSpeed Issues](https://github.com/bigscience-workshop/Megatron-DeepSpeed/issues)
+- [Good First Issues](https://github.com/bigscience-workshop/Megatron-DeepSpeed/contribute)
+
+General BigScience:
+
+- [bigscience Issues](https://github.com/bigscience-workshop/bigscience/issues)
+- [Good First Issues](https://github.com/bigscience-workshop/bigscience/contribute)
