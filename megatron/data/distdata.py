@@ -107,7 +107,6 @@ class DistData(object):
             self.comm.Allreduce(insize, outsize, op=self.mpi4py.MIN)
             return outsize[0]
         else:
-            # torch.distributed doesn't have a scan, so fallback to allreduce
             tensor = torch.tensor([val], dtype=torch.int64)
             dist.all_reduce(tensor, op=dist.ReduceOp.MIN)
             return tensor[0]
