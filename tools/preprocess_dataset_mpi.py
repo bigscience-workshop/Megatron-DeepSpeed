@@ -161,23 +161,28 @@ def get_args():
                        choices=['lazy', 'cached', 'mmap'])
 
     group = parser.add_argument_group(title='runtime')
-    group.add_argument('--mpi4py', action='store_true',
-                       help='Assume script has been launched as an MPI job, and use MPI for communication.')
-    group.add_argument('--torch-backend', type=str, default='gloo', choices = ['gloo', 'mpi'],
+    group.add_argument('--torch-backend', type=str, default='gloo', choices=['gloo', 'mpi'],
                        help='Select torch.distributed backend.')
     group.add_argument('--local_rank', type=int, default=None,
                        help='Local rank of calling process on its node (from torch.distributed.launch).')
+    group.add_argument('--mpi4py', action='store_true',
+                       help='Assume script has been launched as an MPI job, and use mpi4py for communication.')
+    group.add_argument('--merge', type=str, default='parallel', choices=['parallel', 'serial', 'both'],
+                       help=('Method to merge intermediate per-rank files into the final data files.  '
+                             'With "parallel", each rank writes directly to the final files, '
+                             'while rank 0 copies data from all per-rank files with "serial".  '
+                             'A parallel merge can be faster, but for correctness, it requires the underlying file system '
+                             'to support parallel write operations to a file shared among multiple processes.  '
+                             'One can choose "both" for testing purposes, in which case the final files written '
+                             'by the parallel method are given an additional ".par" extension.'))
     group.add_argument('--scratch', type=str, default=None,
-                       help='Path to local storage on compute nodes to write per-rank files before merging, like /dev/shm.')
+                       help=('Path to local storage on compute nodes to write per-rank files before merging, like /dev/shm.  '
+                             'One can only use this option with a parallel merge.'))
     group.add_argument('--log-interval', type=int, default=30,
                        help='Seconds between progress updates (0 to disable)')
 
     args = parser.parse_args()
     args.keep_empty = False
-
-    if args.tokenizer_type.lower().startswith('bert'):
-        if not args.split_sentences:
-            print("Bert tokenizer detected, are you sure you don't want to split sentences?")
 
     # some default/dummy values for the tokenizer
     args.rank = 0
@@ -192,6 +197,16 @@ def get_args():
     # some functions like build_tokenizer use args.rank to filter stdout messages
     args.rank = args.distctx.rank
     args.numranks = args.distctx.numranks
+
+    if args.tokenizer_type.lower().startswith('bert'):
+        if not args.split_sentences:
+            if args.rank == 0:
+                print("Bert tokenizer detected, are you sure you don't want to split sentences?")
+
+    # TODO: perhaps more user friendly to disable scratch and print a warning?
+    # check that serial merge is not attempted with scratch
+    if args.scratch is not None and args.merge != 'parallel':
+        assert False, "The --scratch option is only valid with --merge=parallel"
 
     return args
 
@@ -347,7 +362,7 @@ def get_filename(args, key, rank=None):
     pathname = args.output_prefix
 
     # redirect per-rank file to scratch dir if defined
-    if args.scratch and rank is not None:
+    if args.scratch is not None and rank is not None:
         basename = os.path.basename(pathname)
         pathname = os.path.join(args.scratch, basename)
 
@@ -413,8 +428,6 @@ def rank_files_write(args, dset, idx, encoder):
                 times[0] += start_encode - start_read
                 times[1] += start_write - start_encode
                 times[2] += end_write - start_write
-#                dset_stats[0] += 1
-#                dset_stats[2] += len(text)
 
             if args.rank == 0 and args.log_interval > 0 and time.time() > progress_next:
                 current = time.time()
@@ -472,45 +485,43 @@ def rank_files_write(args, dset, idx, encoder):
     success = args.distctx.alltrue(success)
     return success, err
 
-def rank_files_merge(args):
-    args.dist_merge = True
-    if args.dist_merge:
-        merge_start = time.time()
-        numbytes = np.zeros(1, dtype=np.int64)
-        for key in args.columns:
-            filemain = get_filename(args, key)
-            filerank = get_filename(args, key, args.rank)
-            gather_files_dist(filemain, [filerank], args.distctx, dtype=best_fitting_dtype(args.vocab_size))
+def rank_files_merge_parallel(args):
+    """Each process directly writes its portion of the data from its per-rank file into the final file."""
+    merge_start = time.time()
+    numbytes = np.zeros(1, dtype=np.int64)
+    for key in args.columns:
+        filemain = get_filename(args, key)
+        filerank = get_filename(args, key, args.rank)
+        gather_files_dist(filemain, [filerank], args.distctx, dtype=best_fitting_dtype(args.vocab_size))
 
-            # total up bytes read in merge
-            binfile = data_file_path(filerank)
-            idxfile = index_file_path(filerank)
-            numbytes[0] += os.stat(binfile)[stat.ST_SIZE]
-            numbytes[0] += os.stat(idxfile)[stat.ST_SIZE]
+        # total up bytes read in merge
+        binfile = data_file_path(filerank)
+        idxfile = index_file_path(filerank)
+        numbytes[0] += os.stat(binfile)[stat.ST_SIZE]
+        numbytes[0] += os.stat(idxfile)[stat.ST_SIZE]
 
-            # rename files for now and also do regular merge so we can time both and "cmp" them
-            if args.rank == 0:
-                binfile = data_file_path(filemain)
-                idxfile = index_file_path(filemain)
-                os.rename(binfile, binfile + ".par")
-                os.rename(idxfile, idxfile + ".par")
+        # If user want to use both a parallel and serial merge (for testing),
+        # rename the parallel output files so that the serial merge does not clobber them.
+        if args.merge == 'both' and args.rank == 0:
+            binfile = data_file_path(filemain)
+            idxfile = index_file_path(filemain)
+            os.rename(binfile, binfile + ".par")
+            os.rename(idxfile, idxfile + ".par")
 
-        args.distctx.barrier()
-        args.distctx.all_sum_(numbytes)
-        merge_end = time.time()
-        if args.rank == 0:
-            secs = merge_end - merge_start
-            byterate = numbytes[0] / secs if secs > 0.0 else 0.0
-            print("Parallel merge stats:")
-            print(f"    Scratch: {args.scratch}")
-            print(f"    Seconds to merge: {secs}")
-            print(f"    {int(numbytes)} bytes {format_byterate(byterate)}")
+    # Total up number of bytes read across all ranks,
+    # and wait on all ranks before stopping the timer.
+    args.distctx.all_sum_(numbytes)
+    merge_end = time.time()
+    if args.rank == 0:
+        secs = merge_end - merge_start
+        byterate = numbytes[0] / secs if secs > 0.0 else 0.0
+        print("Parallel merge stats:")
+        print(f"    Scratch: {args.scratch}")
+        print(f"    Seconds to merge: {secs}")
+        print(f"    {int(numbytes)} bytes {format_byterate(byterate)}")
 
-        # if using node-local storage, skip sequential merge test
-        if args.scratch:
-            return
-
-    # rank 0 merges all per-rank files
+def rank_files_merge_serial(args):
+    """Rank 0 merges data from all per-rank files into the final file."""
     if args.rank == 0:
         print("Merging rank files ...", flush=True)
         merge_start = time.time()
@@ -539,8 +550,9 @@ def rank_files_merge(args):
 
                 # sum up the number of merged bytes
                 binfile = data_file_path(infile)
-                filesize = os.stat(binfile)[stat.ST_SIZE]
-                numbytes += filesize
+                idxfile = index_file_path(infile)
+                numbytes += os.stat(binfile)[stat.ST_SIZE]
+                numbytes += os.stat(idxfile)[stat.ST_SIZE]
 
         # finalize the merged file
         print("Finalizing merged file ...", flush=True)
@@ -558,6 +570,19 @@ def rank_files_merge(args):
 
     # hold everyone until rank 0 is done
     args.distctx.barrier()
+
+def rank_files_merge(args):
+    # use parallel merge if asked
+    if args.merge in ['parallel', 'both']:
+        rank_files_merge_parallel(args)
+
+    # if using node-local storage, skip sequential merge
+    if args.scratch is not None:
+        return
+
+    # can fall back to a serial merge
+    if args.merge in ['serial', 'both']:
+        rank_files_merge_serial(args)
 
 def rank_files_delete(args):
     # delete per-rank files
@@ -581,9 +606,6 @@ def rank_files_delete(args):
 def main():
     args = get_args()
     startup_start = time.time()
-
-    # connect processes and cache our rank and number of procs in args
-    #init_distributed(args)
 
     # load the dataset
     dset, err = load_dset(args)
