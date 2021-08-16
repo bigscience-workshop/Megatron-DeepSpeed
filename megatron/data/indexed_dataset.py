@@ -647,16 +647,10 @@ def gather_files_dist_idx_cached(outfile, filelist, distctx, dtype):
 
         doc_offset = len(sizes)
 
-        sizes.extend(index.sizes.tolist())
-
-        tmpdata_offsets = index.data_offsets[1:] + data_offsets[-1]
-        data_offsets.extend(tmpdata_offsets.tolist())
-
-        tmpdim_offsets = index.dim_offsets[1:] + dim_offsets[-1]
-        dim_offsets.extend(tmpdim_offsets.tolist())
-
-        tmpdocs = index.doc_idx[1:] + doc_offset
-        docs.extend(tmpdocs.tolist())
+        sizes.extend(index.sizes)
+        data_offsets.extend(index.data_offsets[1:] + data_offsets[-1])
+        dim_offsets.extend(index.dim_offsets[1:] + dim_offsets[-1])
+        docs.extend(index.doc_idx[1:] + doc_offset)
 
     # Drop first entry from the lists that start with
     # a "0" value if we're not the first rank with some size.
@@ -784,10 +778,8 @@ def gather_files_dist_idx_mmap(outfile, filelist, distctx, dtype):
 
         docs_offset = len(sizes)
 
-        sizes.extend(index.sizes.tolist())
-
-        tmpdocs = index.doc_idx[1:] + docs_offset
-        docs.extend(tmpdocs.tolist())
+        sizes.extend(index.sizes)
+        docs.extend(index.doc_idx[1:] + docs_offset)
 
     # Drop first entry from the lists that start with
     # a "0" value if we're not the first rank with some size.
