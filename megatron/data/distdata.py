@@ -17,7 +17,7 @@ class DistData(object):
                 pass
 
         # lookup our process rank and the group size
-        if self.MPI:
+        if self.MPI is not None:
             self.comm = self.MPI.COMM_WORLD
             self.rank = self.comm.Get_rank()
             self.numranks = self.comm.Get_size()
