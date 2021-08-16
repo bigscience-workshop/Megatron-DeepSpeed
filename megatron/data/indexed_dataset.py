@@ -655,7 +655,8 @@ def gather_files_dist_idx_cached(outfile, filelist, distctx, dtype):
     # Drop first entry from the lists that start with
     # a "0" value if we're not the first rank with some size.
     minrank = distctx.minrank(len(sizes) > 0)
-    if rank != minrank:
+    firstrank = minrank if minrank is not None else 0
+    if rank != firstrank:
         del data_offsets[0]
         del dim_offsets[0]
         del docs[0]
@@ -685,8 +686,10 @@ def gather_files_dist_idx_cached(outfile, filelist, distctx, dtype):
     if rank == 0:
         fout.write(IndexedDataset._HDR_MAGIC)
         fout.write(struct.pack('<Q', 1))
-        fout.write(struct.pack('<QQ', code(index.dtype), index.element_size))
-        fout.write(struct.pack('<QQ', global_data_count - 1, global_size_count))
+        fout.write(struct.pack('<Q', code(index.dtype)))
+        fout.write(struct.pack('<Q', index.element_size))
+        fout.write(struct.pack('<Q', global_data_count - 1))
+        fout.write(struct.pack('<Q', global_size_count))
         fout.write(struct.pack('<Q', global_doc_count))
         pos = fout.tell()
 
@@ -784,7 +787,8 @@ def gather_files_dist_idx_mmap(outfile, filelist, distctx, dtype):
     # Drop first entry from the lists that start with
     # a "0" value if we're not the first rank with some size.
     minrank = distctx.minrank(len(sizes) > 0)
-    if rank != minrank:
+    firstrank = minrank if minrank is not None else 0
+    if rank != firstrank:
         del docs[0]
 
     # Compute total number of size and document index
@@ -794,8 +798,10 @@ def gather_files_dist_idx_mmap(outfile, filelist, distctx, dtype):
     # calling rank.
     numsizes = len(sizes)
     numdocs = len(docs)
+
     global_size_count = distctx.sum(numsizes)
     global_docs_count = distctx.sum(numdocs)
+
     global_size_offset = distctx.exscan(numsizes)
     global_docs_offset = distctx.exscan(numdocs)
 

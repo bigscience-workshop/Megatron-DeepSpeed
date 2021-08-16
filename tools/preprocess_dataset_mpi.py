@@ -472,14 +472,17 @@ def rank_files_write(args, dset, idx, encoder):
         docrate = dset_stats[0] / secs if secs > 0.0 else 0.0
         sentrate = dset_stats[1] / secs if secs > 0.0 else 0.0
         byterate = dset_stats[2] / secs if secs > 0.0 else 0.0
+        secs_read_per_sample = times[0] / dset_stats[0] if dset_stats[0] > 0 else 0.0
+        secs_encode_per_sample = times[1] / dset_stats[0] if dset_stats[0] > 0 else 0.0
+        secs_write_per_sample = times[2] / dset_stats[0] if dset_stats[0] > 0 else 0.0
         print("Process stats:")
         print(f"    Seconds to process: {secs}")
         print(f"    {dset_stats[0]} docs {docrate} docs/sec")
         print(f"    {dset_stats[1]} sents {sentrate} sents/sec")
         print(f"    {dset_stats[2]} bytes {format_byterate(byterate)}")
-        print(f"    Total read seconds {times[0]}, {times[0]/dset_stats[0]} sec/sample")
-        print(f"    Total encode seconds {times[1]}, {times[1]/dset_stats[0]} sec/sample")
-        print(f"    Total write seconds {times[2]}, {times[2]/dset_stats[0]} sec/sample")
+        print(f"    Total read seconds {times[0]}, {secs_read_per_sample} sec/sample")
+        print(f"    Total encode seconds {times[1]}, {secs_encode_per_sample} sec/sample")
+        print(f"    Total write seconds {times[2]}, {secs_write_per_sample} sec/sample")
 
     # allreduce to check whether all ranks wrote their part successfully
     success = args.distctx.alltrue(success)
