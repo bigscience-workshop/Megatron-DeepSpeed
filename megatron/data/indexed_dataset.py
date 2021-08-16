@@ -715,7 +715,7 @@ def gather_files_dist_idx_cached(outfile, filelist, distctx, dtype):
     dim_offsets64 += dim_offset
 
     # Seek to proper offset for this rank and write
-    # dom offset values into file, stored as int64.
+    # dim offset values into file, stored as int64.
     fout.seek(pos + global_dim_offset * np.int64().itemsize)
     fout.write(dim_offsets64.tobytes(order='C'))
     del dim_offsets64
