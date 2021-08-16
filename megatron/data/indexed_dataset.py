@@ -655,8 +655,7 @@ def gather_files_dist_idx_cached(outfile, filelist, distctx, dtype):
         tmpdim_offsets = index.dim_offsets[1:] + dim_offsets[-1]
         dim_offsets.extend(tmpdim_offsets.tolist())
 
-        tmpdocs = np.copy(index.doc_idx[1:])
-        tmpdocs += doc_offset
+        tmpdocs = index.doc_idx[1:] + doc_offset
         docs.extend(tmpdocs.tolist())
 
     # Drop first entry from the lists that start with
