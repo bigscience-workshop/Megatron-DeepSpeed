@@ -867,6 +867,10 @@ def gather_files_dist_idx_mmap(outfile, filelist, distctx, dtype):
         # sentence from all values.
         pointers -= pointers_shift
 
+    # Since the pointers array is the same length as the sizes array,
+    # we use global_size_offset and global_size_count to position
+    # within the file for writing the pointer values.
+
     # Seek to proper offset for this rank and write
     # pointer values into file, stored as int64.
     fout.seek(pos + global_size_offset * np.int64().itemsize)
