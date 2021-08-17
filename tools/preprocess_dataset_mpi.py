@@ -233,7 +233,7 @@ def scatterv_(args, invals, counts, outval, root=0):
         displs = np.cumsum(counts) - counts
         args.mpi_comm.Scatterv([invals, counts, displs, args.MPI.INT64_T], outval, root=root)
     else:
-    scatterlist = None
+        scatterlist = None
         if args.rank == root:
             scatterlist = list(torch.split(torch.from_numpy(invals), counts))
         outtensor = torch.from_numpy(outval)
