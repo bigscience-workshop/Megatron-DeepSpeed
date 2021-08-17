@@ -671,8 +671,11 @@ def gather_files_dist_check_dtype(filelist, dtype_valid, dtype_code, distctx):
     allsame = distctx.alltrue(dtype_code == first_dtype_code or dtype_code is None)
     assert allsame, "Different dtype values detected in index files"
 
+    # return the dtype that is used in all files
+    return dtypes[first_dtype_code]
 
-def gather_files_dist_idx_cached(outfile, filelist, distctx, dtype=np.int32):
+
+def gather_files_dist_idx_cached(outfile, filelist, distctx):
     # get our rank
     rank = distctx.rank
 
@@ -703,7 +706,7 @@ def gather_files_dist_idx_cached(outfile, filelist, distctx, dtype=np.int32):
             dtype_valid = False
 
     # Check that we have consistent dtypes in all files from all ranks
-    gather_files_dist_check_dtype(filelist, dtype_valid, dtype_value, distctx)
+    dtype = gather_files_dist_check_dtype(filelist, dtype_valid, dtype_value, distctx)
 
     # Capture the last value in each array before we delete any items.
     # Note this may be zero on any rank that has no items,
@@ -789,7 +792,7 @@ def gather_files_dist_idx_cached(outfile, filelist, distctx, dtype=np.int32):
     distctx.barrier()
 
 
-def gather_files_dist_idx_mmap(outfile, filelist, distctx, dtype):
+def gather_files_dist_idx_mmap(outfile, filelist, distctx):
     # get our rank
     rank = distctx.rank
 
@@ -816,7 +819,7 @@ def gather_files_dist_idx_mmap(outfile, filelist, distctx, dtype):
             dtype_valid = False
 
     # Check that we have consistent dtypes in all files from all ranks
-    gather_files_dist_check_dtype(filelist, dtype_valid, dtype_value, distctx)
+    dtype = gather_files_dist_check_dtype(filelist, dtype_valid, dtype_value, distctx)
 
     # Drop the zero entry from the lists that start with
     # a "0" value unless we're rank 0
@@ -976,7 +979,7 @@ def gather_files_dist_check_impltype(filelist, distctx):
 # Each rank contributes a distinct list of zero or more files in filelist.
 # Each rank merges its set of files into filemain collectively with all
 # other ranks.
-def gather_files_dist(filemain, filelist, distctx, dtype=np.int64):
+def gather_files_dist(filemain, filelist, distctx):
     # check that at least one input file is listed
     filecount = distctx.sum(len(filelist))
     assert filecount > 0, "No rank has any input files to merge"
@@ -990,9 +993,9 @@ def gather_files_dist(filemain, filelist, distctx, dtype=np.int64):
 
     # Combine index files into a single index file
     if indexstr == "cached":
-        gather_files_dist_idx_cached(filemain, filelist, distctx, dtype)
+        gather_files_dist_idx_cached(filemain, filelist, distctx)
     elif indexstr == "mmap":
-        gather_files_dist_idx_mmap(filemain, filelist, distctx, dtype)
+        gather_files_dist_idx_mmap(filemain, filelist, distctx)
 
 
 def get_start_end(count, rank, numranks):
@@ -1009,11 +1012,11 @@ def get_start_end(count, rank, numranks):
 # Given a global list of files in filelist, and a set of processed defined
 # by the distributed environment in distctx, collectively merge files into
 # a new output specified in filemain.
-def merge_files_dist(filemain, filelist, distctx, dtype=np.int64):
+def merge_files_dist(filemain, filelist, distctx):
     # TODO: if file sizes vary significantly, it might be better to consider
     # file size when splitting the list to different ranks.
 
     # evenly divide list of files among ranks
     start, end = get_start_end(len(filelist), distctx.rank, distctx.numranks)
     sublist = filelist[start:end]
-    return gather_files_dist(filemain, sublist, distctx, dtype)
+    return gather_files_dist(filemain, sublist, distctx)

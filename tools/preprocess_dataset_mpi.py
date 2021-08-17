@@ -495,7 +495,7 @@ def rank_files_merge_parallel(args):
     for key in args.columns:
         filemain = get_filename(args, key)
         filerank = get_filename(args, key, args.rank)
-        gather_files_dist(filemain, [filerank], args.distctx, dtype=best_fitting_dtype(args.vocab_size))
+        gather_files_dist(filemain, [filerank], args.distctx)
 
         # total up bytes read in merge
         binfile = data_file_path(filerank)
