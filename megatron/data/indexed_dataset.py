@@ -1026,27 +1026,3 @@ def gather_files_dist(filemain, filelist, distctx):
         gather_files_dist_idx_cached(filemain, filelist, distctx)
     elif indexstr == "mmap":
         gather_files_dist_idx_mmap(filemain, filelist, distctx)
-
-
-def get_start_end(count, rank, numranks):
-    num, remainder = divmod(count, numranks)
-    if rank < remainder:
-        start = (num + 1) * rank
-        end = start + num + 1
-    else:
-        start = (num + 1) * remainder + num * (rank - remainder)
-        end = start + num
-    return start, end
-
-
-# Given a global list of files in filelist, and a set of processed defined
-# by the distributed environment in distctx, collectively merge files into
-# a new output specified in filemain.
-def merge_files_dist(filemain, filelist, distctx):
-    # TODO: if file sizes vary significantly, it might be better to consider
-    # file size when splitting the list to different ranks.
-
-    # evenly divide list of files among ranks
-    start, end = get_start_end(len(filelist), distctx.rank, distctx.numranks)
-    sublist = filelist[start:end]
-    return gather_files_dist(filemain, sublist, distctx)
