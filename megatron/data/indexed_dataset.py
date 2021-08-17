@@ -665,6 +665,7 @@ def gather_files_dist_idx_cached(outfile, filelist, distctx, dtype):
     data_offsets = [0]
     dim_offsets = [0]
     docs = [0]
+    element_size = None
     for f in filelist:
         doc_offset = len(sizes)
 
@@ -673,10 +674,17 @@ def gather_files_dist_idx_cached(outfile, filelist, distctx, dtype):
         data_offsets.extend(index.data_offsets[1:] + data_offsets[-1])
         dim_offsets.extend(index.dim_offsets[1:] + dim_offsets[-1])
         docs.extend(index.doc_idx[1:] + doc_offset)
+        element_size = index.element_size
+
+    # TODO: verify that element size is the same on all ranks for all files
+    # take first valid element size we can find
+    element_size = distctx.bcast_first(element_size)
+    assert element_size is not None, "Failed to find a valid element size in index files"
 
     # Capture the last value in each array before we delete any items.
     # Note this may be zero on any rank that has no items,
     # but zero is the correct value in that case.
+    # These values are used in scan operations to determine a shift value.
     dim_last = dim_offsets[-1]
     data_last = data_offsets[-1]
 
@@ -712,8 +720,8 @@ def gather_files_dist_idx_cached(outfile, filelist, distctx, dtype):
     if rank == 0:
         fout.write(IndexedDataset._HDR_MAGIC)
         fout.write(struct.pack('<Q', 1))
-        fout.write(struct.pack('<Q', code(index.dtype)))
-        fout.write(struct.pack('<Q', index.element_size))
+        fout.write(struct.pack('<Q', code(dtype)))
+        fout.write(struct.pack('<Q', element_size))
         fout.write(struct.pack('<Q', global_data_count - 1))
         fout.write(struct.pack('<Q', global_size_count))
         fout.write(struct.pack('<Q', global_doc_count))
