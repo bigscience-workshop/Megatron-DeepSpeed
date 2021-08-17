@@ -630,6 +630,29 @@ def gather_files_dist_bin(outfile, filelist, distctx):
     distctx.barrier()
 
 
+def write_list(fout, pos, vals, shift, offset, total, dtype):
+    """Write list of values to fout and return new file position.
+
+    Copy list of values in vals to a numpy array of type dtype.
+    Add a constant shift value to all elements.
+    Write array to file at given offset and scaled by size of the datatype.
+    Compute and return new file position given a total number of elements written.
+    """
+
+    # Make a copy of the vals list using the requested datatype.
+    npvals = np.array(vals, dtype=dtype)
+
+    # Shift values in the list by a constant value.
+    npvals += shift
+
+    # Seek to proper offset for this rank and write
+    # values into file, stored as given datatype.
+    fout.seek(pos + offset * dtype().itemsize)
+    fout.write(npvals.tobytes(order='C'))
+
+    # Advance file pointer past end of this section.
+    return pos + total * dtype().itemsize
+
 def gather_files_dist_idx_cached(outfile, filelist, distctx, dtype):
     # get our rank
     rank = distctx.rank
@@ -637,20 +660,25 @@ def gather_files_dist_idx_cached(outfile, filelist, distctx, dtype):
     # Create shared output file
     fout = distctx.open(index_file_path(outfile))
 
-    # Read the index file for the calling rank
+    # Read each index file and append items to our lists
     sizes = []
     data_offsets = [0]
     dim_offsets = [0]
     docs = [0]
     for f in filelist:
-        index = IndexedDataset(f)
-
         doc_offset = len(sizes)
 
+        index = IndexedDataset(f)
         sizes.extend(index.sizes)
         data_offsets.extend(index.data_offsets[1:] + data_offsets[-1])
         dim_offsets.extend(index.dim_offsets[1:] + dim_offsets[-1])
         docs.extend(index.doc_idx[1:] + doc_offset)
+
+    # Capture the last value in each array before we delete any items.
+    # Note this may be zero on any rank that has no items,
+    # but zero is the correct value in that case.
+    dim_last = dim_offsets[-1]
+    data_last = data_offsets[-1]
 
     # Drop the zero entry from the lists that start with
     # a "0" value unless we're rank 0
@@ -699,37 +727,15 @@ def gather_files_dist_idx_cached(outfile, filelist, distctx, dtype):
     # the sizes list for each sentence.  Adjust dimension
     # offset values based on the number of offsets
     # that come before the calling rank.
-    dim_offsets64 = np.array(dim_offsets, dtype=np.int64)
-    dim_last = dim_offsets[-1] if numdim > 0 else 0
-    dim_offset = distctx.exscan(dim_last)
-    dim_offsets64 += dim_offset
-
-    # Seek to proper offset for this rank and write
-    # dim offset values into file, stored as int64.
-    fout.seek(pos + global_dim_offset * np.int64().itemsize)
-    fout.write(dim_offsets64.tobytes(order='C'))
-    del dim_offsets64
-
-    # Advance past list of dim offset values
-    pos += global_dim_count * np.int64().itemsize
+    dim_shift = distctx.exscan(dim_last)
+    pos = write_list(fout, pos, dim_offsets, dim_shift, global_dim_offset, global_dim_count, np.int64)
 
     # The data index records the byte offset to the start of each
     # sentence within the binary data file.
     # Adjust our data index values for number of bytes that
     # come before the calling rank.
-    data_offsets64 = np.array(data_offsets, dtype=np.int64)
-    byte_last = data_offsets[-1] if numdata > 0 else 0
-    byte_offset = distctx.exscan(byte_last)
-    data_offsets64 += byte_offset
-
-    # Seek to proper offset for this rank and write
-    # data (byte) offset index into file, stored as int64.
-    fout.seek(pos + global_data_offset * np.int64().itemsize)
-    fout.write(data_offsets64.tobytes(order='C'))
-    del data_offsets64
-
-    # Advance past list of data (byte) offset values
-    pos += global_data_count * np.int64().itemsize
+    data_shift = distctx.exscan(data_last)
+    pos = write_list(fout, pos, data_offsets, data_shift, global_data_offset, global_data_count, np.int64)
 
     # Each sentence is stored as a tensor.
     # The tensor for each sentence can be multidimensional.
@@ -739,24 +745,11 @@ def gather_files_dist_idx_cached(outfile, filelist, distctx, dtype):
     # for each dimension of a sentence.
     # The list of size values from each rank are
     # concatenated and stored as int64.
-    fout.seek(pos + global_size_offset * np.int64().itemsize)
-    sizes64 = np.array(sizes, dtype=np.int64)
-    fout.write(sizes64.tobytes(order='C'))
-    del sizes64
-
-    # Advance past list of size values
-    pos += global_size_count * np.int64().itemsize
+    pos = write_list(fout, pos, sizes, 0, global_size_offset, global_size_count, np.int64)
 
     # The document index points to the position in the sizes
     # array for the first sentence of the sample.
-    docs64 = np.array(docs, dtype=np.int64)
-    docs64 += global_size_offset
-
-    # Seek to proper offset for this rank and write
-    # document index into file, stored as int64.
-    fout.seek(pos + global_doc_offset * np.int64().itemsize)
-    fout.write(docs64.tobytes(order='C'))
-    del docs64
+    pos = write_list(fout, pos, docs, global_size_offset, global_doc_offset, global_doc_count, np.int64)
 
     fout.close()
 
@@ -771,14 +764,13 @@ def gather_files_dist_idx_mmap(outfile, filelist, distctx, dtype):
     # Create shared output file
     fout = distctx.open(index_file_path(outfile))
 
-    # Read the index file for each of our files
+    # Read each index file and append items to the size and docs lists
     sizes = []
     docs = [0]
     for f in filelist:
-        index = MMapIndexedDataset.Index(index_file_path(f))
-
         docs_offset = len(sizes)
 
+        index = MMapIndexedDataset.Index(index_file_path(f))
         sizes.extend(index.sizes)
         docs.extend(index.doc_idx[1:] + docs_offset)
 
@@ -817,13 +809,7 @@ def gather_files_dist_idx_mmap(outfile, filelist, distctx, dtype):
 
     # The list of size values from each rank are
     # concatenated and stored as int32.
-    fout.seek(pos + global_size_offset * np.int32().itemsize)
-    sizes32 = np.array(sizes, dtype=np.int32)
-    fout.write(sizes32.tobytes(order='C'))
-    del sizes32
-
-    # Advance past list of size values
-    pos += global_size_count * np.int32().itemsize
+    pos = write_list(fout, pos, sizes, 0, global_size_offset, global_size_count, np.int32)
 
     # The pointer values store the byte offset to each sentence.
     # A sentence has a variable number of tokens, given by
@@ -848,7 +834,7 @@ def gather_files_dist_idx_mmap(outfile, filelist, distctx, dtype):
 
     # Finally, zero-base the offset values by subtracting
     # the number of bytes of the first sentence.  To do that
-    # we first need to find the rank having the first sentence,
+    # we need to find the rank having the first sentence,
     # then bcast that size to all ranks.
     if global_size_count > 0:
         # Since global_size_count > 0, there is at least one sentence across all ranks.
@@ -881,14 +867,7 @@ def gather_files_dist_idx_mmap(outfile, filelist, distctx, dtype):
     # A variable number of sentences can be in each document.
     # Adjust document index for number of sentences that
     # come before the calling rank.
-    doc_idx = np.array(docs, dtype=np.int64)
-    doc_idx += global_size_offset
-
-    # Seek to proper offset for this rank and write
-    # document index into file, stored as int64.
-    fout.seek(pos + global_docs_offset * np.int64().itemsize)
-    fout.write(doc_idx.tobytes(order='C'))
-    del doc_idx
+    pos = write_list(fout, pos, docs, global_size_offset, global_docs_offset, global_docs_count, np.int64)
 
     fout.close()
 
