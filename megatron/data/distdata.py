@@ -3,7 +3,8 @@ import numpy as np
 import torch
 import torch.distributed as dist
 
-class DistDataException(Exception):
+class DistDataError(Exception):
+    """Defines an empty exception to throw when some other rank hit a real exception."""
     pass
 
 class DistData(object):
@@ -29,28 +30,24 @@ class DistData(object):
             self.rank = dist.get_rank()
             self.numranks = dist.get_world_size()
 
-    def assert(self, cond, msg):
+    def allassert(self, cond, msg):
         """Check that condition cond is True on all ranks, assert with message everywhere if not."""
         alltrue = self.alltrue(cond)
         assert alltrue, msg
 
-    def raise(self, err):
+    def allraise_if(self, err):
         """Raise exception if err is not None on any rank."""
         alltrue = self.alltrue(err is None)
         if not alltrue:
-            # at least on rank raised an exception,
-            # re-raise the actual exception on any rank that threw one
+            # At least one rank raised an exception.
+            # Re-raise the actual exception if this rank threw one.
             if err is not None:
                 raise err
 
-            # on other ranks, raise an "empty" exception to indicate
-            # that we're failing because someone else did
-            raise DistDataException
-
-    def assert(self, cond, msg):
-        """Check that condition cond is True on all ranks."""
-        alltrue = self.alltrue(cond)
-        assert alltrue, msg
+            # TODO: is there a better exception to use here?
+            # On other ranks, raise an "empty" exception to indicate
+            # that we're only failing because someone else did.
+            raise DistDataError
 
     def barrier(self):
         """Globally synchronize all processes"""
@@ -174,26 +171,22 @@ class DistData(object):
 
     def open(self, filename):
         """Create, truncate, and open a file shared by all ranks."""
-        success = True
-        err = None
 
         # Don't truncate existing file until all ranks reach this point
         self.barrier()
+
+        # We'll capture any exception in this variable
+        err = None
 
         # Rank 0 creates and truncates file.
         if self.rank == 0:
             try:
                 f = open(filename, 'wb')
             except Exception as e:
-                success = False
                 err = e
 
         # Verify that rank 0 created the file
-        success = self.alltrue(success)
-        if not success:
-            if err is not None:
-                raise err
-            return None
+        self.allraise_if(err)
 
         # Wait for rank 0 to open (and truncate) file,
         # then have all ranks open file for writing.
@@ -201,14 +194,9 @@ class DistData(object):
             try:
                 f = open(filename, 'r+b')
             except Exception as e:
-                success = False
                 err = e
 
         # Verify that all ranks successfully opened the file
-        success = self.alltrue(success)
-        if not success:
-            if err is not None:
-                raise err
-            return None
+        self.allraise_if(err)
 
         return f
