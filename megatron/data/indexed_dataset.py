@@ -653,7 +653,25 @@ def write_list(fout, pos, vals, shift, offset, total, dtype):
     # Advance file pointer past end of this section.
     return pos + total * dtype().itemsize
 
-def gather_files_dist_idx_cached(outfile, filelist, distctx, dtype):
+
+def gather_files_dist_check_dtype(filelist, dtype_valid, dtype_code, distctx):
+    # verify that no rank has found an inconsistent value in their own set of files
+    allvalid = distctx.alltrue(dtype_valid)
+    if not allvalid:
+        if not dtype_valid:
+            print(f"Rank {distctx.rank}: found different dtype values in {filelist}")
+        assert allvalid, f"Some rank found inconsistent dtype values"
+
+    # verify that at least one rank found a dtype
+    first_dtype_code = distctx.bcast_first(dtype_code)
+    assert first_dtype_code is not None, "Failed to find a dtype value in any index file"
+
+    # verify that all ranks that have a dtype that is consistent with each other
+    allsame = distctx.alltrue(dtype_code == first_dtype_code or dtype_code is None)
+    assert allsame, "Different dtype values detected in index files"
+
+
+def gather_files_dist_idx_cached(outfile, filelist, distctx, dtype=np.int32):
     # get our rank
     rank = distctx.rank
 
@@ -665,8 +683,8 @@ def gather_files_dist_idx_cached(outfile, filelist, distctx, dtype):
     data_offsets = [0]
     dim_offsets = [0]
     docs = [0]
-    element_size_valid = True # whether rank identifies inconsistent values in its files
-    element_size_value = None # the current element size value, if any
+    dtype_valid = True # whether rank identifies inconsistent values in its files
+    dtype_value = None # the current dtype code, if any
     for f in filelist:
         doc_offset = len(sizes)
 
@@ -676,26 +694,15 @@ def gather_files_dist_idx_cached(outfile, filelist, distctx, dtype):
         dim_offsets.extend(index.dim_offsets[1:] + dim_offsets[-1])
         docs.extend(index.doc_idx[1:] + doc_offset)
 
-        # check that the element value in this index matches other our other files
-        if element_size_value is None:
-            element_size_value = index.element_size
-        if index.element_size != element_size_value:
-            element_size_valid = False
+        # check that the dtype in this index matches the dtype in our other files
+        dtype_code = code(index.dtype)
+        if dtype_value is None:
+            dtype_value = dtype_code
+        if dtype_value != dtype_code:
+            dtype_valid = False
 
-    # verify that no rank has found an inconsistent value in their own set of files
-    allvalid = distctx.alltrue(element_size_valid)
-    if not allvalid:
-        if not element_size_valid:
-            print(f"Rank {rank}: found different element_size values in {filelist}")
-        assert allvalid, f"Some rank found inconsistent element_size values"
-
-    # verify that at least one rank found an element size
-    element_size = distctx.bcast_first(element_size_value)
-    assert element_size is not None, "Failed to find any element size in index files"
-
-    # verify that all ranks that have an element size are consistent with each other
-    allsame = distctx.alltrue(element_size_value == element_size or element_size_value is None)
-    assert allsame, "Failed to find a valid element size in index files"
+    # Check that we have consistent dtypes in all files from all ranks
+    gather_files_dist_check_dtype(filelist, dtype_valid, dtype_value, distctx)
 
     # Capture the last value in each array before we delete any items.
     # Note this may be zero on any rank that has no items,
@@ -737,7 +744,7 @@ def gather_files_dist_idx_cached(outfile, filelist, distctx, dtype):
         fout.write(IndexedDataset._HDR_MAGIC)
         fout.write(struct.pack('<Q', 1))
         fout.write(struct.pack('<Q', code(dtype)))
-        fout.write(struct.pack('<Q', element_size))
+        fout.write(struct.pack('<Q', IndexedDatasetBuilder.element_sizes[dtype]))
         fout.write(struct.pack('<Q', global_data_count - 1))
         fout.write(struct.pack('<Q', global_size_count))
         fout.write(struct.pack('<Q', global_doc_count))
@@ -791,12 +798,24 @@ def gather_files_dist_idx_mmap(outfile, filelist, distctx, dtype):
     # Read each index file and append items to the size and docs lists
     sizes = []
     docs = [0]
+    dtype_valid = True # whether rank identifies inconsistent values in its files
+    dtype_value = None # the current dtype code, if any
     for f in filelist:
         docs_offset = len(sizes)
 
         index = MMapIndexedDataset.Index(index_file_path(f))
         sizes.extend(index.sizes)
         docs.extend(index.doc_idx[1:] + docs_offset)
+
+        # check that the dtype in this index matches the dtype in our other files
+        dtype_code = code(index.dtype)
+        if dtype_value is None:
+            dtype_value = dtype_code
+        if dtype_value != dtype_code:
+            dtype_valid = False
+
+    # Check that we have consistent dtypes in all files from all ranks
+    gather_files_dist_check_dtype(filelist, dtype_valid, dtype_value, distctx)
 
     # Drop the zero entry from the lists that start with
     # a "0" value unless we're rank 0
@@ -901,7 +920,7 @@ def gather_files_dist_idx_mmap(outfile, filelist, distctx, dtype):
 
 # Verify that all files in filelist are of the same index type.
 # Returns the identified type {cached, mmap} as a string.
-def gather_files_dist_check_type(filelist, distctx):
+def gather_files_dist_check_impltype(filelist, distctx):
     # Sanity check for typos in file names.
     # Check that a data file exists for each of our files.
     exists = True
@@ -963,7 +982,7 @@ def gather_files_dist(filemain, filelist, distctx, dtype=np.int64):
 
     # TODO: seems like this could be relaxed
     # Check that files are all of the same index type
-    indexstr = gather_files_dist_check_type(filelist, distctx)
+    indexstr = gather_files_dist_check_impltype(filelist, distctx)
 
     # Concatenate the data files
     gather_files_dist_bin(filemain, filelist, distctx)
