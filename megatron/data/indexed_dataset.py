@@ -957,6 +957,10 @@ def gather_files_dist_check_type(filelist, distctx):
 # Each rank merges its set of files into filemain collectively with all
 # other ranks.
 def gather_files_dist(filemain, filelist, distctx, dtype=np.int64):
+    # check that at least one input file is listed
+    filecount = distctx.sum(len(filelist))
+    assert filecount > 0, "No rank has any input files to merge"
+
     # TODO: seems like this could be relaxed
     # Check that files are all of the same index type
     indexstr = gather_files_dist_check_type(filelist, distctx)
