@@ -652,11 +652,9 @@ def gather_files_dist_idx_cached(outfile, filelist, distctx, dtype):
         dim_offsets.extend(index.dim_offsets[1:] + dim_offsets[-1])
         docs.extend(index.doc_idx[1:] + doc_offset)
 
-    # Drop first entry from the lists that start with
-    # a "0" value if we're not the first rank with some size.
-    minrank = distctx.minrank(len(sizes) > 0)
-    firstrank = minrank if minrank is not None else 0
-    if rank != firstrank:
+    # Drop the zero entry from the lists that start with
+    # a "0" value unless we're rank 0
+    if rank != 0:
         del data_offsets[0]
         del dim_offsets[0]
         del docs[0]
@@ -784,11 +782,9 @@ def gather_files_dist_idx_mmap(outfile, filelist, distctx, dtype):
         sizes.extend(index.sizes)
         docs.extend(index.doc_idx[1:] + docs_offset)
 
-    # Drop first entry from the lists that start with
-    # a "0" value if we're not the first rank with some size.
-    minrank = distctx.minrank(len(sizes) > 0)
-    firstrank = minrank if minrank is not None else 0
-    if rank != firstrank:
+    # Drop the zero entry from the lists that start with
+    # a "0" value unless we're rank 0
+    if rank != 0:
         del docs[0]
 
     # Compute total number of size and document index
