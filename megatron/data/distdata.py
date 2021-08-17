@@ -3,6 +3,9 @@ import numpy as np
 import torch
 import torch.distributed as dist
 
+class DistDataException(Exception):
+    pass
+
 class DistData(object):
     def __init__(self, backend='gloo', use_mpi4py=False):
         # use mpi4py instead of torch.distributed if requested
@@ -25,6 +28,29 @@ class DistData(object):
             dist.init_process_group(backend, init_method="env://")
             self.rank = dist.get_rank()
             self.numranks = dist.get_world_size()
+
+    def assert(self, cond, msg):
+        """Check that condition cond is True on all ranks, assert with message everywhere if not."""
+        alltrue = self.alltrue(cond)
+        assert alltrue, msg
+
+    def raise(self, err):
+        """Raise exception if err is not None on any rank."""
+        alltrue = self.alltrue(err is None)
+        if not alltrue:
+            # at least on rank raised an exception,
+            # re-raise the actual exception on any rank that threw one
+            if err is not None:
+                raise err
+
+            # on other ranks, raise an "empty" exception to indicate
+            # that we're failing because someone else did
+            raise DistDataException
+
+    def assert(self, cond, msg):
+        """Check that condition cond is True on all ranks."""
+        alltrue = self.alltrue(cond)
+        assert alltrue, msg
 
     def barrier(self):
         """Globally synchronize all processes"""
