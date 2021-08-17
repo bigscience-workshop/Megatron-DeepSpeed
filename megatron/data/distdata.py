@@ -21,6 +21,7 @@ class DistData(object):
             self.rank = self.comm.Get_rank()
             self.numranks = self.comm.Get_size()
         else:
+            assert backend in ['gloo', 'mpi'], f"torch.distributed backend '{backend}' is not supported, valid options are 'gloo' or 'mpi'"
             dist.init_process_group(backend, init_method="env://")
             self.rank = dist.get_rank()
             self.numranks = dist.get_world_size()
