@@ -68,6 +68,13 @@ from megatron.tokenizer import build_tokenizer
 from megatron.data.indexed_dataset import data_file_path, index_file_path, make_builder, best_fitting_dtype, gather_files_dist
 from megatron.data.distdata import DistData
 
+def msg(msg, flush=False):
+    timestamp = time.strftime("%Y-%m-%dT%H:%M:%S")
+    print(f"{timestamp}: {msg}", flush=flush)
+
+def msgerr(msg, flush=False):
+    print(f"ERROR: {msg}", flush=flush)
+
 # https://stackoverflow.com/questions/33139531/preserve-empty-lines-with-nltks-punkt-tokenizer
 class CustomLanguageVars(nltk.tokenize.punkt.PunktLanguageVars):
 
@@ -93,7 +100,7 @@ class Encoder(object):
 
         if self.args.split_sentences:
             if not nltk_available:
-                print("NLTK is not available to split sentences.")
+                msgerr("NLTK is not available to split sentences.")
                 exit()
             splitter = nltk.load("tokenizers/punkt/english.pickle")
             if self.args.keep_newlines:
@@ -201,7 +208,7 @@ def get_args():
     if args.tokenizer_type.lower().startswith('bert'):
         if not args.split_sentences:
             if args.rank == 0:
-                print("Bert tokenizer detected, are you sure you don't want to split sentences?")
+                msg("Bert tokenizer detected, are you sure you don't want to split sentences?")
 
     args.level = "document"
     if args.split_sentences:
@@ -245,19 +252,19 @@ def load_dset(args):
     err = None
     dsetname = args.input
     if args.rank == 0:
-        print(f"Opening dataset {dsetname}")
+        msg(f"Opening dataset {dsetname}")
         try:
             dset = load_dataset(dsetname, split=args.split, keep_in_memory=None)
         except OfflineModeIsEnabled as e:
-            print(f"ERROR: Cannot download '{dsetname}' since running in offline mode.")
-            print(f"ERROR: If the dataset is large, it may be more efficient to download with a single process:")
-            print(f"ERROR:     from datasets import load_dataset")
-            print(f"ERROR:     dset = load_dataset('{dsetname}')")
-            print(f"ERROR: Alternatively, one can force this script to download by setting $HF_DATASETS_OFFLINE=0", flush=True)
+            msgerr(f"Cannot download '{dsetname}' since running in offline mode.")
+            msgerr(f"If the dataset is large, it may be more efficient to download with a single process:")
+            msgerr(f"    from datasets import load_dataset")
+            msgerr(f"    dset = load_dataset('{dsetname}')")
+            msgerr(f"Alternatively, one can force this script to download by setting $HF_DATASETS_OFFLINE=0", flush=True)
             success = False
             err = e
         except Exception as e:
-            print("ERROR: Unexpected error:", sys.exc_info()[0], flush=True)
+            msgerr("Unexpected error:", sys.exc_info()[0], flush=True)
             success = False
             err = e
 
@@ -273,7 +280,7 @@ def load_dset(args):
             dset = load_dataset(dsetname, split=args.split, keep_in_memory=None)
         except Exception as e:
             # this print might be noisy, but better than nothing
-            print("ERROR: Unexpected error:", sys.exc_info()[0], flush=True)
+            msgerr("Unexpected error:", sys.exc_info()[0], flush=True)
             success = False
             err = e
 
@@ -281,12 +288,12 @@ def load_dset(args):
     success = args.distctx.alltrue(success)
     if not success:
         if args.rank == 0:
-            print(f"ERROR: At least one process failed to load {dsetname}", flush=True)
+            msgerr(f"At least one process failed to load {dsetname}", flush=True)
         return None, err
 
     time_end = time.time()
     if args.rank == 0:
-        print(f"Seconds to load dataset: {time_end - time_start}", flush=True)
+        msg(f"Seconds to load dataset: {time_end - time_start}", flush=True)
 
     return dset, err
 
@@ -335,11 +342,11 @@ def select_sample_list(args, dset_size):
     args.distctx.barrier()
     time_end = time.time()
     if args.rank == 0:
-        print(f"Select index stats:")
-        print(f"    Shuffle: {args.shuffle}")
-        print(f"    Seconds to select: {time_bcast - time_select}")
-        print(f"    Seconds to broadcast: {time_end - time_bcast}")
-        print(f"    Seconds total: {time_end - time_select}", flush=True)
+        msg(f"Select index stats:")
+        msg(f"    Shuffle: {args.shuffle}")
+        msg(f"    Seconds to select: {time_bcast - time_select}")
+        msg(f"    Seconds to broadcast: {time_end - time_bcast}")
+        msg(f"    Seconds total: {time_end - time_select}", flush=True)
 
     return idx
 
@@ -379,8 +386,8 @@ def rank_files_write(args, dset, idx, encoder):
     try:
         # create data file for each rank
         if args.rank == 0:
-            print(f"Vocab size: {args.vocab_size}")
-            print(f"Output prefix: {args.output_prefix}")
+            msg(f"Vocab size: {args.vocab_size}")
+            msg(f"Output prefix: {args.output_prefix}")
         output_bin_files = {}
         output_idx_files = {}
         builders = {}
@@ -424,16 +431,15 @@ def rank_files_write(args, dset, idx, encoder):
                 progress_next = current + float(args.log_interval)
 
                 elapsed = current - time_start
-                timestamp = time.strftime("%Y-%m-%dT%H:%M:%S")
                 docs = dset_stats[0] * args.numranks
                 percent = docs / num_samples * 100.0
                 docrate = docs / elapsed if elapsed > 0.0 else 0.0
                 mbs = dset_stats[2] * args.numranks / elapsed / 1024 / 1024 if elapsed > 0.0 else 0.0
                 secs_left = int((num_samples - docs) / docrate if docrate > 0.0 else 0.0)
-                print(f"{timestamp}: Processed (estimated) {docs} of {num_samples} docs ({percent:0.2f}%),",
-                      f"{docrate:0.3f} docs/s, {mbs:0.3f} MB/s,",
-                      f"{secs_left} secs left ...",
-                      flush=True)
+                msg(f"Processed (estimated) {docs} of {num_samples} docs ({percent:0.2f}%),",
+                    f"{docrate:0.3f} docs/s, {mbs:0.3f} MB/s,",
+                    f"{secs_left} secs left ...",
+                    flush=True)
 
         # finalize file of each rank
         for key in args.columns:
@@ -447,8 +453,7 @@ def rank_files_write(args, dset, idx, encoder):
     # In case rank 0 finishes early and stops printing progress messages,
     # inform user that it's waiting for other ranks to finish.
     if args.rank == 0 and args.log_interval > 0:
-        timestamp = time.strftime("%Y-%m-%dT%H:%M:%S")
-        print(f"{timestamp}: Waiting for ranks to finalize files ...", flush=True)
+        msg(f"Waiting for ranks to finalize files ...", flush=True)
 
     # wait for all ranks to finish their files
     args.distctx.barrier()
@@ -465,14 +470,14 @@ def rank_files_write(args, dset, idx, encoder):
         secs_read_per_sample = times[0] / dset_stats[0] if dset_stats[0] > 0 else 0.0
         secs_encode_per_sample = times[1] / dset_stats[0] if dset_stats[0] > 0 else 0.0
         secs_write_per_sample = times[2] / dset_stats[0] if dset_stats[0] > 0 else 0.0
-        print("Process stats:")
-        print(f"    Seconds to process: {secs}")
-        print(f"    {dset_stats[0]} docs {docrate} docs/sec")
-        print(f"    {dset_stats[1]} sents {sentrate} sents/sec")
-        print(f"    {dset_stats[2]} bytes {format_byterate(byterate)}")
-        print(f"    Total read seconds {times[0]}, {secs_read_per_sample} sec/sample")
-        print(f"    Total encode seconds {times[1]}, {secs_encode_per_sample} sec/sample")
-        print(f"    Total write seconds {times[2]}, {secs_write_per_sample} sec/sample")
+        msg("Process stats:")
+        msg(f"    Seconds to process: {secs}")
+        msg(f"    {dset_stats[0]} docs {docrate} docs/sec")
+        msg(f"    {dset_stats[1]} sents {sentrate} sents/sec")
+        msg(f"    {dset_stats[2]} bytes {format_byterate(byterate)}")
+        msg(f"    Total read seconds {times[0]}, {secs_read_per_sample} sec/sample")
+        msg(f"    Total encode seconds {times[1]}, {secs_encode_per_sample} sec/sample")
+        msg(f"    Total write seconds {times[2]}, {secs_write_per_sample} sec/sample")
 
     # allreduce to check whether all ranks wrote their part successfully
     success = args.distctx.alltrue(success)
@@ -508,15 +513,15 @@ def rank_files_merge_parallel(args):
     if args.rank == 0:
         secs = merge_end - merge_start
         byterate = numbytes[0] / secs if secs > 0.0 else 0.0
-        print("Parallel merge stats:")
-        print(f"    Scratch: {args.scratch}")
-        print(f"    Seconds to merge: {secs}")
-        print(f"    {int(numbytes)} bytes {format_byterate(byterate)}")
+        msg("Parallel merge stats:")
+        msg(f"    Scratch: {args.scratch}")
+        msg(f"    Seconds to merge: {secs}")
+        msg(f"    {int(numbytes)} bytes {format_byterate(byterate)}")
 
 def rank_files_merge_serial(args):
     """Rank 0 merges data from all per-rank files into the final file."""
     if args.rank == 0:
-        print("Merging rank files ...", flush=True)
+        msg("Merging rank files ...", flush=True)
         merge_start = time.time()
         numbytes = 0
 
@@ -538,7 +543,7 @@ def rank_files_merge_serial(args):
             for key in args.columns:
                 infile = get_filename(args, key, rank)
 
-#                print(f"Merging file {infile}", flush=True)
+#                msg(f"Merging file {infile}", flush=True)
                 builders[key].merge_file_(infile)
 
                 # sum up the number of merged bytes
@@ -548,7 +553,7 @@ def rank_files_merge_serial(args):
                 numbytes += os.stat(idxfile)[stat.ST_SIZE]
 
         # finalize the merged file
-        print("Finalizing merged file ...", flush=True)
+        msg("Finalizing merged file ...", flush=True)
         for key in args.columns:
             builders[key].finalize(output_idx_files[key])
             del builders[key] # file closed in __del__
@@ -556,10 +561,10 @@ def rank_files_merge_serial(args):
         merge_end = time.time()
         secs = merge_end - merge_start
         byterate = numbytes / secs if secs > 0.0 else 0.0
-        print(f"Merged {args.numranks} files into {args.output_prefix}")
-        print("Merge stats:")
-        print(f"    Seconds to merge: {secs}")
-        print(f"    {numbytes} bytes {format_byterate(byterate)}")
+        msg(f"Merged {args.numranks} files into {args.output_prefix}")
+        msg("Merge stats:")
+        msg(f"    Seconds to merge: {secs}")
+        msg(f"    {numbytes} bytes {format_byterate(byterate)}")
 
     # hold everyone until rank 0 is done
     args.distctx.barrier()
@@ -580,7 +585,7 @@ def rank_files_merge(args):
 def rank_files_delete(args):
     # delete per-rank files
     if args.rank == 0:
-        print("Deleting rank files ...", flush=True)
+        msg("Deleting rank files ...", flush=True)
 
     for key in args.columns:
         filebase = get_filename(args, key, args.rank)
@@ -608,7 +613,7 @@ def main():
         return
     if args.rank == 0:
         print(dset)
-        print("Selecting features:", args.columns)
+        msg("Selecting features:", args.columns)
 
     # create sample index list,
     # optionally shuffle the list,
@@ -625,7 +630,7 @@ def main():
     args.distctx.barrier()
     startup_end = time.time()
     if args.rank == 0:
-        print(f"Seconds to startup: {startup_end - startup_start}")
+        msg(f"Seconds to startup: {startup_end - startup_start}")
 
     # have each rank write its file, returns False if any rank had a problem
     success, err = rank_files_write(args, dset, idx, encoder)
@@ -633,7 +638,7 @@ def main():
         if args.rank == 0:
             # If any process fails, we skip the merge since the resulting file would be invalid.
             # We still delete files to clean up, since those might be invalid anyway.
-            print(f"ERROR: At least one process failed to write its file, skipping merge and cleaning up", flush=True)
+            msgerr(f"At least one process failed to write its file, skipping merge and cleaning up", flush=True)
 
         # delete per-rank files, do this even on error
         rank_files_delete(args)
