@@ -276,6 +276,17 @@ class IndexedDatasetBuilder(object):
         np.double: 8
     }
 
+    @staticmethod
+    def write_header(fout, dtype, numdata, numsize, numdoc):
+        """Writes header for cached indexed dataset to given file handle."""
+        fout.write(IndexedDataset._HDR_MAGIC)
+        fout.write(struct.pack('<Q', 1))
+        fout.write(struct.pack('<Q', code(dtype)))
+        fout.write(struct.pack('<Q', IndexedDatasetBuilder.element_sizes[dtype]))
+        fout.write(struct.pack('<Q', numdata - 1))
+        fout.write(struct.pack('<Q', numsize))
+        fout.write(struct.pack('<Q', numdoc))
+
     def __init__(self, out_file, dtype=np.int32):
         self.out_file = open(out_file, 'wb')
         self.dtype = dtype
@@ -342,6 +353,15 @@ def _warmup_mmap_file(path):
 class MMapIndexedDataset(torch.utils.data.Dataset):
     class Index(object):
         _HDR_MAGIC = b'MMIDIDX\x00\x00'
+
+        @staticmethod
+        def write_header(fout, dtype, numsizes, numdocs):
+            """Writes header for mmap indexed dataset to given file handle."""
+            fout.write(MMapIndexedDataset.Index._HDR_MAGIC)
+            fout.write(struct.pack('<Q', 1))
+            fout.write(struct.pack('<B', code(dtype)))
+            fout.write(struct.pack('<Q', numsizes))
+            fout.write(struct.pack('<Q', numdocs))
 
         @classmethod
         def writer(cls, path, dtype):
@@ -745,13 +765,7 @@ def gather_files_dist_idx_cached(outfile, filelist, distctx):
     # Have rank 0 write the file header
     pos = 0
     if rank == 0:
-        fout.write(IndexedDataset._HDR_MAGIC)
-        fout.write(struct.pack('<Q', 1))
-        fout.write(struct.pack('<Q', code(dtype)))
-        fout.write(struct.pack('<Q', IndexedDatasetBuilder.element_sizes[dtype]))
-        fout.write(struct.pack('<Q', global_data_count - 1))
-        fout.write(struct.pack('<Q', global_size_count))
-        fout.write(struct.pack('<Q', global_doc_count))
+        IndexedDatasetBuilder.write_header(fout, dtype, global_data_count, global_size_count, global_doc_count)
         pos = fout.tell()
 
     # Broadcast value of pos from rank 0,
@@ -843,11 +857,7 @@ def gather_files_dist_idx_mmap(outfile, filelist, distctx):
     # Have rank 0 write the file header
     pos = 0
     if rank == 0:
-        fout.write(MMapIndexedDataset.Index._HDR_MAGIC)
-        fout.write(struct.pack('<Q', 1))
-        fout.write(struct.pack('<B', code(dtype)))
-        fout.write(struct.pack('<Q', global_size_count))
-        fout.write(struct.pack('<Q', global_docs_count))
+        MMapIndexedDataset.Index.write_header(fout, dtype, global_size_count, global_docs_count)
         pos = fout.tell()
 
     # Broadcast value of pos from rank 0,
