@@ -665,7 +665,8 @@ def gather_files_dist_idx_cached(outfile, filelist, distctx, dtype):
     data_offsets = [0]
     dim_offsets = [0]
     docs = [0]
-    element_size = None
+    element_size_valid = True # whether rank identifies inconsistent values in its files
+    element_size_value = None # the current element size value, if any
     for f in filelist:
         doc_offset = len(sizes)
 
@@ -674,12 +675,27 @@ def gather_files_dist_idx_cached(outfile, filelist, distctx, dtype):
         data_offsets.extend(index.data_offsets[1:] + data_offsets[-1])
         dim_offsets.extend(index.dim_offsets[1:] + dim_offsets[-1])
         docs.extend(index.doc_idx[1:] + doc_offset)
-        element_size = index.element_size
 
-    # TODO: verify that element size is the same on all ranks for all files
-    # take first valid element size we can find
-    element_size = distctx.bcast_first(element_size)
-    assert element_size is not None, "Failed to find a valid element size in index files"
+        # check that the element value in this index matches other our other files
+        if element_size_value is None:
+            element_size_value = index.element_size
+        if index.element_size != element_size_value:
+            element_size_valid = False
+
+    # verify that no rank has found an inconsistent value in their own set of files
+    allvalid = distctx.alltrue(element_size_valid)
+    if not allvalid:
+        if not element_size_valid:
+            print(f"Rank {rank}: found different element_size values in {filelist}")
+        assert allvalid, f"Some rank found inconsistent element_size values"
+
+    # verify that at least one rank found an element size
+    element_size = distctx.bcast_first(element_size_value)
+    assert element_size is not None, "Failed to find any element size in index files"
+
+    # verify that all ranks that have an element size are consistent with each other
+    allsame = distctx.alltrue(element_size_value == element_size or element_size_value is None)
+    assert allsame, "Failed to find a valid element size in index files"
 
     # Capture the last value in each array before we delete any items.
     # Note this may be zero on any rank that has no items,
