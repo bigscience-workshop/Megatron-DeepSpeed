@@ -332,11 +332,7 @@ class IndexedDatasetBuilder(object):
     def finalize(self, index_file):
         self.out_file.close()
         index = open(index_file, 'wb')
-        index.write(b'TNTIDX\x00\x00')
-        index.write(struct.pack('<Q', 1))
-        index.write(struct.pack('<QQ', code(self.dtype), self.element_size))
-        index.write(struct.pack('<QQ', len(self.data_offsets) - 1, len(self.sizes)))
-        index.write(struct.pack('<Q', len(self.doc_idx)))
+        IndexedDatasetBuilder.write_header(index, self.dtype, len(self.data_offsets), len(self.sizes), len(self.doc_idx))
         write_longs(index, self.dim_offsets)
         write_longs(index, self.data_offsets)
         write_longs(index, self.sizes)
@@ -368,11 +364,6 @@ class MMapIndexedDataset(torch.utils.data.Dataset):
             class _Writer(object):
                 def __enter__(self):
                     self._file = open(path, 'wb')
-
-                    self._file.write(cls._HDR_MAGIC)
-                    self._file.write(struct.pack('<Q', 1))
-                    self._file.write(struct.pack('<B', code(dtype)))
-
                     return self
 
                 @staticmethod
@@ -400,8 +391,7 @@ class MMapIndexedDataset(torch.utils.data.Dataset):
                     return pointers
 
                 def write(self, sizes, doc_idx):
-                    self._file.write(struct.pack('<Q', len(sizes)))
-                    self._file.write(struct.pack('<Q', len(doc_idx)))
+                    MMapIndexedDataset.Index.write_header(self._file, dtype, len(sizes), len(doc_idx))
 
                     sizes32 = np.array(sizes, dtype=np.int32)
                     self._file.write(sizes32.tobytes(order='C'))
