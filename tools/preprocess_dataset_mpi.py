@@ -176,6 +176,10 @@ def get_args():
         if not args.split_sentences:
             print("Bert tokenizer detected, are you sure you don't want to split sentences?")
 
+    args.level = "document"
+    if args.split_sentences:
+        args.level = "sentence"
+
     # some default/dummy values for the tokenizer
     args.rank = 0
     args.make_vocab_size_divisible_by = 128
@@ -220,20 +224,20 @@ def barrier(args):
         dist.barrier()
 
 def scatterv_(args, invals, counts, outval, root=0):
-    """Scatter values from invals according to counts array, receive values in outval"""
-    if args.use_mpi:
-        displ = [sum(counts[:rank]) for rank in range(args.numranks)]
-        args.mpi_comm.Scatterv([invals, np.array(counts), np.array(displ), args.MPI.INT64_T], outval, root=root)
-    else:
-        tensors = []
-        if args.rank == root:
-            for rank in range(args.numranks):
-                start = sum(counts[:rank])
-                end = start + counts[rank]
-                tensors.append(torch.tensor(invals[start:end]))
+    """Scatter int64 values from invals according to counts array, receive values in outval"""
+    assert len(counts) == args.numranks, f"Length of counts list {len(counts)} does not match number of ranks {args.numranks}"
+    assert outval.shape == (counts[args.rank],), f"Rank {args.rank}: output buffer is of shape {outval.shape}, expected {(counts[args.rank],)}"
 
-        tensor = torch.from_numpy(outval)
-        dist.scatter(tensor, tensors, src=root)
+    if args.use_mpi:
+        counts = np.array(counts)
+        displs = np.cumsum(counts) - counts
+        args.mpi_comm.Scatterv([invals, counts, displs, args.MPI.INT64_T], outval, root=root)
+    else:
+        scatterlist = []
+        if args.rank == root:
+            scatterlist = list(torch.split(torch.from_numpy(invals), counts))
+        outtensor = torch.from_numpy(outval)
+        dist.scatter(outtensor, scatterlist, src=root)
 
 def all_sum_(args, vals):
     """Sums values in vals element-wise and updates vals with final result on all ranks"""
@@ -323,12 +327,17 @@ def load_dset(args):
 
     return dset, err
 
-def select_sample_list(args, dset_size):
-    """Given the total number of samples, select a list of sample index values"""
-    # determine total number of samples that we'll read
+def get_num_samples(args, dset_size):
+    """Given a dataset size and optional count argument, return number of samples to process."""
     num_samples = dset_size
     if args.count is not None and args.count < dset_size:
         num_samples = args.count
+    return num_samples
+
+def select_sample_list(args, dset_size):
+    """Given the total number of samples, select a list of sample index values"""
+    # determine total number of samples that we'll read
+    num_samples = get_num_samples(args, dset_size)
 
     # create sample index list on rank 0,
     # optionally shuffle the list,
@@ -346,7 +355,7 @@ def select_sample_list(args, dset_size):
 
         # optionally limit the sample count
         if args.count is not None:
-            idxlist = idxlist[:args.count]
+            idxlist = idxlist[:num_samples]
 
     # get a list of the number of elements each rank will hold
     counts = get_proc_counts(num_samples, args.numranks)
@@ -358,7 +367,7 @@ def select_sample_list(args, dset_size):
     # based on distribution defined in counts list
     scatterv_(args, idxlist, counts, idx, root=0)
 
-    return num_samples, idx
+    return idx
 
 def get_proc_counts(num, num_ranks):
     num_per_rank, remainder = divmod(num, num_ranks)
@@ -374,8 +383,11 @@ def get_filename(args, key, rank=None):
 
     return filename
 
-def rank_files_write(args, dset, num_samples, idx, encoder):
+def rank_files_write(args, dset, idx, encoder):
     tokenize_start = time.time()
+
+    # compute total number of samples we'e processing
+    num_samples = get_num_samples(args, len(dset))
 
     # we'll total up the number of docs, sentences, and bytes
     # processed across all ranks
@@ -555,14 +567,10 @@ def main():
         print(dset)
         print("Selecting features:", args.columns)
 
-    args.level = "document"
-    if args.split_sentences:
-        args.level = "sentence"
-
     # create sample index list,
     # optionally shuffle the list,
     # and optionally limit the sample count
-    num_samples, idx = select_sample_list(args, len(dset))
+    idx = select_sample_list(args, len(dset))
 
     if nltk_available and args.split_sentences:
         nltk.download("punkt", quiet=True)
@@ -577,7 +585,7 @@ def main():
         print("Seconds to startup:", startup_end - startup_start)
 
     # have each rank write its file, returns False if any rank had a problem
-    success, err = rank_files_write(args, dset, num_samples, idx, encoder)
+    success, err = rank_files_write(args, dset, idx, encoder)
     if not success:
         if args.rank == 0:
             # If any process fails, we skip the merge since the resulting file would be invalid.
