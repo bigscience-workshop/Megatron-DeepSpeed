@@ -218,22 +218,6 @@ def format_byterate(byterate):
     mbps = byterate / (1024.0 * 1024.0)
     return f"{mbps:0.3f} MB/s"
 
-def scatterv_(args, invals, counts, outval, root=0):
-    """Scatter int64 values from invals according to counts array, receive values in outval"""
-    assert len(counts) == args.numranks, f"Length of counts list {len(counts)} does not match number of ranks {args.numranks}"
-    assert outval.shape == (counts[args.rank],), f"Rank {args.rank}: output buffer is of shape {outval.shape}, expected {(counts[args.rank],)}"
-
-    if args.use_mpi:
-        counts = np.array(counts)
-        displs = np.cumsum(counts) - counts
-        args.mpi_comm.Scatterv([invals, counts, displs, args.MPI.INT64_T], outval, root=root)
-    else:
-        scatterlist = None
-        if args.rank == root:
-            scatterlist = list(torch.split(torch.from_numpy(invals), counts))
-        outtensor = torch.from_numpy(outval)
-        dist.scatter(outtensor, scatterlist, src=root)
-
 def load_dset(args):
     # Avoid downloading datasets unless explicitly requested.
     # We allow the user to override this behavior if they set $HF_DATASETS_OFFLINE.
@@ -346,7 +330,7 @@ def select_sample_list(args, dset_size):
     # scatter sample index values from rank 0 to all procs
     # based on distribution defined in counts list
     time_bcast = time.time()
-    scatterv_(args, idxlist, counts, idx, root=0)
+    args.distctx.scatterv_(idxlist, counts, idx, root=0)
 
     args.distctx.barrier()
     time_end = time.time()

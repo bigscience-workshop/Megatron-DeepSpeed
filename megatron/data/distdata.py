@@ -85,6 +85,29 @@ class DistData(object):
             dist.broadcast(tvals, src=root)
             return tvals.tolist()
 
+    def scatterv_(self, invals, counts, outval, root=0):
+        """Scatter int64 values from invals according to counts array, receive values in outval"""
+
+        self.allassert(len(counts) == self.numranks,
+            f"Length of counts list {len(counts)} does not match number of ranks {self.numranks}")
+
+        self.allassert(outval.shape == (counts[self.rank],),
+            f"Rank {self.rank}: output buffer is of shape {outval.shape}, expected {(counts[self.rank],)}")
+
+        self.allassert(outval.dtype == np.int64,
+            f"Requires outval to be of type numpy.int64")
+
+        if self.mpi4py is not None:
+            counts = np.array(counts)
+            displs = np.cumsum(counts) - counts
+            self.comm.Scatterv([invals, counts, displs, self.mpi4py.INT64_T], outval, root=root)
+        else:
+            scatterlist = None
+            if self.rank == root:
+                scatterlist = list(torch.split(torch.from_numpy(invals), counts))
+            outtensor = torch.from_numpy(outval)
+            dist.scatter(outtensor, scatterlist, src=root)
+
     def alltrue(self, val):
         """Returns True if all procs input True, False otherwise"""
         if self.mpi4py is not None:
