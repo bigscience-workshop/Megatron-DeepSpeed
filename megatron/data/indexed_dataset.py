@@ -278,7 +278,9 @@ class IndexedDatasetBuilder(object):
 
     @staticmethod
     def write_header(fout, dtype, numdata, numsize, numdoc):
-        """Writes header for cached indexed dataset to given file handle."""
+        """Writes header for cached indexed dataset to given file handle, return number of bytes written."""
+        startpos = fout.tell()
+
         fout.write(IndexedDataset._HDR_MAGIC)
         fout.write(struct.pack('<Q', 1))
         fout.write(struct.pack('<Q', code(dtype)))
@@ -286,6 +288,9 @@ class IndexedDatasetBuilder(object):
         fout.write(struct.pack('<Q', numdata - 1))
         fout.write(struct.pack('<Q', numsize))
         fout.write(struct.pack('<Q', numdoc))
+
+        endpos = fout.tell()
+        return endpos - startpos
 
     def __init__(self, out_file, dtype=np.int32):
         self.out_file = open(out_file, 'wb')
@@ -352,12 +357,17 @@ class MMapIndexedDataset(torch.utils.data.Dataset):
 
         @staticmethod
         def write_header(fout, dtype, numsizes, numdocs):
-            """Writes header for mmap indexed dataset to given file handle."""
+            """Writes header for mmap indexed dataset to given file handle, return number of bytes written."""
+            startpos = fout.tell()
+
             fout.write(MMapIndexedDataset.Index._HDR_MAGIC)
             fout.write(struct.pack('<Q', 1))
             fout.write(struct.pack('<B', code(dtype)))
             fout.write(struct.pack('<Q', numsizes))
             fout.write(struct.pack('<Q', numdocs))
+
+            endpos = fout.tell()
+            return endpos - startpos
 
         @classmethod
         def writer(cls, path, dtype):
@@ -642,12 +652,36 @@ def gather_files_dist_bin(outfile, filelist, distctx):
 
 
 def write_list(fout, pos, vals, shift, offset, total, dtype):
-    """Write list of values to fout and return new file position.
+    """Write list of values to fout and return the number of bytes written assuming the total list size.
 
-    Copy list of values in vals to a numpy array of type dtype.
-    Add a constant shift value to all elements.
-    Write array to file at given offset and scaled by size of the datatype.
-    Compute and return new file position given a total number of elements written.
+    Copies list of values in vals to a numpy array of type dtype.
+    Adds a constant value to all elements as given in shift.
+    Writes the numpy array to the file handle at given offset and scaled by size of the datatype.
+        byteoffset = pos + vals * dtype().itemsize
+    Computes and return the total bytes written to write total elements of type dtype.
+
+    Parameters
+    ----------
+    fout : file handle
+        Opened file handle to which to write vals
+    pos : int
+        Byte offset within the file where the global list starts
+    vals : list(int)
+        List of values to be written
+    shift : int
+        Value to add to each element in vals before writing (use 0 for no change)
+    offset : int
+        Zero-based element index where vals starts within the global list
+    total : int
+        Total number of elements within the global list
+    dtype : numpy datatype
+        numpy datatype to be used when writing the list to the file
+
+    Returns
+    -------
+    int
+        Number of bytes that would be required to write the global list
+        of length 'total' and of type 'dtype'
     """
 
     # Make a copy of the vals list using the requested datatype.
@@ -661,8 +695,8 @@ def write_list(fout, pos, vals, shift, offset, total, dtype):
     fout.seek(pos + offset * dtype().itemsize)
     fout.write(npvals.tobytes(order='C'))
 
-    # Advance file pointer past end of this section.
-    return pos + total * dtype().itemsize
+    # Return number of bytes written
+    return total * dtype().itemsize
 
 
 def gather_files_dist_check_dtype(filelist, dtype_valid, dtype_code, distctx):
@@ -753,13 +787,11 @@ def gather_files_dist_idx_cached(outfile, filelist, distctx):
     global_doc_offset = distctx.exscan(numdoc)
 
     # Have rank 0 write the file header
-    pos = 0
-    if rank == 0:
-        IndexedDatasetBuilder.write_header(fout, dtype, global_data_count, global_size_count, global_doc_count)
-        pos = fout.tell()
-
     # Broadcast value of pos from rank 0,
     # and advance file position past file header on all ranks.
+    pos = 0
+    if rank == 0:
+        pos = IndexedDatasetBuilder.write_header(fout, dtype, global_data_count, global_size_count, global_doc_count)
     pos = distctx.bcast(pos, root=0)
 
     # The dimension list records the offset within
@@ -767,14 +799,14 @@ def gather_files_dist_idx_cached(outfile, filelist, distctx):
     # offset values based on the number of offsets
     # that come before the calling rank.
     dim_shift = distctx.exscan(dim_last)
-    pos = write_list(fout, pos, dim_offsets, dim_shift, global_dim_offset, global_dim_count, np.int64)
+    pos += write_list(fout, pos, dim_offsets, dim_shift, global_dim_offset, global_dim_count, np.int64)
 
     # The data index records the byte offset to the start of each
     # sentence within the binary data file.
     # Adjust our data index values for number of bytes that
     # come before the calling rank.
     data_shift = distctx.exscan(data_last)
-    pos = write_list(fout, pos, data_offsets, data_shift, global_data_offset, global_data_count, np.int64)
+    pos += write_list(fout, pos, data_offsets, data_shift, global_data_offset, global_data_count, np.int64)
 
     # Each sentence is stored as a tensor.
     # The tensor for each sentence can be multidimensional.
@@ -784,11 +816,11 @@ def gather_files_dist_idx_cached(outfile, filelist, distctx):
     # for each dimension of a sentence.
     # The list of size values from each rank are
     # concatenated and stored as int64.
-    pos = write_list(fout, pos, sizes, 0, global_size_offset, global_size_count, np.int64)
+    pos += write_list(fout, pos, sizes, 0, global_size_offset, global_size_count, np.int64)
 
     # The document index points to the position in the sizes
     # array for the first sentence of the sample.
-    pos = write_list(fout, pos, docs, global_size_offset, global_doc_offset, global_doc_count, np.int64)
+    pos += write_list(fout, pos, docs, global_size_offset, global_doc_offset, global_doc_count, np.int64)
 
     fout.close()
 
@@ -845,18 +877,16 @@ def gather_files_dist_idx_mmap(outfile, filelist, distctx):
     global_docs_offset = distctx.exscan(numdocs)
 
     # Have rank 0 write the file header
-    pos = 0
-    if rank == 0:
-        MMapIndexedDataset.Index.write_header(fout, dtype, global_size_count, global_docs_count)
-        pos = fout.tell()
-
     # Broadcast value of pos from rank 0,
     # and advance file position past file header on all ranks.
+    pos = 0
+    if rank == 0:
+        pos = MMapIndexedDataset.Index.write_header(fout, dtype, global_size_count, global_docs_count)
     pos = distctx.bcast(pos, root=0)
 
     # The list of size values from each rank are
     # concatenated and stored as int32.
-    pos = write_list(fout, pos, sizes, 0, global_size_offset, global_size_count, np.int32)
+    pos += write_list(fout, pos, sizes, 0, global_size_offset, global_size_count, np.int32)
 
     # The pointer values store the byte offset to each sentence.
     # A sentence has a variable number of tokens, given by
@@ -914,7 +944,7 @@ def gather_files_dist_idx_mmap(outfile, filelist, distctx):
     # A variable number of sentences can be in each document.
     # Adjust document index for number of sentences that
     # come before the calling rank.
-    pos = write_list(fout, pos, docs, global_size_offset, global_docs_offset, global_docs_count, np.int64)
+    pos += write_list(fout, pos, docs, global_size_offset, global_docs_offset, global_docs_count, np.int64)
 
     fout.close()
 
