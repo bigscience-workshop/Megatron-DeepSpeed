@@ -872,36 +872,22 @@ def gather_files_dist_idx_mmap(outfile, filelist, distctx):
         # dtype().itemsize bytes (often a standard type that is just
         # large enough to represent all elements of the vocabulary).
 
-        # First compute byte offsets for each sentence of our
-        # local set of sentences.
-        pointers = np.array(sizes, dtype=np.int64)
-        pointer_last = 0
-        if len(sizes) > 0:
-            np.cumsum(pointers, axis=0, out=pointers)
-            pointers *= dtype().itemsize
-            pointer_last = pointers[-1]
+        # Compute byte sizes for each of our sentences given
+        # the token count and vocab dtype.
+        bytesizes = np.array(sizes, dtype=np.int64)
+        bytesizes *= dtype().itemsize
 
-        # Then account for bytes for all sentences on ranks
+        # Inclusive scan to sum number of bytes over sentences.
+        pointers = np.cumsum(bytesizes, axis=0)
+
+        # Account for bytes for all sentences on ranks
         # before the calling rank.
-        pointer_offset = distctx.exscan(pointer_last)
+        bytes_last = pointers[-1] if len(sizes) > 0 else 0
+        pointer_offset = distctx.exscan(bytes_last)
         pointers += pointer_offset
 
-        # Finally, zero-base the offset values by subtracting
-        # the number of bytes of the first sentence.  To do that
-        # we need to find the rank having the first sentence,
-        # then bcast that size to all ranks.
-        if global_size_count > 0:
-            # Since global_size_count > 0, there is at least one sentence across all ranks.
-            # Get the value from the first rank that has a value, which may not be rank 0.
-            pointers_shift = pointers[0] if len(sizes) > 0 else None
-            pointers_shift = distctx.bcast_first(pointers_shift)
-
-            # Since there is at least one, bcast_first should return some value other than None.
-            assert pointers_shift is not None, "Expected at least one rank to have a valid element"
-
-            # Zero-base pointers by subtracting size of first
-            # sentence from all values.
-            pointers -= pointers_shift
+        # Convert to exclusive scan to get global offset.
+        pointers -= bytesizes
 
         # Since the pointers array is the same length as the sizes array,
         # we use global_size_offset and global_size_count to position
@@ -911,7 +897,6 @@ def gather_files_dist_idx_mmap(outfile, filelist, distctx):
         # pointer values into file, stored as int64.
         fout.seek(pos + global_size_offset * np.int64().itemsize)
         fout.write(pointers.tobytes(order='C'))
-        del pointers
 
         # Advance past list of pointer values
         pos += global_size_count * np.int64().itemsize
