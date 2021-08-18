@@ -30,7 +30,7 @@ from megatron.model.utils import attention_mask_func, openai_gelu, erf_gelu
 
 import deepspeed
 
-import activations as glu_activations
+import glu_activations
 from .positional_embeddings import RotaryEmbedding, apply_rotary_pos_emb_torch, apply_rotary_pos_emb
 
 # flags required to enable jit fusion kernels
