@@ -30,7 +30,7 @@ from megatron.model.utils import attention_mask_func, openai_gelu, erf_gelu
 
 import deepspeed
 
-import glu_activations
+from .glu_activations import geglu, liglu, reglu, swiglu
 from .positional_embeddings import RotaryEmbedding, apply_rotary_pos_emb_torch, apply_rotary_pos_emb
 
 # flags required to enable jit fusion kernels
@@ -78,7 +78,13 @@ class ParallelMLP(MegatronModule):
         self.bias_gelu_fusion = args.bias_gelu_fusion
         self.activation_func = F.gelu
         if args.glu_activation:
-            self.activation_func = getattr(glu_activations, args.glu_activation)
+            glu_lookup = {
+                "gegelu": geglu,
+                "liglu": liglu,
+                "reglu": reglu,
+                "swiglu": swiglu,
+            }
+            self.activation_func = glu_lookup[args.glu_activation]
         elif args.openai_gelu:
             self.activation_func = openai_gelu
         elif args.onnx_safe:
