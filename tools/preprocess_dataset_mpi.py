@@ -436,8 +436,8 @@ def rank_files_write(args, dset, idx, encoder):
                 docrate = docs / elapsed if elapsed > 0.0 else 0.0
                 mbs = dset_stats[2] * args.numranks / elapsed / 1024 / 1024 if elapsed > 0.0 else 0.0
                 secs_left = int((num_samples - docs) / docrate if docrate > 0.0 else 0.0)
-                msg(f"Processed (estimated) {docs} of {num_samples} docs ({percent:0.2f}%),",
-                    f"{docrate:0.3f} docs/s, {mbs:0.3f} MB/s,",
+                msg(f"Processed (estimated) {docs} of {num_samples} docs ({percent:0.2f}%) in {int(elapsed)} secs, "
+                    f"{docrate:0.3f} docs/s, {mbs:0.3f} MB/s, "
                     f"{secs_left} secs left ...",
                     flush=True)
 
@@ -562,7 +562,7 @@ def rank_files_merge_serial(args):
         secs = merge_end - merge_start
         byterate = numbytes / secs if secs > 0.0 else 0.0
         msg(f"Merged {args.numranks} files into {args.output_prefix}")
-        msg("Merge stats:")
+        msg("Serial merge stats:")
         msg(f"    Seconds to merge: {secs}")
         msg(f"    {numbytes} bytes {format_byterate(byterate)}")
 
@@ -613,7 +613,7 @@ def main():
         return
     if args.rank == 0:
         print(dset)
-        msg("Selecting features:", args.columns)
+        msg(f"Processing features: {args.columns}")
 
     # create sample index list,
     # optionally shuffle the list,
@@ -653,6 +653,11 @@ def main():
 
     # delete per-rank files
     rank_files_delete(args)
+
+    end_time = time.time()
+    if args.rank == 0:
+        msg(f"Runtime: {end_time - startup_start} secs", flush=True)
+        msg(f"Done")
 
 if __name__ == '__main__':
     main()
