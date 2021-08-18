@@ -31,7 +31,7 @@ class DistData(object):
             self.numranks = dist.get_world_size()
 
     def allassert(self, cond, msg):
-        """Check that condition cond is True on all ranks, assert with message everywhere if not."""
+        """Check that cond is True on all ranks, assert with msg everywhere if not."""
         alltrue = self.alltrue(cond)
         assert alltrue, msg
 
@@ -116,24 +116,26 @@ class DistData(object):
             self.comm.Allreduce(inval, outval, op=self.mpi4py.LAND)
             return bool(outval[0])
         else:
+            # torch.dist does not support reductions with bool types
+            # so we cast to int and cast the result back to bool
             tensor = torch.tensor([int(val)], dtype=torch.int32)
             dist.all_reduce(tensor, op=dist.ReduceOp.BAND)
             return bool(tensor[0])
 
     def sum(self, val):
-        """Compute sum of val, and return total on all ranks."""
+        """Compute sum of a scalar val, and return total on all ranks."""
         if self.mpi4py is not None:
             insize = np.array([val], dtype=np.int64)
             outsize = np.zeros_like(insize)
             self.comm.Allreduce(insize, outsize, op=self.mpi4py.SUM)
             return outsize[0]
         else:
-            tensor = torch.tensor([val], dtype=torch.int64)
+            tensor = torch.tensor([val])
             dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
             return tensor[0]
 
     def exscan(self, val):
-        """Compute prefix sum (exclusive scan) of val, and return offset of each rank."""
+        """Compute prefix sum (exclusive scan) of scalar val, and return offset of each rank."""
         if self.mpi4py is not None:
             insize = np.array([val], dtype=np.int64)
             outsize = np.zeros_like(insize)
@@ -147,14 +149,14 @@ class DistData(object):
             return int(tensor[self.rank]) - val
 
     def min(self, val):
-        """Return minimum val to all ranks."""
+        """Return minimum of scalar val to all ranks."""
         if self.mpi4py is not None:
             insize = np.array([val], dtype=np.int64)
             outsize = np.zeros_like(insize)
             self.comm.Allreduce(insize, outsize, op=self.mpi4py.MIN)
             return outsize[0]
         else:
-            tensor = torch.tensor([val], dtype=torch.int64)
+            tensor = torch.tensor([val])
             dist.all_reduce(tensor, op=dist.ReduceOp.MIN)
             return tensor[0]
 
@@ -183,7 +185,7 @@ class DistData(object):
         return val
 
     def all_sum_(self, vals):
-        """Sums values in vals element-wise and updates vals with final result on all ranks"""
+        """Sums values in numpy array vals element-wise and update vals in place with final result on all ranks"""
         if self.mpi4py is not None:
             outval = np.zeros_like(vals)
             self.comm.Allreduce(vals, outval, op=self.mpi4py.SUM)
