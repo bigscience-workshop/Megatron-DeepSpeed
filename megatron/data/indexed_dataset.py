@@ -615,19 +615,14 @@ class MMapIndexedDatasetBuilder(object):
             index.write(self._sizes, self._doc_idx)
 
 
-# To create the binary files given a set of per-rank binary
-# files, one simply concatenates the data from the per-rank
-# binary files in rank order.  We stat each rank file to determine
-# its size, execute a scan to compute the byte offset where
-# the calling rank should write its data, seek to proper
-# spot, and copy the full file.
+# To merge a set of binary files, one can simply concatenate them in order.
+# We stat each binary file to determine its size, execute a scan to compute
+# the byte offset where the calling rank should write its data, seek to proper
+# spot, and copy each file.
 def gather_files_dist_bin(outfile, filelist, distctx):
-    """Concatenate per-rank binary files into a new file given by outfile"""
+    """Concatenate binary files in filelist into a new file given by outfile"""
     import stat
     import shutil
-
-    # Create shared output file.
-    fout = distctx.open(data_file_path(outfile))
 
     # lookup size of each of our binary files
     filesizes = [os.stat(data_file_path(f))[stat.ST_SIZE] for f in filelist]
@@ -637,15 +632,15 @@ def gather_files_dist_bin(outfile, filelist, distctx):
     numbytes = sum(filesizes)
     offset = distctx.exscan(numbytes)
 
-    # seek to appropriate starting offset in the merged file
-    fout.seek(offset)
+    # Create shared output file.
+    with distctx.open(data_file_path(outfile)) as fout:
+        # Seek to appropriate starting offset in the merged file.
+        fout.seek(offset)
 
-    # copy in contents of each of our files
-    for f in filelist:
-        with open(data_file_path(f), "rb") as fsrc:
-            shutil.copyfileobj(fsrc, fout)
-
-    fout.close()
+        # Copy in contents of each of our files.
+        for f in filelist:
+            with open(data_file_path(f), "rb") as fsrc:
+                shutil.copyfileobj(fsrc, fout)
 
     # TODO: check that all ranks wrote successfully
     distctx.barrier()
@@ -700,32 +695,21 @@ def write_list(fout, pos, vals, shift, offset, total, dtype):
 
 
 def gather_files_dist_check_dtype(filelist, dtype_valid, dtype_code, distctx):
-    # verify that no rank has found an inconsistent value in their own set of files
-    allvalid = distctx.alltrue(dtype_valid)
-    if not allvalid:
-        if not dtype_valid:
-            print(f"Rank {distctx.rank}: found different dtype values in {filelist}")
-        assert allvalid, f"Some rank found inconsistent dtype values"
+    # verify that no rank has found an inconsistent value in its own set of files
+    distctx.allassert(dtype_valid, "Some rank found inconsistent dtype values")
 
-    # verify that at least one rank found a dtype
+    # verify that at least one rank found a dtype value
     first_dtype_code = distctx.bcast_first(dtype_code)
     assert first_dtype_code is not None, "Failed to find a dtype value in any index file"
 
-    # verify that all ranks that have a dtype that is consistent with each other
-    allsame = distctx.alltrue(dtype_code == first_dtype_code or dtype_code is None)
-    assert allsame, "Different dtype values detected in index files"
+    # verify that the dtype is consistent on all ranks, if a rank has a dtype value
+    distctx.allassert(dtype_code == first_dtype_code or dtype_code is None, "Different dtype values detected in index files")
 
-    # return the dtype that is used in all files
+    # return the dtype
     return dtypes[first_dtype_code]
 
 
 def gather_files_dist_idx_cached(outfile, filelist, distctx):
-    # get our rank
-    rank = distctx.rank
-
-    # Create shared output file
-    fout = distctx.open(index_file_path(outfile))
-
     # Read each index file and append items to our lists
     sizes = []
     data_offsets = [0]
@@ -734,9 +718,11 @@ def gather_files_dist_idx_cached(outfile, filelist, distctx):
     dtype_valid = True # whether rank identifies inconsistent values in its files
     dtype_value = None # the current dtype code, if any
     for f in filelist:
-        doc_offset = len(sizes)
-
+        # read index file for this file
         index = IndexedDataset(f)
+
+        # append its size, data, dim, and doc entries to our lists
+        doc_offset = len(sizes)
         sizes.extend(index.sizes)
         data_offsets.extend(index.data_offsets[1:] + data_offsets[-1])
         dim_offsets.extend(index.dim_offsets[1:] + dim_offsets[-1])
@@ -752,25 +738,25 @@ def gather_files_dist_idx_cached(outfile, filelist, distctx):
     # Check that we have consistent dtypes in all files from all ranks
     dtype = gather_files_dist_check_dtype(filelist, dtype_valid, dtype_value, distctx)
 
-    # Capture the last value in each array before we delete any items.
+    # Capture the last value in dim and data arrays before we delete any items.
     # Note this may be zero on any rank that has no items,
     # but zero is the correct value in that case.
-    # These values are used in scan operations to determine a shift value.
-    dim_last = dim_offsets[-1]
-    data_last = data_offsets[-1]
+    # We use this last value to compute a shift value that will
+    # later be added to each element in our lists.
+    dim_shift = distctx.exscan(dim_offsets[-1])
+    data_shift = distctx.exscan(data_offsets[-1])
 
     # Drop the zero entry from the lists that start with
     # a "0" value unless we're rank 0
-    if rank != 0:
+    if distctx.rank != 0:
         del data_offsets[0]
         del dim_offsets[0]
         del docs[0]
 
-    # Compute total number of size and document index
-    # values across all ranks.  Also compute the offset
-    # of the calling rank for each value considering
-    # the values of sizes/docs for all ranks before the
-    # calling rank.
+    # Compute total number of entires in data, size, dim,
+    # and docs lists across all ranks.  Also compute the offset
+    # of the calling rank for each list considering the number
+    # of entries for all ranks before the calling rank.
     numdata = len(data_offsets)
     numsize = len(sizes)
     numdim = len(dim_offsets)
@@ -786,64 +772,59 @@ def gather_files_dist_idx_cached(outfile, filelist, distctx):
     global_dim_offset = distctx.exscan(numdim)
     global_doc_offset = distctx.exscan(numdoc)
 
-    # Have rank 0 write the file header
-    # Broadcast value of pos from rank 0,
-    # and advance file position past file header on all ranks.
-    pos = 0
-    if rank == 0:
-        pos = IndexedDatasetBuilder.write_header(fout, dtype, global_data_count, global_size_count, global_doc_count)
-    pos = distctx.bcast(pos, root=0)
+    # Create shared output file
+    with distctx.open(index_file_path(outfile)) as fout:
+        # Have rank 0 write the file header
+        # Broadcast number of bytes written from rank 0,
+        # and advance file position past file header on all ranks.
+        pos = 0
+        if distctx.rank == 0:
+            pos = IndexedDatasetBuilder.write_header(fout, dtype, global_data_count, global_size_count, global_doc_count)
+        pos = distctx.bcast(pos, root=0)
 
-    # The dimension list records the offset within
-    # the sizes list for each sentence.  Adjust dimension
-    # offset values based on the number of offsets
-    # that come before the calling rank.
-    dim_shift = distctx.exscan(dim_last)
-    pos += write_list(fout, pos, dim_offsets, dim_shift, global_dim_offset, global_dim_count, np.int64)
+        # TODO: is dim_shift == global_size_offset?
+        # The dimension list records the offset within
+        # the sizes list for each sentence.
+        # Adjust dimension index values for number of size values that
+        # come before the calling rank which is in dim_shift.
+        pos += write_list(fout, pos, dim_offsets, dim_shift, global_dim_offset, global_dim_count, np.int64)
 
-    # The data index records the byte offset to the start of each
-    # sentence within the binary data file.
-    # Adjust our data index values for number of bytes that
-    # come before the calling rank.
-    data_shift = distctx.exscan(data_last)
-    pos += write_list(fout, pos, data_offsets, data_shift, global_data_offset, global_data_count, np.int64)
+        # The data index records the element offset to the start of each
+        # sentence within the binary data file, expressed in units of dtype().itemsize.
+        # Adjust data index values for number of elements that
+        # come before the calling rank, which is in data_shift.
+        pos += write_list(fout, pos, data_offsets, data_shift, global_data_offset, global_data_count, np.int64)
 
-    # Each sentence is stored as a tensor.
-    # The tensor for each sentence can be multidimensional.
-    # The number of tensor dimensions per sentence is variable,
-    # and the size of each dimension of a sentence is arbitrary.
-    # The size list records a flattened list of the sizes
-    # for each dimension of a sentence.
-    # The list of size values from each rank are
-    # concatenated and stored as int64.
-    pos += write_list(fout, pos, sizes, 0, global_size_offset, global_size_count, np.int64)
+        # Each sentence is stored as a tensor.
+        # The tensor for each sentence can be multidimensional.
+        # The number of tensor dimensions per sentence is variable,
+        # and the size of each dimension of a sentence is arbitrary.
+        # The size list records a flattened list of the sizes
+        # for each dimension of a sentence.
+        pos += write_list(fout, pos, sizes, 0, global_size_offset, global_size_count, np.int64)
 
-    # The document index points to the position in the sizes
-    # array for the first sentence of the sample.
-    pos += write_list(fout, pos, docs, global_size_offset, global_doc_offset, global_doc_count, np.int64)
-
-    fout.close()
+        # The document index points to the position in the sizes
+        # array for the first sentence of each document.
+        # Adjust document index for number of sentences that
+        # come before the calling rank which is in global_size_offset.
+        pos += write_list(fout, pos, docs, global_size_offset, global_doc_offset, global_doc_count, np.int64)
 
     # TODO: check that all ranks wrote successfully
     distctx.barrier()
 
 
 def gather_files_dist_idx_mmap(outfile, filelist, distctx):
-    # get our rank
-    rank = distctx.rank
-
-    # Create shared output file
-    fout = distctx.open(index_file_path(outfile))
-
     # Read each index file and append items to the size and docs lists
     sizes = []
     docs = [0]
     dtype_valid = True # whether rank identifies inconsistent values in its files
     dtype_value = None # the current dtype code, if any
     for f in filelist:
-        docs_offset = len(sizes)
-
+        # read index file for this file
         index = MMapIndexedDataset.Index(index_file_path(f))
+
+        # append its size and doc entries to our lists
+        docs_offset = len(sizes)
         sizes.extend(index.sizes)
         docs.extend(index.doc_idx[1:] + docs_offset)
 
@@ -859,7 +840,7 @@ def gather_files_dist_idx_mmap(outfile, filelist, distctx):
 
     # Drop the zero entry from the lists that start with
     # a "0" value unless we're rank 0
-    if rank != 0:
+    if distctx.rank != 0:
         del docs[0]
 
     # Compute total number of size and document index
@@ -876,77 +857,77 @@ def gather_files_dist_idx_mmap(outfile, filelist, distctx):
     global_size_offset = distctx.exscan(numsizes)
     global_docs_offset = distctx.exscan(numdocs)
 
-    # Have rank 0 write the file header
-    # Broadcast value of pos from rank 0,
-    # and advance file position past file header on all ranks.
-    pos = 0
-    if rank == 0:
-        pos = MMapIndexedDataset.Index.write_header(fout, dtype, global_size_count, global_docs_count)
-    pos = distctx.bcast(pos, root=0)
+    # Create shared output file
+    with distctx.open(index_file_path(outfile)) as fout:
+        # Have rank 0 write the file header
+        # Broadcast number of bytes written from rank 0,
+        # and advance file position past file header on all ranks.
+        pos = 0
+        if distctx.rank == 0:
+            pos = MMapIndexedDataset.Index.write_header(fout, dtype, global_size_count, global_docs_count)
+        pos = distctx.bcast(pos, root=0)
 
-    # The list of size values from each rank are
-    # concatenated and stored as int32.
-    pos += write_list(fout, pos, sizes, 0, global_size_offset, global_size_count, np.int32)
+        # The list of size values from each rank are
+        # concatenated and stored as int32.
+        pos += write_list(fout, pos, sizes, 0, global_size_offset, global_size_count, np.int32)
 
-    # The pointer values store the byte offset to each sentence.
-    # A sentence has a variable number of tokens, given by
-    # its corresponding entry in the size array.  Each token
-    # of a sentence is stored in units of type dtype, which consumes
-    # dtype().itemsize bytes (often a standard type that is just
-    # large enough to represent all elements of the vocabulary).
+        # The pointer values store the byte offset to each sentence when in memory.
+        # A sentence has a variable number of tokens, given by
+        # its corresponding entry in the size array.  Each token
+        # of a sentence is stored in units of type dtype, which consumes
+        # dtype().itemsize bytes (often a standard type that is just
+        # large enough to represent all elements of the vocabulary).
 
-    # First compute byte offsets for each sentence of our
-    # local set of sentences.
-    pointers = np.array(sizes, dtype=np.int64)
-    pointer_last = 0
-    if len(sizes) > 0:
-        np.cumsum(pointers, axis=0, out=pointers)
-        pointers *= dtype().itemsize
-        pointer_last = pointers[-1]
+        # First compute byte offsets for each sentence of our
+        # local set of sentences.
+        pointers = np.array(sizes, dtype=np.int64)
+        pointer_last = 0
+        if len(sizes) > 0:
+            np.cumsum(pointers, axis=0, out=pointers)
+            pointers *= dtype().itemsize
+            pointer_last = pointers[-1]
 
-    # Then account for bytes for all sentences on ranks
-    # before the calling rank.
-    pointer_offset = distctx.exscan(pointer_last)
-    pointers += pointer_offset
+        # Then account for bytes for all sentences on ranks
+        # before the calling rank.
+        pointer_offset = distctx.exscan(pointer_last)
+        pointers += pointer_offset
 
-    # Finally, zero-base the offset values by subtracting
-    # the number of bytes of the first sentence.  To do that
-    # we need to find the rank having the first sentence,
-    # then bcast that size to all ranks.
-    if global_size_count > 0:
-        # Since global_size_count > 0, there is at least one sentence across all ranks.
-        # Get the value from the first rank that has a value, which may not be rank 0.
-        pointers_shift = pointers[0] if len(sizes) > 0 else None
-        pointers_shift = distctx.bcast_first(pointers_shift)
+        # Finally, zero-base the offset values by subtracting
+        # the number of bytes of the first sentence.  To do that
+        # we need to find the rank having the first sentence,
+        # then bcast that size to all ranks.
+        if global_size_count > 0:
+            # Since global_size_count > 0, there is at least one sentence across all ranks.
+            # Get the value from the first rank that has a value, which may not be rank 0.
+            pointers_shift = pointers[0] if len(sizes) > 0 else None
+            pointers_shift = distctx.bcast_first(pointers_shift)
 
-        # Since there is at least one, bcast_first should return some value other than None.
-        assert pointers_shift is not None, "Expected at least one rank to have a valid element"
+            # Since there is at least one, bcast_first should return some value other than None.
+            assert pointers_shift is not None, "Expected at least one rank to have a valid element"
 
-        # Zero-base pointers by subtracting size of first
-        # sentence from all values.
-        pointers -= pointers_shift
+            # Zero-base pointers by subtracting size of first
+            # sentence from all values.
+            pointers -= pointers_shift
 
-    # Since the pointers array is the same length as the sizes array,
-    # we use global_size_offset and global_size_count to position
-    # within the file for writing the pointer values.
+        # Since the pointers array is the same length as the sizes array,
+        # we use global_size_offset and global_size_count to position
+        # within the file for writing the pointer values.
 
-    # Seek to proper offset for this rank and write
-    # pointer values into file, stored as int64.
-    fout.seek(pos + global_size_offset * np.int64().itemsize)
-    fout.write(pointers.tobytes(order='C'))
-    del pointers
+        # Seek to proper offset for this rank and write
+        # pointer values into file, stored as int64.
+        fout.seek(pos + global_size_offset * np.int64().itemsize)
+        fout.write(pointers.tobytes(order='C'))
+        del pointers
 
-    # Advance past list of pointer values
-    pos += global_size_count * np.int64().itemsize
+        # Advance past list of pointer values
+        pos += global_size_count * np.int64().itemsize
 
-    # The document index points to the position in the sizes
-    # array for the starting sentence of each document.
-    # A variable number of sentences can be in each document.
-    # Adjust document index for number of sentences that
-    # come before the calling rank.
-    pos += write_list(fout, pos, docs, global_size_offset, global_docs_offset, global_docs_count, np.int64)
-
-    fout.close()
+        # The document index points to the position in the sizes
+        # array for the starting sentence of each document.
+        # A variable number of sentences can be in each document.
+        # Adjust document index for number of sentences that
+        # come before the calling rank which is in global_size_offset.
+        pos += write_list(fout, pos, docs, global_size_offset, global_docs_offset, global_docs_count, np.int64)
 
     # TODO: check that all ranks wrote successfully
     distctx.barrier()
@@ -964,11 +945,7 @@ def gather_files_dist_check_impltype(filelist, distctx):
             exists = False
 
     # Check that all ranks have all of their files.
-    allexist = distctx.alltrue(exists)
-    if not allexist:
-        if not exists:
-            assert False, f"At least one of the following names was not found: {filelist}"
-        assert False, f"Some rank is missing its input file"
+    distctx.allassert(exists, "Some rank is missing its input file")
 
     # map type string to an integer for easier bcast, use 0 for unknown
     implmap = {"cached": 1, "mmap": 2}
@@ -981,10 +958,10 @@ def gather_files_dist_check_impltype(filelist, distctx):
         impl = infer_dataset_impl(f)
         implval = implmap[impl] if impl in implmap else 0
 
+        # check that the type matches our other files
         if ourtype is None:
             ourtype = implval
-
-        if implval != ourtype:
+        if ourtype != implval:
             sametype = False
 
     # Check that all ranks have the same type,
@@ -995,9 +972,7 @@ def gather_files_dist_check_impltype(filelist, distctx):
     #   - the broadcast type is of a known type: {cached, mmap}
     bcasttype = distctx.bcast_first(ourtype)
     matchtype = sametype and (ourtype is None or ourtype == bcasttype) and bcasttype != 0
-    allsame = distctx.alltrue(matchtype)
-    if not allsame:
-        assert False, "Cannot merge dataset files of different types"
+    distctx.allassert(matchtype, "Cannot merge dataset files of different types")
 
     # map back to return index string name
     for key in implmap.keys():
@@ -1006,15 +981,15 @@ def gather_files_dist_check_impltype(filelist, distctx):
 
 
 # Collectively merge files into a new output file specified in filemain.
-# Each rank contributes a distinct list of zero or more files in filelist.
-# Each rank merges its set of files into filemain collectively with all
-# other ranks.
+# Each rank contributes a distinct list of zero or more files in filelist,
+# and each rank directly merges its set of files into filemain.
+# It is allowed for the input files in filelist to only be readable from the calling process.
+# The output file in filemain should be in a location that is writable by all processes.
 def gather_files_dist(filemain, filelist, distctx):
-    # check that at least one input file is listed
+    # Check that at least one input file is listed
     filecount = distctx.sum(len(filelist))
     assert filecount > 0, "No rank has any input files to merge"
 
-    # TODO: seems like this could be relaxed
     # Check that files are all of the same index type
     indexstr = gather_files_dist_check_impltype(filelist, distctx)
 
