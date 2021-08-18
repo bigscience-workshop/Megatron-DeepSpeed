@@ -313,6 +313,11 @@ def _add_network_size_args(parser):
                        default=PositionEmbeddingType.absolute,
                        help='Define position embedding type ("absolute" | "rotary"). "absolute" by default.'
                        )
+    group.add_argument('--glu-activation', type=str,
+                       choices=["liglu", "geglu", "reglu", "swiglu"],
+                       default="",
+                       help='GLU activations to use.'
+                       )
 
     return parser
 
