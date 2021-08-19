@@ -591,8 +591,8 @@ class MMapIndexedDatasetBuilder(object):
         index = MMapIndexedDataset.Index(index_file_path(another_file))
         assert index.dtype == self._dtype
 
-#        total_len = len(index.sizes)+len(self._sizes)
-#        print(f"    concat {another_file} size={len(index.sizes)} for a total size of {total_len}")
+        total_len = len(index.sizes)+len(self._sizes)
+        print(f"    concat {another_file} size={len(index.sizes)} for a total size of {total_len}")
 
         offset = len(self._sizes)
         self._sizes.extend(index.sizes)
