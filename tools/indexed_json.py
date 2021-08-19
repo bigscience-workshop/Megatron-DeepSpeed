@@ -65,7 +65,7 @@ class IndexedJSON(object):
         return start, end
 
     def create_index(self, filename, bufsize):
-        """Given a JSON file named dataset.json, write index to dataset.json.idx."""
+        """Given a JSON file named dataset.jsonl, write index to dataset.jsonl.idx."""
 
         # To compute this index, ranks collective scan the JSON
         # file and record the byte offset of newline characters.

@@ -612,7 +612,7 @@ def main():
     startup_start = time.time()
 
     # load the dataset
-    if args.input.endswith(".json"):
+    if args.input.endswith(".jsonl"):
         # assume file is JSONL format
         dset = IndexedJSON(args.input, args.distctx)
     else:
