@@ -3,12 +3,11 @@ import stat
 import json
 import time
 import numpy as np
-from mpi4py import MPI
 
 class IndexedJSON(object):
-    def __init__(self, filename, comm=None, bufsize=16*1024*1024):
+    def __init__(self, filename, distctx, bufsize=16*1024*1024):
         self.filename = filename # JSON file name
-        self.comm = comm         # distributed environment for collective ops
+        self.distctx = distctx   # distributed environment for collective ops
         self.bufsize = bufsize   # buffer size used while building index
         self.numsamples = 0      # number of records in JSON file
         self.fh_idx = None       # file handle to JSON index file
@@ -20,9 +19,9 @@ class IndexedJSON(object):
 
         # check for index file and create it if it does not exist
         exists = False
-        if self.comm.Get_rank() == 0:
+        if self.distctx.rank == 0:
             exists = os.path.exists(filename_idx)
-        exists = self.comm.bcast(exists)
+        exists = self.distctx.bcast(exists, root=0)
         if not exists:
             self.create_index(filename, self.bufsize)
 
@@ -38,41 +37,13 @@ class IndexedJSON(object):
 #        self.fh_idx = open(filename_idx, "rb")
 #        self.fh_json = open(filename, "rb")
 
-    def create_shared_file(self, filename):
-        self.comm.barrier()
-
-        rank = self.comm.Get_rank()
-        if rank == 0:
-            f = open(filename, "wb")
-        self.comm.barrier()
-        if rank != 0:
-            f = open(filename, "r+b")
-
-        self.comm.barrier()
-        return f
-
     def get_filesize(self, filename):
         """Lookup filesize and broadcast to all ranks."""
         filesize = 0
-        rank = self.comm.Get_rank()
-        if rank == 0:
+        if self.distctx.rank == 0:
             filesize = os.stat(filename)[stat.ST_SIZE]
-        filesize = self.comm.bcast(filesize)
+        filesize = self.distctx.bcast(filesize, root=0)
         return filesize
-
-    def get_count(self, val):
-        """Compute global sum of val across all ranks."""
-        inval = np.array([val], dtype=np.int64)
-        outval = np.zeros_like(inval)
-        self.comm.Allreduce(inval, outval, op=MPI.SUM)
-        return outval[0]
-
-    def get_offset(self, val):
-        """Execute exclusive scan prefix sum of val across ranks."""
-        inval = np.array([val], dtype=np.int64)
-        outval = np.zeros_like(inval)
-        self.comm.Scan(inval, outval, op=MPI.SUM)
-        return outval[0] - inval[0]
 
     def index_filename(self, filename):
         """Given the name of a JSON file, return the name of its index file."""
@@ -80,8 +51,8 @@ class IndexedJSON(object):
 
     def get_start_end(self, num):
         """Given num items, compute and return [start,end) range on each rank."""
-        rank = self.comm.Get_rank()
-        num_ranks = self.comm.Get_size()
+        rank = self.distctx.rank
+        num_ranks = self.distctx.numranks
 
         num_per_rank = num // num_ranks
         remainder = num % num_ranks
@@ -107,8 +78,8 @@ class IndexedJSON(object):
         # each record in the JSON file.
 
         time_start = time.time()
-        rank = self.comm.Get_rank()
-        numranks = self.comm.Get_size()
+        rank = self.distctx.rank
+        numranks = self.distctx.numranks
 
         # define file names for the index and the temporary index file
         filename_idx = self.index_filename(filename)
@@ -118,7 +89,7 @@ class IndexedJSON(object):
         filesize = self.get_filesize(filename)
 
         # create the temporary index file, shared across all ranks
-        with self.create_shared_file(filename_tmp) as ftmp:
+        with self.distctx.open(filename_tmp) as ftmp:
             # open and scan the JSON file
             recstart = 0
             with open(filename, "rb") as f:
@@ -150,8 +121,8 @@ class IndexedJSON(object):
                     # Count number of newline chars we found,
                     # and compute sum and offset of newlines across ranks.
                     numrecs = len(newlines)
-                    reccount = self.get_count(numrecs)
-                    recoffset = self.get_offset(numrecs)
+                    reccount = self.distctx.sum(numrecs)
+                    recoffset = self.distctx.exscan(numrecs)
 
                     # Store offsets as int64
                     vals = np.array(newlines, dtype=np.int64)
@@ -168,10 +139,10 @@ class IndexedJSON(object):
                     curpos += bufsize * numranks
 
         # Wait for all ranks to close the file.
-        self.comm.barrier()
+        self.distctx.barrier()
 
         # Create the actual index file.
-        with self.create_shared_file(filename_idx) as fidx:
+        with self.distctx.open(filename_idx) as fidx:
             # We'll read the offsets back from the temporary index file.
             with open(filename_tmp, "rb") as ftmp:
                 # Compute the [start,end) range for this rank within the list of offsets.
@@ -214,14 +185,14 @@ class IndexedJSON(object):
                     fidx.write(vals.tobytes(order='C'))
 
         # Wait for all ranks to finish writing to the index file.
-        self.comm.barrier()
+        self.distctx.barrier()
 
         # Can now delete the temporary index file.
         if rank == 0:
             os.remove(filename_tmp)
 
         # Wait for everyone again and record how long it took.
-        self.comm.barrier()
+        self.distctx.barrier()
         time_end = time.time()
         self.time_index = time_end - time_start
 

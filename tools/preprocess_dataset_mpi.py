@@ -610,7 +610,7 @@ def main():
     # load the dataset
     if args.input.endswith(".json"):
         # assume file is JSONL format
-        dset = IndexedJSON(args.input, args.mpi_comm)
+        dset = IndexedJSON(args.input, args.distctx)
     else:
         dset, err = load_dset(args)
         if dset is None:
