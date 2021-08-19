@@ -20,19 +20,24 @@ This builds data files from a source HuggingFace dataset, e.g,
   from datasets import load_dataset
   dset = load_dataset('openwebtext', split='train')
 
-The implementation can use `mpi4py` or `torch.distributed` for node communication, and it assumes that
-files are written to a global file system, such that one process
+The implementation can use `mpi4py` or `torch.distributed` for node communication,
+and it assumes that files are written to a global file system, such that one process
 can read a file written by another process.
 
 A list of sample index values from the source dataset are selected
-by rank 0 and broadcast to all ranks.
+by rank 0 and scattered to all ranks.
 Each process tokenizes a subset of samples and writes its output to a part file.
-After all ranks have finished, rank 0 merges and deletes the part files.
+After all ranks have finished, the part files are merged into a final output file.
+
+One may optionally use storage local to each process to store the part file.
+For example, on a Linux cluster, one might write the part file to /dev/shm.
 
 To run:
 
-mpiexec -np 320 python preprocess_dataset_mpi.py \
+mpiexec -np 320 python preprocess_data_dist.py \
        --input openwebtext \
+       --count 1_000_000 \
+       --scratch /dev/shm \
        --shuffle \
        --seed 100 \
        --output-prefix openwebtext-bert \
@@ -54,7 +59,6 @@ import numpy as np
 import random
 
 import torch
-import torch.distributed as dist
 try:
     import nltk
     nltk_available = True
