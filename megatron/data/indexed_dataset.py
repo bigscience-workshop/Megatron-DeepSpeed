@@ -964,6 +964,12 @@ def gather_files_dist_check_impltype(filelist, distctx):
 # and each rank directly merges its set of files into filemain.
 # It is allowed for the input files in filelist to only be readable from the calling process.
 # The output file in filemain should be in a location that is writable by all processes.
+#
+# NOTE: This uses parallel writes to a shared file to achieve high write bandwidth.
+# To do so, this implementation seeks beyond the end of the file to write at different
+# offsets from different processes via the seek() method on a python file handle.
+# The behavior of seek() is not well documented, but it seems to map to fseek()/lseek(),
+# and it works as desired on POSIX-compliant file systems like Lustre and GPFS.
 def gather_files_dist(filemain, filelist, distctx):
     # Check that at least one input file is listed
     filecount = distctx.sum(len(filelist))
