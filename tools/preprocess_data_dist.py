@@ -20,7 +20,7 @@ This builds data files from a source HuggingFace dataset, e.g,
   from datasets import load_dataset
   dset = load_dataset('openwebtext', split='train')
 
-The implementation can use `mpi4py` or `torch.distributed` for node communication,
+The implementation uses `torch.distributed` for inter-process communication,
 and it assumes that files are written to a global file system, such that one process
 can read a file written by another process.
 
@@ -34,12 +34,10 @@ For example, on a Linux cluster, one might write the part file to /dev/shm.
 
 To run:
 
-mpiexec -np 320 python preprocess_data_dist.py \
+python -m torch.distributed.launch --nproc_per_node 8 preprocess_data_dist.py \
        --input openwebtext \
-       --count 1_000_000 \
+       --count 1_000 \
        --scratch /dev/shm \
-       --shuffle \
-       --seed 100 \
        --output-prefix openwebtext-bert \
        --vocab bert-large-uncased-vocab.txt \
        --dataset-impl mmap \
@@ -176,8 +174,6 @@ def get_args():
                        help='Select torch.distributed backend.')
     group.add_argument('--local_rank', type=int, default=None,
                        help='Local rank of calling process on its node (from torch.distributed.launch).')
-    group.add_argument('--mpi4py', action='store_true',
-                       help='Assume script has been launched as an MPI job, and use mpi4py for communication.')
     group.add_argument('--merge', type=str, default='parallel', choices=['parallel', 'serial', 'both'],
                        help=('Method to merge intermediate per-rank files into the final data files.  '
                              'With "parallel", each rank writes directly to the final files, '
@@ -202,8 +198,7 @@ def get_args():
     args.vocab_extra_ids = 0
 
     # initialize our distributed environment
-    # use mpi4py instead of torch.distributed if requested
-    args.distctx = DistData(use_mpi4py=args.mpi4py, backend=args.torch_backend)
+    args.distctx = DistData(backend=args.torch_backend)
 
     # some functions like build_tokenizer use args.rank to filter stdout messages
     args.rank = args.distctx.rank

@@ -8,27 +8,14 @@ class DistDataError(Exception):
     pass
 
 class DistData(object):
-    def __init__(self, backend='gloo', use_mpi4py=False):
-        # use mpi4py instead of torch.distributed if requested
-        self.mpi4py = None
-        if use_mpi4py:
-            try:
-                from mpi4py import MPI
-                self.mpi4py = MPI
-            except:
-                #print(f"ERROR: mpi4py requested, but failed to import, falling back to torch.distributed.", flush=True)
-                pass
+    def __init__(self, backend='gloo'):
+        assert backend in ['gloo', 'mpi'], f"torch.distributed backend '{backend}' is not supported, valid options are 'gloo' or 'mpi'"
+
+        dist.init_process_group(backend, init_method="env://")
 
         # lookup our process rank and the group size
-        if self.mpi4py is not None:
-            self.comm = self.mpi4py.COMM_WORLD
-            self.rank = self.comm.Get_rank()
-            self.numranks = self.comm.Get_size()
-        else:
-            assert backend in ['gloo', 'mpi'], f"torch.distributed backend '{backend}' is not supported, valid options are 'gloo' or 'mpi'"
-            dist.init_process_group(backend, init_method="env://")
-            self.rank = dist.get_rank()
-            self.numranks = dist.get_world_size()
+        self.rank = dist.get_rank()
+        self.numranks = dist.get_world_size()
 
     def allassert(self, cond, msg):
         """Check that cond is True on all ranks, assert with msg everywhere if not."""
@@ -51,39 +38,30 @@ class DistData(object):
 
     def barrier(self):
         """Globally synchronize all processes"""
-        if self.mpi4py is not None:
-            self.comm.barrier()
-        else:
-            dist.barrier()
+        dist.barrier()
 
     def bcast(self, val, root):
         """Broadcast a scalar value from root to all ranks"""
-        if self.mpi4py is not None:
-            return self.comm.bcast(val, root=root)
-        else:
-            vals = [val]
-            dist.broadcast_object_list(vals, src=root)
-            return vals[0]
+        vals = [val]
+        dist.broadcast_object_list(vals, src=root)
+        return vals[0]
 
     def bcast_list(self, vals, root=0):
         """Broadcast list of vals from root to all ranks, returns newly allocated list"""
-        if self.mpi4py is not None:
-            return self.comm.bcast(vals, root=root)
+        # broadcast length of vals list
+        length = [len(vals)]
+        dist.broadcast_object_list(length, src=root)
+
+        # allocate a tensor of appropriate size
+        # initialize tensor with list values on root
+        if self.rank == root:
+            tvals = torch.tensor(vals, dtype=torch.int64)
         else:
-            # broadcast length of vals list
-            length = [len(vals)]
-            dist.broadcast_object_list(length, src=root)
+            tvals = torch.zeros(length[0], dtype=torch.int64)
 
-            # allocate a tensor of appropriate size
-            # initialize tensor with list values on root
-            if self.rank == root:
-                tvals = torch.tensor(vals, dtype=torch.int64)
-            else:
-                tvals = torch.zeros(length[0], dtype=torch.int64)
-
-            # broadcast tensor from root, and return as a new list
-            dist.broadcast(tvals, src=root)
-            return tvals.tolist()
+        # broadcast tensor from root, and return as a new list
+        dist.broadcast(tvals, src=root)
+        return tvals.tolist()
 
     def scatterv_(self, invals, counts, outval, root=0):
         """Scatter int64 values from invals according to counts array, receive values in outval"""
@@ -97,68 +75,39 @@ class DistData(object):
         self.allassert(outval.dtype == np.int64,
             f"Requires outval to be of type numpy.int64")
 
-        if self.mpi4py is not None:
-            counts = np.array(counts)
-            displs = np.cumsum(counts) - counts
-            self.comm.Scatterv([invals, counts, displs, self.mpi4py.INT64_T], outval, root=root)
-        else:
-            scatterlist = None
-            if self.rank == root:
-                scatterlist = list(torch.split(torch.from_numpy(invals), counts))
-            outtensor = torch.from_numpy(outval)
-            dist.scatter(outtensor, scatterlist, src=root)
+        scatterlist = None
+        if self.rank == root:
+            scatterlist = list(torch.split(torch.from_numpy(invals), counts))
+        outtensor = torch.from_numpy(outval)
+        dist.scatter(outtensor, scatterlist, src=root)
 
     def alltrue(self, val):
         """Returns True if all procs input True, False otherwise"""
-        if self.mpi4py is not None:
-            inval = np.array([val], dtype=np.bool_)
-            outval = np.zeros_like(inval)
-            self.comm.Allreduce(inval, outval, op=self.mpi4py.LAND)
-            return bool(outval[0])
-        else:
-            # torch.dist does not support reductions with bool types
-            # so we cast to int and cast the result back to bool
-            tensor = torch.tensor([int(val)], dtype=torch.int32)
-            dist.all_reduce(tensor, op=dist.ReduceOp.BAND)
-            return bool(tensor[0])
+        # torch.dist does not support reductions with bool types
+        # so we cast to int and cast the result back to bool
+        tensor = torch.tensor([int(val)], dtype=torch.int32)
+        dist.all_reduce(tensor, op=dist.ReduceOp.BAND)
+        return bool(tensor[0])
 
     def sum(self, val):
         """Compute sum of a scalar val, and return total on all ranks."""
-        if self.mpi4py is not None:
-            insize = np.array([val], dtype=np.int64)
-            outsize = np.zeros_like(insize)
-            self.comm.Allreduce(insize, outsize, op=self.mpi4py.SUM)
-            return outsize[0]
-        else:
-            tensor = torch.tensor([val])
-            dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
-            return tensor[0]
+        tensor = torch.tensor([val])
+        dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
+        return tensor[0]
 
     def exscan(self, val):
         """Compute prefix sum (exclusive scan) of scalar val, and return offset of each rank."""
-        if self.mpi4py is not None:
-            insize = np.array([val], dtype=np.int64)
-            outsize = np.zeros_like(insize)
-            self.comm.Scan(insize, outsize, op=self.mpi4py.SUM)
-            return outsize[0] - insize[0]
-        else:
-            # torch.distributed doesn't have a scan, so fallback to allreduce
-            tensor = torch.zeros(self.numranks, dtype=torch.int64)
-            tensor[self.rank:] = val
-            dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
-            return int(tensor[self.rank]) - val
+        # torch.distributed doesn't have a scan, so fallback to allreduce
+        tensor = torch.zeros(self.numranks, dtype=torch.int64)
+        tensor[self.rank:] = val
+        dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
+        return int(tensor[self.rank]) - val
 
     def min(self, val):
         """Return minimum of scalar val to all ranks."""
-        if self.mpi4py is not None:
-            insize = np.array([val], dtype=np.int64)
-            outsize = np.zeros_like(insize)
-            self.comm.Allreduce(insize, outsize, op=self.mpi4py.MIN)
-            return outsize[0]
-        else:
-            tensor = torch.tensor([val])
-            dist.all_reduce(tensor, op=dist.ReduceOp.MIN)
-            return tensor[0]
+        tensor = torch.tensor([val])
+        dist.all_reduce(tensor, op=dist.ReduceOp.MIN)
+        return tensor[0]
 
     def minrank(self, cond):
         """Find first rank whose condition is True, return that rank if any, None otherwise."""
@@ -186,13 +135,8 @@ class DistData(object):
 
     def all_sum_(self, vals):
         """Sums values in numpy array vals element-wise and update vals in place with final result on all ranks"""
-        if self.mpi4py is not None:
-            outval = np.zeros_like(vals)
-            self.comm.Allreduce(vals, outval, op=self.mpi4py.SUM)
-            vals[:] = outval
-        else:
-            tensor = torch.from_numpy(vals)
-            dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
+        tensor = torch.from_numpy(vals)
+        dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
 
     def open(self, filename):
         """Create, truncate, and open a file shared by all ranks."""
