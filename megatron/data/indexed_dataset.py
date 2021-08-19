@@ -432,21 +432,21 @@ class MMapIndexedDataset(torch.utils.data.Dataset):
                 offset = stream.tell()
 
             if not skip_warmup:
-#                print_rank_0("    warming up index mmap file...")
+                print_rank_0("    warming up index mmap file...")
                 _warmup_mmap_file(path)
 
             self._bin_buffer_mmap = np.memmap(path, mode='r', order='C')
             self._bin_buffer = memoryview(self._bin_buffer_mmap)
-#            print_rank_0("    reading sizes...")
+            print_rank_0("    reading sizes...")
             self._sizes = np.frombuffer(
                 self._bin_buffer,
                 dtype=np.int32,
                 count=self._len,
                 offset=offset)
-#            print_rank_0("    reading pointers...")
+            print_rank_0("    reading pointers...")
             self._pointers = np.frombuffer(self._bin_buffer, dtype=np.int64, count=self._len,
                                            offset=offset + self._sizes.nbytes)
-#            print_rank_0("    reading document index...")
+            print_rank_0("    reading document index...")
             self._doc_idx = np.frombuffer(self._bin_buffer, dtype=np.int64, count=self._doc_count,
                                           offset=offset + self._sizes.nbytes + self._pointers.nbytes)
 

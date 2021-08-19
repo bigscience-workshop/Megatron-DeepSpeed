@@ -546,8 +546,6 @@ def rank_files_merge_serial(args):
         for rank in range(args.numranks):
             for key in args.columns:
                 infile = get_filename(args, key, rank)
-
-#                msg(f"Merging file {infile}", flush=True)
                 builders[key].merge_file_(infile)
 
                 # sum up the number of merged bytes
