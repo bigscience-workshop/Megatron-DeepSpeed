@@ -1,3 +1,4 @@
+import os
 import numpy as np
 
 import torch
@@ -18,12 +19,26 @@ class DistData(object):
         self.numranks = dist.get_world_size()
 
     def allassert(self, cond, msg):
-        """Check that cond is True on all ranks, assert with msg everywhere if not."""
+        """Check that cond is True on all ranks, assert with msg everywhere if not.
+
+        To prevent deadlocks in cases where an assertion might only fail on one rank,
+        this executes an allreduce to ensure that if any rank finds that an assertion
+        has been violated, all ranks fail an assertion check.
+        The condition must be true on all ranks for this not to assert.
+        """
         alltrue = self.alltrue(cond)
         assert alltrue, msg
 
     def allraise_if(self, err):
-        """Raise exception if err is not None on any rank."""
+        """Raise exception if err is not None on any rank.
+
+        Similarly to allassert, this raises an exception on all ranks if err
+        is set to an exception on any rank.  Rank(s) where err is not None
+        re-raise err as exception, and ranks where err is None raise DistDataError.
+        Thus all ranks raise an exception if any rank has an active exception,
+        which helps avoid deadlocks in cases where an exception may be raised
+        on a subset of ranks.
+        """
         alltrue = self.alltrue(err is None)
         if not alltrue:
             # At least one rank raised an exception.
@@ -46,24 +61,7 @@ class DistData(object):
         dist.broadcast_object_list(vals, src=root)
         return vals[0]
 
-    def bcast_list(self, vals, root=0):
-        """Broadcast list of vals from root to all ranks, returns newly allocated list"""
-        # broadcast length of vals list
-        length = [len(vals)]
-        dist.broadcast_object_list(length, src=root)
-
-        # allocate a tensor of appropriate size
-        # initialize tensor with list values on root
-        if self.rank == root:
-            tvals = torch.tensor(vals, dtype=torch.int64)
-        else:
-            tvals = torch.zeros(length[0], dtype=torch.int64)
-
-        # broadcast tensor from root, and return as a new list
-        dist.broadcast(tvals, src=root)
-        return tvals.tolist()
-
-    def scatterv_(self, invals, counts, outval, root=0):
+    def scatterv_(self, invals: np.array, counts: list, outval: np.array, root:int=0):
         """Scatter int64 values from invals according to counts array, receive values in outval"""
 
         self.allassert(len(counts) == self.numranks,
@@ -74,6 +72,11 @@ class DistData(object):
 
         self.allassert(outval.dtype == np.int64,
             f"Requires outval to be of type numpy.int64")
+
+        # Note that we create the torch.tensor outtensor to receive incoming
+        # data by using from_numpy.  This sets outtensor to point to the same
+        # underlying memory of the outval numpy array.  Receiving data into
+        # outtensor thus writes incoming data directly into the numpy array.
 
         scatterlist = None
         if self.rank == root:
@@ -95,8 +98,8 @@ class DistData(object):
         dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
         return tensor[0]
 
-    def exscan(self, val):
-        """Compute prefix sum (exclusive scan) of scalar val, and return offset of each rank."""
+    def exscan(self, val: int):
+        """Compute prefix sum (exclusive scan) of int64 val, and return offset of each rank."""
         # torch.distributed doesn't have a scan, so fallback to allreduce
         tensor = torch.zeros(self.numranks, dtype=torch.int64)
         tensor[self.rank:] = val
@@ -133,12 +136,13 @@ class DistData(object):
         val = self.bcast(val, root=minrank)
         return val
 
-    def all_sum_(self, vals):
+    def all_sum_(self, vals: np.array):
         """Sums values in numpy array vals element-wise and update vals in place with final result on all ranks"""
+        # Builds torch.tensor with from_numpy to use same underlying memory as numpy array.
         tensor = torch.from_numpy(vals)
         dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
 
-    def open(self, filename):
+    def open(self, filename, truncate=None):
         """Create, truncate, and open a file shared by all ranks."""
 
         # Don't truncate existing file until all ranks reach this point
@@ -151,6 +155,12 @@ class DistData(object):
         if self.rank == 0:
             try:
                 f = open(filename, 'wb')
+
+                # Some file systems like GPFS deliver faster write speed
+                # if the file size is known before data is written to the file.
+                if truncate is not None:
+                    f.truncate(truncate)
+
             except Exception as e:
                 err = e
 
@@ -169,3 +179,43 @@ class DistData(object):
         self.allraise_if(err)
 
         return f
+
+    def remove(self, filename):
+        """Remove a shared file."""
+
+        # Don't remove the file until all are ready
+        self.barrier()
+
+        # We'll capture any exception in this variable
+        err = None
+
+        # Rank 0 removes the file if it exists.
+        if self.rank == 0:
+            try:
+                if os.path.exists(filename):
+                    os.remove(filename)
+            except Exception as e:
+                err = e
+
+        # Verify that rank 0 successfully removed the file.
+        self.allraise_if(err)
+
+    def rename(self, srcfile, destfile):
+        """Rename a shared file."""
+
+        # Don't rename until all are ready
+        self.barrier()
+
+        # We'll capture any exception in this variable
+        err = None
+
+        # Rank 0 renames the file.
+        if self.rank == 0:
+            try:
+                if os.path.exists(srcfile):
+                    os.rename(srcfile, destfile)
+            except Exception as e:
+                err = e
+
+        # Verify that the rename succeeded
+        self.allraise_if(err)

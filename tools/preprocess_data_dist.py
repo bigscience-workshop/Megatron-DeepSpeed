@@ -34,15 +34,14 @@ For example, on a Linux cluster, one might write the part file to /dev/shm.
 
 To run:
 
-python -m torch.distributed.launch --nproc_per_node 8 preprocess_data_dist.py \
-       --input openwebtext \
-       --count 1_000 \
-       --scratch /dev/shm \
-       --output-prefix openwebtext-bert \
-       --vocab bert-large-uncased-vocab.txt \
-       --dataset-impl mmap \
-       --tokenizer-type BertWordPieceLowerCase \
-       --split-sentences
+python -m torch.distributed.launch --nproc_per_node 40 --nnodes 8 \
+    preprocess_data_dist.py \
+        --input openwebtext \
+        --output-prefix openwebtext-bert \
+        --vocab bert-large-uncased-vocab.txt \
+        --dataset-impl mmap \
+        --tokenizer-type BertWordPieceLowerCase \
+        --split-sentences
 """
 
 import argparse
@@ -191,18 +190,17 @@ def get_args():
     args = parser.parse_args()
     args.keep_empty = False
 
-    # some default/dummy values for the tokenizer
-    args.rank = 0
-    args.make_vocab_size_divisible_by = 128
-    args.tensor_model_parallel_size = 1
-    args.vocab_extra_ids = 0
-
     # initialize our distributed environment
     args.distctx = DistData(backend=args.torch_backend)
 
     # some functions like build_tokenizer use args.rank to filter stdout messages
     args.rank = args.distctx.rank
     args.numranks = args.distctx.numranks
+
+    # some default/dummy values for the tokenizer
+    args.make_vocab_size_divisible_by = 128
+    args.tensor_model_parallel_size = 1
+    args.vocab_extra_ids = 0
 
     if args.tokenizer_type.lower().startswith('bert'):
         if not args.split_sentences:
