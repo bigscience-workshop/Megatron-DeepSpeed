@@ -655,7 +655,7 @@ def gather_files_dist_bin(outfile, filelist, distctx):
     # if successful or delete the temporary file if not.
     # This way if the final name appears, the user knows it's a valid file.
     finalname = data_file_path(outfile)
-    finaltmp = finalname + ".tmp"
+    finalnametmp = finalname + ".tmp"
 
     # First delete the final file if it already exists
     distctx.remove(finalname)
@@ -664,7 +664,7 @@ def gather_files_dist_bin(outfile, filelist, distctx):
     err = None
     try:
         # Create shared output file and pre-truncate to its final size.
-        with distctx.open(finaltmp, truncate=count) as fout:
+        with distctx.open(finalnametmp, truncate=count) as fout:
             # Seek to appropriate starting offset in the merged file.
             fout.seek(offset)
 
@@ -683,7 +683,7 @@ def gather_files_dist_bin(outfile, filelist, distctx):
 
     # Everyone wrote their part successfully.
     # Rename the temporary file to the final file.
-    distctx.rename(finaltmp, finalname)
+    distctx.rename(finalnametmp, finalname)
 
 
 def write_list_at_offset(fout, file_offset, vals, shift, elem_offset, dtype):
@@ -803,11 +803,20 @@ def gather_files_dist_idx_cached(outfile, filelist, distctx):
     global_dim_offset = distctx.exscan(numdim)
     global_doc_offset = distctx.exscan(numdoc)
 
+    # We first write to a temporary file name.  We rename to the final name
+    # if successful or delete the temporary file if not.
+    # This way if the final name appears, the user knows it's a valid file.
+    finalname = index_file_path(outfile)
+    finalnametmp = finalname + ".tmp"
+
+    # First delete the final file if it already exists
+    distctx.remove(finalname)
+
     # Catch and I/O errors to later determine whether all ranks wrote successfully.
     err = None
     try:
         # Create shared output file
-        with distctx.open(index_file_path(outfile)) as fout:
+        with distctx.open(finalnametmp) as fout:
             # Have rank 0 write the file header
             file_offset = 0
             if distctx.rank == 0:
@@ -860,6 +869,10 @@ def gather_files_dist_idx_cached(outfile, filelist, distctx):
 
     # Check that all ranks wrote successfully
     distctx.allraise_if(err)
+
+    # Everyone wrote their part successfully.
+    # Rename the temporary file to the final file.
+    distctx.rename(finalnametmp, finalname)
 
 
 def gather_files_dist_idx_mmap(outfile, filelist, distctx):
@@ -915,11 +928,20 @@ def gather_files_dist_idx_mmap(outfile, filelist, distctx):
     # before the calling rank.
     pointer_offset = distctx.exscan(pointers_bytes)
 
+    # We first write to a temporary file name.  We rename to the final name
+    # if successful or delete the temporary file if not.
+    # This way if the final name appears, the user knows it's a valid file.
+    finalname = index_file_path(outfile)
+    finalnametmp = finalname + ".tmp"
+
+    # First delete the final file if it already exists
+    distctx.remove(finalname)
+
     # Catch and I/O errors to later determine whether all ranks wrote successfully.
     err = None
     try:
         # Create shared output file
-        with distctx.open(index_file_path(outfile)) as fout:
+        with distctx.open(finalnametmp) as fout:
             # Have rank 0 write the file header
             file_offset = 0
             if distctx.rank == 0:
@@ -964,6 +986,10 @@ def gather_files_dist_idx_mmap(outfile, filelist, distctx):
 
     # Check that all ranks wrote successfully
     distctx.allraise_if(err)
+
+    # Everyone wrote their part successfully.
+    # Rename the temporary file to the final file.
+    distctx.rename(finalnametmp, finalname)
 
 
 # Verify that all files in filelist are of the same index type.
