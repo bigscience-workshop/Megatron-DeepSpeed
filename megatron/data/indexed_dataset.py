@@ -367,8 +367,9 @@ def exscan_from_cumsum_(arr):
     # given an array holding the result of an inclusive scan (cumsum),
     # convert to an exclusive scan (shift to the right)
     # [10, 30, 35, 50] --> [0, 10, 30, 35]
-    if arr.size > 0:
+    if arr.size > 1:
         arr[1:] = arr[:-1]
+    if arr.size > 0:
         arr[0] = 0
 
 
