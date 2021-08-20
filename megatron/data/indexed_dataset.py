@@ -352,6 +352,26 @@ def _warmup_mmap_file(path):
             pass
 
 
+def get_pointers(sizes, elemsize, dtype):
+    """Return a numpy array of type dtype giving the inclusive scan of byte sizes.
+
+    Multiplies values in the sizes array by elemsize (bytes),
+    and then computes an inclusive scan to get cumulative byte sizes.
+    """
+    pointers = np.array(sizes, dtype=dtype)
+    pointers *= elemsize
+    np.cumsum(pointers, axis=0, out=pointers)
+    return pointers
+
+def exscan_from_cumsum_(arr):
+    # given an array holding the result of an inclusive scan (cumsum),
+    # convert to an exclusive scan (shift to the right)
+    # [10, 30, 35, 50] --> [0, 10, 30, 35]
+    if arr.size > 0:
+        arr[1:] = arr[:-1]
+        arr[0] = 0
+
+
 class MMapIndexedDataset(torch.utils.data.Dataset):
     class Index(object):
         _HDR_MAGIC = b'MMIDIDX\x00\x00'
@@ -386,12 +406,10 @@ class MMapIndexedDataset(torch.utils.data.Dataset):
                     """
 
                     # compute element sizes in bytes
-                    bytesizes = np.array(sizes, dtype=npdtype)
-                    bytesizes *= dtype().itemsize
-
-                    # exclusive scan to get byte offsets
-                    pointers = np.cumsum(bytesizes, axis=0)
-                    pointers -= bytesizes
+                    pointers = np.array(sizes, dtype=npdtype)
+                    pointers *= dtype().itemsize
+                    np.cumsum(pointers, axis=0, out=pointers)
+                    exscan_from_cumsum_(pointers)
 
                     return pointers
 
@@ -402,7 +420,8 @@ class MMapIndexedDataset(torch.utils.data.Dataset):
                     self._file.write(sizes32.tobytes(order='C'))
                     del sizes32
 
-                    pointers = self._get_pointers(sizes, np.int64)
+                    pointers = get_pointers(sizes, dtype().itemsize, np.int64)
+                    exscan_from_cumsum_(pointers)
                     self._file.write(pointers.tobytes(order='C'))
                     del pointers
 
@@ -910,22 +929,17 @@ def gather_files_dist_idx_mmap(outfile, filelist, distctx):
             # dtype().itemsize bytes (often a standard type that is just
             # large enough to represent all elements of the vocabulary).
 
-            # Compute byte sizes for each of our sentences given
+            # Compute cumulative byte sizes for each of our sentences given
             # the token count and vocab dtype.
-            bytesizes = np.array(sizes, dtype=np.int64)
-            bytesizes *= dtype().itemsize
+            pointers = get_pointers(sizes, dtype().itemsize, np.int64)
 
-            # Inclusive scan to sum number of bytes over sentences.
-            pointers = np.cumsum(bytesizes, axis=0)
-
-            # Account for bytes for all sentences on ranks
+            # Determine total number of bytes for all sentences on ranks
             # before the calling rank.
             bytes_last = pointers[-1] if len(sizes) > 0 else 0
             pointer_offset = distctx.exscan(bytes_last)
-            pointers += pointer_offset
 
-            # Convert to exclusive scan to get global offset.
-            pointers -= bytesizes
+            # Convert to (local) byte offsets.
+            exscan_from_cumsum_(pointers)
 
             # Since the pointers array is the same length as the sizes array,
             # we use global_size_offset and global_size_count to position
@@ -933,7 +947,7 @@ def gather_files_dist_idx_mmap(outfile, filelist, distctx):
 
             # Seek to proper offset for this rank and write
             # pointer values into file, stored as int64.
-            write_list_at_offset(fout, file_offset, pointers, 0, global_size_offset, np.int64)
+            write_list_at_offset(fout, file_offset, pointers, pointer_offset, global_size_offset, np.int64)
             file_offset += global_size_count * np.int64().itemsize
 
             # The document index points to the position in the sizes
