@@ -672,6 +672,7 @@ def gather_files_dist_bin(outfile, filelist, distctx):
             for f in filelist:
                 with open(data_file_path(f), "rb") as fsrc:
                     shutil.copyfileobj(fsrc, fout)
+
     except Exception as e:
         err = e
 
@@ -686,17 +687,17 @@ def gather_files_dist_bin(outfile, filelist, distctx):
 
 
 def write_list_at_offset(fout, file_offset, vals, shift, elem_offset, dtype):
-    """Write list of values to fout.
+    """Write list of vals to fout starting at an offset given by file_offset, elem_offset, and dtype.
 
     Copies list of values in vals to a numpy array of type dtype.
-    Adds a constant value to all elements as given in shift.
+    Adds a constant shift value to all elements.
     Writes the numpy array to the file handle at given offset and scaled by size of the datatype.
-        byteoffset = pos + vals * dtype().itemsize
+        offset = file_offset + elem_offset * dtype().itemsize
 
     Parameters
     ----------
     fout : file handle
-        Opened file handle to which to write vals
+        Open file handle to which to write list of vals
     file_offset : int
         Byte offset within the file where the global list starts
     vals : list[int]
@@ -705,7 +706,7 @@ def write_list_at_offset(fout, file_offset, vals, shift, elem_offset, dtype):
         Value to add to each element in vals before writing (use 0 for no change)
     elem_offset : int
         Zero-based element index where vals starts within the global list.
-        This value will be scaled by dtype().itemsize to convert to the corresponding number of bytes.
+        This value is scaled by dtype().itemsize to convert to a corresponding byte offset.
     dtype : np.dtype
         numpy datatype to be used when writing the list to the file
     """
@@ -728,7 +729,7 @@ def gather_files_dist_check_dtype(filelist, dtype_rank_consistent, dtype_code, d
     distctx.allassert(dtype_rank_consistent, "Some rank found inconsistent dtype values")
 
     # Verify that at least one rank found a dtype value.
-    # Because of the bcast, the the value of first_dtype_code will be the same on all ranks.
+    # Because of the bcast, the the value of first_dtype_code is the same on all ranks.
     first_dtype_code = distctx.bcast_first(dtype_code)
     assert first_dtype_code is not None, "Failed to find a dtype value in any index file"
 

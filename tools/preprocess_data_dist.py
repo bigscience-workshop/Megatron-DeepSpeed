@@ -178,7 +178,7 @@ def get_args():
                              'With "parallel", each rank writes directly to the final files, '
                              'while rank 0 copies data from all per-rank files with "serial".  '
                              'A parallel merge can be faster, but for correctness, it requires the underlying file system '
-                             'to support parallel write operations to a file shared among multiple processes.  '
+                             'to support parallel write operations to a file that is shared among multiple processes.  '
                              'One can choose "both" for testing purposes, in which case the final files written '
                              'by the parallel method are given an additional ".par" extension.'))
     group.add_argument('--scratch', type=str, default=None,
@@ -485,23 +485,24 @@ def rank_files_merge_parallel(args):
     merge_start = time.time()
     numbytes = np.zeros(1, dtype=np.int64)
     for key in args.columns:
+        # merge the per-rank file from each process into a single shared file
         filemain = get_filename(args, key)
         filerank = get_filename(args, key, args.rank)
         gather_files_dist(filemain, [filerank], args.distctx)
 
-        # total up bytes read in merge
-        binfile = data_file_path(filerank)
-        idxfile = index_file_path(filerank)
-        numbytes[0] += os.stat(binfile)[stat.ST_SIZE]
-        numbytes[0] += os.stat(idxfile)[stat.ST_SIZE]
+        # total up bytes read during the merge
+        binfilerank = data_file_path(filerank)
+        idxfilerank = index_file_path(filerank)
+        numbytes[0] += os.stat(binfilerank)[stat.ST_SIZE]
+        numbytes[0] += os.stat(idxfilerank)[stat.ST_SIZE]
 
         # If user want to use both a parallel and serial merge (for testing),
         # rename the parallel output files so that the serial merge does not clobber them.
         if args.merge == 'both' and args.rank == 0:
-            binfile = data_file_path(filemain)
-            idxfile = index_file_path(filemain)
-            os.rename(binfile, binfile + ".par")
-            os.rename(idxfile, idxfile + ".par")
+            binfilemain = data_file_path(filemain)
+            idxfilemain = index_file_path(filemain)
+            os.rename(binfilemain, binfilemain + ".par")
+            os.rename(idxfilemain, idxfilemain + ".par")
 
     # Total up number of bytes read across all ranks,
     # and wait on all ranks before stopping the timer.
