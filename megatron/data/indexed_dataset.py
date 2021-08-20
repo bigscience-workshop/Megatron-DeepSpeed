@@ -352,17 +352,6 @@ def _warmup_mmap_file(path):
             pass
 
 
-def get_pointers(sizes, elemsize, dtype):
-    """Return a numpy array of type dtype giving the inclusive scan of byte sizes.
-
-    Multiplies values in the sizes array by elemsize (bytes),
-    and then computes an inclusive scan to get cumulative byte sizes.
-    """
-    pointers = np.array(sizes, dtype=dtype)
-    pointers *= elemsize
-    np.cumsum(pointers, axis=0, out=pointers)
-    return pointers
-
 def exscan_from_cumsum_(arr):
     # given an array holding the result of an inclusive scan (cumsum),
     # convert to an exclusive scan (shift to the right)
@@ -371,6 +360,28 @@ def exscan_from_cumsum_(arr):
         arr[1:] = arr[:-1]
     if arr.size > 0:
         arr[0] = 0
+
+
+def get_pointers_with_total(sizes, elemsize, dtype):
+    """Return a numpy array of type np.dtype giving the byte offsets.
+
+    Multiplies values in the sizes array by elemsize (bytes),
+    and then computes an exclusive scan to get byte offsets.
+    Returns the total number of bytes as second item in a tuple.
+    """
+
+    # scale values in sizes array by elemsize to get sizes in bytes
+    pointers = np.array(sizes, dtype=dtype)
+    pointers *= elemsize
+    np.cumsum(pointers, axis=0, out=pointers)
+
+    # get total number of bytes from all sizes (last element)
+    bytes_last = pointers[-1] if len(sizes) > 0 else 0
+
+    # convert to byte offsets
+    exscan_from_cumsum_(pointers)
+
+    return pointers, bytes_last
 
 
 class MMapIndexedDataset(torch.utils.data.Dataset):
@@ -407,11 +418,7 @@ class MMapIndexedDataset(torch.utils.data.Dataset):
                     """
 
                     # compute element sizes in bytes
-                    pointers = np.array(sizes, dtype=npdtype)
-                    pointers *= dtype().itemsize
-                    np.cumsum(pointers, axis=0, out=pointers)
-                    exscan_from_cumsum_(pointers)
-
+                    pointers, _ = get_pointers_with_total(sizes, dtype().itemsize, npdtype)
                     return pointers
 
                 def write(self, sizes, doc_idx):
@@ -421,8 +428,7 @@ class MMapIndexedDataset(torch.utils.data.Dataset):
                     self._file.write(sizes32.tobytes(order='C'))
                     del sizes32
 
-                    pointers = get_pointers(sizes, dtype().itemsize, np.int64)
-                    exscan_from_cumsum_(pointers)
+                    pointers = self._get_pointers(sizes, np.int64)
                     self._file.write(pointers.tobytes(order='C'))
                     del pointers
 
@@ -930,21 +936,17 @@ def gather_files_dist_idx_mmap(outfile, filelist, distctx):
             # dtype().itemsize bytes (often a standard type that is just
             # large enough to represent all elements of the vocabulary).
 
-            # Compute cumulative byte sizes for each of our sentences given
-            # the token count and vocab dtype.
-            pointers = get_pointers(sizes, dtype().itemsize, np.int64)
-
-            # Determine total number of bytes for all sentences on ranks
-            # before the calling rank.
-            bytes_last = pointers[-1] if len(sizes) > 0 else 0
-            pointer_offset = distctx.exscan(bytes_last)
-
-            # Convert to (local) byte offsets.
-            exscan_from_cumsum_(pointers)
-
             # Since the pointers array is the same length as the sizes array,
             # we use global_size_offset and global_size_count to position
             # within the file for writing the pointer values.
+
+            # Compute cumulative byte sizes for each of our sentences given
+            # the token count and vocab dtype.
+            pointers, pointers_bytes = get_pointers_with_total(sizes, dtype().itemsize, np.int64)
+
+            # Determine total number of bytes for all sentences on ranks
+            # before the calling rank.
+            pointer_offset = distctx.exscan(pointers_bytes)
 
             # Seek to proper offset for this rank and write
             # pointer values into file, stored as int64.
