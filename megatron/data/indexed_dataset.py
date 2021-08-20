@@ -906,6 +906,14 @@ def gather_files_dist_idx_mmap(outfile, filelist, distctx):
     global_size_offset = distctx.exscan(numsizes)
     global_docs_offset = distctx.exscan(numdocs)
 
+    # Compute local byte offsets for each of our sentences given
+    # the token count and byte size of the vocab dtype.
+    pointers, pointers_bytes = get_pointers_with_total(sizes, dtype().itemsize, np.int64)
+
+    # Determine total number of bytes for all sentences on ranks
+    # before the calling rank.
+    pointer_offset = distctx.exscan(pointers_bytes)
+
     # Catch and I/O errors to later determine whether all ranks wrote successfully.
     err = None
     try:
@@ -935,21 +943,9 @@ def gather_files_dist_idx_mmap(outfile, filelist, distctx):
             # of a sentence is stored in units of type dtype, which consumes
             # dtype().itemsize bytes (often a standard type that is just
             # large enough to represent all elements of the vocabulary).
-
             # Since the pointers array is the same length as the sizes array,
             # we use global_size_offset and global_size_count to position
             # within the file for writing the pointer values.
-
-            # Compute cumulative byte sizes for each of our sentences given
-            # the token count and vocab dtype.
-            pointers, pointers_bytes = get_pointers_with_total(sizes, dtype().itemsize, np.int64)
-
-            # Determine total number of bytes for all sentences on ranks
-            # before the calling rank.
-            pointer_offset = distctx.exscan(pointers_bytes)
-
-            # Seek to proper offset for this rank and write
-            # pointer values into file, stored as int64.
             write_list_at_offset(fout, file_offset, pointers, pointer_offset, global_size_offset, np.int64)
             file_offset += global_size_count * np.int64().itemsize
 
