@@ -207,6 +207,10 @@ def get_gpu_count():
     else:
         return 0
 
+def torch_assert_equal(actual, expected):
+    """ emulates the removed torch.testing.assert_equal """
+    torch.testing.assert_close(actual, expected, rtol=0.0, atol=0.0)
+
 
 def get_tests_dir(append_path=None):
     """
