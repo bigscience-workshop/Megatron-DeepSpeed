@@ -4,7 +4,7 @@ import unittest
 import torch
 from torch.nn import functional as F
 
-from megatron.model.activations import liglu, geglu, reglu, swiglu
+from megatron.model.glu_activations import liglu, geglu, reglu, swiglu
 from megatron.testing_utils import set_seed
 
 
