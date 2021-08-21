@@ -27,16 +27,16 @@ class TestActivations(unittest.TestCase):
 
     def test_liglu(self):
         expected = self.x1 * self.x2
-        torch.testing.assert_equal(liglu(self.x), expected)
+        torch.testing.assert_close(liglu(self.x), expected, rtol=0.0, atol=0.0)
 
     def test_geglu(self):
         expected = self.x1 * F.gelu(self.x2)
-        torch.testing.assert_equal(geglu(self.x), expected)
+        torch.testing.assert_close(geglu(self.x), expected, rtol=0.0, atol=0.0)
 
     def test_reglu(self):
         expected = self.x1 * F.relu(self.x2)
-        torch.testing.assert_equal(reglu(self.x), expected)
+        torch.testing.assert_close(reglu(self.x), expected, rtol=0.0, atol=0.0)
 
     def test_swiglu(self):
         expected = self.x1 * F.silu(self.x2)
-        torch.testing.assert_equal(swiglu(self.x), expected)
+        torch.testing.assert_close(swiglu(self.x), expected, rtol=0.0, atol=0.0)
