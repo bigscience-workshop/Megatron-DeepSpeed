@@ -43,7 +43,7 @@ class TestActivations(unittest.TestCase):
 
     # from megatron.testing_utils import require_torch_bf16
     # @require_torch_bf16
-    # def test_bf16_jit(self):       
+    # def test_bf16_jit(self):
     #     x_bf16 = self.x.to(torch.bfloat16)
     #     for activation_fn in GLU_ACTIVATIONS.values():
     #         output = activation_fn(x_bf16)
