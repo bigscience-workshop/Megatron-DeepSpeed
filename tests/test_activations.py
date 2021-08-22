@@ -4,8 +4,8 @@ import unittest
 import torch
 from torch.nn import functional as F
 
-from megatron.model.glu_activations import liglu, geglu, reglu, swiglu
-from megatron.testing_utils import set_seed, torch_assert_equal
+from megatron.model.glu_activations import GLU_ACTIVATIONS, geglu, liglu, reglu, swiglu
+from megatron.testing_utils import set_seed, torch_assert_equal, is_torch_bf16_available
 
 
 class TestActivations(unittest.TestCase):
@@ -17,13 +17,13 @@ class TestActivations(unittest.TestCase):
         self.num_channels = random.randint(1, 384) * 2
         self.x = torch.randn(self.batch_size, self.seq_len, self.num_channels)
         self.x1, self.x2 = self.x.chunk(2, dim=-1)
+        # glu should halve the last dimension
+        self.output_shape = [self.batch_size, self.seq_len, self.num_channels // 2]
 
     def test_shapes(self):
-        # glu should halve the last dimension
-        output_shape = [self.batch_size, self.seq_len, self.num_channels // 2]
-        for activation_fn in [liglu, geglu, reglu, swiglu]:
+        for activation_fn in GLU_ACTIVATIONS.values():
             output = activation_fn(self.x)
-            self.assertEqual(list(output.shape), output_shape)
+            self.assertEqual(list(output.shape), self.output_shape)
 
     def test_liglu(self):
         expected = self.x1 * self.x2
@@ -40,3 +40,10 @@ class TestActivations(unittest.TestCase):
     def test_swiglu(self):
         expected = self.x1 * F.silu(self.x2)
         torch_assert_equal(swiglu(self.x), expected)
+
+    def test_bf16_jit(self):
+        if is_torch_bf16_available():    
+            x_bf16 = self.x.to(torch.bfloat16)
+            for activation_fn in GLU_ACTIVATIONS.values():
+                output = activation_fn(x_bf16)
+                self.assertEqual(list(output.shape), self.output_shape)

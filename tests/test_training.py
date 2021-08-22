@@ -102,6 +102,7 @@ class MegDSTestTraining(TestCasePlus):
             --log-timers-to-tensorboard
             --log-batch-size-to-tensorboard
             --log-validation-ppl-to-tensorboard
+            --glu-activation=geglu
         """.split()
 
         ds_args = f"""
