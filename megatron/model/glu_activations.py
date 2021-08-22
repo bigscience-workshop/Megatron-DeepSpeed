@@ -41,7 +41,7 @@ swiglu = torch.jit.script(SwiGLU())
 
 
 GLU_ACTIVATIONS = {
-    "gegelu": geglu,
+    "geglu": geglu,
     "liglu": liglu,
     "reglu": reglu,
     "swiglu": swiglu,
