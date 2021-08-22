@@ -180,7 +180,7 @@ def codecarbon_tracker_start():
     if _GLOBAL_CODECARBON_TRACKER is None:
         return
 
-
+    #print("CC START")
     _GLOBAL_CODECARBON_TRACKER.start()
 
 
@@ -189,33 +189,17 @@ def codecarbon_tracker_stop():
     if _GLOBAL_CODECARBON_TRACKER is None:
         return
 
+    #print("CC STOP")
     _GLOBAL_CODECARBON_TRACKER.stop()
 
 
-def codecarbon_tracker_pause():
-    """ pause saves intermediate results """
+def codecarbon_tracker_flush():
     global _GLOBAL_CODECARBON_TRACKER
     if _GLOBAL_CODECARBON_TRACKER is None:
         return
 
-    _GLOBAL_CODECARBON_TRACKER.pause()
-
-
-def codecarbon_tracker_resume():
-    global _GLOBAL_CODECARBON_TRACKER
-    if _GLOBAL_CODECARBON_TRACKER is None:
-        return
-
-    _GLOBAL_CODECARBON_TRACKER.resume()
-
-
-def codecarbon_tracker_restart():
-    global _GLOBAL_CODECARBON_TRACKER
-    if _GLOBAL_CODECARBON_TRACKER is None:
-        return
-
-    codecarbon_tracker_pause()
-    codecarbon_tracker_resume()
+    #print("CC FLUSH")
+    _GLOBAL_CODECARBON_TRACKER.flush()
 
 
 def _set_adlr_autoresume(args):

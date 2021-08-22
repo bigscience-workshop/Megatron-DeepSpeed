@@ -22,7 +22,7 @@ import numpy as np
 
 import torch
 
-from megatron.global_vars import codecarbon_tracker_restart
+from megatron.global_vars import codecarbon_tracker_flush
 from megatron import (get_args,
                       mpu,
                       print_rank_0,
@@ -187,7 +187,7 @@ def save_checkpoint(iteration, model, optimizer, lr_scheduler):
     # since the code can be exited or aborted in various places we use the checkpoint saving as
     # a save saving point for the codecarbon tracker. If the program doesn't run to its normal
     # end, then only the data since the last saved checkpoint will be lost.
-    codecarbon_tracker_restart()
+    codecarbon_tracker_flush()
 
 def _transpose_first_dim(t, num_splits, num_splits_first, model):
     input_shape = t.size()
