@@ -298,16 +298,16 @@ class IndexedDatasetBuilder(object):
         index = IndexedDataset(another_file)
         assert index.dtype == self.dtype
 
-        offset = len(self.sizes)
+        doc_offset = len(self.sizes)
 
         begin = self.data_offsets[-1]
-        for offset in index.data_offsets[1:]:
-            self.data_offsets.append(begin + offset)
+        for data_offset in index.data_offsets[1:]:
+            self.data_offsets.append(begin + data_offset)
         self.sizes.extend(index.sizes)
         begin = self.dim_offsets[-1]
         for dim_offset in index.dim_offsets[1:]:
             self.dim_offsets.append(begin + dim_offset)
-        self.doc_idx.extend( (offset + index.doc_idx)[1:] )
+        self.doc_idx.extend( (doc_offset + index.doc_idx)[1:] )
 
         with open(data_file_path(another_file), 'rb') as f:
             while True:
@@ -359,22 +359,16 @@ class MMapIndexedDataset(torch.utils.data.Dataset):
                     """Return a numpy array of byte offsets given a list of sizes.
 
                     Multiplies values in the sizes array by dtype size (bytes),
-                    and then computes a zero-based prefix scan.
+                    and then computes an exclusive scan to get byte offsets.
                     """
 
-                    # create numpy array of desired numpy datatype
-                    pointers = np.array(sizes, dtype=npdtype)
+                    # compute element sizes in bytes
+                    bytesizes = np.array(sizes, dtype=npdtype)
+                    bytesizes *= dtype().itemsize
 
-                    if len(sizes) > 0:
-                        # scale each element by its dtype size
-                        dtype_size = dtype().itemsize
-                        pointers *= dtype_size
-
-                        # in-place prefix scan to compute byte offsets
-                        np.cumsum(pointers, axis=0, out=pointers)
-
-                        # zero-base the prefix scan (exclusive scan)
-                        pointers -= pointers[0]
+                    # exclusive scan to get byte offsets
+                    pointers = np.cumsum(bytesizes, axis=0)
+                    pointers -= bytesizes
 
                     return pointers
 
