@@ -230,6 +230,14 @@ def is_torch_bf16_available():
         return False
 
 
+def require_torch_bf16(test_case):
+    """Decorator marking a test that requires CUDA hardware supporting bf16 and PyTorch >= 1.9."""
+    if not is_torch_bf16_available():
+        return unittest.skip("test requires CUDA hardware supporting bf16 and PyTorch >= 1.9")(test_case)
+    else:
+        return test_case
+
+
 def get_tests_dir(append_path=None):
     """
     Args:
