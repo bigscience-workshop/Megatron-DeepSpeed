@@ -25,6 +25,7 @@ import unittest
 import random
 from distutils.util import strtobool
 from io import StringIO
+from packaging import version
 from pathlib import Path
 from typing import Iterator, Union
 from unittest import mock
@@ -210,6 +211,31 @@ def get_gpu_count():
 def torch_assert_equal(actual, expected):
     """ emulates the removed torch.testing.assert_equal """
     torch.testing.assert_close(actual, expected, rtol=0.0, atol=0.0)
+
+
+def is_torch_bf16_available():
+    # from https://github.com/huggingface/transformers/blob/26eb566e43148c80d0ea098c76c3d128c0281c16/src/transformers/file_utils.py#L301
+    if is_torch_available():
+        import torch
+        if not torch.cuda.is_available() or torch.version.cuda is None:
+            return False
+        if torch.cuda.get_device_properties(torch.cuda.current_device()).major < 8:
+            return False
+        if int(torch.version.cuda.split(".")[0]) < 11:
+            return False
+        if not version.parse(torch.__version__) >= version.parse("1.09"):
+            return False
+        return True
+    else:
+        return False
+
+
+def require_torch_bf16(test_case):
+    """Decorator marking a test that requires CUDA hardware supporting bf16 and PyTorch >= 1.9."""
+    if not is_torch_bf16_available():
+        return unittest.skip("test requires CUDA hardware supporting bf16 and PyTorch >= 1.9")(test_case)
+    else:
+        return test_case
 
 
 def get_tests_dir(append_path=None):
