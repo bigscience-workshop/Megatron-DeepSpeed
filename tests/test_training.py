@@ -90,6 +90,7 @@ class MegDSTestTraining(TestCasePlus):
             --eval-interval 10
             --eval-iters 5
             --checkpoint-activations
+            --glu-activation geglu
             --exit-interval {exit_interval}
 
             --merge-file {data_dir}/gpt2-tiny-merges.txt
@@ -102,7 +103,6 @@ class MegDSTestTraining(TestCasePlus):
             --log-timers-to-tensorboard
             --log-batch-size-to-tensorboard
             --log-validation-ppl-to-tensorboard
-            --glu-activation geglu
         """.split()
 
         ds_args = f"""
