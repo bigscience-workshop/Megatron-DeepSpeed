@@ -5,7 +5,7 @@ import torch
 from torch.nn import functional as F
 
 from megatron.model.glu_activations import GLU_ACTIVATIONS, geglu, liglu, reglu, swiglu
-from megatron.testing_utils import set_seed, torch_assert_equal, require_torch_bf16
+from megatron.testing_utils import set_seed, torch_assert_equal
 
 
 class TestActivations(unittest.TestCase):
@@ -41,9 +41,10 @@ class TestActivations(unittest.TestCase):
         expected = self.x1 * F.silu(self.x2)
         torch_assert_equal(swiglu(self.x), expected)
 
-    @require_torch_bf16
-    def test_bf16_jit(self):       
-        x_bf16 = self.x.to(torch.bfloat16)
-        for activation_fn in GLU_ACTIVATIONS.values():
-            output = activation_fn(x_bf16)
-            self.assertEqual(list(output.shape), self.output_shape)
+    # from megatron.testing_utils import require_torch_bf16
+    # @require_torch_bf16
+    # def test_bf16_jit(self):       
+    #     x_bf16 = self.x.to(torch.bfloat16)
+    #     for activation_fn in GLU_ACTIVATIONS.values():
+    #         output = activation_fn(x_bf16)
+    #         self.assertEqual(list(output.shape), self.output_shape)
