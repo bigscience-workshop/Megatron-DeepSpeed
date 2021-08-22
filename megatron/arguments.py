@@ -22,6 +22,7 @@ import torch
 import deepspeed
 
 from megatron.enums import PositionEmbeddingType
+from megatron.model.glu_activations import GLU_ACTIVATIONS
 
 
 def parse_args(extra_args_provider=None, defaults={},
@@ -312,6 +313,10 @@ def _add_network_size_args(parser):
                        choices=list(PositionEmbeddingType),
                        default=PositionEmbeddingType.absolute,
                        help='Define position embedding type ("absolute" | "rotary"). "absolute" by default.'
+                       )
+    group.add_argument('--glu-activation', type=str,
+                       choices=GLU_ACTIVATIONS.keys(),
+                       help='GLU activations to use.'
                        )
 
     return parser
