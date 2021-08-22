@@ -223,7 +223,7 @@ def is_torch_bf16_available():
             return False
         if int(torch.version.cuda.split(".")[0]) < 11:
             return False
-        if not version.parse(torch.__version__) > version.parse("1.09"):
+        if not version.parse(torch.__version__) >= version.parse("1.09"):
             return False
         return True
     else:
