@@ -73,16 +73,23 @@ class DistData(object):
         self.allassert(outval.dtype == np.int64,
             f"Requires outval to be of type numpy.int64")
 
-        # Note that we create the torch.tensor outtensor to receive incoming
-        # data by using from_numpy.  This sets outtensor to point to the same
-        # underlying memory of the outval numpy array.  Receiving data into
-        # outtensor thus writes incoming data directly into the numpy array.
-
+        # Define list of tensors to scatter on the root.
+        # torch.distributed.scatter requires each tensor to be the same shape,
+        # so find the max size across all count values and pad.
         scatterlist = None
         if self.rank == root:
-            scatterlist = list(torch.split(torch.from_numpy(invals), counts))
-        outtensor = torch.from_numpy(outval)
-        dist.scatter(outtensor, scatterlist, src=root)
+            scatterlist = []
+            slices = list(torch.split(torch.from_numpy(invals), counts))
+            for num, s in zip(counts, slices):
+                padtensor = torch.zeros(max(counts), dtype=torch.int64)
+                padtensor[:num] = s
+                scatterlist.append(padtensor)
+
+        # Receive a tensor of the max count size from the root,
+        # then copy values into output numpy array, which may be smaller.
+        recvtensor = torch.zeros(max(counts), dtype=torch.int64)
+        dist.scatter(recvtensor, scatterlist, src=root)
+        outval[:] = recvtensor[:counts[self.rank]]
 
     def alltrue(self, val):
         """Returns True if all procs input True, False otherwise"""
