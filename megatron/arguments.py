@@ -21,6 +21,10 @@ import os
 import torch
 import deepspeed
 
+from megatron.enums import PositionEmbeddingType
+import megatron
+
+
 def parse_args(extra_args_provider=None, defaults={},
                ignore_unknown_args=False):
     """Parse all arguments."""
@@ -200,8 +204,7 @@ def parse_args(extra_args_provider=None, defaults={},
                 'and lr-warmup-samples'
 
     # Check required arguments.
-    required_args = ['num_layers', 'hidden_size', 'num_attention_heads',
-                     'max_position_embeddings']
+    required_args = ['num_layers', 'hidden_size', 'num_attention_heads']
     for req_arg in required_args:
         _check_arg_is_not_none(args, req_arg)
 
@@ -220,10 +223,15 @@ def parse_args(extra_args_provider=None, defaults={},
         assert args.encoder_seq_length is not None
         args.seq_length = args.encoder_seq_length
 
-    if args.seq_length is not None:
-        assert args.max_position_embeddings >= args.seq_length
-    if args.decoder_seq_length is not None:
-        assert args.max_position_embeddings >= args.decoder_seq_length
+    if args.position_embedding_type == PositionEmbeddingType.absolute:
+        assert args.max_position_embeddings is not None
+        if args.seq_length is not None:
+            assert args.max_position_embeddings >= args.seq_length
+        if args.decoder_seq_length is not None:
+            assert args.max_position_embeddings >= args.decoder_seq_length
+    else:
+        assert args.max_position_embeddings is None
+
     if args.lr is not None:
         assert args.min_lr <= args.lr
     if args.save is not None:
@@ -302,6 +310,15 @@ def _add_network_size_args(parser):
     group.add_argument('--bert-no-binary-head', action='store_false',
                        help='Disable BERT binary head.',
                        dest='bert_binary_head')
+    group.add_argument('--position-embedding-type', type=lambda x: PositionEmbeddingType[x],
+                       choices=list(PositionEmbeddingType),
+                       default=PositionEmbeddingType.absolute,
+                       help='Define position embedding type ("absolute" | "rotary"). "absolute" by default.'
+                       )
+    group.add_argument('--glu-activation', type=str,
+                       choices=megatron.model.glu_activations.GLU_ACTIVATIONS.keys(),
+                       help='GLU activations to use.'
+                       )
 
     return parser
 
@@ -385,14 +402,14 @@ def _add_training_args(parser):
     group.add_argument('--rampup-batch-size', nargs='*', default=None,
                        help='Batch size ramp up with the following values:'
                        '  --rampup-batch-size <start batch size> '
-                       '                      <batch size incerement> '
+                       '                      <batch size increment> '
                        '                      <ramp-up samples> '
-                       'For example:'
-                       '   --rampup-batch-size 16 8 300000 \ '
-                       '   --global-batch-size 1024'
+                       'For example: '
+                       '   --rampup-batch-size 16 8 300000 '
+                       '   --global-batch-size 1024 '
                        'will start with global batch size 16 and over '
-                       ' (1024 - 16) / 8 = 126 intervals will increase'
-                       'the batch size linearly to 1024. In each interval'
+                       ' (1024 - 16) / 8 = 126 intervals will increase '
+                       'the batch size linearly to 1024. In each interval '
                        'we will use approximately 300000 / 126 = 2380 samples.')
     group.add_argument('--checkpoint-activations', action='store_true',
                        help='Checkpoint activation to allow for training '

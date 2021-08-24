@@ -17,17 +17,21 @@
 import math
 import torch
 import torch.nn.functional as F
+from torch import nn
 
 from megatron import get_args
 from megatron import mpu
 from .module import MegatronModule
-from megatron.model.enums import AttnMaskType, LayerType, AttnType
+from megatron.enums import AttnMaskType, LayerType, AttnType, PositionEmbeddingType
 from megatron.model import LayerNorm
 from megatron.model.fused_softmax import FusedScaleMaskSoftmax
 from megatron.model.fused_bias_gelu import bias_gelu_impl
 from megatron.model.utils import attention_mask_func, openai_gelu, erf_gelu
 
 import deepspeed
+
+from .glu_activations import GLU_ACTIVATIONS
+from .positional_embeddings import RotaryEmbedding, apply_rotary_pos_emb_torch, apply_rotary_pos_emb
 
 # flags required to enable jit fusion kernels
 torch._C._jit_set_profiling_mode(False)
@@ -73,7 +77,9 @@ class ParallelMLP(MegatronModule):
 
         self.bias_gelu_fusion = args.bias_gelu_fusion
         self.activation_func = F.gelu
-        if args.openai_gelu:
+        if args.glu_activation:
+            self.activation_func = GLU_ACTIVATIONS[args.glu_activation]
+        elif args.openai_gelu:
             self.activation_func = openai_gelu
         elif args.onnx_safe:
             self.activation_func = erf_gelu
@@ -119,6 +125,7 @@ class ParallelAttention(MegatronModule):
         args = get_args()
         self.fp16 = args.fp16
         self.bf16 = args.bf16
+        self.position_embedding_type = args.position_embedding_type
 
         self.apply_query_key_layer_scaling = args.apply_query_key_layer_scaling
         self.attention_softmax_in_fp32 = args.attention_softmax_in_fp32
@@ -191,6 +198,9 @@ class ParallelAttention(MegatronModule):
             global get_cuda_rng_tracker, checkpoint
             get_cuda_rng_tracker = deepspeed.checkpointing.get_cuda_rng_tracker
             checkpoint = deepspeed.checkpointing.checkpoint
+
+        if self.position_embedding_type == PositionEmbeddingType.rotary:
+            self.rotary_emb = RotaryEmbedding(self.hidden_size_per_attention_head, precision=args.params_dtype)
 
     def forward(self, hidden_states, attention_mask, layer_past=None,
                 get_key_value=False, encoder_output=None):
@@ -273,6 +283,18 @@ class ParallelAttention(MegatronModule):
             output_size[3],
             dtype=query_layer.dtype,
             device=torch.cuda.current_device())
+
+        # Rotary embeddings
+        if self.position_embedding_type == PositionEmbeddingType.rotary:
+            apply_rotary_fn = apply_rotary_pos_emb_torch if self.bf16 else apply_rotary_pos_emb
+
+            seq_len = key_layer.shape[0]
+            offset = 0
+            if layer_past is not None and layer_past.numel() > 0:
+                offset = layer_past[0].shape[0]
+                seq_len += offset
+            cos, sin = self.rotary_emb(value_layer, seq_len=seq_len)
+            query_layer, key_layer = apply_rotary_fn(query_layer, key_layer, cos, sin, offset=offset)
 
         # Raw attention scores. [b * np, sq, sk]
         matmul_result = torch.baddbmm(

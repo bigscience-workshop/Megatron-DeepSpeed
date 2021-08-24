@@ -244,7 +244,7 @@ class Timers:
         assert normalizer > 0.0
         for name in names:
             value = self.timers[name].elapsed(reset=reset) / normalizer
-            writer.add_scalar(name + '-time', value, iteration)
+            writer.add_scalar(f'time/{name}-time', value, iteration)
 
     def log(self, names, normalizer=1.0, reset=True):
         """Log a group of timers."""

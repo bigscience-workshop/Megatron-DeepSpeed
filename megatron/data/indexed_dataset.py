@@ -18,10 +18,11 @@ from itertools import accumulate
 
 import numpy as np
 import torch
+
 from megatron import print_rank_0
 
 
-def __best_fitting_dtype(vocab_size=None):
+def best_fitting_dtype(vocab_size=None):
     if vocab_size is not None and vocab_size < 65500:
         return np.uint16
     else:
@@ -48,10 +49,12 @@ def infer_dataset_impl(path):
         return None
 
 
-def make_builder(out_file, impl, vocab_size=None):
+def make_builder(out_file, impl, dtype=None):
     if impl == 'mmap':
-        return MMapIndexedDatasetBuilder(out_file, dtype=__best_fitting_dtype(vocab_size))
+        assert dtype is not None
+        return MMapIndexedDatasetBuilder(out_file, dtype=dtype)
     else:
+        assert dtype is None
         return IndexedDatasetBuilder(out_file)
 
 
@@ -295,13 +298,16 @@ class IndexedDatasetBuilder(object):
         index = IndexedDataset(another_file)
         assert index.dtype == self.dtype
 
+        doc_offset = len(self.sizes)
+
         begin = self.data_offsets[-1]
-        for offset in index.data_offsets[1:]:
-            self.data_offsets.append(begin + offset)
+        for data_offset in index.data_offsets[1:]:
+            self.data_offsets.append(begin + data_offset)
         self.sizes.extend(index.sizes)
         begin = self.dim_offsets[-1]
         for dim_offset in index.dim_offsets[1:]:
             self.dim_offsets.append(begin + dim_offset)
+        self.doc_idx.extend( (doc_offset + index.doc_idx)[1:] )
 
         with open(data_file_path(another_file), 'rb') as f:
             while True:
@@ -349,28 +355,32 @@ class MMapIndexedDataset(torch.utils.data.Dataset):
                     return self
 
                 @staticmethod
-                def _get_pointers(sizes):
-                    dtype_size = dtype().itemsize
-                    address = 0
-                    pointers = []
+                def _get_pointers(sizes, npdtype):
+                    """Return a numpy array of byte offsets given a list of sizes.
 
-                    for size in sizes:
-                        pointers.append(address)
-                        address += size * dtype_size
+                    Multiplies values in the sizes array by dtype size (bytes),
+                    and then computes an exclusive scan to get byte offsets.
+                    """
+
+                    # compute element sizes in bytes
+                    bytesizes = np.array(sizes, dtype=npdtype)
+                    bytesizes *= dtype().itemsize
+
+                    # exclusive scan to get byte offsets
+                    pointers = np.cumsum(bytesizes, axis=0)
+                    pointers -= bytesizes
 
                     return pointers
 
                 def write(self, sizes, doc_idx):
-                    pointers = self._get_pointers(sizes)
-
                     self._file.write(struct.pack('<Q', len(sizes)))
                     self._file.write(struct.pack('<Q', len(doc_idx)))
 
-                    sizes = np.array(sizes, dtype=np.int32)
-                    self._file.write(sizes.tobytes(order='C'))
-                    del sizes
+                    sizes32 = np.array(sizes, dtype=np.int32)
+                    self._file.write(sizes32.tobytes(order='C'))
+                    del sizes32
 
-                    pointers = np.array(pointers, dtype=np.int64)
+                    pointers = self._get_pointers(sizes, np.int64)
                     self._file.write(pointers.tobytes(order='C'))
                     del pointers
 
@@ -535,6 +545,10 @@ class MMapIndexedDataset(torch.utils.data.Dataset):
             os.path.exists(index_file_path(path)) and os.path.exists(data_file_path(path))
         )
 
+    @property
+    def dtype(self):
+        return self._index.dtype
+
 
 class MMapIndexedDatasetBuilder(object):
     def __init__(self, out_file, dtype=np.int64):
@@ -556,8 +570,12 @@ class MMapIndexedDatasetBuilder(object):
         index = MMapIndexedDataset.Index(index_file_path(another_file))
         assert index.dtype == self._dtype
 
-        for size in index.sizes:
-            self._sizes.append(size)
+        total_len = len(index.sizes)+len(self._sizes)
+        print(f"    concat {another_file} size={len(index.sizes)} for a total size of {total_len}")
+
+        offset = len(self._sizes)
+        self._sizes.extend(index.sizes)
+        self._doc_idx.extend( (offset + index.doc_idx)[1:] )
 
         # Concatenate data
         with open(data_file_path(another_file), 'rb') as f:
