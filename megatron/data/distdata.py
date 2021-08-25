@@ -2,6 +2,7 @@ import os
 import numpy as np
 
 import torch
+import torch.nn.functional as F
 import torch.distributed as dist
 
 class DistDataError(Exception):
@@ -76,18 +77,15 @@ class DistData(object):
         # Define list of tensors to scatter on the root.
         # torch.distributed.scatter requires each tensor to be the same shape,
         # so find the max size across all count values and pad.
+        max_size = max(counts)
         scatterlist = None
         if self.rank == root:
-            scatterlist = []
             slices = list(torch.split(torch.from_numpy(invals), counts))
-            for num, s in zip(counts, slices):
-                padtensor = torch.zeros(max(counts), dtype=torch.int64)
-                padtensor[:num] = s
-                scatterlist.append(padtensor)
+            scatterlist = [F.pad(s, (0, max_size - len(s))) for s in slices]
 
         # Receive a tensor of the max count size from the root,
         # then copy values into output numpy array, which may be smaller.
-        recvtensor = torch.zeros(max(counts), dtype=torch.int64)
+        recvtensor = torch.zeros(max_size, dtype=torch.int64)
         dist.scatter(recvtensor, scatterlist, src=root)
         outval[:] = recvtensor[:counts[self.rank]]
 
