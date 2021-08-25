@@ -245,7 +245,6 @@ def load_dset(args):
 
     # Load the specified HuggingFace dataset.
     # Give rank 0 a head start in case the dataset is not already cached.
-    success = True
     err = None
     dsetname = args.input
     if args.rank == 0:
@@ -258,17 +257,13 @@ def load_dset(args):
             msgerr(f"    from datasets import load_dataset")
             msgerr(f"    dset = load_dataset('{dsetname}')")
             msgerr(f"Alternatively, one can force this script to download by setting $HF_DATASETS_OFFLINE=0", flush=True)
-            success = False
             err = e
         except Exception as e:
-            msgerr("Unexpected error:", sys.exc_info()[0], flush=True)
-            success = False
+            msgerr(f"Unexpected error: {sys.exc_info()[0]}", flush=True)
             err = e
 
     # determine whether rank 0 succeeded in loading the dataset
-    success = args.distctx.alltrue(success)
-    if not success:
-        return None, err
+    args.distctx.allraise_if(err)
 
     # Rank 0 succeeded, attempt to load dataset on all other ranks.
     # This should load from cache now.
@@ -277,22 +272,17 @@ def load_dset(args):
             dset = load_dataset(dsetname, split=args.split, keep_in_memory=None)
         except Exception as e:
             # this print might be noisy, but better than nothing
-            msgerr("Unexpected error:", sys.exc_info()[0], flush=True)
-            success = False
+            msgerr(f"Unexpected error: {sys.exc_info()[0]}", flush=True)
             err = e
 
     # verify that all ranks loaded the dataset
-    success = args.distctx.alltrue(success)
-    if not success:
-        if args.rank == 0:
-            msgerr(f"At least one process failed to load {dsetname}", flush=True)
-        return None, err
+    args.distctx.allraise_if(err)
 
     time_end = time.time()
     if args.rank == 0:
         msg(f"Seconds to load dataset: {time_end - time_start}", flush=True)
 
-    return dset, err
+    return dset
 
 def get_num_samples(args, dset_size):
     """Given a dataset size and optional count argument, return number of samples to process."""
@@ -374,7 +364,6 @@ def rank_files_write(args, dset, idx, encoder):
     dset_stats = np.zeros(3, dtype=np.int64) # docs, sentences, bytes
 
     # we'll set this to false on any problem
-    success = True
     err = None
     times = np.zeros(3, dtype=np.float32) # read, tokenize, write
     try:
@@ -441,7 +430,6 @@ def rank_files_write(args, dset, idx, encoder):
             del builders[key] # file closed in __del__
     except Exception as e:
         # caught an exception, assume our file is invalid
-        success = False
         err = e
 
     # In case rank 0 finishes early and stops printing progress messages,
@@ -473,9 +461,8 @@ def rank_files_write(args, dset, idx, encoder):
         msg(f"    Total encode seconds {times[1]}, {secs_encode_per_sample} sec/sample")
         msg(f"    Total write seconds {times[2]}, {secs_write_per_sample} sec/sample")
 
-    # allreduce to check whether all ranks wrote their part successfully
-    success = args.distctx.alltrue(success)
-    return success, err
+    # check whether all ranks wrote their part successfully
+    args.distctx.allraise_if(err)
 
 def rank_files_merge_parallel(args):
     """Each process directly writes its portion of the data from its per-rank file into the final file."""
@@ -599,11 +586,7 @@ def main():
     startup_start = time.time()
 
     # load the dataset
-    dset, err = load_dset(args)
-    if dset is None:
-        if err is not None:
-            raise err
-        return
+    dset = load_dset(args)
     if args.rank == 0:
         print(dset)
         msg(f"Processing features: {args.columns}")
@@ -625,21 +608,21 @@ def main():
     if args.rank == 0:
         msg(f"Seconds to startup: {startup_end - startup_start}")
 
-    # have each rank write its file, returns False if any rank had a problem
-    success, err = rank_files_write(args, dset, idx, encoder)
-    if not success:
+    # have each rank write its file,
+    # all ranks should raise an exception if any rank has a problem
+    try:
+        rank_files_write(args, dset, idx, encoder)
+    except Exception as e:
+        # If any process fails, we skip the merge since the resulting file would be invalid.
+        # We still delete files to clean up, since those might be invalid anyway.
         if args.rank == 0:
-            # If any process fails, we skip the merge since the resulting file would be invalid.
-            # We still delete files to clean up, since those might be invalid anyway.
             msgerr(f"At least one process failed to write its file, skipping merge and cleaning up", flush=True)
 
         # delete per-rank files, do this even on error
         rank_files_delete(args)
 
-        # raise exception caught during write phase
-        if err is not None:
-            raise err
-        return
+        # re-raise exception caught during write phase
+        raise e
 
     # all ranks were successful writing their file, merge them into one
     rank_files_merge(args)
