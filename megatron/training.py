@@ -563,6 +563,8 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
             writer.add_scalar(f"lm-loss-training/{key}", loss_dict[key], iteration)
             writer.add_scalar(f"lm-loss-training/{key}" + ' vs samples', loss_dict[key],
                               args.consumed_train_samples)
+            writer.add_scalar(f"lm-loss-training/{key}" + ' vs gigaflos (without embeddings)', loss_dict[key],
+                              args.gigaflos_no_embeds)
         if args.log_loss_scale_to_tensorboard:
             writer.add_scalar('loss-scale/loss-scale', loss_scale, iteration)
             writer.add_scalar('loss-scale/loss-scale vs samples', loss_scale,
@@ -832,7 +834,7 @@ def evaluate_and_print_results(prefix, forward_step_func,
             writer.add_scalar(f'lm-loss-validation/{key} validation vs samples',
                               total_loss_dict[key].item(),
                               args.consumed_train_samples)
-            writer.add_scalar('{} validation vs gigaflos (without embeddings)'.format(key),
+            writer.add_scalar(f'lm-loss-validation/{key} validation vs gigaflos (without embeddings)',
                               total_loss_dict[key].item(),
                               args.gigaflos_no_embeds)
             if args.log_validation_ppl_to_tensorboard:
@@ -840,6 +842,8 @@ def evaluate_and_print_results(prefix, forward_step_func,
                                   iteration)
                 writer.add_scalar(f'lm-loss-validation/{key} validation ppl vs samples',
                                   ppl, args.consumed_train_samples)
+                writer.add_scalar(f'lm-loss-validation/{key} validation ppl vs gigaflos (without embeddings)',
+                                  ppl, args.gigaflos_no_embeds)
 
     length = len(string) + 1
     print_rank_last('-' * length)
