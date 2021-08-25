@@ -651,7 +651,8 @@ def save_checkpoint_and_time(iteration, model, optimizer, lr_scheduler):
 def train(forward_step_func, model, optimizer, lr_scheduler,
           train_data_iterator, valid_data_iterator):
     """Train the model function."""
-    print(f"Number of trainable parameters: {sum(p.numel() for submodel in model for p in submodel.parameters() if p.requires_grad)}")
+    print(f"Number of parameters: {get_parameters_in_billions(model)} billion")
+    print(f"Number of parameters without embeddings: {get_parameters_in_billions(model, exclude_embeddings=True)} billion")
     args = get_args()
     timers = get_timers()
 
