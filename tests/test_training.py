@@ -98,6 +98,7 @@ class MegDSTestTraining(TestCasePlus):
             --save {output_dir}/checkpoints
             --load {output_dir}/checkpoints
             --data-path {data_dir}/meg-gpt2-openwebtext_text_document
+            --codecarbon-dir {output_dir}/codecarbon
             --tensorboard-dir {output_dir}/tensorboard
             --tensorboard-queue-size 5
             --log-timers-to-tensorboard

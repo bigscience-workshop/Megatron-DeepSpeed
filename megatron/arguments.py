@@ -457,6 +457,8 @@ def _add_training_args(parser):
                        help='Run optimizer on CPU')
     group.add_argument('--cpu_torch_adam', action='store_true',
                        help='Use Torch Adam as optimizer on CPU.')
+    group.add_argument('--codecarbon-dir', type=str, default=None,
+                       help='Write CodeCarbon logs to this directory.')
 
     return parser
 
