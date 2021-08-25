@@ -221,7 +221,7 @@ def get_parameters_in_billions(model, exclude_embeddings=False):
     if exclude_embeddings:
         approx_parameters_in_billions = sum([non_embedding_params(model_module) for model_module in model])
     else:
-        approx_parameters_in_billions = sum([sum([p.ds_numel if hasattr(p,'ds_id') else p.nelement() for p in model_module.parameters()])
+        approx_parameters_in_billions = sum([sum([p.ds_numel if hasattr(p, 'ds_id') else p.nelement() for p in model_module.parameters()])
                                             for model_module in model])
 
     return approx_parameters_in_billions*gpus_per_model/(1e9)
