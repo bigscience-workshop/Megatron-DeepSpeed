@@ -5,7 +5,7 @@ import time
 import numpy as np
 
 class IndexedJSON(object):
-    def __init__(self, filename, distctx, bufsize=16*1024*1024):
+    def __init__(self, filename, distctx, bufsize=16*1024*1024, progress=10.0):
         self.filename = filename # JSON file name
         self.distctx = distctx   # distributed environment for collective ops
         self.bufsize = bufsize   # buffer size used while building index
@@ -13,6 +13,7 @@ class IndexedJSON(object):
         self.fh_idx = None       # file handle to JSON index file
         self.fh_json = None      # file handle to JSON file
         self.time_index = 0      # record cost to construct index
+        self.progress = progress # number of secs between progress msgs (0 to disable)
 
         # given a JSON file name, compute the name of its index file
         filename_idx = self.index_filename(filename)
@@ -88,9 +89,14 @@ class IndexedJSON(object):
         # lookup and broadcast size of JSON file to all ranks
         filesize = self.get_filesize(filename)
 
+        # if progress messages are enabled, print a header about what we're doing
+        if rank == 0 and self.progress > 0.0:
+            print(f"Indexing '{filename}' of {filesize} bytes ...", flush=True)
+
         # create the temporary index file, shared across all ranks
         with self.distctx.open(filename_tmp) as ftmp:
             # open and scan the JSON file
+            time_next = time_start + self.progress
             recstart = 0
             with open(filename, "rb") as f:
                 curpos = 0
@@ -137,6 +143,18 @@ class IndexedJSON(object):
 
                     # Move on to the next section of the JSON file.
                     curpos += bufsize * numranks
+
+                    # this can take a while, so print progress messages if enabled
+                    if rank == 0 and self.progress > 0.0:
+                        time_now = time.time()
+                        if time_now > time_next:
+                            time_next = time_now + self.progress
+                            elapsed = time_now - time_start
+                            percent = curpos * 100.0 / filesize if filesize > 0 else 0.0
+                            byterate = curpos / elapsed / (1024.0 * 1024.0) if elapsed > 0.0 else 0.0
+                            remaining = (100.0 - percent) * elapsed / percent if percent > 0.0 else 0.0
+                            print(f"Scanned {curpos} of {filesize} bytes ({percent:0.2f}%) in {int(elapsed)} secs, "
+                                  f"{byterate:0.3f} MB/s, {int(remaining)} secs left ...", flush=True)
 
         # Wait for all ranks to close the file.
         self.distctx.barrier()
@@ -195,6 +213,10 @@ class IndexedJSON(object):
         self.distctx.barrier()
         time_end = time.time()
         self.time_index = time_end - time_start
+
+        # if progress messages are enabled, print a summary
+        if rank == 0 and self.progress > 0.0:
+            print(f"Indexed '{filename}' in {int(self.time_index)} seconds", flush=True)
 
     def __str__(self):
         return (f"IndexedJSON (\n"
