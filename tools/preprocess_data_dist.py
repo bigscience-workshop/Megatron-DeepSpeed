@@ -328,13 +328,10 @@ def select_sample_list(args, dset_size):
     # get a list of the number of elements each rank will hold
     counts = get_proc_counts(num_samples, args.numranks)
 
-    # allocate space to hold its portion of the list
-    idx = np.zeros(counts[args.rank], np.int64)
-
     # scatter sample index values from rank 0 to all procs
     # based on distribution defined in counts list
     time_bcast = time.time()
-    args.distctx.scatterv_(idxlist, counts, idx, root=0)
+    idx = args.distctx.scatterv_(idxlist, counts, root=0)
 
     args.distctx.barrier()
     time_end = time.time()

@@ -62,17 +62,11 @@ class DistData(object):
         dist.broadcast_object_list(vals, src=root)
         return vals[0]
 
-    def scatterv_(self, invals: np.array, counts: list, outval: np.array, root:int=0):
-        """Scatter int64 values from invals according to counts array, receive values in outval"""
+    def scatterv_(self, invals: np.array, counts: list, root:int=0):
+        """Scatter int64 values from invals according to counts array, return received portion in a new tensor"""
 
         self.allassert(len(counts) == self.numranks,
             f"Length of counts list {len(counts)} does not match number of ranks {self.numranks}")
-
-        self.allassert(outval.shape == (counts[self.rank],),
-            f"Rank {self.rank}: output buffer is of shape {outval.shape}, expected {(counts[self.rank],)}")
-
-        self.allassert(outval.dtype == np.int64,
-            f"Requires outval to be of type numpy.int64")
 
         # Define list of tensors to scatter on the root.
         # torch.distributed.scatter requires each tensor to be the same shape,
@@ -87,7 +81,7 @@ class DistData(object):
         # then copy values into output numpy array, which may be smaller.
         recvtensor = torch.zeros(max_size, dtype=torch.int64)
         dist.scatter(recvtensor, scatterlist, src=root)
-        outval[:] = recvtensor[:counts[self.rank]]
+        return recvtensor[:counts[self.rank]]
 
     def alltrue(self, val):
         """Returns True if all procs input True, False otherwise"""
