@@ -212,7 +212,7 @@ def non_embedding_params(module):
     non_embedding_parameters = [
         parameter for name, parameter in module.named_parameters() if name not in embedding_param_names
     ]
-    return sum(p.ds_numel if hasattr(p,'ds_id') else p.nelement() for p in non_embedding_parameters)
+    return sum(p.ds_numel if hasattr(p, 'ds_id') else p.nelement() for p in non_embedding_parameters)
 
 
 def get_parameters_in_billions(model, exclude_embeddings=False):
