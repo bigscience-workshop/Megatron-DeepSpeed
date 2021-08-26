@@ -1,5 +1,5 @@
 name: do-the-job
-on:  workflow_dispatch:
+on:  workflow_dispatch
 jobs:
   start-runner:
     name: Start self-hosted EC2 runner
