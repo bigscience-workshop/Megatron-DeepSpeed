@@ -78,6 +78,13 @@ class MegDSTestPreprocessing(TestCasePlus):
             tgt_path = f"{output_prefix}_text_document.{ext}"
             self.assertTrue(Path(tgt_path).exists(), )
 
+    def compare_meg_data_files(self, tgt, ref):
+        for ext in ["bin", "idx"]:
+            tgt_path = f"{tgt}.{ext}"
+            ref_path = f"{ref}.{ext}"
+            self.assertTrue(Path(tgt_path).exists(), )
+            self.assertTrue(filecmp.cmp(tgt_path, ref_path, shallow=False))
+
     def test_process_data_microsoft(self):
         """We want to be stable to Microsoft version."""
         src_dir = self.src_dir
@@ -104,9 +111,58 @@ class MegDSTestPreprocessing(TestCasePlus):
         # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
         execute_subprocess_async(cmd, env=self.get_env())
 
-        for ext in ["bin", "idx"]:
-            tgt_path = f"{output_prefix}_text_document.{ext}"
-            ref_path = f"{data_dir}/meg-gpt2-openwebtext_text_document.{ext}"
-            self.assertTrue(Path(tgt_path).exists(), )
-            self.assertTrue(filecmp.cmp(tgt_path, ref_path, shallow=False))
+        self.compare_meg_data_files(f"{output_prefix}_text_document", f"{data_dir}/meg-gpt2-openwebtext_text_document")
+
+    def test_process_data_dist_microsoft(self):
+        """We want to be stable to Microsoft version."""
+        src_dir = self.src_dir
+        data_dir = f"{self.data_dir}/gpt2"
+        output_dir = self.get_auto_remove_tmp_dir()  # "./xxx", after=False)
+
+        output_prefix = f"{output_dir}/test-ds-meg-gpt2-openwebtext_1k"
+
+        cmd = f"""
+                python -m torch.distributed.launch --nproc_per_node 2 {src_dir}/tools/preprocess_data_dist.py
+                    --input openwebtext-10k
+                    --count 1000
+                    --output-prefix {output_prefix}
+                    --dataset-impl mmap
+                    --tokenizer-type GPT2BPETokenizer
+                    --merge-file {data_dir}/gpt2-tiny-merges.txt
+                    --vocab {data_dir}/gpt2-tiny-vocab.json
+                    --append-eod
+                """.split()
+
+        # keep for quick debug
+        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
+        execute_subprocess_async(cmd, env=self.get_env())
+
+        self.compare_meg_data_files(f"{output_prefix}_text_document", f"{data_dir}/meg-gpt2-openwebtext_text_document")
+
+    def test_process_data_dist_serial_microsoft(self):
+        """We want to be stable to Microsoft version."""
+        src_dir = self.src_dir
+        data_dir = f"{self.data_dir}/gpt2"
+        output_dir = self.get_auto_remove_tmp_dir()  # "./xxx", after=False)
+
+        output_prefix = f"{output_dir}/test-ds-meg-gpt2-openwebtext_1k"
+
+        cmd = f"""
+                python -m torch.distributed.launch --nproc_per_node 2 {src_dir}/tools/preprocess_data_dist.py
+                    --input openwebtext-10k
+                    --count 1000
+                    --merge serial
+                    --output-prefix {output_prefix}
+                    --dataset-impl mmap
+                    --tokenizer-type GPT2BPETokenizer
+                    --merge-file {data_dir}/gpt2-tiny-merges.txt
+                    --vocab {data_dir}/gpt2-tiny-vocab.json
+                    --append-eod
+                """.split()
+
+        # keep for quick debug
+        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
+        execute_subprocess_async(cmd, env=self.get_env())
+
+        self.compare_meg_data_files(f"{output_prefix}_text_document", f"{data_dir}/meg-gpt2-openwebtext_text_document")
 
