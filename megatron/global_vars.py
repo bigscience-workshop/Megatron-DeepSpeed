@@ -154,7 +154,7 @@ def _set_tensorboard_writer(args):
 
 def _set_codecarbon_tracker(args):
     global _GLOBAL_CODECARBON_TRACKER
-    if not hasattr(args, 'codecarbon_dir'):
+    if not hasattr(args, 'codecarbon_dir') or args.codecarbon_dir is None:
         return
 
     import codecarbon
