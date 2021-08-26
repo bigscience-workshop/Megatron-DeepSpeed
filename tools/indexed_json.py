@@ -18,12 +18,20 @@ class IndexedJSON(object):
         # given a JSON file name, compute the name of its index file
         filename_idx = self.index_filename(filename)
 
-        # check for index file and create it if it does not exist
-        exists = False
-        if self.distctx.rank == 0:
-            exists = os.path.exists(filename_idx)
-        exists = self.distctx.bcast(exists, root=0)
+        # determine whether we need to create the index
+        create_index = False
+        exists = self.test_exists(filename_idx)
         if not exists:
+            # index file does not exist
+            create_index = True
+        else:
+            # index exists, but rebuild the index if the original file
+            # has been modified since the index was built
+            mtime = self.get_mtime(filename)
+            mtime_idx = self.get_mtime(filename_idx)
+            if mtime > mtime_idx:
+                create_index = True
+        if create_index:
             self.create_index(filename, self.bufsize)
 
         # Identify number of samples in JSON file.
@@ -38,6 +46,14 @@ class IndexedJSON(object):
 #        self.fh_idx = open(filename_idx, "rb")
 #        self.fh_json = open(filename, "rb")
 
+    def test_exists(self, filename):
+        """Test whether file exists and broadcast result to all ranks."""
+        exists = False
+        if self.distctx.rank == 0:
+            exists = os.path.exists(filename)
+        exists = self.distctx.bcast(exists, root=0)
+        return exists
+
     def get_filesize(self, filename):
         """Lookup filesize and broadcast to all ranks."""
         filesize = 0
@@ -45,6 +61,14 @@ class IndexedJSON(object):
             filesize = os.stat(filename)[stat.ST_SIZE]
         filesize = self.distctx.bcast(filesize, root=0)
         return filesize
+
+    def get_mtime(self, filename):
+        """Lookup file mtime and broadcast to all ranks."""
+        mtime = 0
+        if self.distctx.rank == 0:
+            mtime = os.stat(filename)[stat.ST_MTIME]
+        mtime = self.distctx.bcast(mtime, root=0)
+        return mtime
 
     def index_filename(self, filename):
         """Given the name of a JSON file, return the name of its index file."""
@@ -222,7 +246,7 @@ class IndexedJSON(object):
         return (f"IndexedJSON (\n"
                 f"  file: {self.filename}\n"
                 f"  rows: {self.numsamples}\n"
-                f"  secs: {self.time_index})")
+                f")")
 
     def __len__(self):
         """Return number of samples (lines) in the JSON file."""
