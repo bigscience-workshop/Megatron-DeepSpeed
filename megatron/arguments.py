@@ -22,6 +22,7 @@ import torch
 import deepspeed
 
 from megatron.enums import PositionEmbeddingType
+import megatron
 
 
 def parse_args(extra_args_provider=None, defaults={},
@@ -313,6 +314,10 @@ def _add_network_size_args(parser):
                        default=PositionEmbeddingType.absolute,
                        help='Define position embedding type ("absolute" | "rotary"). "absolute" by default.'
                        )
+    group.add_argument('--glu-activation', type=str,
+                       choices=megatron.model.glu_activations.GLU_ACTIVATIONS.keys(),
+                       help='GLU activations to use.'
+                       )
 
     return parser
 
@@ -452,6 +457,8 @@ def _add_training_args(parser):
                        help='Run optimizer on CPU')
     group.add_argument('--cpu_torch_adam', action='store_true',
                        help='Use Torch Adam as optimizer on CPU.')
+    group.add_argument('--codecarbon-dir', type=str, default=None,
+                       help='Write CodeCarbon logs to this directory.')
 
     return parser
 

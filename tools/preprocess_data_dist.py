@@ -20,7 +20,7 @@ This builds data files from a source HuggingFace dataset, e.g,
   from datasets import load_dataset
   dset = load_dataset('openwebtext', split='train')
 
-The implementation can use `mpi4py` or `torch.distributed` for node communication,
+The implementation uses `torch.distributed` for inter-process communication,
 and it assumes that files are written to a global file system, such that one process
 can read a file written by another process.
 
@@ -34,17 +34,14 @@ For example, on a Linux cluster, one might write the part file to /dev/shm.
 
 To run:
 
-mpiexec -np 320 python preprocess_data_dist.py \
-       --input openwebtext \
-       --count 1_000_000 \
-       --scratch /dev/shm \
-       --shuffle \
-       --seed 100 \
-       --output-prefix openwebtext-bert \
-       --vocab bert-large-uncased-vocab.txt \
-       --dataset-impl mmap \
-       --tokenizer-type BertWordPieceLowerCase \
-       --split-sentences
+python -m torch.distributed.launch --nproc_per_node 40 --nnodes 8 \
+    preprocess_data_dist.py \
+        --input openwebtext \
+        --output-prefix openwebtext-bert \
+        --vocab bert-large-uncased-vocab.txt \
+        --dataset-impl mmap \
+        --tokenizer-type BertWordPieceLowerCase \
+        --split-sentences
 """
 
 import argparse
@@ -178,14 +175,12 @@ def get_args():
                        help='Select torch.distributed backend.')
     group.add_argument('--local_rank', type=int, default=None,
                        help='Local rank of calling process on its node (from torch.distributed.launch).')
-    group.add_argument('--mpi4py', action='store_true',
-                       help='Assume script has been launched as an MPI job, and use mpi4py for communication.')
     group.add_argument('--merge', type=str, default='parallel', choices=['parallel', 'serial', 'both'],
                        help=('Method to merge intermediate per-rank files into the final data files.  '
                              'With "parallel", each rank writes directly to the final files, '
                              'while rank 0 copies data from all per-rank files with "serial".  '
                              'A parallel merge can be faster, but for correctness, it requires the underlying file system '
-                             'to support parallel write operations to a file shared among multiple processes.  '
+                             'to support parallel write operations to a file that is shared among multiple processes.  '
                              'One can choose "both" for testing purposes, in which case the final files written '
                              'by the parallel method are given an additional ".par" extension.'))
     group.add_argument('--scratch', type=str, default=None,
@@ -197,19 +192,17 @@ def get_args():
     args = parser.parse_args()
     args.keep_empty = False
 
-    # some default/dummy values for the tokenizer
-    args.rank = 0
-    args.make_vocab_size_divisible_by = 128
-    args.tensor_model_parallel_size = 1
-    args.vocab_extra_ids = 0
-
     # initialize our distributed environment
-    # use mpi4py instead of torch.distributed if requested
-    args.distctx = DistData(use_mpi4py=args.mpi4py, backend=args.torch_backend)
+    args.distctx = DistData(backend=args.torch_backend)
 
     # some functions like build_tokenizer use args.rank to filter stdout messages
     args.rank = args.distctx.rank
     args.numranks = args.distctx.numranks
+
+    # some default/dummy values for the tokenizer
+    args.make_vocab_size_divisible_by = 128
+    args.tensor_model_parallel_size = 1
+    args.vocab_extra_ids = 0
 
     if args.tokenizer_type.lower().startswith('bert'):
         if not args.split_sentences:
@@ -223,7 +216,7 @@ def get_args():
     # TODO: perhaps more user friendly to disable scratch and print a warning?
     # check that serial merge is not attempted with scratch
     if args.scratch is not None and args.merge != 'parallel':
-        assert False, "The --scratch option is only valid with --merge=parallel"
+        raise  ValueError("The --scratch option is only valid with --merge=parallel")
 
     return args
 
@@ -254,7 +247,6 @@ def load_dset(args):
 
     # Load the specified HuggingFace dataset.
     # Give rank 0 a head start in case the dataset is not already cached.
-    success = True
     err = None
     dsetname = args.input
     if args.rank == 0:
@@ -267,17 +259,13 @@ def load_dset(args):
             msgerr(f"    from datasets import load_dataset")
             msgerr(f"    dset = load_dataset('{dsetname}')")
             msgerr(f"Alternatively, one can force this script to download by setting $HF_DATASETS_OFFLINE=0", flush=True)
-            success = False
             err = e
         except Exception as e:
-            msgerr("Unexpected error:", sys.exc_info()[0], flush=True)
-            success = False
+            msgerr(f"Unexpected error: {sys.exc_info()[0]}", flush=True)
             err = e
 
     # determine whether rank 0 succeeded in loading the dataset
-    success = args.distctx.alltrue(success)
-    if not success:
-        return None, err
+    args.distctx.allraise_if(err)
 
     # Rank 0 succeeded, attempt to load dataset on all other ranks.
     # This should load from cache now.
@@ -286,22 +274,17 @@ def load_dset(args):
             dset = load_dataset(dsetname, split=args.split, keep_in_memory=None)
         except Exception as e:
             # this print might be noisy, but better than nothing
-            msgerr("Unexpected error:", sys.exc_info()[0], flush=True)
-            success = False
+            msgerr(f"Unexpected error: {sys.exc_info()[0]}", flush=True)
             err = e
 
     # verify that all ranks loaded the dataset
-    success = args.distctx.alltrue(success)
-    if not success:
-        if args.rank == 0:
-            msgerr(f"At least one process failed to load {dsetname}", flush=True)
-        return None, err
+    args.distctx.allraise_if(err)
 
     time_end = time.time()
     if args.rank == 0:
         msg(f"Seconds to load dataset: {time_end - time_start}", flush=True)
 
-    return dset, err
+    return dset
 
 def get_num_samples(args, dset_size):
     """Given a dataset size and optional count argument, return number of samples to process."""
@@ -337,13 +320,10 @@ def select_sample_list(args, dset_size):
     # get a list of the number of elements each rank will hold
     counts = get_proc_counts(num_samples, args.numranks)
 
-    # allocate space to hold its portion of the list
-    idx = np.zeros(counts[args.rank], np.int64)
-
     # scatter sample index values from rank 0 to all procs
     # based on distribution defined in counts list
     time_bcast = time.time()
-    args.distctx.scatterv_(idxlist, counts, idx, root=0)
+    idx = args.distctx.scatterv_(idxlist, counts, root=0)
 
     args.distctx.barrier()
     time_end = time.time()
@@ -386,7 +366,6 @@ def rank_files_write(args, dset, idx, encoder):
     dset_stats = np.zeros(3, dtype=np.int64) # docs, sentences, bytes
 
     # we'll set this to false on any problem
-    success = True
     err = None
     times = np.zeros(3, dtype=np.float32) # read, tokenize, write
     try:
@@ -453,7 +432,6 @@ def rank_files_write(args, dset, idx, encoder):
             del builders[key] # file closed in __del__
     except Exception as e:
         # caught an exception, assume our file is invalid
-        success = False
         err = e
 
     # In case rank 0 finishes early and stops printing progress messages,
@@ -485,32 +463,32 @@ def rank_files_write(args, dset, idx, encoder):
         msg(f"    Total encode seconds {times[1]}, {secs_encode_per_sample} sec/sample")
         msg(f"    Total write seconds {times[2]}, {secs_write_per_sample} sec/sample")
 
-    # allreduce to check whether all ranks wrote their part successfully
-    success = args.distctx.alltrue(success)
-    return success, err
+    # check whether all ranks wrote their part successfully
+    args.distctx.allraise_if(err)
 
 def rank_files_merge_parallel(args):
     """Each process directly writes its portion of the data from its per-rank file into the final file."""
     merge_start = time.time()
     numbytes = np.zeros(1, dtype=np.int64)
     for key in args.columns:
+        # merge the per-rank file from each process into a single shared file
         filemain = get_filename(args, key)
         filerank = get_filename(args, key, args.rank)
         gather_files_dist(filemain, [filerank], args.distctx)
 
-        # total up bytes read in merge
-        binfile = data_file_path(filerank)
-        idxfile = index_file_path(filerank)
-        numbytes[0] += os.stat(binfile)[stat.ST_SIZE]
-        numbytes[0] += os.stat(idxfile)[stat.ST_SIZE]
+        # total up bytes read during the merge
+        binfilerank = data_file_path(filerank)
+        idxfilerank = index_file_path(filerank)
+        numbytes[0] += os.stat(binfilerank)[stat.ST_SIZE]
+        numbytes[0] += os.stat(idxfilerank)[stat.ST_SIZE]
 
         # If user want to use both a parallel and serial merge (for testing),
         # rename the parallel output files so that the serial merge does not clobber them.
         if args.merge == 'both' and args.rank == 0:
-            binfile = data_file_path(filemain)
-            idxfile = index_file_path(filemain)
-            os.rename(binfile, binfile + ".par")
-            os.rename(idxfile, idxfile + ".par")
+            binfilemain = data_file_path(filemain)
+            idxfilemain = index_file_path(filemain)
+            os.rename(binfilemain, binfilemain + ".par")
+            os.rename(idxfilemain, idxfilemain + ".par")
 
     # Total up number of bytes read across all ranks,
     # and wait on all ranks before stopping the timer.
@@ -548,8 +526,6 @@ def rank_files_merge_serial(args):
         for rank in range(args.numranks):
             for key in args.columns:
                 infile = get_filename(args, key, rank)
-
-#                msg(f"Merging file {infile}", flush=True)
                 builders[key].merge_file_(infile)
 
                 # sum up the number of merged bytes
@@ -612,15 +588,7 @@ def main():
     startup_start = time.time()
 
     # load the dataset
-    if args.input.endswith(".jsonl"):
-        # assume file is JSONL format
-        dset = IndexedJSON(args.input, args.distctx)
-    else:
-        dset, err = load_dset(args)
-        if dset is None:
-            if err is not None:
-                raise err
-            return
+    dset = load_dset(args)
     if args.rank == 0:
         print(dset)
         msg(f"Processing features: {args.columns}")
@@ -642,21 +610,21 @@ def main():
     if args.rank == 0:
         msg(f"Seconds to startup: {startup_end - startup_start}")
 
-    # have each rank write its file, returns False if any rank had a problem
-    success, err = rank_files_write(args, dset, idx, encoder)
-    if not success:
+    # have each rank write its file,
+    # all ranks should raise an exception if any rank has a problem
+    try:
+        rank_files_write(args, dset, idx, encoder)
+    except Exception as e:
+        # If any process fails, we skip the merge since the resulting file would be invalid.
+        # We still delete files to clean up, since those might be invalid anyway.
         if args.rank == 0:
-            # If any process fails, we skip the merge since the resulting file would be invalid.
-            # We still delete files to clean up, since those might be invalid anyway.
             msgerr(f"At least one process failed to write its file, skipping merge and cleaning up", flush=True)
 
         # delete per-rank files, do this even on error
         rank_files_delete(args)
 
-        # raise exception caught during write phase
-        if err is not None:
-            raise err
-        return
+        # re-raise exception caught during write phase
+        raise e
 
     # all ranks were successful writing their file, merge them into one
     rank_files_merge(args)
