@@ -1,6 +1,7 @@
 import os
 import stat
 import json
+import struct
 import time
 import numpy as np
 
@@ -16,35 +17,42 @@ class IndexedJSON(object):
         self.progress = progress # number of secs between progress msgs (0 to disable)
 
         # given a JSON file name, compute the name of its index file
-        filename_idx = self.index_filename(filename)
+        self.filename_idx = self.index_filename(self.filename)
 
         # determine whether we need to create the index
         create_index = False
-        exists = self.test_exists(filename_idx)
+        exists = self.test_exists(self.filename_idx)
         if not exists:
             # index file does not exist
             create_index = True
         else:
             # index exists, but rebuild the index if the original file
             # has been modified since the index was built
-            mtime = self.get_mtime(filename)
-            mtime_idx = self.get_mtime(filename_idx)
+            mtime = self.get_mtime(self.filename)
+            mtime_idx = self.get_mtime(self.filename_idx)
             if mtime > mtime_idx:
                 create_index = True
         if create_index:
-            self.create_index(filename, self.bufsize)
-
-        # Identify number of samples in JSON file.
-        # For now, we can do that using the size of index file.
-        filesize_idx = self.get_filesize(filename_idx)
-        self.numsamples = int(filesize_idx / 16)
+            self.create_index(self.filename, self.bufsize)
 
         # Open the index and the json files for reading.
         # Disable buffering to avoid reading extra bytes we won't use.
-        self.fh_idx = open(filename_idx, "rb", buffering=0)
-        self.fh_json = open(filename, "rb", buffering=0)
-#        self.fh_idx = open(filename_idx, "rb")
-#        self.fh_json = open(filename, "rb")
+        self.fh_idx = open(self.filename_idx, "rb", buffering=0)
+        self.fh_json = open(self.filename, "rb", buffering=0)
+#        self.fh_idx = open(self.filename_idx, "rb")
+#        self.fh_json = open(self.filename, "rb")
+
+        self.read_index_header()
+
+        # Identify number of samples in JSON file.
+        # For now, we can do that using the size of index file.
+        self.numsamples = None
+        if self.idx_version == 1:
+            # version 1 has a 16-byte header
+            # followed by a list of (offset, length) pairs of uint64
+            header_size = 16
+            filesize_idx = self.get_filesize(self.filename_idx)
+            self.numsamples = int((filesize_idx - header_size) / 16)
 
     def test_exists(self, filename):
         """Test whether file exists and broadcast result to all ranks."""
@@ -69,6 +77,32 @@ class IndexedJSON(object):
             mtime = os.stat(filename)[stat.ST_MTIME]
         mtime = self.distctx.bcast(mtime, root=0)
         return mtime
+
+    def read_index_header(self):
+        """Read header from index file and check its version."""
+        # Rank 0 reads the header, and bcasts its version
+        version = None
+        if self.distctx.rank == 0:
+            try:
+                # Seek to the front of the file
+                self.fh_idx.seek(0)
+
+                # Read the magic valud and check that it matches what we expect
+                magic = self.fh_idx.read(8)
+                if magic == b'INDXJSON':
+                    # Good magic value, now read file format version number
+                    buf = self.fh_idx.read(8)
+                    if len(buf) == 8:
+                        version = struct.unpack(">Q", buf)[0]
+            except Exception as e:
+                pass
+
+        # Get version from rank 0 (should be None on any error)
+        self.idx_version = self.distctx.bcast(version, root=0)
+
+        # Check that we have a version number that we support
+        if self.idx_version != 1:
+            raise ValueError("Unknown index file format version '{self.idx_version}' in file '{self.filename_idx}'")
 
     def index_filename(self, filename):
         """Given the name of a JSON file, return the name of its index file."""
@@ -185,6 +219,12 @@ class IndexedJSON(object):
 
         # Create the actual index file.
         with self.distctx.open(filename_idx) as fidx:
+            # Rank 0 writes the index file header.
+            if self.distctx.rank == 0:
+                fidx.write(b'INDXJSON')          # use 8-byte magic value of "INDXJSON"
+                fidx.write(struct.pack(">Q", 1)) # file format version number in network byte order
+            data_offset = 16
+
             # We'll read the offsets back from the temporary index file.
             with open(filename_tmp, "rb") as ftmp:
                 # Compute the [start,end) range for this rank within the list of offsets.
@@ -224,7 +264,7 @@ class IndexedJSON(object):
                 # We write values to the index file in network byte order,
                 # so that the file can be read correctly on any system.
                 if readcount > 0:
-                    pos = start * 16
+                    pos = data_offset + start * 16
                     fidx.seek(pos)
                     fidx.write(vals.astype(">i8").tobytes(order='C'))
 
@@ -276,18 +316,23 @@ class IndexedJSON(object):
         """Given an sample id, return (offset, size) tuple of location of sample in the JSON file."""
         assert idx < self.numsamples
 
-        # Seek to the right spot in the index file for the given sample id.
-        offset_idx = idx * 16
-        self.fh_idx.seek(offset_idx)
+        if self.idx_version == 1:
+            # Version 1 has a 16-byte header followed by a
+            # list of (offset, length) pairs of uint64
 
-        # Read offset and length of record from the index.
-        # Values in the index file are stored in network byte order.
-        vals = np.zeros(2, dtype=">i8")
-        self.fh_idx.readinto(vals)
-        offset = vals[0]
-        size = vals[1]
+            # Seek to the right spot in the index file for the given sample id.
+            header_size = 16
+            offset_idx = header_size + idx * 16
+            self.fh_idx.seek(offset_idx)
 
-        return offset, size
+            # Read offset and length of record from the index.
+            # Values in the index file are stored in network byte order.
+            vals = np.zeros(2, dtype=">i8")
+            self.fh_idx.readinto(vals)
+            offset = vals[0]
+            size = vals[1]
+
+            return offset, size
 
     def pread(self, offset, size):
         """Read size bytes at the given offset in the JSON file and return as a buffer."""
