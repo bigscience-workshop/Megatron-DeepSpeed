@@ -20,7 +20,7 @@ jobs:
         with:
           mode: start
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-          ec2-image-id: ami-0c7563df049759e8b
+          ec2-image-id: ami-092ea3a7bad5555ec
           ec2-instance-type: p3.8xlarge
           subnet-id: subnet-3502b45e
           security-group-id: sg-e8f46d9d
@@ -36,12 +36,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
-      - name: Hello World
-        run: echo 'Hello World!'
       - name: Test
         run: pwd; ls -l
       - name: GPU Test
         run: nvidia-smi
+      - name: Real Test
+        run: pytest tests
 
   stop-runner:
     name: Stop self-hosted EC2 runner
