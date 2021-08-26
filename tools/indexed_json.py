@@ -221,10 +221,12 @@ class IndexedJSON(object):
                     vals[:,1] = lengths
 
                 # Write our portion of the index values.
+                # We write values to the index file in network byte order,
+                # so that the file can be read correctly on any system.
                 if readcount > 0:
                     pos = start * 16
                     fidx.seek(pos)
-                    fidx.write(vals.tobytes(order='C'))
+                    fidx.write(vals.astype(">i8").tobytes(order='C'))
 
         # Wait for all ranks to finish writing to the index file.
         self.distctx.barrier()
@@ -274,12 +276,13 @@ class IndexedJSON(object):
         """Given an sample id, return (offset, size) tuple of location of sample in the JSON file."""
         assert idx < self.numsamples
 
-        # seek to the right spot in the index file for the given sample id
+        # Seek to the right spot in the index file for the given sample id.
         offset_idx = idx * 16
         self.fh_idx.seek(offset_idx)
 
-        # read offset and length of record from the index
-        vals = np.zeros(2, dtype=np.int64)
+        # Read offset and length of record from the index.
+        # Values in the index file are stored in network byte order.
+        vals = np.zeros(2, dtype=">i8")
         self.fh_idx.readinto(vals)
         offset = vals[0]
         size = vals[1]
