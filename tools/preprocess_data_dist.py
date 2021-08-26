@@ -20,26 +20,28 @@ This builds data files from a source HuggingFace dataset, e.g,
   from datasets import load_dataset
   dset = load_dataset('openwebtext', split='train')
 
-The implementation can use `mpi4py` or `torch.distributed` for node communication, and it assumes that
-files are written to a global file system, such that one process
+The implementation uses `torch.distributed` for inter-process communication,
+and it assumes that files are written to a global file system, such that one process
 can read a file written by another process.
 
 A list of sample index values from the source dataset are selected
-by rank 0 and broadcast to all ranks.
+by rank 0 and scattered to all ranks.
 Each process tokenizes a subset of samples and writes its output to a part file.
-After all ranks have finished, rank 0 merges and deletes the part files.
+After all ranks have finished, the part files are merged into a final output file.
+
+One may optionally use storage local to each process to store the part file.
+For example, on a Linux cluster, one might write the part file to /dev/shm.
 
 To run:
 
-mpiexec -np 320 python preprocess_dataset_mpi.py \
-       --input openwebtext \
-       --shuffle \
-       --seed 100 \
-       --output-prefix openwebtext-bert \
-       --vocab bert-large-uncased-vocab.txt \
-       --dataset-impl mmap \
-       --tokenizer-type BertWordPieceLowerCase \
-       --split-sentences
+python -m torch.distributed.launch --nproc_per_node 40 --nnodes 8 \
+    preprocess_data_dist.py \
+        --input openwebtext \
+        --output-prefix openwebtext-bert \
+        --vocab bert-large-uncased-vocab.txt \
+        --dataset-impl mmap \
+        --tokenizer-type BertWordPieceLowerCase \
+        --split-sentences
 """
 
 import argparse
@@ -54,7 +56,6 @@ import numpy as np
 import random
 
 import torch
-import torch.distributed as dist
 try:
     import nltk
     nltk_available = True
@@ -65,7 +66,15 @@ from datasets import config, logging, load_dataset
 from datasets.utils.file_utils import OfflineModeIsEnabled
 
 from megatron.tokenizer import build_tokenizer
-from megatron.data.indexed_dataset import data_file_path, index_file_path, make_builder, best_fitting_dtype
+from megatron.data.indexed_dataset import data_file_path, index_file_path, make_builder, best_fitting_dtype, gather_files_dist
+from megatron.data.distdata import DistData
+
+def msg(msg, flush=False):
+    timestamp = time.strftime("%Y-%m-%dT%H:%M:%S")
+    print(f"{timestamp}: {msg}", flush=flush)
+
+def msgerr(msg, flush=False):
+    print(f"ERROR: {msg}", flush=flush)
 
 # https://stackoverflow.com/questions/33139531/preserve-empty-lines-with-nltks-punkt-tokenizer
 class CustomLanguageVars(nltk.tokenize.punkt.PunktLanguageVars):
@@ -92,7 +101,7 @@ class Encoder(object):
 
         if self.args.split_sentences:
             if not nltk_available:
-                print("NLTK is not available to split sentences.")
+                msgerr("NLTK is not available to split sentences.")
                 exit()
             splitter = nltk.load("tokenizers/punkt/english.pickle")
             if self.args.keep_newlines:
@@ -160,106 +169,58 @@ def get_args():
                        choices=['lazy', 'cached', 'mmap'])
 
     group = parser.add_argument_group(title='runtime')
-    group.add_argument('--mpi4py', action='store_true',
-                       help='Assume script has been launched as an MPI job, and use MPI for communication.')
-    group.add_argument('--torch-backend', type=str, default='gloo', choices = ['gloo', 'mpi'],
+    group.add_argument('--torch-backend', type=str, default='gloo', choices=['gloo', 'mpi'],
                        help='Select torch.distributed backend.')
     group.add_argument('--local_rank', type=int, default=None,
                        help='Local rank of calling process on its node (from torch.distributed.launch).')
+    group.add_argument('--merge', type=str, default='parallel', choices=['parallel', 'serial', 'both'],
+                       help=('Method to merge intermediate per-rank files into the final data files.  '
+                             'With "parallel", each rank writes directly to the final files, '
+                             'while rank 0 copies data from all per-rank files with "serial".  '
+                             'A parallel merge can be faster, but for correctness, it requires the underlying file system '
+                             'to support parallel write operations to a file that is shared among multiple processes.  '
+                             'One can choose "both" for testing purposes, in which case the final files written '
+                             'by the parallel method are given an additional ".par" extension.'))
+    group.add_argument('--scratch', type=str, default=None,
+                       help=('Path to local storage on compute nodes to write per-rank files before merging, like /dev/shm.  '
+                             'One can only use this option with a parallel merge.'))
     group.add_argument('--log-interval', type=int, default=30,
                        help='Seconds between progress updates (0 to disable)')
 
     args = parser.parse_args()
     args.keep_empty = False
 
+    # initialize our distributed environment
+    args.distctx = DistData(backend=args.torch_backend)
+
+    # some functions like build_tokenizer use args.rank to filter stdout messages
+    args.rank = args.distctx.rank
+    args.numranks = args.distctx.numranks
+
+    # some default/dummy values for the tokenizer
+    args.make_vocab_size_divisible_by = 128
+    args.tensor_model_parallel_size = 1
+    args.vocab_extra_ids = 0
+
     if args.tokenizer_type.lower().startswith('bert'):
         if not args.split_sentences:
-            print("Bert tokenizer detected, are you sure you don't want to split sentences?")
+            if args.rank == 0:
+                msg("Bert tokenizer detected, are you sure you don't want to split sentences?")
 
     args.level = "document"
     if args.split_sentences:
         args.level = "sentence"
 
-    # some default/dummy values for the tokenizer
-    args.rank = 0
-    args.make_vocab_size_divisible_by = 128
-    args.tensor_model_parallel_size = 1
-    args.vocab_extra_ids = 0
-
-    # use mpi4py instead of torch.distributed if requested
-    args.use_mpi = False
-    if args.mpi4py:
-        try:
-            from mpi4py import MPI
-            args.MPI = MPI
-            args.use_mpi = True
-        except:
-            print(f"ERROR: mpi4py requested, but failed to import, falling back to torch.distributed.", flush=True)
+    # TODO: perhaps more user friendly to disable scratch and print a warning?
+    # check that serial merge is not attempted with scratch
+    if args.scratch is not None and args.merge != 'parallel':
+        raise  ValueError("The --scratch option is only valid with --merge=parallel")
 
     return args
 
 def format_byterate(byterate):
     mbps = byterate / (1024.0 * 1024.0)
     return f"{mbps:0.3f} MB/s"
-
-def init_distributed(args):
-    """Determine which distributed runtime to use and connect up processes"""
-    # select our distributed runtime (MPI or torch.distributed)
-    # lookup our process rank and the group size
-    # some functions like build_tokenizer use args.rank to filter stdout messages
-    if args.use_mpi:
-        args.mpi_comm = args.MPI.COMM_WORLD
-        args.rank = args.mpi_comm.Get_rank()
-        args.numranks = args.mpi_comm.Get_size()
-    else:
-        dist.init_process_group(args.torch_backend, init_method="env://")
-        args.rank = dist.get_rank()
-        args.numranks = dist.get_world_size()
-
-def barrier(args):
-    """Globally synchronize all processes."""
-    if args.use_mpi:
-        args.mpi_comm.barrier()
-    else:
-        dist.barrier()
-
-def scatterv_(args, invals, counts, outval, root=0):
-    """Scatter int64 values from invals according to counts array, receive values in outval"""
-    assert len(counts) == args.numranks, f"Length of counts list {len(counts)} does not match number of ranks {args.numranks}"
-    assert outval.shape == (counts[args.rank],), f"Rank {args.rank}: output buffer is of shape {outval.shape}, expected {(counts[args.rank],)}"
-
-    if args.use_mpi:
-        counts = np.array(counts)
-        displs = np.cumsum(counts) - counts
-        args.mpi_comm.Scatterv([invals, counts, displs, args.MPI.INT64_T], outval, root=root)
-    else:
-        scatterlist = None
-        if args.rank == root:
-            scatterlist = list(torch.split(torch.from_numpy(invals), counts))
-        outtensor = torch.from_numpy(outval)
-        dist.scatter(outtensor, scatterlist, src=root)
-
-def all_sum_(args, vals):
-    """Sums values in vals element-wise and updates vals with final result on all ranks"""
-    if args.use_mpi:
-        outval = np.zeros_like(vals)
-        args.mpi_comm.Allreduce(vals, outval, op=args.MPI.SUM)
-        vals[:] = outval
-    else:
-        tensor = torch.from_numpy(vals)
-        dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
-
-def all_true(args, val):
-    """Returns True if all procs input True, False otherwise"""
-    if args.use_mpi:
-        inval = np.array([val], dtype=np.bool_)
-        outval = np.zeros_like(inval)
-        args.mpi_comm.Allreduce(inval, outval, op=args.MPI.LAND)
-        return bool(outval[0])
-    else:
-        tensor = torch.tensor([int(val)], dtype=torch.int32)
-        dist.all_reduce(tensor, op=dist.ReduceOp.BAND)
-        return bool(tensor[0])
 
 def load_dset(args):
     # Avoid downloading datasets unless explicitly requested.
@@ -280,32 +241,29 @@ def load_dset(args):
     if args.rank != 0:
         logging.set_verbosity(logging.ERROR)
 
+    time_start = time.time()
+
     # Load the specified HuggingFace dataset.
     # Give rank 0 a head start in case the dataset is not already cached.
-    success = True
     err = None
     dsetname = args.input
     if args.rank == 0:
-        print(f"Opening dataset {dsetname}")
+        msg(f"Opening dataset {dsetname}")
         try:
             dset = load_dataset(dsetname, split=args.split, keep_in_memory=None)
         except OfflineModeIsEnabled as e:
-            print(f"ERROR: Cannot download '{dsetname}' since running in offline mode.")
-            print(f"ERROR: If the dataset is large, it may be more efficient to download with a single process:")
-            print(f"ERROR:     from datasets import load_dataset")
-            print(f"ERROR:     dset = load_dataset('{dsetname}')")
-            print(f"ERROR: Alternatively, one can force this script to download by setting $HF_DATASETS_OFFLINE=0", flush=True)
-            success = False
+            msgerr(f"Cannot download '{dsetname}' since running in offline mode.")
+            msgerr(f"If the dataset is large, it may be more efficient to download with a single process:")
+            msgerr(f"    from datasets import load_dataset")
+            msgerr(f"    dset = load_dataset('{dsetname}')")
+            msgerr(f"Alternatively, one can force this script to download by setting $HF_DATASETS_OFFLINE=0", flush=True)
             err = e
         except Exception as e:
-            print("ERROR: Unexpected error:", sys.exc_info()[0], flush=True)
-            success = False
+            msgerr(f"Unexpected error: {sys.exc_info()[0]}", flush=True)
             err = e
 
     # determine whether rank 0 succeeded in loading the dataset
-    success = all_true(args, success)
-    if not success:
-        return None, err
+    args.distctx.allraise_if(err)
 
     # Rank 0 succeeded, attempt to load dataset on all other ranks.
     # This should load from cache now.
@@ -314,18 +272,17 @@ def load_dset(args):
             dset = load_dataset(dsetname, split=args.split, keep_in_memory=None)
         except Exception as e:
             # this print might be noisy, but better than nothing
-            print("ERROR: Unexpected error:", sys.exc_info()[0], flush=True)
-            success = False
+            msgerr(f"Unexpected error: {sys.exc_info()[0]}", flush=True)
             err = e
 
     # verify that all ranks loaded the dataset
-    success = all_true(args, success)
-    if not success:
-        if args.rank == 0:
-            print(f"ERROR: At least one process failed to load {dsetname}", flush=True)
-        return None, err
+    args.distctx.allraise_if(err)
 
-    return dset, err
+    time_end = time.time()
+    if args.rank == 0:
+        msg(f"Seconds to load dataset: {time_end - time_start}", flush=True)
+
+    return dset
 
 def get_num_samples(args, dset_size):
     """Given a dataset size and optional count argument, return number of samples to process."""
@@ -342,6 +299,7 @@ def select_sample_list(args, dset_size):
     # create sample index list on rank 0,
     # optionally shuffle the list,
     # and optionally limit the sample count
+    time_select = time.time()
     idxlist = None
     if args.rank == 0:
         # generate a list of all index values
@@ -360,12 +318,19 @@ def select_sample_list(args, dset_size):
     # get a list of the number of elements each rank will hold
     counts = get_proc_counts(num_samples, args.numranks)
 
-    # allocate space to hold its portion of the list
-    idx = np.zeros(counts[args.rank], np.int64)
-
     # scatter sample index values from rank 0 to all procs
     # based on distribution defined in counts list
-    scatterv_(args, idxlist, counts, idx, root=0)
+    time_bcast = time.time()
+    idx = args.distctx.scatterv_(idxlist, counts, root=0)
+
+    args.distctx.barrier()
+    time_end = time.time()
+    if args.rank == 0:
+        msg(f"Select index stats:")
+        msg(f"    Shuffle: {args.shuffle}")
+        msg(f"    Seconds to select: {time_bcast - time_select}")
+        msg(f"    Seconds to broadcast: {time_end - time_bcast}")
+        msg(f"    Seconds total: {time_end - time_select}", flush=True)
 
     return idx
 
@@ -376,6 +341,11 @@ def get_proc_counts(num, num_ranks):
 def get_filename(args, key, rank=None):
     pathname = args.output_prefix
 
+    # redirect per-rank file to scratch dir if defined
+    if args.scratch is not None and rank is not None:
+        basename = os.path.basename(pathname)
+        pathname = os.path.join(args.scratch, basename)
+
     if rank is not None:
         filename = f"{pathname}_{key}_{args.level}_{rank}"
     else:
@@ -384,7 +354,7 @@ def get_filename(args, key, rank=None):
     return filename
 
 def rank_files_write(args, dset, idx, encoder):
-    tokenize_start = time.time()
+    time_start = time.time()
 
     # compute total number of samples we'e processing
     num_samples = get_num_samples(args, len(dset))
@@ -394,13 +364,13 @@ def rank_files_write(args, dset, idx, encoder):
     dset_stats = np.zeros(3, dtype=np.int64) # docs, sentences, bytes
 
     # we'll set this to false on any problem
-    success = True
     err = None
+    times = np.zeros(3, dtype=np.float32) # read, tokenize, write
     try:
         # create data file for each rank
         if args.rank == 0:
-            print(f"Vocab size: {args.vocab_size}")
-            print(f"Output prefix: {args.output_prefix}")
+            msg(f"Vocab size: {args.vocab_size}")
+            msg(f"Output prefix: {args.output_prefix}")
         output_bin_files = {}
         output_idx_files = {}
         builders = {}
@@ -408,9 +378,10 @@ def rank_files_write(args, dset, idx, encoder):
             filebase = get_filename(args, key, args.rank)
             output_bin_files[key] = data_file_path(filebase)
             output_idx_files[key] = index_file_path(filebase)
+            best_dtype = best_fitting_dtype(args.vocab_size) if args.dataset_impl == "mmap" else None
             builders[key] = make_builder(output_bin_files[key],
                                          impl=args.dataset_impl,
-                                         dtype=best_fitting_dtype(args.vocab_size))
+                                         dtype=best_dtype)
 
         # each rank tokenizes its samples and writes its own file
         progress_next = time.time() + float(args.log_interval)
@@ -418,10 +389,13 @@ def rank_files_write(args, dset, idx, encoder):
             sample_id = int(i)
             for key in args.columns:
                 # tokenize text for the given sample index
+                start_read = time.time()
                 text = dset[sample_id][key]
+                start_encode = time.time()
                 doc, bytes_processed = encoder.encode_text(text)
 
                 # add tokenized sequence to our data file
+                start_write = time.time()
                 for key, sentences in doc.items():
                     for sentence in sentences:
                         builders[key].add_item(torch.IntTensor(sentence))
@@ -429,22 +403,26 @@ def rank_files_write(args, dset, idx, encoder):
                     dset_stats[0] += 1
                     dset_stats[1] += len(sentences)
                 dset_stats[2] += bytes_processed
+                end_write = time.time()
+
+                times[0] += start_encode - start_read
+                times[1] += start_write - start_encode
+                times[2] += end_write - start_write
 
             if args.rank == 0 and args.log_interval > 0 and time.time() > progress_next:
                 current = time.time()
                 progress_next = current + float(args.log_interval)
 
-                elapsed = current - tokenize_start
-                timestamp = time.strftime("%Y-%m-%dT%H:%M:%S")
+                elapsed = current - time_start
                 docs = dset_stats[0] * args.numranks
                 percent = docs / num_samples * 100.0
                 docrate = docs / elapsed if elapsed > 0.0 else 0.0
                 mbs = dset_stats[2] * args.numranks / elapsed / 1024 / 1024 if elapsed > 0.0 else 0.0
                 secs_left = int((num_samples - docs) / docrate if docrate > 0.0 else 0.0)
-                print(f"{timestamp}: Processed (estimated) {docs} of {num_samples} docs ({percent:0.2f}%),",
-                      f"{docrate:0.3f} docs/s, {mbs:0.3f} MB/s,",
-                      f"{secs_left} secs left ...",
-                      flush=True)
+                msg(f"Processed (estimated) {docs} of {num_samples} docs ({percent:0.2f}%) in {int(elapsed)} secs, "
+                    f"{docrate:0.3f} docs/s, {mbs:0.3f} MB/s, "
+                    f"{secs_left} secs left ...",
+                    flush=True)
 
         # finalize file of each rank
         for key in args.columns:
@@ -452,40 +430,80 @@ def rank_files_write(args, dset, idx, encoder):
             del builders[key] # file closed in __del__
     except Exception as e:
         # caught an exception, assume our file is invalid
-        success = False
         err = e
 
     # In case rank 0 finishes early and stops printing progress messages,
     # inform user that it's waiting for other ranks to finish.
     if args.rank == 0 and args.log_interval > 0:
-        timestamp = time.strftime("%Y-%m-%dT%H:%M:%S")
-        print(f"{timestamp}: Waiting for ranks to finalize files ...", flush=True)
+        msg(f"Waiting for ranks to finalize files ...", flush=True)
 
     # wait for all ranks to finish their files
-    barrier(args)
-    tokenize_end = time.time()
+    args.distctx.barrier()
+    time_end = time.time()
 
     # compute total stats across all processes
-    all_sum_(args, dset_stats)
+    args.distctx.all_sum_(times)
+    args.distctx.all_sum_(dset_stats)
     if args.rank == 0:
-        secs = tokenize_end - tokenize_start
+        secs = time_end - time_start
         docrate = dset_stats[0] / secs if secs > 0.0 else 0.0
         sentrate = dset_stats[1] / secs if secs > 0.0 else 0.0
         byterate = dset_stats[2] / secs if secs > 0.0 else 0.0
-        print("Tokenize stats:", secs)
-        print(f"    Seconds to tokenize: {secs}")
-        print(f"    {dset_stats[0]} docs {docrate} docs/sec")
-        print(f"    {dset_stats[1]} sents {sentrate} sents/sec")
-        print(f"    {dset_stats[2]} bytes {format_byterate(byterate)}")
+        secs_read_per_sample = times[0] / dset_stats[0] if dset_stats[0] > 0 else 0.0
+        secs_encode_per_sample = times[1] / dset_stats[0] if dset_stats[0] > 0 else 0.0
+        secs_write_per_sample = times[2] / dset_stats[0] if dset_stats[0] > 0 else 0.0
+        msg("Process stats:")
+        msg(f"    Seconds to process: {secs}")
+        msg(f"    {dset_stats[0]} docs {docrate} docs/sec")
+        msg(f"    {dset_stats[1]} sents {sentrate} sents/sec")
+        msg(f"    {dset_stats[2]} bytes {format_byterate(byterate)}")
+        msg(f"    Total read seconds {times[0]}, {secs_read_per_sample} sec/sample")
+        msg(f"    Total encode seconds {times[1]}, {secs_encode_per_sample} sec/sample")
+        msg(f"    Total write seconds {times[2]}, {secs_write_per_sample} sec/sample")
 
-    # allreduce to check whether all ranks wrote their part successfully
-    success = all_true(args, success)
-    return success, err
+    # check whether all ranks wrote their part successfully
+    args.distctx.allraise_if(err)
 
-def rank_files_merge(args):
-    # rank 0 merges all per-rank files
+def rank_files_merge_parallel(args):
+    """Each process directly writes its portion of the data from its per-rank file into the final file."""
+    merge_start = time.time()
+    numbytes = np.zeros(1, dtype=np.int64)
+    for key in args.columns:
+        # merge the per-rank file from each process into a single shared file
+        filemain = get_filename(args, key)
+        filerank = get_filename(args, key, args.rank)
+        gather_files_dist(filemain, [filerank], args.distctx)
+
+        # total up bytes read during the merge
+        binfilerank = data_file_path(filerank)
+        idxfilerank = index_file_path(filerank)
+        numbytes[0] += os.stat(binfilerank)[stat.ST_SIZE]
+        numbytes[0] += os.stat(idxfilerank)[stat.ST_SIZE]
+
+        # If user want to use both a parallel and serial merge (for testing),
+        # rename the parallel output files so that the serial merge does not clobber them.
+        if args.merge == 'both' and args.rank == 0:
+            binfilemain = data_file_path(filemain)
+            idxfilemain = index_file_path(filemain)
+            os.rename(binfilemain, binfilemain + ".par")
+            os.rename(idxfilemain, idxfilemain + ".par")
+
+    # Total up number of bytes read across all ranks,
+    # and wait on all ranks before stopping the timer.
+    args.distctx.all_sum_(numbytes)
+    merge_end = time.time()
     if args.rank == 0:
-        print("Merging rank files ...", flush=True)
+        secs = merge_end - merge_start
+        byterate = numbytes[0] / secs if secs > 0.0 else 0.0
+        msg("Parallel merge stats:")
+        msg(f"    Scratch: {args.scratch}")
+        msg(f"    Seconds to merge: {secs}")
+        msg(f"    {int(numbytes)} bytes {format_byterate(byterate)}")
+
+def rank_files_merge_serial(args):
+    """Rank 0 merges data from all per-rank files into the final file."""
+    if args.rank == 0:
+        msg("Merging rank files ...", flush=True)
         merge_start = time.time()
         numbytes = 0
 
@@ -497,25 +515,25 @@ def rank_files_merge(args):
             filebase = get_filename(args, key)
             output_bin_files[key] = data_file_path(filebase)
             output_idx_files[key] = index_file_path(filebase)
+            best_dtype = best_fitting_dtype(args.vocab_size) if args.dataset_impl == "mmap" else None
             builders[key] = make_builder(output_bin_files[key],
                                          impl=args.dataset_impl,
-                                         dtype=best_fitting_dtype(args.vocab_size))
+                                         dtype=best_dtype)
 
         # merge all ranks into one file
         for rank in range(args.numranks):
             for key in args.columns:
                 infile = get_filename(args, key, rank)
-
-                print(f"Merging file {infile}", flush=True)
                 builders[key].merge_file_(infile)
 
                 # sum up the number of merged bytes
                 binfile = data_file_path(infile)
-                filesize = os.stat(binfile)[stat.ST_SIZE]
-                numbytes += filesize
+                idxfile = index_file_path(infile)
+                numbytes += os.stat(binfile)[stat.ST_SIZE]
+                numbytes += os.stat(idxfile)[stat.ST_SIZE]
 
         # finalize the merged file
-        print("Finalizing merged file ...", flush=True)
+        msg("Finalizing merged file ...", flush=True)
         for key in args.columns:
             builders[key].finalize(output_idx_files[key])
             del builders[key] # file closed in __del__
@@ -523,18 +541,31 @@ def rank_files_merge(args):
         merge_end = time.time()
         secs = merge_end - merge_start
         byterate = numbytes / secs if secs > 0.0 else 0.0
-        print(f"Merged {args.numranks} files into {args.output_prefix}")
-        print("Merge stats:")
-        print(f"    Seconds to merge: {secs}")
-        print(f"    {numbytes} bytes {format_byterate(byterate)}")
+        msg(f"Merged {args.numranks} files into {args.output_prefix}")
+        msg("Serial merge stats:")
+        msg(f"    Seconds to merge: {secs}")
+        msg(f"    {numbytes} bytes {format_byterate(byterate)}")
 
     # hold everyone until rank 0 is done
-    barrier(args)
+    args.distctx.barrier()
+
+def rank_files_merge(args):
+    # use parallel merge if asked
+    if args.merge in ['parallel', 'both']:
+        rank_files_merge_parallel(args)
+
+    # if using node-local storage, skip sequential merge
+    if args.scratch is not None:
+        return
+
+    # can fall back to a serial merge
+    if args.merge in ['serial', 'both']:
+        rank_files_merge_serial(args)
 
 def rank_files_delete(args):
     # delete per-rank files
     if args.rank == 0:
-        print("Deleting rank files ...", flush=True)
+        msg("Deleting rank files ...", flush=True)
 
     for key in args.columns:
         filebase = get_filename(args, key, args.rank)
@@ -548,24 +579,17 @@ def rank_files_delete(args):
             os.remove(idxfile)
 
     # hold everyone until all are done
-    barrier(args)
+    args.distctx.barrier()
 
 def main():
     args = get_args()
     startup_start = time.time()
 
-    # connect processes and cache our rank and number of procs in args
-    init_distributed(args)
-
     # load the dataset
-    dset, err = load_dset(args)
-    if dset is None:
-        if err is not None:
-            raise err
-        return
+    dset = load_dset(args)
     if args.rank == 0:
         print(dset)
-        print("Selecting features:", args.columns)
+        msg(f"Processing features: {args.columns}")
 
     # create sample index list,
     # optionally shuffle the list,
@@ -579,32 +603,37 @@ def main():
     args.vocab_size = encoder.tokenizer.vocab_size
 
     # wait for all ranks before stopping timer
-    barrier(args)
+    args.distctx.barrier()
     startup_end = time.time()
     if args.rank == 0:
-        print("Seconds to startup:", startup_end - startup_start)
+        msg(f"Seconds to startup: {startup_end - startup_start}")
 
-    # have each rank write its file, returns False if any rank had a problem
-    success, err = rank_files_write(args, dset, idx, encoder)
-    if not success:
+    # have each rank write its file,
+    # all ranks should raise an exception if any rank has a problem
+    try:
+        rank_files_write(args, dset, idx, encoder)
+    except Exception as e:
+        # If any process fails, we skip the merge since the resulting file would be invalid.
+        # We still delete files to clean up, since those might be invalid anyway.
         if args.rank == 0:
-            # If any process fails, we skip the merge since the resulting file would be invalid.
-            # We still delete files to clean up, since those might be invalid anyway.
-            print(f"ERROR: At least one process failed to write its file, skipping merge and cleaning up", flush=True)
+            msgerr(f"At least one process failed to write its file, skipping merge and cleaning up", flush=True)
 
         # delete per-rank files, do this even on error
         rank_files_delete(args)
 
-        # raise exception caught during write phase
-        if err is not None:
-            raise err
-        return
+        # re-raise exception caught during write phase
+        raise e
 
     # all ranks were successful writing their file, merge them into one
     rank_files_merge(args)
 
     # delete per-rank files
     rank_files_delete(args)
+
+    end_time = time.time()
+    if args.rank == 0:
+        msg(f"Runtime: {end_time - startup_start} secs", flush=True)
+        msg(f"Done")
 
 if __name__ == '__main__':
     main()
