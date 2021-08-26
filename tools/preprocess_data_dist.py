@@ -588,7 +588,12 @@ def main():
     startup_start = time.time()
 
     # load the dataset
-    dset = load_dset(args)
+    if args.input.endswith(".jsonl"):
+        # assume file is JSONL format
+        dset = IndexedJSON(args.input, args.mpi_comm)
+    else:
+        # otherwise load HuggingFace dataset
+        dset = load_dset(args)
     if args.rank == 0:
         print(dset)
         msg(f"Processing features: {args.columns}")
