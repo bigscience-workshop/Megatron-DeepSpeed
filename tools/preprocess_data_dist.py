@@ -216,7 +216,7 @@ def get_args():
     # TODO: perhaps more user friendly to disable scratch and print a warning?
     # check that serial merge is not attempted with scratch
     if args.scratch is not None and args.merge != 'parallel':
-        raise  ValueError("The --scratch option is only valid with --merge=parallel")
+        raise ValueError("The --scratch option is only valid with --merge=parallel")
 
     return args
 

@@ -459,21 +459,21 @@ class MMapIndexedDataset(torch.utils.data.Dataset):
                 offset = stream.tell()
 
             if not skip_warmup:
-#                print_rank_0("    warming up index mmap file...")
+                print_rank_0("    warming up index mmap file...")
                 _warmup_mmap_file(path)
 
             self._bin_buffer_mmap = np.memmap(path, mode='r', order='C')
             self._bin_buffer = memoryview(self._bin_buffer_mmap)
-#            print_rank_0("    reading sizes...")
+            print_rank_0("    reading sizes...")
             self._sizes = np.frombuffer(
                 self._bin_buffer,
                 dtype=np.int32,
                 count=self._len,
                 offset=offset)
-#            print_rank_0("    reading pointers...")
+            print_rank_0("    reading pointers...")
             self._pointers = np.frombuffer(self._bin_buffer, dtype=np.int64, count=self._len,
                                            offset=offset + self._sizes.nbytes)
-#            print_rank_0("    reading document index...")
+            print_rank_0("    reading document index...")
             self._doc_idx = np.frombuffer(self._bin_buffer, dtype=np.int64, count=self._doc_count,
                                           offset=offset + self._sizes.nbytes + self._pointers.nbytes)
 
@@ -618,8 +618,8 @@ class MMapIndexedDatasetBuilder(object):
         index = MMapIndexedDataset.Index(index_file_path(another_file))
         assert index.dtype == self._dtype
 
-#        total_len = len(index.sizes)+len(self._sizes)
-#        print(f"    concat {another_file} size={len(index.sizes)} for a total size of {total_len}")
+        total_len = len(index.sizes)+len(self._sizes)
+        print(f"    concat {another_file} size={len(index.sizes)} for a total size of {total_len}")
 
         offset = len(self._sizes)
         self._sizes.extend(index.sizes)
@@ -764,29 +764,6 @@ def gather_files_dist_idx_cached(outfile, filelist, distctx):
         if dtype_value is None:
             dtype_value = dtype_code
         if dtype_value != dtype_code:
-            dtype_valid = False
-
-    # Check that we have consistent dtypes in all files from all ranks
-    dtype = gather_files_dist_check_dtype(filelist, dtype_valid, dtype_value, distctx)
-
-    # Capture the last value in dim and data arrays before we delete any items.
-    # Note this may be zero on any rank that has no items,
-    # but zero is the correct value in that case.
-    # We use this last value to compute a shift value that will
-    # later be added to each element in our lists.
-    dim_shift = distctx.exscan(dim_offsets[-1])
-    data_shift = distctx.exscan(data_offsets[-1])
-
-    # Drop the zero entry from the lists that start with
-    # a "0" value unless we're rank 0
-    if distctx.rank != 0:
-        del data_offsets[0]
-        del dim_offsets[0]
-        del docs[0]
-
-    # Compute total number of entires in data, size, dim,
-    # and docs lists across all ranks.  Also compute the offset
-=======
             dtype_rank_consistent = False
 
     # Check that we have consistent dtypes in all files from all ranks,
