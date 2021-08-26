@@ -27,6 +27,8 @@ from megatron.testing_utils import (
     set_seed
 )
 
+from datasets import load_dataset
+
 set_seed(42)
 
 
@@ -81,12 +83,6 @@ class MegDSTestPreprocessing(TestCasePlus):
             tgt_path = f"{output_prefix}_text_document.{ext}"
             self.assertTrue(Path(tgt_path).exists(), )
 
-    def download_hf_dataset(self, dsetname):
-        # preprocess_data_dist requires one to have already downloaded the input HF dataset.
-        # We do that by running this script before the test.
-        cmd = ["python", "-c", f"from datasets import load_dataset; load_dataset('{dsetname}')"]
-        execute_subprocess_async(cmd, env=self.get_env())
-
     def compare_meg_data_files(self, tgt, ref):
         for ext in ["bin", "idx"]:
             tgt_path = f"{tgt}.{ext}"
@@ -134,7 +130,7 @@ class MegDSTestPreprocessing(TestCasePlus):
         # preprocess_data_dist requires one to have already downloaded the input HF dataset.
         # We do that by running this script before the test.
         dsetname = 'stas/openwebtext-10k'
-        self.download_hf_dataset(dsetname)
+        load_dataset(dsetname)
 
         cmd = f"""
                 python -m torch.distributed.launch --nproc_per_node 2 {src_dir}/tools/preprocess_data_dist.py
@@ -165,7 +161,7 @@ class MegDSTestPreprocessing(TestCasePlus):
         # preproces_data_dist requires one to have already downloaded the input HF dataset.
         # We do that by running this script before the test.
         dsetname = 'stas/openwebtext-10k'
-        self.download_hf_dataset(dsetname)
+        load_dataset(dsetname)
 
         cmd = f"""
                 python -m torch.distributed.launch --nproc_per_node 2 {src_dir}/tools/preprocess_data_dist.py
