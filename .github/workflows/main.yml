@@ -33,6 +33,8 @@ jobs:
     name: Do the job on the runner
     needs: start-runner # required to start the main job when the runner is ready
     runs-on: ${{ needs.start-runner.outputs.label }} # run the job on the newly created runner
+    container:
+      options: --user ubuntu
     steps:
       - name: Who Am I?
         run: su - ubuntu; whoami
