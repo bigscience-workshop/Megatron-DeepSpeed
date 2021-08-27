@@ -18,6 +18,7 @@ import json
 import re
 import os
 import unittest
+import functools
 
 from pathlib import Path
 
@@ -44,6 +45,10 @@ def write_jsonl(path, lines_num=1000, line_length=1024):
             x = json.dumps(rec, indent=0, ensure_ascii=False)
             x = re.sub(r'\n', ' ', x, 0, re.M)
             f.write(x + "\n")
+
+@functools.lru_cache()
+def download_hf_dataset(dsetname):
+    return load_dataset(dsetname)
 
 class MegDSTestPreprocessing(TestCasePlus):
     """ """
@@ -130,7 +135,7 @@ class MegDSTestPreprocessing(TestCasePlus):
         # preprocess_data_dist requires one to have already downloaded the input HF dataset.
         # We do that by running this script before the test.
         dsetname = 'stas/openwebtext-10k'
-        load_dataset(dsetname)
+        download_hf_dataset(dsetname)
 
         cmd = f"""
                 python -m torch.distributed.launch --nproc_per_node 2 {src_dir}/tools/preprocess_data_dist.py
@@ -161,7 +166,7 @@ class MegDSTestPreprocessing(TestCasePlus):
         # preproces_data_dist requires one to have already downloaded the input HF dataset.
         # We do that by running this script before the test.
         dsetname = 'stas/openwebtext-10k'
-        load_dataset(dsetname)
+        download_hf_dataset(dsetname)
 
         cmd = f"""
                 python -m torch.distributed.launch --nproc_per_node 2 {src_dir}/tools/preprocess_data_dist.py
