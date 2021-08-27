@@ -1,4 +1,6 @@
 import os
+import stat
+import shutil
 import numpy as np
 
 import torch
@@ -218,3 +220,52 @@ class DistData(object):
 
         # Verify that the rename succeeded
         self.allraise_if(err)
+
+    # We stat each binary file to determine its size, execute a scan to compute
+    # the byte offset where the calling rank should write its data, seek to proper
+    # spot, and copy each file.
+    def gather_files_concat(self, finalname, filelist):
+        """Concatenate binary files in filelist into a new file given by outfile"""
+        # lookup size of each of our binary files
+        filesizes = [os.stat(f)[stat.ST_SIZE] for f in filelist]
+
+        # compute total bytes of the merged file and the offset
+        # at which this rank will write data from its files
+        numbytes = sum(filesizes)
+        count = self.sum(numbytes)
+        offset = self.exscan(numbytes)
+
+        # We first write to a temporary file name.  We rename to the final name
+        # if successful or delete the temporary file if not.
+        # This way if the final name appears, the user knows it's a valid file.
+        finalnametmp = finalname + ".tmp"
+
+        # First delete the final file if it already exists
+        self.remove(finalname)
+
+        # Catch I/O errors from any process
+        err = None
+        try:
+            # Create shared output file and pre-truncate to its final size.
+            with self.open(finalnametmp, truncate=count) as fout:
+                # Seek to appropriate starting offset in the merged file.
+                fout.seek(offset)
+
+                # Copy in contents of each of our files.
+                for f in filelist:
+                    with open(f, "rb") as fsrc:
+                        shutil.copyfileobj(fsrc, fout)
+
+        except Exception as e:
+            err = e
+
+        # Check that all ranks wrote successfully.
+        # This will raise an exception all on ranks if we detect
+        # an exception on any rank.
+        self.allraise_if(err)
+
+        # Everyone wrote their part successfully.
+        # Rename the temporary file to the final file.
+        self.rename(finalnametmp, finalname)
+
+        return numbytes
