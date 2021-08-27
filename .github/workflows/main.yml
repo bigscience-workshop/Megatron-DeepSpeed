@@ -34,6 +34,8 @@ jobs:
     needs: start-runner # required to start the main job when the runner is ready
     runs-on: ${{ needs.start-runner.outputs.label }} # run the job on the newly created runner
     steps:
+      - name: Who Am I?
+        run: su - ubuntu
       - name: Checkout
         uses: actions/checkout@v2
       - name: Test
