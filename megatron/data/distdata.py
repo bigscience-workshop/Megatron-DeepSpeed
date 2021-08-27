@@ -13,6 +13,22 @@ class DistData(object):
     def __init__(self, backend='gloo'):
         assert backend in ['gloo', 'mpi'], f"torch.distributed backend '{backend}' is not supported, valid options are 'gloo' or 'mpi'"
 
+        # for launching with SLURM srun
+        if 'SLURM_PROCID' in os.environ:
+            os.environ["RANK"] = os.environ['SLURM_PROCID']
+        if 'SLURM_NPROCS' in os.environ:
+            os.environ["WORLD_SIZE"] = os.environ['SLURM_NPROCS']
+        if 'SLURM_LOCALID' in os.environ:
+            os.environ["LOCAL_RANK"] = os.environ['SLURM_LOCALID']
+
+        # for launching with IBM LSF jsrun
+        if 'OMPI_COMM_WORLD_RANK' in os.environ:
+            os.environ["RANK"] = os.environ['OMPI_COMM_WORLD_RANK']
+        if 'OMPI_COMM_WORLD_SIZE' in os.environ:
+            os.environ["WORLD_SIZE"] = os.environ['OMPI_COMM_WORLD_SIZE']
+        if 'OMPI_COMM_WORLD_LOCAL_RANK' in os.environ:
+            os.environ["LOCAL_RANK"] = os.environ['OMPI_COMM_WORLD_LOCAL_RANK']
+
         dist.init_process_group(backend, init_method="env://")
 
         # lookup our process rank and the group size
