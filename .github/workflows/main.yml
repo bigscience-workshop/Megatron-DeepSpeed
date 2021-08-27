@@ -41,7 +41,7 @@ jobs:
         run: nvidia-smi
       - name: Real Test
         run: |
-          python -m pytest tests
+          python3 -m pytest tests
 
   stop-runner:
     name: Stop self-hosted EC2 runner
