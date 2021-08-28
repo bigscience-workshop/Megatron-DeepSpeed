@@ -590,7 +590,7 @@ def main():
     # load the dataset
     if args.input.endswith(".jsonl"):
         # assume file is JSONL format
-        dset = IndexedJSON(args.input, args.mpi_comm)
+        dset = IndexedJSON(args.input, args.distctx)
     else:
         # otherwise load HuggingFace dataset
         dset = load_dset(args)
