@@ -48,15 +48,21 @@ jobs:
           su - ubuntu
           whoami
       - name: Who Am I?
+        if: ${{ always() }}
         shell: bash -l {0}
         run: whoami; python3 -m pytest
       - name: Checkout
+        if: ${{ always() }}
         uses: actions/checkout@v2
       - name: Test
-        run: pwd; ls -l; whoami; ls -l ..
+        if: ${{ always() }}
+        run: |
+          df -h
+          pwd; ls -l; whoami; ls -l ..
       - name: GPU Test
         run: nvidia-smi
       - name: Real Test
+        if: ${{ always() }}
         run: |
           python3 -m pytest tests
 
