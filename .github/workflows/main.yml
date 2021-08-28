@@ -35,12 +35,18 @@ jobs:
     runs-on: ${{ needs.start-runner.outputs.label }} # run the job on the newly created runner
     steps:
       - name: Who Am I?
-        run: sudo su - ubuntu; whoami
+        run: |
+          sudo su - ubuntu
+          whoami
       - name: Who Am I?
-        run: sudo -u ubuntu bash; whoami
+        run: |
+          sudo -u ubuntu bash
+          whoami
       - name: Who Am I?
         shell: bash -l {0}
-        run: su - ubuntu; whoami
+        run: |
+          su - ubuntu
+          whoami
       - name: Who Am I?
         shell: bash -l {0}
         run: whoami; python3 -m pytest
