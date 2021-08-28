@@ -3,6 +3,7 @@ torch
 six
 regex
 numpy
+nltk
 transformers
 # git+https://github.com/microsoft/DeepSpeed.git@big-science
 # edit to a higher SHA or future release if needed
