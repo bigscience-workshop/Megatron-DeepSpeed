@@ -58,6 +58,8 @@ jobs:
         if: ${{ always() }}
         run: |
           df -h
+          du -sh /home
+          ls -l /home/ubuntu/
           pwd; ls -l; whoami; ls -l ..
       - name: GPU Test
         run: nvidia-smi
