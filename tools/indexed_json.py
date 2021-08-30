@@ -103,7 +103,7 @@ class IndexedJSON(object):
         return start, end
 
     def scan_newlines(self, filename, filesize, filename_tmp):
-        """Given a JSON file named dataset.jsonl, write index to dataset.jsonl.idx."""
+        """Given an input file and its size, scan for newline chars and write offsets to temporary file."""
         time_start = time.time()
         rank = self.distctx.rank
         numranks = self.distctx.numranks
@@ -112,7 +112,7 @@ class IndexedJSON(object):
         # Create the temporary file, shared across all ranks
         # Since this is a collective open, all ranks should raise an exception if any fails.
         with self.distctx.open(filename_tmp) as ftmp:
-            # Open and scan the JSON file, count total number of records as we go
+            # Open input file, we'll count total number of records as we go
             time_next = time_start + self.progress
             rectotal = 0
             with self.distctx.openread(filename) as f:
@@ -158,7 +158,7 @@ class IndexedJSON(object):
                     reccount = self.distctx.sum(numrecs)
                     recoffset = self.distctx.exscan(numrecs)
 
-                    # Have each rank writes the byte offsets for each of its records
+                    # Have each rank write the byte offsets for each of its records
                     # to the temporary file.
                     # Since errors may be likely during I/O, we catch and
                     # and later check for an exception on any rank.  If any
@@ -181,7 +181,7 @@ class IndexedJSON(object):
                     # Bump up to next slot in the temporary file.
                     rectotal += reccount
 
-                    # Move on to the next section of the JSON file.
+                    # Move on to the next section of the input file.
                     curpos += bufsize * numranks
 
                     # this can take a while, so print progress messages if enabled
@@ -203,6 +203,7 @@ class IndexedJSON(object):
         return rectotal
 
     def write_index(self, filename_tmp, numrecs, filename_idx):
+        """Given a file with offsets of new records, write an index file."""
         # Create the actual index file.
         # Since this is a collective open, all ranks should raise an exception if any fails.
         with self.distctx.open(filename_idx) as fidx:
@@ -279,17 +280,17 @@ class IndexedJSON(object):
         self.distctx.barrier()
 
     def create_index(self):
-        """Given a JSON file named dataset.jsonl, write index to dataset.jsonl.idx."""
+        """Given a file named foo, write index to foo.idx"""
 
-        # To compute this index, ranks collective scan the JSON
+        # To compute this index, ranks collective scan the input
         # file and record the byte offset of newline characters.
         # Those byte offsets are accumulated in a temporary index file
-        # until the entire JSON file has been scanned.  The processes
+        # until the entire input file has been scanned.  The processes
         # then read back those byte locations from the temporary file
         # to compute the length of each record.  Finally for each
         # record an (offset,length) pair of int64 types is written into
         # the index file to specify the starting offset and length of
-        # each record in the JSON file.
+        # each record in the input file.
 
         time_start = time.time()
 
@@ -300,15 +301,15 @@ class IndexedJSON(object):
         # Delete any existing index file.
         self.distctx.remove(filename_idx)
 
-        # Lookup and broadcast size of JSON file to all ranks
+        # Lookup and broadcast size of input file to all ranks
         filesize = self.distctx.filesize(filename)
 
         # If progress messages are enabled, print a header about what we're doing
         if self.distctx.rank == 0 and self.progress > 0.0:
             print(f"Indexing '{filename}' of {filesize} bytes ...", flush=True)
 
-        # Scan JSON file for newline characaters to identify starting byte offsets
-        # of each new record (line) and record list of offsets in a temporary file.
+        # Scan input file for newline characaters to identify starting byte offset
+        # of each new record (line) and record full list of offsets in a temporary file.
         # Returns number of records if successful.
         # All ranks should throw an exception if any rank does.
         filename_tmp = filename_idx + 'tmp'
