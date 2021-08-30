@@ -144,6 +144,7 @@ class DistData(object):
 
     def open(self, filename, truncate=None):
         """Create, truncate, and open a file for writing shared by all ranks."""
+        f = None
 
         # Don't truncate existing file until all ranks reach this point
         self.barrier()
@@ -163,6 +164,8 @@ class DistData(object):
 
             except Exception as e:
                 err = e
+                if f is not None:
+                    f.close()
 
         # Verify that rank 0 created the file
         self.allraise_if(err)
@@ -176,12 +179,20 @@ class DistData(object):
                 err = e
 
         # Verify that all ranks successfully opened the file
+        if not self.alltrue(err is None):
+            # Someone failed to open the file.
+            # If we succeeded, close our file.
+            if f is not None:
+                f.close()
+
+        # All raise an exception if anyone did
         self.allraise_if(err)
 
         return f
 
     def openread(self, filename):
         """Open a shared file for reading by all ranks."""
+        f = None
 
         # Don't attempt to open until all ranks are ready.
         self.barrier()
@@ -198,7 +209,7 @@ class DistData(object):
         if not self.alltrue(err is None):
             # Someone failed to open the file.
             # If we succeeded, close our file.
-            if err is None:
+            if f is not None:
                 f.close()
 
         # All raise an exception if anyone did
