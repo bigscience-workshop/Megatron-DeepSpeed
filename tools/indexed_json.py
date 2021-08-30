@@ -21,16 +21,17 @@ class IndexedJSON(object):
 
         # determine whether we need to create the index
         create_index = False
-        exists = self.test_exists(self.filename_idx)
+        exists = self.distctx.exists(self.filename_idx)
         if not exists:
             # index file does not exist
             create_index = True
         else:
             # index exists, but rebuild the index if the original file
             # has been modified since the index was built
-            mtime = self.get_mtime(self.filename)
-            mtime_idx = self.get_mtime(self.filename_idx)
+            mtime = self.distctx.mtime(self.filename)
+            mtime_idx = self.distctx.mtime(self.filename_idx)
             if mtime > mtime_idx:
+                # original file may have changed, rebuild the index
                 create_index = True
         if create_index:
             self.create_index(self.filename, self.bufsize)
@@ -42,6 +43,8 @@ class IndexedJSON(object):
 #        self.fh_idx = open(self.filename_idx, "rb")
 #        self.fh_json = open(self.filename, "rb")
 
+        # Read the header from the index file.
+        # This verifies the file format and sets self.idx_version.
         self.read_index_header()
 
         # Identify number of samples in JSON file.
@@ -51,32 +54,8 @@ class IndexedJSON(object):
             # version 1 has a 16-byte header
             # followed by a list of (offset, length) pairs of uint64
             header_size = 16
-            filesize_idx = self.get_filesize(self.filename_idx)
+            filesize_idx = self.distctx.filesize(self.filename_idx)
             self.numsamples = int((filesize_idx - header_size) / 16)
-
-    def test_exists(self, filename):
-        """Test whether file exists and broadcast result to all ranks."""
-        exists = False
-        if self.distctx.rank == 0:
-            exists = os.path.exists(filename)
-        exists = self.distctx.bcast(exists, root=0)
-        return exists
-
-    def get_filesize(self, filename):
-        """Lookup filesize and broadcast to all ranks."""
-        filesize = 0
-        if self.distctx.rank == 0:
-            filesize = os.stat(filename)[stat.ST_SIZE]
-        filesize = self.distctx.bcast(filesize, root=0)
-        return filesize
-
-    def get_mtime(self, filename):
-        """Lookup file mtime and broadcast to all ranks."""
-        mtime = 0
-        if self.distctx.rank == 0:
-            mtime = os.stat(filename)[stat.ST_MTIME]
-        mtime = self.distctx.bcast(mtime, root=0)
-        return mtime
 
     def read_index_header(self):
         """Read header from index file and check its version."""
@@ -109,7 +88,7 @@ class IndexedJSON(object):
         return filename + '.idx'
 
     def get_start_end(self, num):
-        """Given num items, compute and return [start,end) range on each rank."""
+        """Given num items, compute and return [start,end) range on calling rank."""
         rank = self.distctx.rank
         num_ranks = self.distctx.numranks
 
@@ -145,7 +124,7 @@ class IndexedJSON(object):
         filename_tmp = filename_idx + 'tmp'
 
         # lookup and broadcast size of JSON file to all ranks
-        filesize = self.get_filesize(filename)
+        filesize = self.distctx.filesize(filename)
 
         # if progress messages are enabled, print a header about what we're doing
         if rank == 0 and self.progress > 0.0:
@@ -272,8 +251,7 @@ class IndexedJSON(object):
         self.distctx.barrier()
 
         # Can now delete the temporary index file.
-        if rank == 0:
-            os.remove(filename_tmp)
+        self.distctx.remove(filename_tmp)
 
         # Wait for everyone again and record how long it took.
         self.distctx.barrier()
@@ -338,8 +316,7 @@ class IndexedJSON(object):
         """Read size bytes at the given offset in the JSON file and return as a buffer."""
         # seek to offset in JSON file and read the record
         self.fh_json.seek(offset)
-        buf = self.fh_json.read(size)
-        return buf
+        return self.fh_json.read(size)
 
     def read(self, idx):
         """Given a sample id, read sample from the file and return as a buffer."""

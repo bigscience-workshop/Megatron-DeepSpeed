@@ -1,4 +1,5 @@
 import os
+import stat
 import numpy as np
 
 import torch
@@ -218,3 +219,27 @@ class DistData(object):
 
         # Verify that the rename succeeded
         self.allraise_if(err)
+
+    def exists(self, filename):
+        """Test whether file exists and broadcast result to all ranks."""
+        exists = False
+        if self.rank == 0:
+            exists = os.path.exists(filename)
+        exists = self.bcast(exists, root=0)
+        return exists
+
+    def stat(self, filename, field):
+        """Lookup field from stat on file and broadcast to all ranks."""
+        val = None
+        if self.rank == 0:
+            val = os.stat(filename)[field]
+        val = self.bcast(val, root=0)
+        return val
+
+    def filesize(self, filename):
+        """Lookup filesize and broadcast to all ranks."""
+        return self.stat(filename, stat.ST_SIZE)
+
+    def mtime(self, filename):
+        """Lookup file mtime and broadcast to all ranks."""
+        return self.stat(filename, stat.ST_MTIME)
