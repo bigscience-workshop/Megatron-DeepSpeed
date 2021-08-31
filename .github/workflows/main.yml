@@ -48,10 +48,12 @@ jobs:
       - name: Install Prerequisites
         if: ${{ always() }}
         run: |
-          pip install pytest-timeout
+          # XXX: pre-install these
+          pip install pytest-timeout datasets nltk
+          # this one install every time
           pip install git+https://github.com/microsoft/DeepSpeed.git@big-science
       - name: Test
-        run: pytest --timeout=120 tests -sv
+        run: pytest --timeout=300 tests -sv
 
   stop-runner:
     name: Stop self-hosted EC2 runner
