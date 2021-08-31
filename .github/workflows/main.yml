@@ -20,7 +20,7 @@ jobs:
         with:
           mode: start
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-          ec2-image-id: ami-092ea3a7bad5555ec
+          ec2-image-id: ami-0dfaabfa78a779fbc
           ec2-instance-type: p3.8xlarge
           subnet-id: subnet-3502b45e
           security-group-id: sg-e8f46d9d
@@ -42,11 +42,12 @@ jobs:
       - name: Checkout
         if: ${{ always() }}
         uses: actions/checkout@v2
-      - name: Install Prerequisites
-        run: |
-          pip install git+https://github.com/microsoft/DeepSpeed.git@big-science
       - name: Test
         run: pytest tests
+      - name: Install Prerequisites
+        if: ${{ always() }}
+        run: |
+          pip install git+https://github.com/microsoft/DeepSpeed.git@big-science
       - name: Test
         if: ${{ always() }}
         run: |
