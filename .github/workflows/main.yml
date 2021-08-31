@@ -42,12 +42,12 @@ jobs:
       - name: Checkout
         if: ${{ always() }}
         uses: actions/checkout@v2
-      - name: Test
-        run: pytest tests
       - name: Install Prerequisites
         if: ${{ always() }}
         run: |
           pip install git+https://github.com/microsoft/DeepSpeed.git@big-science
+      - name: Test
+        run: pytest tests
       - name: Test
         if: ${{ always() }}
         run: |
