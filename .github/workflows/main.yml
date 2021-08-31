@@ -45,16 +45,10 @@ jobs:
       - name: Install Prerequisites
         if: ${{ always() }}
         run: |
+          pip install pytest-timeout
           pip install git+https://github.com/microsoft/DeepSpeed.git@big-science
       - name: Test
-        run: pytest tests
-      - name: Test
-        if: ${{ always() }}
-        run: |
-          df -h
-          du -sh /home
-          ls -l /home/ubuntu/
-          pwd; ls -l; whoami; ls -l ..
+        run: pytest --timeout=120 tests -sv
 
   stop-runner:
     name: Stop self-hosted EC2 runner
