@@ -11,11 +11,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import filecmp
 import io
 import json
 import re
 import os
+import unittest
+import functools
+
 from pathlib import Path
 
 from megatron.testing_utils import (
@@ -23,6 +27,8 @@ from megatron.testing_utils import (
     execute_subprocess_async,
     set_seed
 )
+
+from datasets import load_dataset
 
 set_seed(42)
 
@@ -39,6 +45,10 @@ def write_jsonl(path, lines_num=1000, line_length=1024):
             x = json.dumps(rec, indent=0, ensure_ascii=False)
             x = re.sub(r'\n', ' ', x, 0, re.M)
             f.write(x + "\n")
+
+@functools.lru_cache()
+def download_hf_dataset(dsetname):
+    return load_dataset(dsetname)
 
 class MegDSTestPreprocessing(TestCasePlus):
     """ """
@@ -85,6 +95,7 @@ class MegDSTestPreprocessing(TestCasePlus):
             self.assertTrue(Path(tgt_path).exists(), )
             self.assertTrue(filecmp.cmp(tgt_path, ref_path, shallow=False))
 
+    @unittest.skip("Skip test until data is fixed.")
     def test_process_data_microsoft(self):
         """We want to be stable to Microsoft version."""
         src_dir = self.src_dir
@@ -121,9 +132,14 @@ class MegDSTestPreprocessing(TestCasePlus):
 
         output_prefix = f"{output_dir}/test-ds-meg-gpt2-openwebtext_1k"
 
+        # preprocess_data_dist requires one to have already downloaded the input HF dataset.
+        # We do that by running this script before the test.
+        dsetname = 'stas/openwebtext-10k'
+        download_hf_dataset(dsetname)
+
         cmd = f"""
                 python -m torch.distributed.launch --nproc_per_node 2 {src_dir}/tools/preprocess_data_dist.py
-                    --input openwebtext-10k
+                    --input {dsetname}
                     --count 1000
                     --output-prefix {output_prefix}
                     --dataset-impl mmap
@@ -147,9 +163,14 @@ class MegDSTestPreprocessing(TestCasePlus):
 
         output_prefix = f"{output_dir}/test-ds-meg-gpt2-openwebtext_1k"
 
+        # preproces_data_dist requires one to have already downloaded the input HF dataset.
+        # We do that by running this script before the test.
+        dsetname = 'stas/openwebtext-10k'
+        download_hf_dataset(dsetname)
+
         cmd = f"""
                 python -m torch.distributed.launch --nproc_per_node 2 {src_dir}/tools/preprocess_data_dist.py
-                    --input openwebtext-10k
+                    --input {dsetname}
                     --count 1000
                     --merge serial
                     --output-prefix {output_prefix}
@@ -165,4 +186,3 @@ class MegDSTestPreprocessing(TestCasePlus):
         execute_subprocess_async(cmd, env=self.get_env())
 
         self.compare_meg_data_files(f"{output_prefix}_text_document", f"{data_dir}/meg-gpt2-openwebtext_text_document")
-
