@@ -27,7 +27,7 @@ jobs:
           ec2-image-id: ami-03540b272db1624b7
           ec2-instance-type: p3.8xlarge
           security-group-id: sg-f2a4e2fc
-          subnet-id: subnet-df0f6180 # us-east-1a
+          subnet-id: subnet-06576a4b # us-east-1d
           aws-resource-tags: > # optional, requires additional permissions
             [
               {"Key": "Name", "Value": "ec2-github-runner"},
@@ -60,7 +60,7 @@ jobs:
           ec2-image-id: ami-03540b272db1624b7
           ec2-instance-type: p3.8xlarge
           security-group-id: sg-f2a4e2fc
-          subnet-id: subnet-06576a4b # us-east-1d
+          subnet-id: subnet-df0f6180 # us-east-1a
           aws-resource-tags: > # optional, requires additional permissions
             [
               {"Key": "Name", "Value": "ec2-github-runner"},
@@ -101,10 +101,7 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
-          # XXX: pre-install these
-          #pip install pytest-timeout datasets nltk tensorboard
-          # this one install every time
-          #pip install git+https://github.com/microsoft/DeepSpeed.git@big-science
+          pip install pytest-timeout
 
       - name: Run tests
         run: pytest --timeout=300 tests -sv
