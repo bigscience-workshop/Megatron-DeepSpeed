@@ -14,8 +14,8 @@ on:
 
 # need to figure out how to cancel the previous build if a new push was made the old test is still running
 concurrency: # cancel previous build on a new push
-group: ${{ github.ref }} # https://docs.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#github-context
-cancel-in-progress: true
+  group: ${{ github.ref }} # https://docs.github.com/en/actions/reference/context-and-expression-syntax-for-github-actions#github-context
+  cancel-in-progress: true
 
 jobs:
 
