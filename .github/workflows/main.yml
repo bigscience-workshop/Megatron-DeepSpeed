@@ -15,9 +15,10 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-2
-      - name: Start EC2 runner
-        id: start-ec2-runner
+      - name: Try to start EC2 runner (a)
+        id: try-us-east-2a
         uses: machulav/ec2-github-runner@v2
+        continue-on-error: true
         with:
           mode: start
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
@@ -30,6 +31,55 @@ jobs:
               {"Key": "Name", "Value": "ec2-github-runner"},
               {"Key": "GitHubRepository", "Value": "${{ github.repository }}"}
             ]
+      - name: Try to start EC2 runner (b)
+        id: try-us-east-2b
+        if: steps.try-us-east-2a.outcome == 'failure'
+        uses: machulav/ec2-github-runner@v2
+        continue-on-error: true
+        with:
+          mode: start
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          ec2-image-id: ami-0dfaabfa78a779fbc
+          ec2-instance-type: p3.8xlarge
+          security-group-id: sg-e8f46d9d
+          subnet-id: subnet-e193c4ad
+          aws-resource-tags: > # optional, requires additional permissions
+            [
+              {"Key": "Name", "Value": "ec2-github-runner"},
+              {"Key": "GitHubRepository", "Value": "${{ github.repository }}"}
+            ]
+      - name: Try to start EC2 runner (c)
+        id: try-us-east-2c
+        if: steps.try-us-east-2b.outcome == 'failure'
+        uses: machulav/ec2-github-runner@v2
+        with:
+          mode: start
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          ec2-image-id: ami-0dfaabfa78a779fbc
+          ec2-instance-type: p3.8xlarge
+          security-group-id: sg-e8f46d9d
+          subnet-id: subnet-608b641d
+          aws-resource-tags: > # optional, requires additional permissions
+            [
+              {"Key": "Name", "Value": "ec2-github-runner"},
+              {"Key": "GitHubRepository", "Value": "${{ github.repository }}"}
+            ]
+      - name: See if any of 3 sub-regions had the resource
+        id: start-ec2-runner
+        run: |
+          if [ "${{ steps.try-us-east-2a.outcome }}" = "success" ]; then
+            echo "::set-output name=label::${{ steps.try-us-east-2a.outputs.label }}"
+            echo "::set-output name=ec2-instance-id::${{ steps.try-us-east-2a.outputs.ec2-instance-id }}"
+          fi
+          if [ "${{ steps.try-us-east-2b.outcome }}" = "success" ]; then
+            echo "::set-output name=label::${{ steps.try-us-east-2b.outputs.label }}"
+            echo "::set-output name=ec2-instance-id::${{ steps.try-us-east-2b.outputs.ec2-instance-id }}"
+          fi
+          if [ "${{ steps.try-us-east-2c.outcome }}" = "success" ]; then
+            echo "::set-output name=label::${{ steps.try-us-east-2c.outputs.label }}"
+            echo "::set-output name=ec2-instance-id::${{ steps.try-us-east-2c.outputs.ec2-instance-id }}"
+          fi
+
 
   do-the-job:
     name: Do the job on the runner
