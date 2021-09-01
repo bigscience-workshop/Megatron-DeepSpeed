@@ -5,12 +5,12 @@ on:
   push:
     branches:
       - "*"
-    paths:
-      - "megatron/**"
-      - "tests/**"
-      - ".github/**"
-      - "tools/**"
-      - "*.py"
+    # paths:
+    #   - "megatron/**"
+    #   - "tests/**"
+    #   - ".github/**"
+    #   - "tools/**"
+    #   - "*.py"
 
 jobs:
 
