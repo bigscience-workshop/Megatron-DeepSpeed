@@ -89,22 +89,23 @@ jobs:
       cancel-in-progress: true
     runs-on: ${{ needs.start-runner.outputs.label }} # run the job on the newly created runner
     steps:
-      - name: Who Am I?
-        run: |
-          whoami
-      - name: GPU Test
+      - name: NVIDIA-SMI
         run: nvidia-smi
+
       - name: Checkout
-        if: ${{ always() }}
         uses: actions/checkout@v2
-      - name: Install Prerequisites
-        if: ${{ always() }}
+
+      - name: Install Dependencies
         run: |
+          pip install --upgrade pip
+          pip install -r /path/to/requirements.txt
+          pip install .
           # XXX: pre-install these
-          pip install pytest-timeout datasets nltk tensorboard
+          #pip install pytest-timeout datasets nltk tensorboard
           # this one install every time
-          pip install git+https://github.com/microsoft/DeepSpeed.git@big-science
-      - name: Test
+          #pip install git+https://github.com/microsoft/DeepSpeed.git@big-science
+
+      - name: Run tests
         run: pytest --timeout=300 tests -sv
 
   stop-runner:
