@@ -21,64 +21,24 @@ def get_proc_counts(num, num_ranks):
     num_per_rank, remainder = divmod(num, num_ranks)
     return [num_per_rank + 1 if rank < remainder else num_per_rank for rank in range(num_ranks)]
 
-def get_num_samples(args, dset_size):
-    # determine total number of samples that we'll read
-    num_samples = dset_size
-    if args.count is not None and args.count < dset_size:
-        num_samples = args.count
-    return num_samples
-
-def select_sample_list(args, dset_size):
-    """Given the total number of samples, select a list of sample index values"""
-    # determine total number of samples that we'll read
-    num_samples = get_num_samples(args, dset_size)
-
-    # create sample index list on rank 0,
-    # optionally shuffle the list,
-    # and optionally limit the sample count
-    idxlist = None
-    time_select = time.time()
-    if args.distctx.rank == 0:
-        # generate a list of all index values
-        idxlist = np.arange(dset_size, dtype=np.int64)
-
-#        # optionally limit the sample count
-#        if args.count is not None:
-#            idxlist = idxlist[:args.count]
-
-    # get a list of the number of elements each rank will hold
-#    counts = get_proc_counts(num_samples, args.distctx.numranks)
-    counts = get_proc_counts(dset_size, args.distctx.numranks)
-
-    # scatter sample index values from rank 0 to all procs
-    # based on distribution defined in counts list
-    time_bcast = time.time()
-    idx = args.distctx.scatterv_(idxlist, counts, root=0)
-
-    args.distctx.barrier()
-    time_end = time.time()
-    if args.distctx.rank == 0:
-        msg(f"Select index stats:")
-#        msg(f"    Shuffle: {args.shuffle}")
-        msg(f"    Seconds to select: {time_bcast - time_select}")
-        msg(f"    Seconds to broadcast: {time_end - time_bcast}")
-        msg(f"    Seconds total: {time_end - time_select}", flush=True)
-
-    return idx
-
 def pack_sendbuf(shufbuf, sendindex, sendoffsets, sendsizes):
+    # Allocate, prepare, and return send buffers.
+
+    # The index list records the sample id within the batch.
+    # The size list records the number of bytes of each sample.
     tensorindex = torch.tensor(sendindex, dtype=torch.int64)
     tensorsizes = torch.tensor(sendsizes, dtype=torch.int64)
     #sendmeta = torch.zeros(2 * len(sendindex), dtype=torch.int64)
     #sendmeta[0::2] = tensorindex[:]
     #sendmeta[1::2] = tensorsizes[:]
 
+    # Allocate a buffer to hold bytes for all samples.
     numbytes = sum(sendsizes)
     sendbuf = np.zeros(numbytes, dtype=np.uint8)
     #sendbuf = torch.zeros(numbytes, dtype=torch.uint8)
 
     # Pack each sample from our shufbuf into the send buffer.
-    # Each sample is concatenated to the previous.
+    # Each sample is concatenated to the previous one.
     packsize = 0
     for o, s in zip(sendoffsets, sendsizes):
         sendbuf[packsize : packsize + s] = shufbuf[o : o + s]
@@ -100,18 +60,35 @@ def register_pointers(pointers, buffers, src, recvindex, recvsizes, recvbuf):
     for i in range(len(recvindex)):
         pointers[int(recvindex[i])] = (src, int(recvoffsets[i]), int(recvsizes[i]))
 
-def total_rec_sizes(args, dset, idx):
+def shuffle_dset(args, dset):
+    # TODO: perhaps determine dynamically based on max memory and average sample size
+    # max number of samples to gather to each rank in each write phase
+    batch_size = 100000
+
+    # TODO: to use None, we could have rank 0 use None,
+    # use that to generate a random seed, and then bcast that seed to all ranks
+    # args.seed may be an int (to seed) or None (to not)
+    rng = np.random.default_rng(args.seed)
+
     rank = args.distctx.rank
     numranks = args.distctx.numranks
 
     if rank == 0:
         msg(f"Computing offsets ...", flush=True)
 
-    idxnp = idx.numpy()
+    num_samples = len(dset)
 
-    # args.seed may be an int (to seed) or None (to not)
-    rng = np.random.default_rng(args.seed)
+    # Get a list of the number of elements each rank holds
+    counts = get_proc_counts(num_samples, numranks)
+    counts = np.array(counts, dtype=np.int64)
 
+    # Computing starting sample index for each rank
+    rank_offsets = np.cumsum(counts)
+    rank_offsets -= counts
+
+    # TODO: for reading offset/size values of a consecutive set of samples,
+    #       it would be nice to extend distdata to return lists, it could grab
+    #       those with a single read operation, too.
     # Determine file offset and size of each sample this rank is responsible for.
     # The offset here is the byte offset to the start of the line within the source file.
     # The size is the number of bytes of each line.
@@ -119,7 +96,7 @@ def total_rec_sizes(args, dset, idx):
     offsets = []
     sizes = []
     numbytes = 0
-    for i in idxnp:
+    for i in range(rank_offsets[rank], rank_offsets[rank] + counts[rank]):
         sample_id = int(i)
         offset, size = dset.index(sample_id)
         offsets.append(offset)
@@ -134,11 +111,13 @@ def total_rec_sizes(args, dset, idx):
     if rank == 0:
         msg(f"Seconds to compute offsets: {time_sizes - time_start}", flush=True)
 
+    # TODO: for files where samples are contiguous, this could be read in a single
+    #       read operation rather than read per sample.
     # Allocate a buffer to hold all bytes in our porition,
     # and read samples from source file into memory.
     # Construct an list of offsets to the start of each sample in memory.
     shufbuf = np.zeros(numbytes, dtype=np.uint8)
-    shufbufoffsets = np.zeros(len(idxnp), dtype=np.int64)
+    shufbufoffsets = np.zeros(counts[rank], dtype=np.int64)
     sample_start = 0
     sample_idx = 0
     for o, s in zip(offsets, sizes):
@@ -155,19 +134,19 @@ def total_rec_sizes(args, dset, idx):
 
     # Each process randomly shuffles its set of samples.
     # We do this by just shuffling a list of local index values.
-    samplelist = np.arange(len(idx))
-    rng.shuffle(samplelist)
+    # Each rank executes the RNG for the same number of steps here
+    # to keep the RNG in lock-step across all procs.
+    samplelist = None
+    for r in range(numranks):
+        tmplist = np.arange(counts[r])
+        rng.shuffle(tmplist)
+        if r == rank:
+            samplelist = tmplist
 
     args.distctx.barrier()
     time_shuffle = time.time()
     if rank == 0:
         msg(f"Seconds to shuffle: {time_shuffle - time_shufbuf}", flush=True)
-
-    # TODO: fixme: this is redundant, and it must match how the index values were divided up.
-    # Get a list of the number of elements each rank holds
-    num_samples = len(dset)
-    counts = get_proc_counts(num_samples, numranks)
-    counts = np.array(counts, dtype=np.int64)
 
     # Randomly pick ranks to draw each sample.
     # This creates a list with one entry for each sample a rank has.
@@ -198,7 +177,6 @@ def total_rec_sizes(args, dset, idx):
         # Processes execute an alltoallv-style communication pattern to gather its samples.
         # After collecting its batch, each process writes its batch to the final file.
         # The process completes until all samples are accounted for.
-        batch_size = 100000 # max number of samples to gather to each rank in each phase
         next_sample = 0     # tracks local sample id to use on the current rank
         totalwritten = 0    # tracks byte offset into the final file for each phase
         samples_remaining = num_samples # global number of samples left to write
@@ -206,6 +184,8 @@ def total_rec_sizes(args, dset, idx):
             args.distctx.barrier()
             time_start_bcast = time.time()
 
+            # TODO: if this becomes a bottleneck, it may be possible
+            # to do this locally on each rank.
             # Broadcast list of ranks to sample from for each batch.
             # There is one batch per rank, as each rank will
             # collect a batch of samples to write to the final file.
@@ -368,12 +348,12 @@ def total_rec_sizes(args, dset, idx):
             args.distctx.barrier()
             time_end_write = time.time()
 
-            if rank == 0:
-                msg(f"bcast {time_end_bcast    - time_start_bcast}")
-                msg(f"ranks {time_end_ranks    - time_end_bcast}")
-                msg(f"pack  {time_end_pack     - time_end_ranks}")
-                msg(f"exch  {time_end_exchange - time_end_pack}")
-                msg(f"write {time_end_write    - time_end_exchange}", flush=True)
+            if rank == 0 and progress_interval > 0.0:
+                msg(f"  bcast {time_end_bcast    - time_start_bcast}")
+                msg(f"  ident {time_end_ranks    - time_end_bcast}")
+                msg(f"  pack  {time_end_pack     - time_end_ranks}")
+                msg(f"  exch  {time_end_exchange - time_end_pack}")
+                msg(f"  write {time_end_write    - time_end_exchange}", flush=True)
 
     if rank == 0 and progress_interval > 0.0:
         msg(f"{args.distctx.rank}: Waiting for ranks to finish ...", flush=True)
@@ -391,9 +371,7 @@ def get_args():
                        help='Dataset name')
     group.add_argument('--output', type=str, required=True,
                        help='Output file name')
-    group.add_argument('--count', type=int, default=None,
-                       help='Limit the number of samples to select.')
-    group.add_argument('--seed', type=int, default=None,
+    group.add_argument('--seed', type=int, required=True,
                        help='Seed to pass to random.seed for shuffle operations.')
     group.add_argument('--torch-backend', type=str, default='gloo', choices = ['gloo', 'mpi'],
                        help='Select torch.distributed backend.')
@@ -403,22 +381,20 @@ def get_args():
 
     args.distctx = DistData(backend=args.torch_backend, use_mpi4py=True)
 
+    # Check that user doesn't clobber their input file with a simple typo
+    if args.input == args.output:
+        raise ValueError(f"--input {args.input} and --output {args.output} must be different files")
+
     return args
 
 def main():
     args = get_args()
-    startup_start = time.time()
 
     # load the dataset
     # assume file is JSONL format
     dset = IndexedJSON(args.input, args.distctx)
 
-    # create sample index list,
-    # optionally shuffle the list,
-    # and optionally limit the sample count
-    idx = select_sample_list(args, len(dset))
-
-    total_rec_sizes(args, dset, idx)
+    shuffle_dset(args, dset)
 
 if __name__ == '__main__':
     main()
