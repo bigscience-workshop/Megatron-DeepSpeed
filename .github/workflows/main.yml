@@ -4,9 +4,7 @@ name: Run all tests
 on:
   push:
     branches:
-      - main
-      - ci_*
-      - ci-*
+      - "*"
     paths:
       - "megatron/**"
       - "tests/**"
