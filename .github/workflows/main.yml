@@ -15,6 +15,8 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
+      # don't use the following subnets as p3.8xlarge is not supported there
+      # - subnet-859322b4 # us-east-1e
       - name: Try to start EC2 runner (a)
         id: try-us-east-1a
         uses: machulav/ec2-github-runner@v2
@@ -25,7 +27,7 @@ jobs:
           ec2-image-id: ami-03540b272db1624b7
           ec2-instance-type: p3.8xlarge
           security-group-id: sg-f2a4e2fc
-          subnet-id: subnet-859322b4
+          subnet-id: subnet-df0f6180 # us-east-1a
           aws-resource-tags: > # optional, requires additional permissions
             [
               {"Key": "Name", "Value": "ec2-github-runner"},
@@ -42,7 +44,7 @@ jobs:
           ec2-image-id: ami-03540b272db1624b7
           ec2-instance-type: p3.8xlarge
           security-group-id: sg-f2a4e2fc
-          subnet-id: subnet-a396b2ad
+          subnet-id: subnet-a396b2ad # us-east-1f
           aws-resource-tags: > # optional, requires additional permissions
             [
               {"Key": "Name", "Value": "ec2-github-runner"},
@@ -58,7 +60,7 @@ jobs:
           ec2-image-id: ami-03540b272db1624b7
           ec2-instance-type: p3.8xlarge
           security-group-id: sg-f2a4e2fc
-          subnet-id: subnet-df0f6180
+          subnet-id: subnet-06576a4b # us-east-1d
           aws-resource-tags: > # optional, requires additional permissions
             [
               {"Key": "Name", "Value": "ec2-github-runner"},
@@ -99,7 +101,6 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
-          pip install .
           # XXX: pre-install these
           #pip install pytest-timeout datasets nltk tensorboard
           # this one install every time
