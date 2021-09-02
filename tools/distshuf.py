@@ -74,15 +74,15 @@ def shuffle_dset(args, dset):
     numranks = args.distctx.numranks
 
     if rank == 0:
-        msg(f"Computing offsets ...", flush=True)
+        msg(f"Determining sample offsets ...", flush=True)
 
     num_samples = len(dset)
 
-    # Get a list of the number of elements each rank holds
+    # Compute number of samples each rank will read
     counts = get_proc_counts(num_samples, numranks)
     counts = np.array(counts, dtype=np.int64)
 
-    # Computing starting sample index for each rank
+    # Compute starting sample index for each rank
     rank_offsets = np.cumsum(counts)
     rank_offsets -= counts
 
@@ -96,8 +96,7 @@ def shuffle_dset(args, dset):
     offsets = []
     sizes = []
     numbytes = 0
-    for i in range(rank_offsets[rank], rank_offsets[rank] + counts[rank]):
-        sample_id = int(i)
+    for sample_id in range(rank_offsets[rank], rank_offsets[rank] + counts[rank]):
         offset, size = dset.index(sample_id)
         offsets.append(offset)
         sizes.append(size)
@@ -109,7 +108,7 @@ def shuffle_dset(args, dset):
     args.distctx.barrier()
     time_sizes = time.time()
     if rank == 0:
-        msg(f"Seconds to compute offsets: {time_sizes - time_start}", flush=True)
+        msg(f"Seconds to index samples: {time_sizes - time_start}", flush=True)
 
     # TODO: for files where samples are contiguous, this could be read in a single
     #       read operation rather than read per sample.
@@ -130,7 +129,7 @@ def shuffle_dset(args, dset):
     args.distctx.barrier()
     time_shufbuf = time.time()
     if rank == 0:
-        msg(f"Seconds to prepare shuffle buffer: {time_shufbuf - time_sizes}", flush=True)
+        msg(f"Seconds to read samples: {time_shufbuf - time_sizes}", flush=True)
 
     # Each process randomly shuffles its set of samples.
     # We do this by just shuffling a list of local index values.
@@ -146,7 +145,7 @@ def shuffle_dset(args, dset):
     args.distctx.barrier()
     time_shuffle = time.time()
     if rank == 0:
-        msg(f"Seconds to shuffle: {time_shuffle - time_shufbuf}", flush=True)
+        msg(f"Seconds for local shuffle: {time_shuffle - time_shufbuf}", flush=True)
 
     # Randomly pick ranks to draw each sample.
     # This creates a list with one entry for each sample a rank has.
@@ -159,6 +158,11 @@ def shuffle_dset(args, dset):
             ordered[rank_start : rank_start + c] = r
             rank_start += c
         rng.shuffle(ordered)
+
+    args.distctx.barrier()
+    time_order = time.time()
+    if rank == 0:
+        msg(f"Seconds for global shuffle: {time_order - time_shuffle}", flush=True)
 
     # Open output file for shared writing, pre-truncate to its final size.
     # On some file systems, truncating in advance helps speed up the write.
