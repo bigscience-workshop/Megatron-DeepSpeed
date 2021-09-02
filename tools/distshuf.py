@@ -191,12 +191,12 @@ def shuffle_dset(args, dset):
             # collect a batch of samples to write to the final file.
             batches = []
             for r in range(numranks):
-                batch = None
+                maxsize = min(batch_size, samples_remaining)
+                batch = np.zeros(maxsize, dtype=np.int64)
                 if rank == 0:
-                    maxsize = min(batch_size, samples_remaining)
                     sample_start = num_samples - samples_remaining
-                    batch = ordered[sample_start : sample_start + maxsize].tolist()
-                batch = args.distctx.bcast_list(batch, root=0)
+                    batch[:] = ordered[sample_start : sample_start + maxsize]
+                MPI.COMM_WORLD.Bcast(batch, root=0)
                 batches.append(batch)
                 samples_remaining -= len(batch)
 
@@ -216,13 +216,13 @@ def shuffle_dset(args, dset):
                 sendindex = []
                 sendoffsets = []
                 sendsizes = []
-                for i, srcrank in enumerate(batch):
-                    if srcrank == rank:
-                        local_index = samplelist[next_sample]
-                        next_sample += 1
-                        sendindex.append(i)
-                        sendoffsets.append(shufbufoffsets[local_index])
-                        sendsizes.append(sizes[local_index])
+                send_index_list = np.argwhere(batch == rank)
+                for i in send_index_list:
+                    local_index = samplelist[next_sample]
+                    next_sample += 1
+                    sendindex.append(i[0])
+                    sendoffsets.append(shufbufoffsets[local_index])
+                    sendsizes.append(sizes[local_index])
                 sendindex_all.append(sendindex)
                 sendoffsets_all.append(sendoffsets)
                 sendsizes_all.append(sendsizes)
@@ -248,9 +248,11 @@ def shuffle_dset(args, dset):
             pointers = dict()
             buffers = dict()
             for dist in range(numranks):
-                # This barrier is not strictly necessary, but it's cheap and it helps with flow control
-                # by keeping procs in step with each other.
-                args.distctx.barrier()
+                # This barrier is not strictly necessary, but it could help with flow control
+                # by keeping procs in step with each other to prevent too many procs flooding
+                # the same destination with messages.  One could also implement a go-ahead message
+                # from the destination to each sender.
+                #args.distctx.barrier()
 
                 if dist == 0:
                     # Receive from ourself
@@ -341,7 +343,7 @@ def shuffle_dset(args, dset):
                         estbytes = totalwritten
                         byterate = estbytes / elapsed / (1024.0 * 1024.0) if elapsed > 0.0 else 0.0
                         percent = totalwritten * 100.0 / filesize
-                        msg(f"{rank}: Wrote {totalwritten} of {filesize} bytes ({percent:0.2f}%) in {int(elapsed)} secs, {byterate:0.3f} MB/s", flush=True)
+                        msg(f"Wrote {totalwritten} of {filesize} bytes ({percent:0.2f}%) in {int(elapsed)} secs, {byterate:0.3f} MB/s", flush=True)
 
             # Wait for everyone one to finish writing,
             # and print some stats for this pass.
@@ -356,7 +358,7 @@ def shuffle_dset(args, dset):
                 msg(f"  write {time_end_write    - time_end_exchange}", flush=True)
 
     if rank == 0 and progress_interval > 0.0:
-        msg(f"{args.distctx.rank}: Waiting for ranks to finish ...", flush=True)
+        msg(f"Waiting for ranks to finish ...", flush=True)
 
     args.distctx.allraise_if(err)
 
