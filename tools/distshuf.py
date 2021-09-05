@@ -17,6 +17,22 @@ def msg(msg, flush=False):
     timestamp = time.strftime("%Y-%m-%dT%H:%M:%S")
     print(f"{timestamp}: {msg}", flush=flush)
 
+def get_seed(args):
+    """Acquire common seed value on all ranks to initialize random number generator."""
+    # If user specified a seed on the command line, we use that.
+    if args.seed is not None:
+        return args.seed
+
+    # Otherwise, have rank 0 initialize a random number generator,
+    # generate a random integer, then bcast the random integer
+    # to use as a global seed on all ranks.
+    seed = None
+    if args.distctx.rank == 0:
+        rng = np.random.default_rng()
+        seed = rng.integers(1_000_000_000) # TODO: what's a good max int value?
+    seed = args.distctx.bcast(seed, root=0)
+    return seed
+
 def get_proc_counts(num, num_ranks):
     num_per_rank, remainder = divmod(num, num_ranks)
     return [num_per_rank + 1 if rank < remainder else num_per_rank for rank in range(num_ranks)]
@@ -68,7 +84,8 @@ def shuffle_dset(args, dset):
     # TODO: to use None, we could have rank 0 use None,
     # use that to generate a random seed, and then bcast that seed to all ranks
     # args.seed may be an int (to seed) or None (to not)
-    rng = np.random.default_rng(args.seed)
+    seed = get_seed(args)
+    rng = np.random.default_rng(seed)
 
     rank = args.distctx.rank
     numranks = args.distctx.numranks
@@ -377,7 +394,7 @@ def get_args():
                        help='Dataset name')
     group.add_argument('--output', type=str, required=True,
                        help='Output file name')
-    group.add_argument('--seed', type=int, required=True,
+    group.add_argument('--seed', type=int, default=None,
                        help='Seed to pass to random.seed for shuffle operations.')
     group.add_argument('--torch-backend', type=str, default='gloo', choices = ['gloo', 'mpi'],
                        help='Select torch.distributed backend.')
