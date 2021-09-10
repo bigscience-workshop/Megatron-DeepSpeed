@@ -117,6 +117,27 @@ class ParallelAttention(MegatronModule):
     and returns output of the same size.
     """
 
+    @staticmethod
+    def _build_alibi_tensor(max_seq_len, num_attention_heads):
+        # Based on https://github.com/ofirpress/attention_with_linear_biases/blob/a35aaca144e0eb6b789dfcb46784c4b8e31b7983/fairseq/models/transformer.py#L742
+        """Returns tensor shaped (1, num_attention_heads, 1, max_seq_len)"""
+        def get_slopes(n):
+            def get_slopes_power_of_2(n):
+                start = (2 ** (-2 ** -(math.log2(n) - 3)))
+                ratio = start
+                return [start * ratio ** i for i in range(n)]
+
+            if math.log2(n).is_integer():
+                return get_slopes_power_of_2(n)
+            else:
+                closest_power_of_2 = 2 ** math.floor(math.log2(n))
+                return get_slopes_power_of_2(closest_power_of_2) + get_slopes(2 * closest_power_of_2)[0::2][
+                                                                   :n - closest_power_of_2]
+        slopes = torch.Tensor(get_slopes(num_attention_heads))
+        alibi = slopes.unsqueeze(1).unsqueeze(1) * torch.arange(max_seq_len).unsqueeze(0).unsqueeze(0).expand(num_attention_heads, -1, -1)
+        alibi = alibi.view(num_attention_heads, 1, max_seq_len).unsqueeze(0)
+        return alibi
+
     def __init__(self, init_method,
                  output_layer_init_method, layer_number,
                  attention_type=AttnType.self_attn,
@@ -201,6 +222,8 @@ class ParallelAttention(MegatronModule):
 
         if self.position_embedding_type == PositionEmbeddingType.rotary:
             self.rotary_emb = RotaryEmbedding(self.hidden_size_per_attention_head, precision=args.params_dtype)
+        elif self.position_embedding_type == PositionEmbeddingType.alibi:
+            self.alibi = None
 
     def forward(self, hidden_states, attention_mask, layer_past=None,
                 get_key_value=False, encoder_output=None):
@@ -295,6 +318,8 @@ class ParallelAttention(MegatronModule):
                 seq_len += offset
             cos, sin = self.rotary_emb(value_layer, seq_len=seq_len)
             query_layer, key_layer = apply_rotary_fn(query_layer, key_layer, cos, sin, offset=offset)
+        elif self.position_embedding_type == PositionEmbeddingType.alibi and self.alibi is None:
+             self.alibi = self._build_alibi_tensor(output_size[3], args.num_attention_heads)
 
         # Raw attention scores. [b * np, sq, sk]
         matmul_result = torch.baddbmm(
@@ -305,6 +330,8 @@ class ParallelAttention(MegatronModule):
 
         # change view to [b, np, sq, sk]
         attention_scores = matmul_result.view(*output_size)
+
+        attention_scores += self.alibi[:,:,:output_size[2],:output_size[3]]
 
         # ==================================================
         # Update attention mask for inference. [b, np, sq, sk]
