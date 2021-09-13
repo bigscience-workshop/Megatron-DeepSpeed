@@ -33,13 +33,28 @@ from megatron.testing_utils import (
 set_seed(42)
 
 
-def get_launcher(distributed=True):
+def get_launcher(num_gpus):
     # 1. explicitly set --num_nodes=1 just in case these tests end up run on a multi-node setup
     # - it won't be able to handle that
-    # 2. for now testing with just 2 gpus max (since some quality tests may give different
-    # results with mode gpus because we use very little data)
-    num_gpus = min(2, get_gpu_count()) if distributed else 1
     return f"deepspeed --num_nodes 1 --num_gpus {num_gpus}".split()
+
+def get_3d_dimensions():
+    num_gpus = get_gpu_count()
+
+    # XXX: if we had 8 gpus, could do dp_size too!
+    dp_size = 1
+
+    if num_gpus >= 4:
+        pp_size = 2
+        tp_size = 2
+    elif num_gpus >= 2:
+        pp_size = 2
+        tp_size = 1
+    else:
+        pp_size = 1
+        tp_size = 1
+
+    return pp_size, tp_size, dp_size
 
 
 @require_deepspeed
@@ -57,11 +72,13 @@ class MegDSTestTraining(TestCasePlus):
         data_dir = f"{self.data_dir}/gpt2"
         output_dir = self.get_auto_remove_tmp_dir() # "./xxx", after=False)
 
-        pp_size = max(2, get_gpu_count()) # trying to test pp=2 or pp=1
+        pp_size, tp_size, dp_size = get_3d_dimensions()
+        num_gpus = pp_size * tp_size * dp_size
+
         n_samples = 200 # about 37 iterations
         exit_interval = 20 # some samples in the first half and then some more in the 2nd half after resume
         args = f"""
-            --tensor-model-parallel-size 1
+            --tensor-model-parallel-size {tp_size}
             --pipeline-model-parallel-size {pp_size}
             --distributed-backend nccl
 
@@ -114,7 +131,7 @@ class MegDSTestTraining(TestCasePlus):
         """.split()
 
         script = [f"{src_dir}/pretrain_gpt.py"]
-        launcher = get_launcher()
+        launcher = get_launcher(num_gpus)
 
         cmd = launcher + script + args + ds_args
         # keep for quick debug
