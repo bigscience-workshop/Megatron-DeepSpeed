@@ -164,9 +164,14 @@ def _set_codecarbon_tracker(args):
     output_dir = args.codecarbon_dir
     output_file = f"emissions-{args.rank:03d}.csv"
     logger_preamble = f"r{args.rank:03d}"
-    log_level = "warning"
+    log_level = "error"
     country_iso_code = "FRA"
+
+    # CC was emitting all kinds of warnings about issues with measurements, so the following
+    # settings are supposed to help
     misfire_grace_time = 3
+    measure_power_secs = 60
+    max_instances = 3
 
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     _GLOBAL_CODECARBON_TRACKER = codecarbon.OfflineEmissionsTracker(
@@ -175,6 +180,8 @@ def _set_codecarbon_tracker(args):
         logger_preamble=logger_preamble,
         log_level=log_level,
         misfire_grace_time=misfire_grace_time,
+        measure_power_secs=measure_power_secs,
+        max_instances=max_instances,
         country_iso_code=country_iso_code,
     )
 
