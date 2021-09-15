@@ -211,6 +211,7 @@ def param_size(parameter):
 
 
 def unique_param_count(param_list):
+    # not actually deduplicating tied variables for now (which causes the PP > 1 double-counting bug)
     return sum(dict((p.data_ptr(), param_size(p)) for p in param_list).values())
 
 
