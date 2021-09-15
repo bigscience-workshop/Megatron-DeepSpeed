@@ -155,8 +155,9 @@ class ParallelAttention(MegatronModule):
         self.layer_number = max(1, layer_number)
         self.attention_type = attention_type
         self.attn_mask_type = attn_mask_type
+        self.num_attention_heads = args.num_attention_heads
 
-        projection_size = args.kv_channels * args.num_attention_heads
+        projection_size = args.kv_channels * self.num_attention_heads
 
         # Per attention head and per partition values.
         world_size = mpu.get_tensor_model_parallel_world_size()
@@ -319,7 +320,8 @@ class ParallelAttention(MegatronModule):
             cos, sin = self.rotary_emb(value_layer, seq_len=seq_len)
             query_layer, key_layer = apply_rotary_fn(query_layer, key_layer, cos, sin, offset=offset)
         elif self.position_embedding_type == PositionEmbeddingType.alibi and self.alibi is None:
-             self.alibi = self._build_alibi_tensor(output_size[3], args.num_attention_heads)
+            print(output_size[3], self.num_attention_heads, attention_mask.shape) 
+            self.alibi = self._build_alibi_tensor(output_size[3], self.num_attention_heads).to(device=torch.cuda.current_device())
 
         # Raw attention scores. [b * np, sq, sk]
         matmul_result = torch.baddbmm(
@@ -331,7 +333,8 @@ class ParallelAttention(MegatronModule):
         # change view to [b, np, sq, sk]
         attention_scores = matmul_result.view(*output_size)
 
-        attention_scores += self.alibi[:,:,:output_size[2],:output_size[3]]
+        if self.position_embedding_type == PositionEmbeddingType.alibi:
+            attention_scores += self.alibi[:,:,:output_size[2],:output_size[3]]
 
         # ==================================================
         # Update attention mask for inference. [b, np, sq, sk]
