@@ -16,6 +16,7 @@
 """General utilities."""
 
 import sys
+import warnings
 
 import torch
 from torch import nn
@@ -229,6 +230,7 @@ def get_parameters_in_billions(model, exclude_embeddings=False):
     if exclude_embeddings:
         approx_parameters_in_billions = sum([non_embedding_params(model_module) for model_module in model])
     else:
+        warnings.warn("Parameter count with the embeddings will be inaccurate with PP > 1, as the first and last stage hold several copies of the embeddings")
         approx_parameters_in_billions = unique_param_count([p for model_module in model for p in model_module.parameters()])
 
     return approx_parameters_in_billions*gpus_per_model/(1e9)
