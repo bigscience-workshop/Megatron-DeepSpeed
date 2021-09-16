@@ -167,7 +167,7 @@ def get_ltor_masks_and_position_ids(
     micro_batch_size, seq_length = data.size()
 
     # Attention mask (lower triangular).
-    if reset_attention_mask:
+    if reset_attention_mask or prefix_indices is not None:
         att_mask_batch = micro_batch_size
     else:
         att_mask_batch = 1
