@@ -4,7 +4,16 @@ name: Run all tests
 on:
   push:
     branches:
-      - main
+      - "*"
+    paths:
+      - "megatron/**"
+      - "tests/**"
+      - ".github/**"
+      - "tools/**"
+      - "*.py"
+  # push:
+  #   branches:
+  #     - main
   pull_request_target:
     paths:
       - "**"
