@@ -14,8 +14,6 @@
 # limitations under the License.
 
 """Pretrain BERT for Inverse Cloze Task"""
-
-from functools import partial
 import math
 
 import torch
@@ -33,16 +31,13 @@ from megatron.training import pretrain
 from megatron.utils import average_losses_across_data_parallel_group
 
 
-def pretrain_ict_model_provider(pre_process=True, post_process=True):
+def pretrain_ict_model_provider():
     args = get_args()
-
     model = biencoder_model_provider(
                 only_context_model=False,
                 only_query_model=False,
                 biencoder_shared_query_context_model=\
-                args.biencoder_shared_query_context_model,
-                pre_process=pre_process, post_process=post_process)
-
+                    args.biencoder_shared_query_context_model)
     return model
 
 def get_group_world_size_rank():
@@ -82,9 +77,25 @@ class AllgatherFromDataParallelRegion(torch.autograd.Function):
         output = output_list[rank].contiguous()
         return output
 
-def loss_func(output_tensor):
+def forward_step(data_iterator, model, input_tensor):
+    """Forward step."""
     args = get_args()
-    query_logits, context_logits = output_tensor
+    timers = get_timers()
+
+    # Get the batch.
+    timers('batch-generator').start()
+    query_tokens, query_mask, \
+    context_tokens, context_mask, context_indices = get_ict_batch(data_iterator)
+    timers('batch-generator').stop()
+
+    # Query and Context Types
+    query_types = torch.cuda.LongTensor(*query_tokens.shape).fill_(0)
+    context_types = torch.cuda.LongTensor(*context_tokens.shape).fill_(0)
+
+    # Forward model.
+    query_logits, context_logits = model(query_tokens, query_mask,
+                                    query_types, context_tokens,
+                                    context_mask, context_types)
 
     micro_batch_size = query_logits.shape[0]
     # recall we assert that tensor_model_parallel_size == 1
@@ -125,28 +136,6 @@ def loss_func(output_tensor):
     stats_dict = dict(loss=reduced_losses[0], **topk_acc_dict)
     return loss, stats_dict
 
-
-
-def forward_step(data_iterator, model):
-    """Forward step."""
-    args = get_args()
-    timers = get_timers()
-
-    # Get the batch.
-    timers('batch-generator').start()
-    query_tokens, query_mask, \
-    context_tokens, context_mask, context_indices = get_ict_batch(data_iterator)
-    timers('batch-generator').stop()
-
-    # Query and Context Types
-    query_types = torch.cuda.LongTensor(*query_tokens.shape).fill_(0)
-    context_types = torch.cuda.LongTensor(*context_tokens.shape).fill_(0)
-
-    # Forward model.
-    output_tensor = model(query_tokens, query_mask, query_types, context_tokens,
-                        context_mask, context_types)
-
-    return output_tensor, partial(loss_func)
 
 def train_valid_test_datasets_provider(train_val_test_num_samples):
     """Build train, valid and test datasets."""
