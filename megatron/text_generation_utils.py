@@ -41,13 +41,16 @@ def get_batch(context_tokens):
 
     # Move to GPU.
     tokens = context_tokens.view(args.micro_batch_size, -1).contiguous().cuda()
-    # Get the attention mask and postition ids.
+    # Get the attention mask and position ids.
     attention_mask, _, position_ids = get_ltor_masks_and_position_ids(
         tokens,
         tokenizer.eod,
         args.reset_position_ids,
         args.reset_attention_mask,
-        args.eod_mask_loss)
+        args.eod_mask_loss,
+        prefix_indices=None,
+        loss_on_targets_only=args.loss_on_targets_only
+    )
 
     return tokens, attention_mask, position_ids
 

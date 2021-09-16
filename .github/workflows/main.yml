@@ -2,15 +2,18 @@ name: Run all tests
 # enable to manually trigger the tests
 #on:  workflow_dispatch
 on:
-  push:
+  pull_request_target:
     branches:
       - "*"
-    # paths:
-    #   - "megatron/**"
-    #   - "tests/**"
-    #   - ".github/**"
-    #   - "tools/**"
-    #   - "*.py"
+    paths:
+      - "*"
+  push:
+    paths:
+      - "megatron/**"
+      - "tests/**"
+      - ".github/**"
+      - "tools/**"
+      - "*.py"
 
 # need to figure out how to cancel the previous build if a new push was made the old test is still running
 concurrency: # cancel previous build on a new push
