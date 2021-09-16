@@ -42,9 +42,10 @@ def model_provider(pre_process=True, post_process=True):
     args = get_args()
 
     with deepspeed.zero.Init(data_parallel_group=mpu.get_data_parallel_group(),
-                             remote_device=None if args.remote_device=='none' else args.remote_device,
-                             config=args.deepspeed_config,
-                             enabled=args.zero_stage==3):
+                             remote_device=None if args.remote_device == 'none' else args.remote_device,
+                             config_dict_or_path=args.deepspeed_config,
+                             enabled=args.zero_stage == 3,
+                             mpu=mpu):
         if args.deepspeed:
             model = GPTModelPipe(
                 num_tokentypes=0,
