@@ -15,8 +15,6 @@ on:
   #   branches:
   #     - main
   pull_request_target:
-    branches:
-      - "*"
     types: [assigned, opened, synchronize, reopened]
 
 jobs:
