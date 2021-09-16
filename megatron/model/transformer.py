@@ -687,7 +687,7 @@ class ParallelTransformer(MegatronModule):
         if args.position_embedding_type == PositionEmbeddingType.alibi:
             self.alibi = self._build_alibi_tensor(args.seq_length, args.num_attention_heads, args.micro_batch_size).to(torch.cuda.current_device())
             if args.params_dtype == torch.float16:
-                self.alibi = self.alibi.half()
+                self.alibi = self.alibi.to(torch.bfloat16)
         else:
             self.alibi = None
 
@@ -794,4 +794,3 @@ class ParallelTransformer(MegatronModule):
             output = [output, presents]
 
         return output
-
