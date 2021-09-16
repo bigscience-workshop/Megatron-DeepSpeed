@@ -615,7 +615,7 @@ class ParallelTransformer(MegatronModule):
                                                                    :n - closest_power_of_2]
         slopes = torch.Tensor(get_slopes(num_attention_heads))
         alibi = slopes.unsqueeze(1).unsqueeze(1) * torch.arange(max_seq_len).unsqueeze(0).unsqueeze(0).expand(num_attention_heads, -1, -1)
-        alibi = alibi.view(num_attention_heads, 1, max_seq_len).repeat(batch_size, 1, 1)
+        alibi = alibi.repeat(batch_size, 1, 1)
         return alibi
 
     def __init__(self, init_method, output_layer_init_method,
