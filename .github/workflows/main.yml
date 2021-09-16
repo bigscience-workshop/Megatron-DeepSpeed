@@ -1,6 +1,6 @@
 name: Run all tests
 # enable to manually trigger the tests
-#on:  workflow_dispatch
+# on:  workflow_dispatch
 on:
   pull_request_target:
     paths:
