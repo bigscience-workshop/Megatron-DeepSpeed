@@ -2,19 +2,21 @@ name: Run all tests
 # enable to manually trigger the tests
 # on:  workflow_dispatch
 on:
-  push:
-    branches:
-      - "*"
-    paths:
-      - "megatron/**"
-      - "tests/**"
-      - ".github/**"
-      - "tools/**"
-      - "*.py"
+  # push:
+  #   branches:
+  #     - "*"
+  #   paths:
+  #     - "megatron/**"
+  #     - "tests/**"
+  #     - ".github/**"
+  #     - "tools/**"
+  #     - "*.py"
   # push:
   #   branches:
   #     - main
   pull_request_target:
+    branches:
+      - "*"
     paths:
       - "**"
     types: [assigned, opened, synchronize, reopened]
