@@ -95,14 +95,13 @@ class MegDSTestPreprocessing(TestCasePlus):
             self.assertTrue(Path(tgt_path).exists(), )
             self.assertTrue(filecmp.cmp(tgt_path, ref_path, shallow=False))
 
-    @unittest.skip("Skip test until data is fixed.")
     def test_process_data_microsoft(self):
         """We want to be stable to Microsoft version."""
         src_dir = self.src_dir
         data_dir = f"{self.data_dir}/gpt2"
         output_dir = self.get_auto_remove_tmp_dir()  # "./xxx", after=False)
 
-        input_path = f"{self.tests_dir}/tools/openwebtext-1000.jsonl"
+        input_path = f"{self.tests_dir}/data/gpt2/openwebtext-1000.jsonl"
 
         output_prefix = f"{output_dir}/test-ds-meg-gpt2-openwebtext"
 

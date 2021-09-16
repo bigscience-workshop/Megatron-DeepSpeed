@@ -71,13 +71,16 @@ def process_batch(batch):
     labels = tokens_[:, 1:].contiguous()
     tokens = tokens_[:, :-1].contiguous()
 
-    # Get the masks and postition ids.
+    # Get the masks and position ids.
     attention_mask, _, position_ids = get_ltor_masks_and_position_ids(
         tokens,
         tokenizer.eod,
         args.reset_position_ids,
         args.reset_attention_mask,
-        args.eod_mask_loss)
+        args.eod_mask_loss,
+        prefix_indices=None,
+        loss_on_targets_only=args.loss_on_targets_only
+    )
 
     return tokens, labels, attention_mask, position_ids, loss_mask
 
