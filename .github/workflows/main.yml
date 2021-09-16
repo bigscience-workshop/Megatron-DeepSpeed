@@ -19,6 +19,7 @@ on:
       - "*"
     paths:
       - "**"
+    types: [assigned, opened, edited, synchronize, reopened]
 
 jobs:
 
