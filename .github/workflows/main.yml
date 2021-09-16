@@ -2,8 +2,8 @@ name: Run all tests
 # enable to manually trigger the tests
 #on:  workflow_dispatch
 on:
-  push:
-    branches:
+  pull_request_target:
+    paths:
       - "*"
 
 jobs:
