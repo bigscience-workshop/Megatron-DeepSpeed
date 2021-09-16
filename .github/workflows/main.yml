@@ -2,12 +2,13 @@ name: Run all tests
 # enable to manually trigger the tests
 # on:  workflow_dispatch
 on:
+  push:
+    branches:
+      - main
   pull_request_target:
     paths:
       - "**"
-  push:
-    paths:
-      - main
+    types: [assigned, opened, synchronize, reopened]
 
 jobs:
 
