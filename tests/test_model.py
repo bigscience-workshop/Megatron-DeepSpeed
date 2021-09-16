@@ -6,7 +6,7 @@ import deepspeed
 import torch
 
 from megatron import initialize_megatron, get_args, get_tokenizer, global_vars
-from megatron.testing_utils import TestCasePlus
+from megatron.testing_utils import TestCasePlus, mockenv_context
 from megatron.training import setup_model_and_optimizer
 from pretrain_gpt import model_provider as gpt_model_provider, get_batch_pipe as get_gpt_batch_pipe
 from pretrain_prefix_lm import model_provider as prefix_lm_model_provider, get_batch_pipe as get_prefix_lm_batch_pipe
@@ -71,7 +71,10 @@ def equal_vectors(tensor1, tensor2, dim=-1):
 class MyTestCase(TestCasePlus):
     @classmethod
     def setUpClass(cls) -> None:
-        deepspeed.init_distributed(auto_mpi_discovery=False)
+        with mockenv_context(**dict(
+            MASTER_ADDR="localhost", MASTER_PORT="9994", RANK="0", LOCAL_RANK="0", WORLD_SIZE="1"
+        )):
+            deepspeed.init_distributed(auto_mpi_discovery=False)
 
     def setUp(self) -> None:
         super().setUp()
