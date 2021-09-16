@@ -17,9 +17,7 @@ on:
   pull_request_target:
     branches:
       - "*"
-    paths:
-      - "**"
-    types: [assigned, opened, edited, synchronize, reopened]
+    types: [assigned, opened, synchronize, reopened]
 
 jobs:
 
