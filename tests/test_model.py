@@ -71,7 +71,7 @@ def equal_vectors(tensor1, tensor2, dim=-1):
 class MyTestCase(TestCasePlus):
     @classmethod
     def setUpClass(cls) -> None:
-        deepspeed.init_distributed()
+        deepspeed.init_distributed(auto_mpi_discovery=False)
 
     def setUp(self) -> None:
         super().setUp()
