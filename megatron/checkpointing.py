@@ -22,6 +22,7 @@ import numpy as np
 
 import torch
 
+from megatron.global_vars import codecarbon_tracker_flush
 from megatron import (get_args,
                       mpu,
                       print_rank_0,
@@ -135,7 +136,7 @@ def save_checkpoint(iteration, model, optimizer, lr_scheduler):
                 for i in range(len(model)):
                     mpu.set_virtual_pipeline_model_parallel_rank(i)
                     state_dict['model%d' % i] = model[i].state_dict_for_save_checkpoint()
-            
+
             # Optimizer stuff.
             if not args.no_save_optim:
                 if optimizer is not None:
@@ -182,6 +183,11 @@ def save_checkpoint(iteration, model, optimizer, lr_scheduler):
     # Wait so everyone is done (not necessary)
     if torch.distributed.is_initialized():
         torch.distributed.barrier()
+
+    # since the code can be exited or aborted in various places we use the checkpoint saving as
+    # a save saving point for the codecarbon tracker. If the program doesn't run to its normal
+    # end, then only the data since the last saved checkpoint will be lost.
+    codecarbon_tracker_flush()
 
 def _transpose_first_dim(t, num_splits, num_splits_first, model):
     input_shape = t.size()
@@ -353,6 +359,8 @@ def load_checkpoint(model, optimizer, lr_scheduler, load_arg='load', strict=True
         update_num_microbatches(consumed_samples=args.consumed_train_samples)
         args.consumed_valid_samples = getattr(checkpoint_args,
                                               'consumed_valid_samples', 0)
+        args.gigaflos_no_embeds = getattr(checkpoint_args,
+                                          'gigaflos_no_embeds', 0)
     else:
         print_rank_0('could not find arguments in the checkpoint ...')
 
@@ -417,7 +425,7 @@ def load_checkpoint(model, optimizer, lr_scheduler, load_arg='load', strict=True
 def load_biencoder_checkpoint(model, only_query_model=False,
         only_context_model=False, custom_load_path=None):
     """
-    selectively load retrieval models for indexing/retrieving 
+    selectively load retrieval models for indexing/retrieving
     from saved checkpoints
     """
 

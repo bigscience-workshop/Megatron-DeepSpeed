@@ -43,7 +43,7 @@ from megatron.initialize import initialize_megatron
 from megatron.initialize import write_args_to_tensorboard
 from megatron.learning_rates import AnnealingLR
 from megatron.model import DistributedDataParallel as LocalDDP
-from megatron.utils import check_adlr_autoresume_termination
+from megatron.utils import check_adlr_autoresume_termination, get_parameters_in_billions
 from megatron.utils import unwrap_model
 from megatron.data.data_samplers import build_pretraining_data_loader
 from megatron.utils import calc_params_l2_norm
@@ -51,6 +51,7 @@ from megatron.schedules import forward_backward_no_pipelining
 from megatron.schedules import forward_backward_pipelining_without_interleaving
 from megatron.schedules import forward_backward_pipelining_with_interleaving
 from megatron.utils import report_memory, flops_calculator
+from megatron.global_vars import codecarbon_tracker_start, codecarbon_tracker_stop
 
 import deepspeed
 
@@ -95,6 +96,8 @@ def pretrain(train_valid_test_dataset_provider,
     initialize_megatron(extra_args_provider=extra_args_provider,
                         args_defaults=args_defaults)
 
+    codecarbon_tracker_start()
+
     # Adjust the startup time so it reflects the largest value.
     # This will be closer to what scheduler will see (outside of
     # image ... launches.
@@ -113,6 +116,8 @@ def pretrain(train_valid_test_dataset_provider,
     # Model, optimizer, and learning rate.
     timers('model-and-optimizer-setup').start()
     model, optimizer, lr_scheduler = setup_model_and_optimizer(model_provider)
+    print(f'estimated model parameters: {get_parameters_in_billions(model)}')
+    print(f'estimated model parameters without embeddings: {get_parameters_in_billions(model, exclude_embeddings=True)}')
     timers('model-and-optimizer-setup').stop()
     print_datetime('after model, optimizer, and learning rate '
                    'scheduler are built')
@@ -161,6 +166,9 @@ def pretrain(train_valid_test_dataset_provider,
         evaluate_and_print_results(prefix, forward_step_func,
                                    test_data_iterator, model,
                                    0, True)
+
+    codecarbon_tracker_stop()
+
 
 def update_train_iters(args):
 
@@ -380,7 +388,7 @@ def train_step(forward_step_func, data_iterator,
         assert isinstance(model[0], deepspeed.PipelineEngine), model
         loss = model[0].train_batch(data_iter=data_iterator)
         skipped_iter = 0
-        grad_norm = 0.
+        grad_norm = model[0].get_global_grad_norm()
         num_zeros_in_grad = 0
         return {'lm loss' : loss}, skipped_iter, grad_norm, num_zeros_in_grad
 
@@ -545,7 +553,7 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
                        total_loss_dict[skipped_iters_key]
 
     # Tensorboard values.
-    if writer and (iteration % args.tensorboard_log_interval == 0 ) and \
+    if writer and (iteration % args.tensorboard_log_interval == 0) and \
        is_last_rank():
         writer.add_scalar('steps-vs-samples/y=steps,x=samples', iteration, args.consumed_train_samples)
         writer.add_scalar('steps-vs-samples/y=samples,x=steps', args.consumed_train_samples, iteration)
@@ -561,6 +569,8 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
             writer.add_scalar(f"lm-loss-training/{key}", loss_dict[key], iteration)
             writer.add_scalar(f"lm-loss-training/{key}" + ' vs samples', loss_dict[key],
                               args.consumed_train_samples)
+            writer.add_scalar(f"lm-loss-training/{key}" + ' vs gigaflos (without embeddings)', loss_dict[key],
+                              args.gigaflos_no_embeds)
         if args.log_loss_scale_to_tensorboard:
             writer.add_scalar('loss-scale/loss-scale', loss_scale, iteration)
             writer.add_scalar('loss-scale/loss-scale vs samples', loss_scale,
@@ -584,8 +594,7 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
     if iteration % args.log_interval == 0:
         elapsed_time = timers('interval-time').elapsed()
         elapsed_time_per_iteration = elapsed_time / total_iterations
-        # Changed `torch.distributed.get_rank() == 0` to `is_last_rank()` as a writing condition.
-        # Bug fix as detailed in this issue: https://github.com/NVIDIA/Megatron-LM/issues/129
+        # only the last rank process has a non-None _GLOBAL_TENSORBOARD_WRITER
         if writer and is_last_rank():
             if args.log_timers_to_tensorboard:
                 writer.add_scalar('iteration-time/iteration-time',
@@ -648,6 +657,8 @@ def save_checkpoint_and_time(iteration, model, optimizer, lr_scheduler):
 def train(forward_step_func, model, optimizer, lr_scheduler,
           train_data_iterator, valid_data_iterator):
     """Train the model function."""
+    print(f"Number of parameters: {get_parameters_in_billions(model)} billion")
+    print(f"Number of parameters without embeddings: {get_parameters_in_billions(model, exclude_embeddings=True)} billion")
     args = get_args()
     timers = get_timers()
 
@@ -684,9 +695,11 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
                        optimizer,
                        lr_scheduler)
         iteration += 1
-        args.consumed_train_samples += mpu.get_data_parallel_world_size() * \
+        new_samples = mpu.get_data_parallel_world_size() * \
                                        args.micro_batch_size * \
                                        get_num_microbatches()
+        args.consumed_train_samples += new_samples
+        args.gigaflos_no_embeds += (6 * new_samples * args.seq_length * get_parameters_in_billions(model, exclude_embeddings=True))
 
         # Logging.
         if args.deepspeed:
@@ -828,11 +841,16 @@ def evaluate_and_print_results(prefix, forward_step_func,
             writer.add_scalar(f'lm-loss-validation/{key} validation vs samples',
                               total_loss_dict[key].item(),
                               args.consumed_train_samples)
+            writer.add_scalar(f'lm-loss-validation/{key} validation vs gigaflos (without embeddings)',
+                              total_loss_dict[key].item(),
+                              args.gigaflos_no_embeds)
             if args.log_validation_ppl_to_tensorboard:
                 writer.add_scalar(f'lm-loss-validation/{key} validation ppl', ppl,
                                   iteration)
                 writer.add_scalar(f'lm-loss-validation/{key} validation ppl vs samples',
                                   ppl, args.consumed_train_samples)
+                writer.add_scalar(f'lm-loss-validation/{key} validation ppl vs gigaflos (without embeddings)',
+                                  ppl, args.gigaflos_no_embeds)
 
     length = len(string) + 1
     print_rank_last('-' * length)

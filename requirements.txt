@@ -1,5 +1,12 @@
-pybind11
-torch
-six
-regex
+datasets
+nltk
 numpy
+pybind11
+regex
+six
+tensorboard
+torch
+transformers
+DeepSpeed @ git+https://github.com/microsoft/DeepSpeed.git@big-science
+# edit to a higher SHA or future release if needed
+codecarbon @ git+https://github.com/mlco2/codecarbon.git@e6c3863

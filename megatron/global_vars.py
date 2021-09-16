@@ -19,6 +19,8 @@ import os
 import sys
 import time
 
+from pathlib import Path
+
 import torch
 
 from megatron.tokenizer import build_tokenizer
@@ -29,9 +31,9 @@ _GLOBAL_ARGS = None
 _GLOBAL_NUM_MICROBATCHES_CALCULATOR = None
 _GLOBAL_TOKENIZER = None
 _GLOBAL_TENSORBOARD_WRITER = None
+_GLOBAL_CODECARBON_TRACKER = None
 _GLOBAL_ADLR_AUTORESUME = None
 _GLOBAL_TIMERS = None
-
 
 def get_args():
     """Return arguments."""
@@ -63,6 +65,10 @@ def get_tensorboard_writer():
     to check if it is initialized."""
     return _GLOBAL_TENSORBOARD_WRITER
 
+def get_codecarbon_tracker():
+    """Return codecarbon tracker. It can be None so no need
+    to check if it is initialized."""
+    return _GLOBAL_CODECARBON_TRACKER
 
 def get_adlr_autoresume():
     """ADLR autoresume object. It can be None so no need
@@ -86,6 +92,7 @@ def set_global_variables(extra_args_provider=None, args_defaults={},
     if args.vocab_file or args.tokenizer_name_or_path:
         _ = _build_tokenizer(args)
     _set_tensorboard_writer(args)
+    _set_codecarbon_tracker(args)
     _set_adlr_autoresume(args)
     _set_timers()
 
@@ -143,6 +150,67 @@ def _set_tensorboard_writer(args):
             print('WARNING: TensorBoard writing requested but is not '
                   'available (are you using PyTorch 1.1.0 or later?), '
                   'no TensorBoard logs will be written.', flush=True)
+
+
+def _set_codecarbon_tracker(args):
+    global _GLOBAL_CODECARBON_TRACKER
+    if not hasattr(args, 'codecarbon_dir') or args.codecarbon_dir is None:
+        return
+
+    import codecarbon
+    if args.rank == 0:
+        print('> setting codecarbon ...')
+
+    output_dir = args.codecarbon_dir
+    output_file = f"emissions-{args.rank:03d}.csv"
+    logger_preamble = f"r{args.rank:03d}"
+    log_level = "error"
+    country_iso_code = "FRA"
+
+    # CC was emitting all kinds of warnings about issues with measurements, so the following
+    # settings are supposed to help
+    misfire_grace_time = 3
+    measure_power_secs = 60
+    max_instances = 3
+
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    _GLOBAL_CODECARBON_TRACKER = codecarbon.OfflineEmissionsTracker(
+        output_dir=output_dir,
+        output_file=output_file,
+        logger_preamble=logger_preamble,
+        log_level=log_level,
+        misfire_grace_time=misfire_grace_time,
+        measure_power_secs=measure_power_secs,
+        max_instances=max_instances,
+        country_iso_code=country_iso_code,
+    )
+
+
+def codecarbon_tracker_start():
+    global _GLOBAL_CODECARBON_TRACKER
+    if _GLOBAL_CODECARBON_TRACKER is None:
+        return
+
+    #print("CC START")
+    _GLOBAL_CODECARBON_TRACKER.start()
+
+
+def codecarbon_tracker_stop():
+    global _GLOBAL_CODECARBON_TRACKER
+    if _GLOBAL_CODECARBON_TRACKER is None:
+        return
+
+    #print("CC STOP")
+    _GLOBAL_CODECARBON_TRACKER.stop()
+
+
+def codecarbon_tracker_flush():
+    global _GLOBAL_CODECARBON_TRACKER
+    if _GLOBAL_CODECARBON_TRACKER is None:
+        return
+
+    #print("CC FLUSH")
+    _GLOBAL_CODECARBON_TRACKER.flush()
 
 
 def _set_adlr_autoresume(args):

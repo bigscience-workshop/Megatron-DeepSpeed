@@ -22,6 +22,7 @@ import torch
 import deepspeed
 
 from megatron.enums import PositionEmbeddingType
+import megatron
 
 
 def parse_args(extra_args_provider=None, defaults={},
@@ -169,6 +170,7 @@ def parse_args(extra_args_provider=None, defaults={},
     # Consumed tokens.
     args.consumed_train_samples = 0
     args.consumed_valid_samples = 0
+    args.gigaflos_no_embeds = 0
 
     # Iteration-based training.
     if args.train_iters:
@@ -313,6 +315,10 @@ def _add_network_size_args(parser):
                        default=PositionEmbeddingType.absolute,
                        help='Define position embedding type ("absolute" | "rotary"). "absolute" by default.'
                        )
+    group.add_argument('--glu-activation', type=str,
+                       choices=megatron.model.glu_activations.GLU_ACTIVATIONS.keys(),
+                       help='GLU activations to use.'
+                       )
 
     return parser
 
@@ -396,14 +402,14 @@ def _add_training_args(parser):
     group.add_argument('--rampup-batch-size', nargs='*', default=None,
                        help='Batch size ramp up with the following values:'
                        '  --rampup-batch-size <start batch size> '
-                       '                      <batch size incerement> '
+                       '                      <batch size increment> '
                        '                      <ramp-up samples> '
-                       'For example:'
-                       '   --rampup-batch-size 16 8 300000 \ '
-                       '   --global-batch-size 1024'
+                       'For example: '
+                       '   --rampup-batch-size 16 8 300000 '
+                       '   --global-batch-size 1024 '
                        'will start with global batch size 16 and over '
-                       ' (1024 - 16) / 8 = 126 intervals will increase'
-                       'the batch size linearly to 1024. In each interval'
+                       ' (1024 - 16) / 8 = 126 intervals will increase '
+                       'the batch size linearly to 1024. In each interval '
                        'we will use approximately 300000 / 126 = 2380 samples.')
     group.add_argument('--checkpoint-activations', action='store_true',
                        help='Checkpoint activation to allow for training '
@@ -452,6 +458,8 @@ def _add_training_args(parser):
                        help='Run optimizer on CPU')
     group.add_argument('--cpu_torch_adam', action='store_true',
                        help='Use Torch Adam as optimizer on CPU.')
+    group.add_argument('--codecarbon-dir', type=str, default=None,
+                       help='Write CodeCarbon logs to this directory.')
 
     return parser
 

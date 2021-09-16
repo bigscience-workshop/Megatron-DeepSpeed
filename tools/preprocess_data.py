@@ -21,10 +21,9 @@ import multiprocessing
 import os
 import sys
 
-from megatron.data.indexed_dataset import best_fitting_dtype
-
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
                                              os.path.pardir)))
+from megatron.data.indexed_dataset import best_fitting_dtype
 import time
 
 import torch
