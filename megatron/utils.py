@@ -320,10 +320,10 @@ def get_prefix_indices(data, eod_token, partial_prefix_indices, reset_attention_
 
     assert partial_prefix_indices is None or len(partial_prefix_indices) == micro_batch_size, f"partial_prefix_indices has to be None or its length equal to {micro_batch_size}, got {len(partial_prefix_indices)}"
     for batch_id in range(micro_batch_size):
-        prefix_indices.append([])
-
         # Prefix lm per document.
         if reset_attention_mask:
+            prefix_indices.append([])
+
             # Compute the index of all eod tokens in data.
             eod_indices = (data[batch_id] == eod_token).nonzero().squeeze(-1)
 
@@ -356,6 +356,7 @@ def get_prefix_indices(data, eod_token, partial_prefix_indices, reset_attention_
             assert partial_prefix_indices is None or isinstance(partial_prefix_indices[batch_id], int), \
                 f"Per document prefix has to store an int for each row, got {partial_prefix_indices[batch_id]}"
 
+            prefix_index: int
             if partial_prefix_indices is None or partial_prefix_indices[batch_id] is None:
                 # We need to randomly generate a prefix index
                 prefix_index = randint(0, seq_length - 1)
@@ -363,5 +364,6 @@ def get_prefix_indices(data, eod_token, partial_prefix_indices, reset_attention_
                 # We get value from partial_prefix_indices, and run validation on that value
                 prefix_index = partial_prefix_indices[batch_id]
                 assert 0 <= prefix_index < seq_length - 1, f"Prefix index needs to be between documents indices, 0 <= {prefix_index} < {seq_length - 1} should be True."
-            prefix_indices[batch_id].append(prefix_index)
+            prefix_indices.append(prefix_index)
+
     return prefix_indices

@@ -145,7 +145,7 @@ def get_batch_pipe(data):
         loss_on_targets_only=args.loss_on_targets_only
     )
 
-    return (tokens, position_ids, attention_mask), (labels, loss_mask)
+    return (tokens, position_ids, attention_mask), (labels, loss_mask), prefix_indices
 
 def loss_func(loss_mask, output_tensor):
     losses = output_tensor.float()
