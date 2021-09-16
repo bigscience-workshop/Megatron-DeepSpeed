@@ -188,7 +188,7 @@ def get_ltor_masks_and_position_ids(
     if reset_position_ids:
         position_ids = position_ids.clone()
 
-    if reset_position_ids or reset_attention_mask:
+    if reset_position_ids or reset_attention_mask or prefix_indices is not None:
         # Loop through the batches:
         for b in range(micro_batch_size):
 
@@ -295,18 +295,20 @@ def get_prefix_indices(data, eod_token, partial_prefix_indices, reset_attention_
     assert partial_prefix_indices is None or len(partial_prefix_indices) == micro_batch_size, f"partial_prefix_indices has to be None or its length equal to {micro_batch_size}, got {len(partial_prefix_indices)}"
     for batch_id in range(micro_batch_size):
         prefix_indices.append([])
-        # Compute the index of all eod tokens in data.
-        eod_indices = (data[batch_id] == eod_token).nonzero().squeeze(-1)
-
-        # If the last eod token is not the last token of the sequence, we suppose that there is a partial document
-        # We treat this case as if we add an eod token at the end of the sequence.
-        if data[batch_id][-1] != eod_token:
-            eod_indices = torch.cat(
-                (eod_indices, torch.tensor([len(data[batch_id])], dtype = eod_indices.dtype, device = eod_indices.device))
-            )
 
         # Prefix lm per document.
         if reset_attention_mask:
+            # Compute the index of all eod tokens in data.
+            eod_indices = (data[batch_id] == eod_token).nonzero().squeeze(-1)
+
+            # If the last eod token is not the last token of the sequence, we suppose that there is a partial document
+            # We treat this case as if we add an eod token at the end of the sequence.
+            if data[batch_id][-1] != eod_token:
+                eod_indices = torch.cat(
+                    (eod_indices,
+                     torch.tensor([len(data[batch_id])], dtype=eod_indices.dtype, device=eod_indices.device))
+                )
+
             prev_index = 0
             assert partial_prefix_indices is None or len(partial_prefix_indices[batch_id]) == len(eod_indices), f"The number of prefixes has to match the number of documents, complete or partial. Got {len(partial_prefix_indices[batch_id])} prefixes and {len(eod_indices)} documents"
 
