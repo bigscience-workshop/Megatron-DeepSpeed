@@ -205,7 +205,7 @@ class GPTModelPipe(PipelineModule,MegatronModule):
                 self.specs.append(lambda x: x.transpose(0, 1).contiguous())
             else:
                 # EmbeddingPipe returns attention mask as well
-                self.specs.append(lambda x: (elt.transpose(0, 1).contiguous() for elt in x))
+                self.specs.append(lambda x: tuple((elt.transpose(0, 1).contiguous() for elt in x)))
 
         for layer_idx in range(args.num_layers):
             self.specs.append(
