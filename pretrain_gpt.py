@@ -48,14 +48,6 @@ def model_provider(pre_process=True, post_process=True):
                              enabled=args.zero_stage == 3,
                              mpu=mpu):
         if args.deepspeed:
-            model = GPTModelPipe(
-                num_tokentypes=0,
-                parallel_output=True
-            )
-            # This is a hack to give us a reference to get_batch_pipe from within training.py
-            # We need to call model.set_batch_fn after deepspeed.initialize
-            model._megatron_batch_fn = get_batch_pipe
-
             # Precompute the attention mask and store it in args. This avoids having to
             # pipeline it as an activation during training. The mask is constant, and thus
             # we can reuse it.
@@ -73,6 +65,13 @@ def model_provider(pre_process=True, post_process=True):
             # must be bool or the training crashes expecting bool, but getting Half
             args.attn_mask = attention_mask.to(torch.bool)
 
+            model = GPTModelPipe(
+                num_tokentypes=0,
+                parallel_output=True
+            )
+            # This is a hack to give us a reference to get_batch_pipe from within training.py
+            # We need to call model.set_batch_fn after deepspeed.initialize
+            model._megatron_batch_fn = get_batch_pipe
         else:
             model = GPTModel(
                 num_tokentypes=0,
