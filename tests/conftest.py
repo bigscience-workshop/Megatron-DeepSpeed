@@ -31,7 +31,7 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 
 
 def pytest_sessionstart(session):
-    # since some of us use use deepspeed@master for other uses make sure we test against the correct
+    # since some of us use deepspeed@master for other uses make sure we test against the correct
     # deepspeed branch. eventually this won't be needed by for now we use a frozen branch
     if deepspeed.__git_branch__ != "big-science":
         raise ValueError(f"detected deepspeed.__git_branch__={deepspeed.__git_branch__ }, but needing branch='big-science'.\n"
