@@ -170,6 +170,7 @@ def parse_args(extra_args_provider=None, defaults={},
     # Consumed tokens.
     args.consumed_train_samples = 0
     args.consumed_valid_samples = 0
+    args.gigaflos_no_embeds = 0
 
     # Iteration-based training.
     if args.train_iters:
@@ -696,9 +697,11 @@ def _add_data_args(parser):
                        help='Reset posistion ids after end-of-document token.')
     group.add_argument('--reset-attention-mask', action='store_true',
                        help='Reset self attention maske after '
-                       'end-of-document token.')
+                       'end-of-document token. Attention between tokens from different documents is null.')
     group.add_argument('--eod-mask-loss', action='store_true',
                        help='Mask loss for the end of document tokens.')
+    group.add_argument('--loss-on-targets-only', action='store_true',
+                       help='Mask loss on input sequence.')
 
     return parser
 

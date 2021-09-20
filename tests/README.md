@@ -20,3 +20,7 @@ Important: the first time you run this it can take some minutes to build all the
 For various other options please see the doc mentioned at the very top.
 
 You will want to have at least 1 gpu available, best 2 to run the tests.
+
+## CI
+
+The CI setup is documented [here](../.github/workflows/ci.md).
