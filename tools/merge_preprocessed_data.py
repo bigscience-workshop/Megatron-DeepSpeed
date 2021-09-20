@@ -7,13 +7,14 @@ collectively merge datasets into a single file.
 
 The serial mode is simpler to use.
 
-The parallel mode can improve performance when larging many or
-large datasets.  The distributed mode requires one to write
-the output dataset to a POSIX-complaint file system that supports
-shared parallel access to the file as different processes write
-to different regions of the output file simultaneously.
+Provides that the file system permits it, the parallel mode
+can improve performance when merging many dataset files.
+The distributed mode requires one to write the output dataset to
+a POSIX-complaint file system that supports shared parallel
+access to the file as different processes write to different
+regions of the output file simultaneously.
 
-To operate in serial mode:
+To run in serial mode:
 
   python tools/merge_preprocessed_data.py \
     --datasets \
@@ -22,7 +23,7 @@ To operate in serial mode:
       meg-gpt2-oscar-en-500-p3_text_document \
     --output-prefix meg-gpt2_oscar_text_document
 
-To operate in distributed mode:
+To run in distributed mode:
 
   MASTER_ADDR="localhost"
   MASTER_PORT=12345
