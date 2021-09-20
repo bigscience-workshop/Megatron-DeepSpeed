@@ -106,7 +106,7 @@ def main():
         # Ensure that all datasets use the same implementaton.
         for ds in args.datasets:
             ds_impl = infer_dataset_impl(ds)
-            assert ds_impl == dataset_impl, f"Dataset type {ds_impl} in file {ds} does not match type {dataset_impl} from file {args.datasets[0]}"
+            assert ds_impl == dataset_impl, f"Dataset type '{ds_impl}' in file '{ds}' does not match type '{dataset_impl}' from file '{args.datasets[0]}'"
 
         # We use the first dataset to infer the dtype common to all datasets.
         first_dataset = indexed_dataset.make_dataset(args.datasets[0], dataset_impl)
@@ -124,7 +124,7 @@ def main():
         builder.finalize(output_idx_file)
 
     startup_end = time.time()
-    print_rank_0(f"Time to merge: {startup_end - startup_start")
+    print_rank_0(f"Time to merge: {startup_end - startup_start}")
     print_rank_0(f"Merged {len(args.datasets)} datasets to {args.output_prefix}")
 
 if __name__ == "__main__":
