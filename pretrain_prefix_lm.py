@@ -33,6 +33,9 @@ from deepspeed.runtime.utils import see_memory_usage
 import os
 import subprocess
 
+class GPT2ModelPipe(GPTModelPipe):
+    """The biggest hack ever, this forces deepspeed to use bool attentions"""
+
 def model_provider(pre_process=True, post_process=True):
     """Build the model."""
 
@@ -47,7 +50,7 @@ def model_provider(pre_process=True, post_process=True):
                              enabled=args.zero_stage == 3,
                              mpu=mpu):
         if args.deepspeed:
-            model = GPTModelPipe(
+            model = GPT2ModelPipe(
                 num_tokentypes=0,
                 parallel_output=True,
                 prefix_lm=True
