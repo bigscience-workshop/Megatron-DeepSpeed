@@ -1,5 +1,6 @@
 import os
 import stat
+import shutil
 import numpy as np
 
 import torch
@@ -383,3 +384,50 @@ class DistData(object):
     def mtime(self, filename):
         """Lookup file mtime and broadcast to all ranks."""
         return self.stat(filename, stat.ST_MTIME)
+
+    # We stat each file to determine its size, execute a scan to compute
+    # the byte offset where the calling rank should write its data, seek to proper
+    # spot, and copy each file.
+    def concat_files_gather(self, outfile, filelist):
+        """Concatenate files in filelist into a new file given by outfile"""
+        # We first write to a temporary file name.  We rename to the final name
+        # if successful or delete the temporary file if not.
+        # This way if the final name appears, the user knows it's a valid file.
+        tmpfile = outfile + ".tmp"
+
+        # First delete the final file if it already exists
+        self.remove(outfile)
+
+        # Lookup size of each of our files
+        filesizes = [os.stat(f)[stat.ST_SIZE] for f in filelist]
+
+        # Compute total bytes of the final file and the offset
+        # at which this rank will write data from its files.
+        numbytes = sum(filesizes)
+        count = self.sum(numbytes)
+        offset = self.exscan(numbytes)
+
+        # Catch I/O errors from any process
+        err = None
+        try:
+            # Create shared output file and pre-truncate to its final size.
+            with self.open(tmpfile, truncate=count) as fout:
+                # Seek to appropriate starting offset in the merged file.
+                fout.seek(offset)
+
+                # Copy in contents of each of our files.
+                for f in filelist:
+                    with open(f, "rb") as fsrc:
+                        shutil.copyfileobj(fsrc, fout)
+
+        except Exception as e:
+            err = e
+
+        # Check that all ranks wrote successfully.
+        # This will raise an exception all on ranks if we detect
+        # an exception on any rank.
+        self.allraise_if(err)
+
+        # Everyone wrote their part successfully.
+        # Rename the temporary file to the final file.
+        self.rename(tmpfile, outfile)
