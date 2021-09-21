@@ -72,6 +72,7 @@ def get_args():
     # initialize distributed environment if distributed merge requested
     if args.merge == 'distributed':
         if args.torch_backend is None:
+            print_rank_0("Distributed merge using --torch-backend=gloo as default")
             args.torch_backend = 'gloo'
         args.distctx = DistData(backend=args.torch_backend)
 
