@@ -3,18 +3,21 @@ import stat
 import json
 import struct
 import time
+import re
 import numpy as np
 
 class IndexedJSON(object):
-    def __init__(self, filename, distctx, bufsize=16*1024*1024, progress=10.0):
+    def __init__(self, filename, distctx, bufsize=128*1024*1024, log_interval=10.0):
         self.filename = filename # JSON file name
         self.distctx = distctx   # distributed environment for collective ops
         self.bufsize = bufsize   # buffer size used while building index
-        self.numsamples = 0      # number of records in JSON file
-        self.fh_idx = None       # file handle to JSON index file
-        self.fh_json = None      # file handle to JSON file
-        self.time_index = 0      # record cost to construct index
-        self.progress = progress # number of secs between progress msgs (0 to disable)
+        self.log_interval = log_interval # number of secs between progress msgs (0 to disable)
+        self.re_newline = re.compile(r'\n')
+
+        # check that source JSON file exists
+        exists = self.distctx.exists(self.filename)
+        if not exists:
+            raise ValueError("File '{self.filename}' does not exist")
 
         # given a JSON file name, compute the name of its index file
         self.filename_idx = self.index_filename(self.filename)
@@ -38,10 +41,10 @@ class IndexedJSON(object):
 
         # Open the index and the json files for reading.
         # Disable buffering to avoid reading extra bytes we won't use.
-        self.fh_idx = open(self.filename_idx, "rb", buffering=0)
-        self.fh_json = open(self.filename, "rb", buffering=0)
-#        self.fh_idx = open(self.filename_idx, "rb")
-#        self.fh_json = open(self.filename, "rb")
+#        self.fh_idx = open(self.filename_idx, "rb", buffering=0)
+#        self.fh_json = open(self.filename, "rb", buffering=0)
+        self.fh_idx = open(self.filename_idx, "rb")
+        self.fh_json = open(self.filename, "rb")
 
         # Read the header from the index file.
         # This verifies the file format and sets self.idx_version.
@@ -102,6 +105,124 @@ class IndexedJSON(object):
             end = start + num_per_rank
         return start, end
 
+    def scan_newlines2(self, filename, filesize, filename_tmp):
+        """Given an input file and its size, scan for newline chars and write offsets to temporary file."""
+        rank = self.distctx.rank
+        numranks = self.distctx.numranks
+        bufsize = self.bufsize
+
+        time_start = time.time()
+        time_next = time_start + self.log_interval
+
+        # Open input file, identify offset of byte immediately after each newline
+        newlines = []
+        with self.distctx.openread(filename) as f:
+            err = None
+            try:
+                # Get starting and ending byte offset for the calling rank
+                startpos, endpos = self.get_start_end(filesize)
+
+                # Seek to starting byte offset for this rank
+                f.seek(startpos)
+
+                # Compute number of bytes this rank is responsible to read
+                numbytes = endpos - startpos
+
+                numread = 0
+                while numread < numbytes:
+                    # Have each rank read and scan a section of the file.
+                    # Since errors may be likely during I/O, we catch and
+                    # and later check for an exception on any rank.  If any
+                    # rank raises an exception, we raise an exception everywhere.
+                    # each rank reads a section of the file
+                    numtoread = min(bufsize, numbytes - numread)
+                    data = f.read(numtoread)
+
+                    # determine number of bytes we actually read
+                    length = len(data)
+                    if length == 0:
+                        raise IOError("Rank {rank}: Early EOF in '{filename}', read {numread + length} bytes, expected {numbytes} bytes")
+
+                    # scan section for newline chars, and record offset
+                    # of byte immediately following each newline (start of new record)
+                    pos = 0
+                    while pos < length:
+                        found = data.find(b'\n', pos)
+                        if found >= 0:
+                            # We actually store the byte offset to the start
+                            # of the record that would follow the newline char.
+                            newlines.append(startpos + numread + found + 1)
+
+                            # Update our buffer position and keep scanning.
+                            pos = found + 1
+                        else:
+                            # No newlines in the remainder of the buffer
+                            break
+
+                    # bump up number of bytes processed
+                    numread += length
+
+                    # this can take a while, so print progress messages if enabled
+                    if rank == 0 and self.log_interval > 0.0:
+                        time_now = time.time()
+                        if time_now > time_next:
+                            time_next = time_now + self.log_interval
+                            elapsed = time_now - time_start
+                            estbytes = numread * numranks
+                            percent = estbytes * 100.0 / filesize if filesize > 0 else 0.0
+                            byterate = estbytes / elapsed / (1024.0 * 1024.0) if elapsed > 0.0 else 0.0
+                            remaining = (100.0 - percent) * elapsed / percent if percent > 0.0 else 0.0
+                            print(f"Scanned est {estbytes} of {filesize} bytes ({percent:0.2f}%) in {int(elapsed)} secs, "
+                                  f"{byterate:0.3f} MB/s, {int(remaining)} secs left ...", flush=True)
+
+            except Exception as e:
+                err = e
+
+            # Check that all ranks read and scanned their chunk successfully
+            self.distctx.allraise_if(err)
+
+        # Count number of newline chars we found,
+        # and compute sum and offset of newlines across ranks.
+        numrecs = len(newlines)
+        reccount = self.distctx.sum(numrecs)
+        recoffset = self.distctx.exscan(numrecs)
+
+        tmpfile_size = reccount * 8
+        with self.distctx.open(filename_tmp, truncate=tmpfile_size) as ftmp:
+            # Have each rank write the byte offsets for each of its records
+            # to the temporary file.
+            # Since errors may be likely during I/O, we catch and
+            # and later check for an exception on any rank.  If any
+            # rank raises an exception, we raise an exception everywhere.
+            err = None
+            try:
+                # Store offsets as int64
+                vals = np.array(newlines, dtype=np.int64)
+
+                # Write offsets to temporary file
+                pos = recoffset * 8
+                ftmp.seek(pos)
+                ftmp.write(vals.tobytes(order='C'))
+            except Exception as e:
+                err = e
+
+            # Check that all ranks write their chunk successfully
+            self.distctx.allraise_if(err)
+
+        # Wait for all ranks to close the file.
+        self.distctx.barrier()
+
+        # this can take a while, so print progress messages if enabled
+        if rank == 0 and self.log_interval > 0.0:
+            time_now = time.time()
+            elapsed = time_now - time_start
+            byterate = filesize / elapsed / (1024.0 * 1024.0) if elapsed > 0.0 else 0.0
+            print(f"Scanned {filesize} bytes in {int(elapsed)} secs, "
+                  f"{byterate:0.3f} MB/s", flush=True)
+
+        # Return total number of records
+        return reccount
+
     def scan_newlines(self, filename, filesize, filename_tmp):
         """Given an input file and its size, scan for newline chars and write offsets to temporary file."""
         time_start = time.time()
@@ -113,9 +234,11 @@ class IndexedJSON(object):
         # Since this is a collective open, all ranks should raise an exception if any fails.
         with self.distctx.open(filename_tmp) as ftmp:
             # Open input file, we'll count total number of records as we go
-            time_next = time_start + self.progress
+            time_next = time_start + self.log_interval
             rectotal = 0
+#            data = np.empty(bufsize, dtype=np.uint8)
             with self.distctx.openread(filename) as f:
+#            with open(filename) as f:
                 curpos = 0
                 while curpos < filesize:
                     # Have each rank read and scan a section of the file.
@@ -128,6 +251,14 @@ class IndexedJSON(object):
                         offset = curpos + bufsize * rank
                         f.seek(offset)
                         data = f.read(bufsize)
+#                        f.readinto(data)
+
+#                        matchiter = self.re_newline.finditer(data)
+#                        matchiter = self.re_newline.finditer(data.decode("utf-8"))
+#                        newlines = [offset + m.start() + 1 for m in matchiter]
+#                        newlines = np.argwhere(data == ord('\n'))
+#                        newlines += offset + 1
+#                        print(newlines)
 
                         # scan section for newline chars, and record offset
                         # of byte immediately following each newline (start of new record)
@@ -185,10 +316,10 @@ class IndexedJSON(object):
                     curpos += bufsize * numranks
 
                     # this can take a while, so print progress messages if enabled
-                    if rank == 0 and self.progress > 0.0:
+                    if rank == 0 and self.log_interval > 0.0:
                         time_now = time.time()
                         if time_now > time_next:
-                            time_next = time_now + self.progress
+                            time_next = time_now + self.log_interval
                             elapsed = time_now - time_start
                             percent = curpos * 100.0 / filesize if filesize > 0 else 0.0
                             byterate = curpos / elapsed / (1024.0 * 1024.0) if elapsed > 0.0 else 0.0
@@ -206,7 +337,8 @@ class IndexedJSON(object):
         """Given a file with offsets of new records, write an index file."""
         # Create the actual index file.
         # Since this is a collective open, all ranks should raise an exception if any fails.
-        with self.distctx.open(filename_idx) as fidx:
+        index_bytes = 16 + numrecs * 2 * 8
+        with self.distctx.open(filename_idx, truncate=index_bytes) as fidx:
             # Rank 0 writes the index file header.
             err = None
             if self.distctx.rank == 0:
@@ -266,7 +398,7 @@ class IndexedJSON(object):
                     # We write values to the index file in network byte order,
                     # so that the file can be read correctly on any system.
                     if readcount > 0:
-                        pos = data_offset + start * 16
+                        pos = data_offset + start * 2 * 8
                         fidx.seek(pos)
                         fidx.write(vals.astype(">i8").tobytes(order='C'))
 
@@ -305,7 +437,7 @@ class IndexedJSON(object):
         filesize = self.distctx.filesize(filename)
 
         # If progress messages are enabled, print a header about what we're doing
-        if self.distctx.rank == 0 and self.progress > 0.0:
+        if self.distctx.rank == 0 and self.log_interval > 0.0:
             print(f"Indexing '{filename}' of {filesize} bytes ...", flush=True)
 
         # Scan input file for newline characaters to identify starting byte offset
@@ -314,7 +446,7 @@ class IndexedJSON(object):
         # All ranks should throw an exception if any rank does.
         filename_tmp = filename_idx + 'tmp'
         try:
-            numrecs = self.scan_newlines(filename, filesize, filename_tmp)
+            numrecs = self.scan_newlines2(filename, filesize, filename_tmp)
         except Exception as e:
             # Delete the temporary file if we failed to finish writing it.
             self.distctx.remove(filename_tmp)
@@ -339,11 +471,10 @@ class IndexedJSON(object):
         # Wait for everyone again and record how long it took.
         self.distctx.barrier()
         time_end = time.time()
-        self.time_index = time_end - time_start
 
         # if progress messages are enabled, print a summary
-        if self.distctx.rank == 0 and self.progress > 0.0:
-            print(f"Indexed {numrecs} records in '{filename}' in {int(self.time_index)} seconds", flush=True)
+        if self.distctx.rank == 0 and self.log_interval > 0.0:
+            print(f"Indexed {numrecs} records in '{filename}' in {int(time_end - time_start)} seconds", flush=True)
 
     def __str__(self):
         return (f"IndexedJSON (\n"
@@ -383,7 +514,7 @@ class IndexedJSON(object):
 
             # Seek to the right spot in the index file for the given sample id.
             header_size = 16
-            offset_idx = header_size + idx * 16
+            offset_idx = header_size + idx * 2 * 8
             self.fh_idx.seek(offset_idx)
 
             # Read offset and length of record from the index.
