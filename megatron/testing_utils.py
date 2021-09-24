@@ -208,20 +208,9 @@ def get_gpu_count():
     else:
         return 0
 
-def torch_assert_equal(actual, expected, **kwargs):
-    # assert_equal was added around pt-1.9, it does better checks - e.g will check dimensions match
-    if hasattr(torch.testing, "assert_equal"):
-        return torch.testing.assert_equal(actual, expected, **kwargs)
-    else:
-        return torch.allclose(actual, expected, rtol=0.0, atol=0.0)
-
-def torch_assert_close(actual, expected, **kwargs):
-    # assert_close was added around pt-1.9, it does better checks - e.g will check dimensions match
-    if hasattr(torch.testing, "assert_close"):
-        return torch.testing.assert_close(actual, expected, **kwargs)
-    else:
-        kwargs.pop("msg", None) # doesn't have msg arg
-        return torch.allclose(actual, expected, **kwargs)
+def torch_assert_equal(actual, expected):
+    """ emulates the removed torch.testing.assert_equal """
+    torch.testing.assert_close(actual, expected, rtol=0.0, atol=0.0)
 
 
 def is_torch_bf16_available():
