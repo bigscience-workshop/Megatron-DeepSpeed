@@ -223,7 +223,7 @@ def parse_args(extra_args_provider=None, defaults={},
         assert args.encoder_seq_length is not None
         args.seq_length = args.encoder_seq_length
 
-    if args.position_embedding_type == PositionEmbeddingType.absolute:
+    if args.position_embedding_type == PositionEmbeddingType.absolute or args.position_embedding_type == PositionEmbeddingType.alibi:
         assert args.max_position_embeddings is not None
         if args.seq_length is not None:
             assert args.max_position_embeddings >= args.seq_length
@@ -313,7 +313,7 @@ def _add_network_size_args(parser):
     group.add_argument('--position-embedding-type', type=lambda x: PositionEmbeddingType[x],
                        choices=list(PositionEmbeddingType),
                        default=PositionEmbeddingType.absolute,
-                       help='Define position embedding type ("absolute" | "rotary"). "absolute" by default.'
+                       help='Define position embedding type ("absolute" | "rotary" | "alibi"). "absolute" by default.'
                        )
     group.add_argument('--glu-activation', type=str,
                        choices=megatron.model.glu_activations.GLU_ACTIVATIONS.keys(),
