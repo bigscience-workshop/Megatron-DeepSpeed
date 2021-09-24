@@ -170,7 +170,6 @@ def parse_args(extra_args_provider=None, defaults={},
     # Consumed tokens.
     args.consumed_train_samples = 0
     args.consumed_valid_samples = 0
-    args.gigaflos_no_embeds = 0
 
     # Iteration-based training.
     if args.train_iters:
