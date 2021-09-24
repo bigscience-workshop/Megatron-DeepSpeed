@@ -67,14 +67,11 @@ def post_language_model_processing(lm_output, labels, logit_weights,
 class GPTModel(MegatronModule):
     """GPT-2 Language model."""
 
-    def __init__(
-        self,
-        num_tokentypes=0,
-        parallel_output=True,
-        pre_process=True,
-        post_process=True,
-        prefix_lm=False,
-    ):
+    def __init__(self,
+                 num_tokentypes=0,
+                 parallel_output=True,
+                 pre_process=True,
+                 post_process=True):
         super(GPTModel, self).__init__()
         args = get_args()
 
@@ -86,8 +83,7 @@ class GPTModel(MegatronModule):
         self.language_model, self._language_model_key = get_language_model(
             num_tokentypes=num_tokentypes,
             add_pooler=False,
-            # TODO: Change naming of class from GPT to something that encapsulate prefix lm.
-            encoder_attn_mask_type=AttnMaskType.prefix if prefix_lm else AttnMaskType.causal,
+            encoder_attn_mask_type=AttnMaskType.causal,
             init_method=init_method_normal(args.init_method_std),
             scaled_init_method=scaled_init_method_normal(args.init_method_std,
                                                          args.num_layers),
@@ -161,12 +157,9 @@ def CrossEntropy(output, labels):
 class GPTModelPipe(PipelineModule,MegatronModule):
     """GPT-2 Language model."""
 
-    def __init__(
-        self,
-        num_tokentypes=0,
-        parallel_output=True,
-        prefix_lm=False
-    ):
+    def __init__(self,
+                 num_tokentypes=0,
+                 parallel_output=True):
         args = get_args()
         self.parallel_output = parallel_output
 
@@ -206,8 +199,7 @@ class GPTModelPipe(PipelineModule,MegatronModule):
                     output_layer_init_method=scaled_init_method_normal(args.init_method_std,
                                                                        args.num_layers),
                     layer_number=layer_idx,
-                    # TODO: Change naming of class from GPT to something that encapsulate prefix lm.
-                    self_attn_mask_type=AttnMaskType.prefix if prefix_lm else AttnMaskType.causal))
+                    self_attn_mask_type=AttnMaskType.causal))
                 
         
         # Undo data format change

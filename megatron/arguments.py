@@ -697,11 +697,9 @@ def _add_data_args(parser):
                        help='Reset posistion ids after end-of-document token.')
     group.add_argument('--reset-attention-mask', action='store_true',
                        help='Reset self attention maske after '
-                       'end-of-document token. Attention between tokens from different documents is null.')
+                       'end-of-document token.')
     group.add_argument('--eod-mask-loss', action='store_true',
                        help='Mask loss for the end of document tokens.')
-    group.add_argument('--loss-on-targets-only', action='store_true',
-                       help='Mask loss on input sequence.')
 
     return parser
 

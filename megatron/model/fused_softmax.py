@@ -92,7 +92,6 @@ class FusedScaleMaskSoftmax(torch.nn.Module):
         scale: scaling factor used in input tensor scaling.
 
     """
-    custom_kernel_friendly_attn_mask_type = [AttnMaskType.causal, AttnMaskType.padding]
 
     def __init__(
         self,
@@ -135,8 +134,7 @@ class FusedScaleMaskSoftmax(torch.nn.Module):
 
         # invoke custom kernel
         if self.input_in_float16 and mask is not None and \
-            custom_kernel_constraint and self.scaled_masked_softmax_fusion and \
-            self.attn_mask_type in self.custom_kernel_friendly_attn_mask_type:
+            custom_kernel_constraint and self.scaled_masked_softmax_fusion:
             scale = self.scale if self.scale is not None else 1.0
 
             if self.attn_mask_type == AttnMaskType.causal:
