@@ -7,6 +7,6 @@ six
 tensorboard
 torch
 transformers
-DeepSpeed @ git+https://github.com/microsoft/DeepSpeed.git@big-science
+git+https://github.com/microsoft/DeepSpeed.git@big-science
 # edit to a higher SHA or future release if needed
-codecarbon @ git+https://github.com/mlco2/codecarbon.git@03479b695a771c28df6b877a809f5af3eb9ef3b8
+git+git://github.com/mlco2/codecarbon.git@03479b695a771c28df6b877a809f5af3eb9ef3b8
