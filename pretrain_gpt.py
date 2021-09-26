@@ -23,7 +23,7 @@ from megatron import get_timers
 from megatron import get_tokenizer
 from megatron import mpu
 from megatron.data.gpt_dataset import build_train_valid_test_datasets
-from megatron.model import GPTModel, GPTModelPipe
+from megatron.model.gpt_model import GPTModel, GPTModelPipe
 from megatron.training import pretrain
 from megatron.utils import get_ltor_masks_and_position_ids, get_prefix_indices
 from megatron.utils import average_losses_across_data_parallel_group
