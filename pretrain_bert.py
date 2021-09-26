@@ -25,7 +25,7 @@ from megatron import print_rank_0
 from megatron import get_timers
 from megatron import mpu
 from megatron.data.dataset_utils import build_train_valid_test_datasets
-from megatron.model import BertModel
+from megatron.model.bert_model import BertModel
 from megatron.training import pretrain
 from megatron.utils import average_losses_across_data_parallel_group
 

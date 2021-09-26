@@ -29,7 +29,7 @@ from .utils import init_method_normal
 from .utils import scaled_init_method_normal
 
 from deepspeed.pipe import PipelineModule, LayerSpec, TiedLayerSpec
-from megatron.model import LayerNorm
+from megatron.model.fused_layer_norm import MixedFusedLayerNorm as LayerNorm
 from megatron.model.module import float16_to_fp32
 from .language_model import EmbeddingPipe
 from .transformer import ParallelTransformerLayerPipe
