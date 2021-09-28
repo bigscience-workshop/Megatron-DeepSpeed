@@ -1,4 +1,4 @@
-from megatron import get_args
+from megatron import get_args, get_tokenizer
 from megatron import initialize_megatron
 from megatron.data.gpt_dataset import build_train_valid_test_datasets
 from megatron.training import update_train_iters
@@ -14,8 +14,11 @@ def _add_network_size_args(parser):
 
 if __name__ == "__main__":
     initialize_megatron(extra_args_provider=_add_network_size_args)
+
     args = get_args()
+    tokenizer = get_tokenizer()
     update_train_iters(args)
+
     # prepare data iterators
     eval_iters = (args.train_iters // args.eval_interval + 1) * args.eval_iters
     test_iters = args.eval_iters
@@ -36,6 +39,12 @@ if __name__ == "__main__":
 
     for i in range(args.sample_id_range[0], args.sample_id_range[1]):
         print(f"[{i}/{len(train_dataset)}]-th sample: ")
-        print(train_dataset[i]["text"])
+
+        tokens = train_dataset[i]["text"]
+        # XXX: probably add a flag to print text vs tokens?
+        #print(tokens)
+
+        trim_decode_tokens = tokenizer.detokenize(tokens)
+        print(trim_decode_tokens)
 
     np.set_printoptions(**np_orig_opts)  # restore
