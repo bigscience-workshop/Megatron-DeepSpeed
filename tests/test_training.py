@@ -175,6 +175,7 @@ class MegDSTestTraining(TestCasePlus):
         tensorboard_files = glob.glob(f"{output_dir}/tensorboard/events*")
         self.assertEqual(len(tensorboard_files), 2, "tensorboard files")
 
+    @unittest.skip("Skip until deepspeed allows to pass tuple of tensors between pipeline stages.")
     def test_training_prefix_lm_all(self):
         # all in one test
         src_dir = self.src_dir
