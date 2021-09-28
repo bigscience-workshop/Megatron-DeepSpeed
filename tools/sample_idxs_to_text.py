@@ -2,7 +2,7 @@ from megatron import get_args
 from megatron import initialize_megatron
 from megatron.data.gpt_dataset import build_train_valid_test_datasets
 from megatron.training import update_train_iters
-
+import numpy as np
 
 def _add_network_size_args(parser):
     group = parser.add_argument_group(title='Get text from sample idxs.')
@@ -29,6 +29,13 @@ if __name__ == "__main__":
                                                           seq_length=args.seq_length,
                                                           seed=args.seed,
                                                           skip_warmup=(not args.mmap_warmup))
+
+
+    np_orig_opts = np.get_printoptions()
+    np.set_printoptions(threshold=np.inf)
+
     for i in range(args.sample_id_range[0], args.sample_id_range[1]):
         print(f"[{i}/{len(train_dataset)}]-th sample: ")
         print(train_dataset[i]["text"])
+
+    np.set_printoptions(**np_orig_opts)  # restore
