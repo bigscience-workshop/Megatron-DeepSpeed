@@ -1,6 +1,6 @@
 """
 A script which prints the data according to the given sample index.
-Example script:
+Below is an example bash script to print the data in sample index range 29040~29050:
 ```
 source $six_ALL_CCFRWORK/code/tr1-13B/bigscience/train/tr1-13B-base/start-tr1-13B
 MEGATRON_DEEPSPEED_REPO=$six_ALL_CCFRWORK/code/tr1-13B/Megatron-DeepSpeed-tr1-13B/
@@ -37,7 +37,7 @@ python ./tools/sample_idxs_to_text.py \
     --eval-interval 1000 \
     --eval-iters 5 \
     \
-    `# Dummy params`
+    `# Dummy params` \
     --num-layers 1 \
     --hidden-size 1 \
     --num-attention-heads 1
