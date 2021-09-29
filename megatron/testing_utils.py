@@ -296,34 +296,48 @@ class CaptureStd:
     """
     Context manager to capture:
 
-        - stdout: replay it, clean it up and make it available via obj.out
-        - stderr: replay it and make it available via obj.err
+        - stdout: replay it, clean it up and make it available via ``obj.out``
+        - stderr: replay it and make it available via ``obj.err``
 
         init arguments:
 
-        - out - capture stdout: True/False, default True
-        - err - capture stdout: True/False, default True
-
-        By default each captured stream gets replayed back on context's exit, so that one can see
-        what the test was doing. If this is a not wanted behavior and the captured data shouldn't be
-        replayed, pass ``reply=False`` to disable this feature.
+        - out - capture stdout:`` True``/``False``, default ``True``
+        - err - capture stdout: ``True``/``False``, default ``True``
+        - replay - whether to replay or not: ``True``/``False``, default ``True``. By default each
+        captured stream gets replayed back on context's exit, so that one can see what the test was
+        doing. If this is a not wanted behavior and the captured data shouldn't be replayed, pass
+        ``replay=False`` to disable this feature.
 
         Examples::
 
+            # to capture stdout only with auto-replay
             with CaptureStdout() as cs:
                 print("Secret message")
-            print(f"captured: {cs.out}")
+            assert "message" in cs.out
 
+            # to capture stderr only with auto-replay
             import sys
             with CaptureStderr() as cs:
                 print("Warning: ", file=sys.stderr)
-            print(f"captured: {cs.err}")
+            assert "Warning" in cs.err
 
-            # to capture just one of the streams, but not the other
+            # to capture both streams with auto-replay
+            with CaptureStd() as cs:
+                print("Secret message")
+                print("Warning: ", file=sys.stderr)
+            assert "message" in cs.out
+            assert "Warning" in cs.err
+
+            # to capture just one of the streams, and not the other, with auto-replay
             with CaptureStd(err=False) as cs:
                 print("Secret message")
-            print(f"captured: {cs.out}")
+            assert "message" in cs.out
             # but best use the stream-specific subclasses
+
+            # to capture without auto-replay
+            with CaptureStd(replay=False) as cs:
+                print("Secret message")
+            assert "message" in cs.out
 
     """
 
