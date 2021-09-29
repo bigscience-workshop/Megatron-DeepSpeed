@@ -21,7 +21,7 @@ import unittest
 from pathlib import Path
 
 from megatron.testing_utils import (
-    CaptureStd,
+    CaptureStdout,
     TestCasePlus,
     execute_subprocess_async,
     get_gpu_count,
@@ -138,7 +138,7 @@ class MegDSTestTraining(TestCasePlus):
         # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
 
         # 1. test training from scratch (no checkpoint)
-        with CaptureStd() as cs:
+        with CaptureStdout() as cs:
             execute_subprocess_async(cmd, env=self.get_env())
 
         # test deepspeed is running
@@ -159,7 +159,7 @@ class MegDSTestTraining(TestCasePlus):
 
         # 2. test training from checkpoint: resume
         # now do it again, this time resuming from the checkpoint
-        with CaptureStd() as cs:
+        with CaptureStdout() as cs:
             execute_subprocess_async(cmd, env=self.get_env())
 
         # test checkpoint loading
