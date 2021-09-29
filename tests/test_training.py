@@ -140,7 +140,6 @@ class MegDSTestTraining(TestCasePlus):
         # 1. test training from scratch (no checkpoint)
         with CaptureStdout() as cs:
             execute_subprocess_async(cmd, env=self.get_env())
-        print(cs.out) # flush for devs to see what's logged
 
         # test deepspeed is running
         self.assertIn("DeepSpeed info", cs.out)
@@ -162,7 +161,6 @@ class MegDSTestTraining(TestCasePlus):
         # now do it again, this time resuming from the checkpoint
         with CaptureStdout() as cs:
             execute_subprocess_async(cmd, env=self.get_env())
-        print(cs.out) # flush for devs to see what's logged
 
         # test checkpoint loading
         self.assertIn(f"successfully loaded checkpoint from {output_dir}/checkpoints", cs.out)

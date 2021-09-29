@@ -296,13 +296,17 @@ class CaptureStd:
     """
     Context manager to capture:
 
-        - stdout, clean it up and make it available via obj.out
-        - stderr, and make it available via obj.err
+        - stdout: replay it, clean it up and make it available via obj.out
+        - stderr: replay it and make it available via obj.err
 
         init arguments:
 
         - out - capture stdout: True/False, default True
         - err - capture stdout: True/False, default True
+
+        By default each captured stream gets replayed back on context's exit, so that one can see
+        what the test was doing. If this is a not wanted behavior and the captured data shouldn't be
+        replayed, pass ``reply=False`` to disable this feature.
 
         Examples::
 
@@ -323,7 +327,10 @@ class CaptureStd:
 
     """
 
-    def __init__(self, out=True, err=True):
+    def __init__(self, out=True, err=True, replay=True):
+
+        self.replay = replay
+
         if out:
             self.out_buf = StringIO()
             self.out = "error: CaptureStd context is unfinished yet, called too early"
@@ -352,11 +359,17 @@ class CaptureStd:
     def __exit__(self, *exc):
         if self.out_buf:
             sys.stdout = self.out_old
-            self.out = apply_print_resets(self.out_buf.getvalue())
+            captured = self.out_buf.getvalue()
+            if self.replay:
+                sys.stdout.write(captured)
+            self.out = apply_print_resets(captured)
 
         if self.err_buf:
             sys.stderr = self.err_old
-            self.err = self.err_buf.getvalue()
+            captured = self.err_buf.getvalue()
+            if self.replay:
+                sys.stderr.write(captured)
+            self.err = captured
 
     def __repr__(self):
         msg = ""
@@ -376,15 +389,15 @@ class CaptureStd:
 class CaptureStdout(CaptureStd):
     """Same as CaptureStd but captures only stdout"""
 
-    def __init__(self):
-        super().__init__(err=False)
+    def __init__(self, replay=True):
+        super().__init__(err=False, replay=replay)
 
 
 class CaptureStderr(CaptureStd):
     """Same as CaptureStd but captures only stderr"""
 
-    def __init__(self):
-        super().__init__(out=False)
+    def __init__(self, replay=True):
+        super().__init__(out=False, replay=replay)
 
 
 class CaptureLogger:
