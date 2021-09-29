@@ -4,6 +4,7 @@ from megatron.data.gpt_dataset import build_train_valid_test_datasets
 from megatron.data.data_samplers import build_pretraining_data_loader
 from megatron.training import update_train_iters
 import torch
+from itertools import chain
 
 def _add_network_size_args(parser):
     group = parser.add_argument_group(title='Get text from sample idxs.')
@@ -45,12 +46,11 @@ if __name__ == "__main__":
 
     # fast forward to where we want to start sampling
     train_dataloader = build_pretraining_data_loader(train_ds, args.sample_id_range[0])
+    data_iterator = iter(train_dataloader)
 
     if args.all_tokens:
         torch.set_printoptions(threshold=2**20)
 
-    range_len = args.sample_id_range[1] - args.sample_id_range[0]
-    data_iterator = iter(train_dataloader)
 
     for i in range(args.sample_id_range[0], args.sample_id_range[1]):
 
@@ -60,7 +60,6 @@ if __name__ == "__main__":
             print(f"{i} {tokens}")
 
         if args.print_text:
-            from itertools import chain
             tokens = list(chain(*tokens.tolist()))
             trim_decode_tokens = tokenizer.detokenize(tokens)
             print(f"{i} {trim_decode_tokens}")
