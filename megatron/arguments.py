@@ -460,6 +460,8 @@ def _add_training_args(parser):
                        help='Use Torch Adam as optimizer on CPU.')
     group.add_argument('--codecarbon-dir', type=str, default=None,
                        help='Write CodeCarbon logs to this directory.')
+    group.add_argument('--no-train', type=bool, required=False,
+                       help='If set to True, no train step will be performed.' )
 
     return parser
 
