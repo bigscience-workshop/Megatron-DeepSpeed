@@ -43,7 +43,6 @@ python ./tools/sample_idxs_to_text.py \
     --num-attention-heads 1
 ```
 """
-from itertools import chain
 
 import torch
 
@@ -101,12 +100,11 @@ if __name__ == "__main__":
         torch.set_printoptions(threshold=2**20)
 
     for i in range(args.sample_id_range[0], args.sample_id_range[1]):
-        tokens = next(data_iterator)["text"]
+        tokens = next(data_iterator)["text"][0].tolist()
 
         if args.print_tokens:
             print(f"{i} {tokens}")
 
         if args.print_text:
-            tokens = list(chain(*tokens.tolist()))
             trim_decode_tokens = tokenizer.detokenize(tokens)
             print(f"{i} {trim_decode_tokens}")
