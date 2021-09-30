@@ -1,17 +1,30 @@
+import os
+import sys
 from contextlib import ContextDecorator
 from functools import wraps
+from unittest.mock import patch
 
+import deepspeed
 import torch
+from transformers import GPT2LMHead, GPT2Tokenizer
 
-from transformers import GPT2LMHeadModel
+from megatron import get_args, get_tokenizer, global_vars, initialize_megatron
+from megatron.testing_utils import (
+    TestCasePlus,
+    mockenv_context,
+    set_seed,
+    torch_assert_equal,
+)
+from megatron.training import setup_model_and_optimizer
+from pretrain_gpt import get_batch_pipe, model_provider
+from tools.convert_checkpoint import deepspeed_to_transformers
 
-from megatron import initialize_megatron, get_args, get_tokenizer, global_vars
-from megatron.testing_utils import set_seed, torch_assert_equal, TestCasePlus, mockenv_context
-from pretrain_gpt import model_provider, get_batch_pipe
+from .test_model import flatten_arguments, get_default_args
 
 
 class run_megatron(ContextDecorator):
     """decorator & context manager for megatron code"""
+
     def __call__(self, func):
         @wraps(func)
         def decorator():
@@ -19,13 +32,14 @@ class run_megatron(ContextDecorator):
             with patch("sys.argv", flatten_arguments(command_args)):
                 # NOTE: perhaps should not hard code distributed config?
                 with mockenv_context(
-                    MASTER_ADDR="localhost", 
-                    MASTER_PORT="9994", 
-                    RANK="0", 
-                    LOCAL_RANK="0", 
+                    MASTER_ADDR="localhost",
+                    MASTER_PORT="9994",
+                    RANK="0",
+                    LOCAL_RANK="0",
                     WORLD_SIZE="1",
                 ):
                     return func()
+
         return decorator()
 
 
@@ -45,11 +59,11 @@ class TestConversion(TestCasePlus):
         reset_global_variables()
         self.args = get_args()
         self.token_ids = torch.randint(
-            args.padded_vocab_size, (args.micro_batch_size, args.seq_length)
+            self.args.padded_vocab_size,
+            (self.args.micro_batch_size, self.args.seq_length),
         )
-        token_ids[token_ids == tokenizer.eod] += 1
-        token_ids[token_ids == tokenizer.eod] %= args.padded_vocab_size
-        self.token_ids = token_ids
+        self.megatron_output = None
+        self.transformers_output = None
 
     def test_megatron(self):
         with run_megatron():
@@ -61,20 +75,37 @@ class TestConversion(TestCasePlus):
             megatron_model = megatron_model[0]
 
             # process batch
-            megatron_input = get_batch_pipe({"text": self.token_ids})[0]
-            megatron_output = megatron_model(*megatron_input)
+            self.token_ids[self.token_ids == megatron_tokenizer.eod] += 1
+            self.token_ids[
+                self.token_ids == megatron_tokenizer.eod
+            ] %= self.args.padded_vocab_size
+            tokens = get_batch_pipe({"text": self.token_ids})[0]
 
+            # cache result
+            self.megatron_output = megatron_model(*tokens)
+
+            # save model
             state_dict = megatron_input.state_dict_for_save_checkpoint()
-    
+            temp_dir = self.get_auto_remove_tmp_dir()
+            torch.save(state_dict, os.path.join(temp_dir, "megatron.pt"))
+
     def test_huggingface(self):
-        
+        temp_dir = self.get_auto_remove_tmp_dir()
+        transformer_dir = os.path.join(temp_dir, "transformers")
 
+        conversion_args = f"""
+            --input_folder {os.path.join(temp_dir, "megatron.pt")}
+            --output_folder {transformer_dir}
+        """
 
+        with patch.object(sys, "argv", conversion_args):
+            deepspeed_to_transformers.main()
 
-        
+        transformers_model = GPT2LMHead.from_pretrained(transformer_dir)
+        transformers_tokenizer = GPT2Tokenizer.from_pretrained(transformer_dir)
 
+        tokens = transformers_tokenizer(self.token_ids)
+        self.transformers_output = transformers_model(**tokens)
 
     def test_equal_output(self):
-        hf_output = hf_model(self.input)
-        megatron_output = megatron_model(self.input)
-        torch_assert_equal(hf_output, megatron_output)
+        torch_assert_equal(self.megatron_output, self.transformers_output)
