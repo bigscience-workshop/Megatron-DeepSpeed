@@ -13,13 +13,7 @@ meg-gpt2_oscar-combined_text_document_train_indexmap_100ns_1024sl_42s_sample_idx
 
 So these 3 have to match the training to get the correct output from this script.
 
-If you're working on the same machine that already has the indices generated during the training, you can also do a sanity check that it doesn't generate new .npy files for the 3 train .npy files (but it will still do it for 3 valid and 3 test .npy files since we feed it hardcoded setup there)
-
-Another If you see the script logging:
-
- > WARNING: could not find index map files, building the indices on rank 0 ...
-
-for the train index it means it's building a new index and not using the one that was already built for training, so most likely you got some args mismatched and you will be getting incorrect data. (Unless of course you're doing it on another machine where the training didn't happen and there is no index, but you need to check that the resulting .npy files are named exactly the same as when the training happened)
+If you're working on the same machine that already has the indices generated during the training, you can also do a sanity check that it doesn't generate new .npy files for the 3 train .npy files (but it will still do it for 3 valid and 3 test .npy files since we feed it a hardcoded setup of size 0 for both valid and test datasets.)
 
 Below is an example bash script to print the data in sample index range 5-15:
 
@@ -36,7 +30,7 @@ DATA_PATH=$six_ALL_CCFRWORK/datasets-custom/oscar-en/meg-gpt2_text_document
 SEQ_LEN=2048
 
 python tools/sample_idxs_to_text.py \
-    --print_text \
+    --print-text \
     --sample-id-range 5 15 \
     --seed 42 \
     --train-samples 100 \
@@ -48,7 +42,11 @@ python tools/sample_idxs_to_text.py \
     --merge-file $MERGE_FILE
 ````
 
-If you want tokens instead of text, remove `--print_text` and add `--print_tokens` (but you can have both). If you want full token dumps add `--all_tokens`
+If you want tokens instead of text, remove `--print-text` and add `--print-tokens` (but you can have both). If you want full token dumps add `--all-tokens`
+
+If you want the data written to a file add:
+
+    --output-file output.txt
 
 This script can be extended to support valid and tests datasets as well, but currently ignores those.
 
@@ -75,9 +73,10 @@ def _add_network_size_args(parser):
     group = parser.add_argument_group(title='Get text from sample idxs.')
     group.add_argument('--sample-id-range', type=int, nargs='+', required=True,
                         help='The number of samples consumed. ex) --sample-id-range 1024 2048')
-    group.add_argument('--all_tokens', action='store_true', help='Whether to dump all tokens per record')
-    group.add_argument('--print_tokens', action='store_true', help='Whether to print tokens')
-    group.add_argument('--print_text', action='store_true', help='Whether to print text')
+    group.add_argument('--all-tokens', action='store_true', help='Whether to dump all tokens per record')
+    group.add_argument('--print-tokens', action='store_true', help='Whether to print tokens')
+    group.add_argument('--print-text', action='store_true', help='Whether to print text')
+    group.add_argument('--output-file', help='path to file if the dump should be saved into a file')
 
     return parser
 
@@ -127,12 +126,30 @@ if __name__ == "__main__":
     if args.all_tokens:
         torch.set_printoptions(threshold=2**20)
 
+    if args.output_file is not None:
+        print(f"*** Saving to {args.output_file}")
+        fh = open(args.output_file, "w")
+    else:
+        print(f"*** Dumping to stdout")
+
+    def write(msg):
+        if args.output_file:
+            fh.write(msg+"\n")
+        else:
+            print(msg)
+
     for i in range(args.sample_id_range[0], args.sample_id_range[1]):
         tokens = next(data_iterator)["text"][0]
 
         if args.print_tokens:
-            print(f"{i} {tokens}")
+            write(f"{i} {tokens}")
 
         if args.print_text:
             trim_decode_tokens = tokenizer.detokenize(tokens.tolist())
-            print(f"{i} {trim_decode_tokens}")
+            write(f"{i} {trim_decode_tokens}")
+
+    if args.output_file is not None:
+        print(f"*** Output saved in {args.output_file}")
+        fh.close()
+
+    print(f"*** {args.sample_id_range[1]-args.sample_id_range[0]} records dumped")
