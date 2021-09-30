@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import deepspeed
 import torch
-from transformers import GPT2LMHead, GPT2Tokenizer
+from transformers import GPT2LMHeadModel, GPT2Tokenizer
 
 from megatron import get_args, get_tokenizer, global_vars, initialize_megatron
 from megatron.testing_utils import (
@@ -65,29 +65,29 @@ class TestConversion(TestCasePlus):
         self.megatron_output = None
         self.transformers_output = None
 
+    @run_megatron
     def test_megatron(self):
-        with run_megatron():
-            deepspeed.init_distributed()
-            initialize_megatron()
-            megatron_tokenizer = get_tokenizer()
+        deepspeed.init_distributed()
+        initialize_megatron()
+        megatron_tokenizer = get_tokenizer()
 
-            megatron_model, _, _ = setup_model_and_optimizer(model_provider)
-            megatron_model = megatron_model[0]
+        megatron_model, _, _ = setup_model_and_optimizer(model_provider)
+        megatron_model = megatron_model[0]
 
-            # process batch
-            self.token_ids[self.token_ids == megatron_tokenizer.eod] += 1
-            self.token_ids[
-                self.token_ids == megatron_tokenizer.eod
-            ] %= self.args.padded_vocab_size
-            tokens = get_batch_pipe({"text": self.token_ids})[0]
+        # process batch
+        self.token_ids[self.token_ids == megatron_tokenizer.eod] += 1
+        self.token_ids[
+            self.token_ids == megatron_tokenizer.eod
+        ] %= self.args.padded_vocab_size
+        tokens = get_batch_pipe({"text": self.token_ids})[0]
 
-            # cache result
-            self.megatron_output = megatron_model(*tokens)
+        # cache result
+        self.megatron_output = megatron_model(*tokens)
 
-            # save model
-            state_dict = megatron_input.state_dict_for_save_checkpoint()
-            temp_dir = self.get_auto_remove_tmp_dir()
-            torch.save(state_dict, os.path.join(temp_dir, "megatron.pt"))
+        # save model
+        state_dict = megatron_model.state_dict_for_save_checkpoint()
+        temp_dir = self.get_auto_remove_tmp_dir()
+        torch.save(state_dict, os.path.join(temp_dir, "megatron.pt"))
 
     def test_huggingface(self):
         temp_dir = self.get_auto_remove_tmp_dir()
@@ -101,7 +101,7 @@ class TestConversion(TestCasePlus):
         with patch.object(sys, "argv", conversion_args):
             deepspeed_to_transformers.main()
 
-        transformers_model = GPT2LMHead.from_pretrained(transformer_dir)
+        transformers_model = GPT2LMHeadModel.from_pretrained(transformer_dir)
         transformers_tokenizer = GPT2Tokenizer.from_pretrained(transformer_dir)
 
         tokens = transformers_tokenizer(self.token_ids)
