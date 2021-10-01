@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import deepspeed
 import torch
+torch.backends.cudnn.deterministic = True
 from transformers import GPT2LMHeadModel, GPT2Tokenizer
 
 from megatron import get_args, get_tokenizer, global_vars, initialize_megatron
