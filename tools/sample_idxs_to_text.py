@@ -15,6 +15,17 @@ So these 3 have to match the training to get the correct output from this script
 
 If you're working on the same machine that already has the indices generated during the training, you can also do a sanity check that it doesn't generate new .npy files for the 3 train .npy files (but it will still do it for 3 valid and 3 test .npy files since we feed it a hardcoded setup of size 0 for both valid and test datasets.)
 
+`--sample-id-range` is for consumed samples, so if the gap of interest is between these 2 iterations:
+
+ iteration     3848/  159576 | consumed samples:        75888 | elapsed time per iteration (ms): 14308.9 | learning rate: 2.102E-05 | global batch size:    32 | lm loss: 6.452862E+00 | loss scale: 32768.0 | grad norm: 262044.694 | num zeros: 0.0 | number of skipped iterations:   0 | number of nan iterations:   0 |
+ iteration     3792/  159576 | consumed samples:        74096 | elapsed time per iteration (ms): 16474.9 | learning rate: 2.052E-05 | global batch size:    32 | lm loss: 6.404737E+00 | loss scale: 32768.0 | grad norm: 214321.235 | num zeros: 0.0 | number of skipped iterations:   0 | number of nan iterations:   0 |
+
+You'd then use:
+
+`--sample-id-range 75888 74096`
+
+the larger the batch size, the larger the number of samples will be.
+
 Below is an example bash script to print the data in sample index range 5-15:
 
 ```
