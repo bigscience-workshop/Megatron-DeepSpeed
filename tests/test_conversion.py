@@ -48,6 +48,9 @@ class TestConversion(TestCasePlus):
         # run megatron first, then convert to transformers, then compare the difference
         command_args = get_default_args()
 
+        # reset the number of layers 
+        command_args['--num-layers'] = '10'
+
         ds_args = f"""
             --deepspeed
             --deepspeed_config {self.test_file_dir_str}/ds_config.json
@@ -64,8 +67,8 @@ class TestConversion(TestCasePlus):
                 # args for checkpointing
                 args.save, args.no_save_optim = megatron_dir, True
 
-                # fix this token_ids
-                token_ids = torch.randint(args.padded_vocab_size, (args.micro_batch_size, args.seq_length))
+                # always use this token_ids, hacked case here, could be args.micro_batch_size, args.seq_length
+                token_ids = torch.randint(args.padded_vocab_size, (10, 2))
 
                 megatron_tokenizer = get_tokenizer()
 
@@ -91,6 +94,7 @@ class TestConversion(TestCasePlus):
                 megatron_model._compute_loss = False
                 megatron_model.fwd_outputs = []
 
+                megatron_model.eval()
                 # due to the hack in https://github.com/bigscience-workshop/Megatron-DeepSpeed/blob/68b46f201aad8803d0699f76b100663553e89e1b/pretrain_gpt.py#L74
                 args.attn_mask = attention_mask
 
@@ -116,6 +120,7 @@ class TestConversion(TestCasePlus):
                 transformers_model = GPT2LMHeadModel.from_pretrained(transformer_dir)
 
                 transformers_model.cuda()
+                transformers_model.eval()
                 # FIXME: potential error here, do not have tokenizer saved in deepspeed_to_transformers file
                 # transformers_tokenizer = GPT2Tokenizer.from_pretrained(transformer_dir)
                 # transformers_tokens = transformers_tokenizer(token_ids)
@@ -123,6 +128,5 @@ class TestConversion(TestCasePlus):
                 # FIXME: we do not have attention mask here
                 transformers_output = transformers_model(input_ids=tokens)
                 transformers_output = transformers_output.logits
-
         # compare the difference 
-        torch_assert_equal(megatron_output.cpu(), transformers_output.cpu())
+        torch_assert_equal(megatron_output.data.cpu(), transformers_output.data.cpu())
