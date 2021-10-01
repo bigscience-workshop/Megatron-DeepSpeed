@@ -16,34 +16,14 @@ from megatron.testing_utils import (
     torch_assert_equal,
 )
 from megatron.training import setup_model_and_optimizer
+from megatron.checkpointing import load_checkpoint, save_checkpoint
+
 from pretrain_gpt import get_batch_pipe, model_provider
 
-sys.path.insert(1, 'tools/convert_checkpoint')
-import deepspeed_to_transformers
+# fix the relative path
+sys.path.append('tools/convert_checkpoint/')
 from tools.convert_checkpoint import deepspeed_to_transformers
-
 from test_model import flatten_arguments, get_default_args
-
-
-class run_megatron(ContextDecorator):
-    """decorator & context manager for megatron code"""
-
-    def __call__(self, func):
-        @wraps(func)
-        def decorator():
-            command_args = get_default_args()
-            with patch("sys.argv", flatten_arguments(command_args)):
-                # NOTE: perhaps should not hard code distributed config?
-                with mockenv_context(
-                    MASTER_ADDR="localhost",
-                    MASTER_PORT="9994",
-                    RANK="0",
-                    LOCAL_RANK="0",
-                    WORLD_SIZE="1",
-                ):
-                    return func()
-
-        return decorator()
 
 
 def reset_global_variables():
@@ -56,59 +36,93 @@ def reset_global_variables():
 
 
 class TestConversion(TestCasePlus):
-    def setUp(self):
+    def setUp(self) -> None:
         super().setUp()
         set_seed()
         reset_global_variables()
-        self.args = get_args()
-        self.token_ids = torch.randint(
-            self.args.padded_vocab_size,
-            (self.args.micro_batch_size, self.args.seq_length),
+        self.dist_env_1_gpu = dict(
+            MASTER_ADDR="localhost", MASTER_PORT="9994", RANK="0", LOCAL_RANK="0", WORLD_SIZE="1"
         )
-        self.megatron_output = None
-        self.transformers_output = None
 
-    @run_megatron
-    def test_megatron(self):
-        deepspeed.init_distributed()
-        initialize_megatron()
-        megatron_tokenizer = get_tokenizer()
+    def test_deepspeed_to_transformers(self):
+        # run megatron first, then convert to transformers, then compare the difference
+        command_args = get_default_args()
 
-        megatron_model, _, _ = setup_model_and_optimizer(model_provider)
-        megatron_model = megatron_model[0]
+        ds_args = f"""
+            --deepspeed
+            --deepspeed_config {self.test_file_dir_str}/ds_config.json
+            --zero-stage 1
+            --deepspeed-activation-checkpointing
+        """.split()
+        # run deepspeed megatron
+        with patch('sys.argv', flatten_arguments(command_args) + ds_args):
+            with mockenv_context(**self.dist_env_1_gpu):
+                deepspeed.init_distributed()
+                initialize_megatron()
+                args = get_args()
+                megatron_dir = self.get_auto_remove_tmp_dir()
+                # args for checkpointing
+                args.save, args.no_save_optim = megatron_dir, True
 
-        # process batch
-        self.token_ids[self.token_ids == megatron_tokenizer.eod] += 1
-        self.token_ids[
-            self.token_ids == megatron_tokenizer.eod
-        ] %= self.args.padded_vocab_size
-        tokens = get_batch_pipe({"text": self.token_ids})[0]
+                # fix this token_ids
+                token_ids = torch.randint(args.padded_vocab_size, (args.micro_batch_size, args.seq_length))
 
-        # cache result
-        self.megatron_output = megatron_model(*tokens)
+                megatron_tokenizer = get_tokenizer()
 
-        # save model
-        state_dict = megatron_model.state_dict_for_save_checkpoint()
-        temp_dir = self.get_auto_remove_tmp_dir()
-        torch.save(state_dict, os.path.join(temp_dir, "megatron.pt"))
+                # get deepspeed megatron model
+                megatron_model, _, _ = setup_model_and_optimizer(model_provider)
 
-    def test_huggingface(self):
-        temp_dir = self.get_auto_remove_tmp_dir()
-        transformer_dir = os.path.join(temp_dir, "transformers")
+                # save deepspeed megatron model
+                save_checkpoint(0, megatron_model, _, _)
 
-        conversion_args = f"""
-            --input_folder {os.path.join(temp_dir, "megatron.pt")}
-            --output_folder {transformer_dir}
-        """
+                megatron_model = megatron_model[0]
 
-        with patch.object(sys, "argv", conversion_args):
-            deepspeed_to_transformers.main()
+                # process batch
+                token_ids[token_ids == megatron_tokenizer.eod] += 1
+                token_ids[token_ids == megatron_tokenizer.eod] %= args.padded_vocab_size
 
-        transformers_model = GPT2LMHeadModel.from_pretrained(transformer_dir)
-        transformers_tokenizer = GPT2Tokenizer.from_pretrained(transformer_dir)
+                # get processed batch
+                megatron_token, _ = get_batch_pipe({"text": token_ids})
+                tokens, position_ids, attention_mask = megatron_token
 
-        tokens = transformers_tokenizer(self.token_ids)
-        self.transformers_output = transformers_model(**tokens)
+                # disable activation checkpoint
+                megatron_model.module.activation_checkpoint_interval = 0
+                # resemble _exec_schedule in /deepspeed/runtine/pipe/engine.py
+                megatron_model._compute_loss = False
+                megatron_model.fwd_outputs = []
 
-    def test_equal_output(self):
-        torch_assert_equal(self.megatron_output, self.transformers_output)
+                # due to the hack in https://github.com/bigscience-workshop/Megatron-DeepSpeed/blob/68b46f201aad8803d0699f76b100663553e89e1b/pretrain_gpt.py#L74
+                args.attn_mask = attention_mask
+
+                # use deepspeed pipeline thing 
+                megatron_model.pipe_buffers["inputs"].append( megatron_token )
+                megatron_model.pipe_buffers["outputs"].append( None )
+
+                with torch.no_grad():
+                    megatron_model._exec_forward_pass(buffer_id=0)
+
+                # gather output
+                megatron_output = megatron_model.pipe_buffers["outputs"][0]
+
+                # run conversion file 
+                transformer_dir = self.get_auto_remove_tmp_dir()
+                conversion_args = {
+                    "--input_folder": f"{megatron_dir}", 
+                    "--output_folder": f"{transformer_dir}"
+                }
+                with patch('sys.argv', flatten_arguments(conversion_args)):
+                    deepspeed_to_transformers.main()
+
+                transformers_model = GPT2LMHeadModel.from_pretrained(transformer_dir)
+
+                transformers_model.cuda()
+                # FIXME: potential error here, do not have tokenizer saved in deepspeed_to_transformers file
+                # transformers_tokenizer = GPT2Tokenizer.from_pretrained(transformer_dir)
+                # transformers_tokens = transformers_tokenizer(token_ids)
+
+                # FIXME: we do not have attention mask here
+                transformers_output = transformers_model(input_ids=tokens)
+                transformers_output = transformers_output.logits
+
+        # compare the difference 
+        torch_assert_equal(megatron_output.cpu(), transformers_output.cpu())
