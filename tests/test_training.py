@@ -65,6 +65,11 @@ class MegDSTestTraining(TestCasePlus):
     def setUp(self):
         super().setUp()
 
+        # at times magatron fails to build kernels and doesn't remove the lock file, which makes
+        # subsequent runs hang - so make sure there is no lock when starting the testing
+        meg_lock_file_path = self.repo_root_dir_str + "/megatron/fused_kernels/build/lock"
+        os.unlink(meg_lock_file_path)
+
 
     def test_training_all(self):
         # all in one test
