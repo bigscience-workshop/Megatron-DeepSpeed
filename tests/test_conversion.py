@@ -17,9 +17,12 @@ from megatron.testing_utils import (
 )
 from megatron.training import setup_model_and_optimizer
 from pretrain_gpt import get_batch_pipe, model_provider
+
+sys.path.insert(1, 'tools/convert_checkpoint')
+import deepspeed_to_transformers
 from tools.convert_checkpoint import deepspeed_to_transformers
 
-from .test_model import flatten_arguments, get_default_args
+from test_model import flatten_arguments, get_default_args
 
 
 class run_megatron(ContextDecorator):
