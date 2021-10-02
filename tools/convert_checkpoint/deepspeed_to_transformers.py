@@ -25,6 +25,14 @@ def main():
 
     # the 2nd part comes from transformers.models.megatron_gpt2.convert_megatron_gpt2_checkpoint.main
     # Spell out all parameters in case the defaults change.
+    ds_args = ds_checkpoint.get_args()
+    if ds_args.bias_gelu_fusion: 
+        activation_function = 'gelu_fast'
+    elif ds_args.openai_gelu: 
+        activation_function = 'gelu_new'
+    else: 
+        activation_function = 'gelu'
+
     config = GPT2Config(
         vocab_size=50257,
         n_positions=1024,
@@ -33,7 +41,7 @@ def main():
         n_layer=24,
         n_head=16,
         n_inner=4096,
-        activation_function="gelu_new",  # used to be "gelu_new" in earlier versions
+        activation_function=activation_function,  # used to be "gelu_new" in earlier versions
         resid_pdrop=0.1,
         embd_pdrop=0.1,
         attn_pdrop=0.1,
