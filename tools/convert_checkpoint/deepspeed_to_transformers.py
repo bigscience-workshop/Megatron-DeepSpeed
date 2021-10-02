@@ -33,7 +33,7 @@ def main():
         n_layer=24,
         n_head=16,
         n_inner=4096,
-        activation_function="gelu",  # used to be "gelu_new" in earlier versions
+        activation_function="gelu_new",  # used to be "gelu_new" in earlier versions
         resid_pdrop=0.1,
         embd_pdrop=0.1,
         attn_pdrop=0.1,
