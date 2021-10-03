@@ -39,7 +39,7 @@ def reset_global_variables():
     global_vars._GLOBAL_TIMERS = None
 
 
-class TestConversion(TestCasePlus):
+class TestCheckpointConversion(TestCasePlus):
     def setUp(self) -> None:
         super().setUp()
         set_seed()
