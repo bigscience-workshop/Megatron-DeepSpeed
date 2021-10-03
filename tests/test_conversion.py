@@ -83,7 +83,7 @@ class TestCheckpointConversion(TestCasePlus):
         return ds_megatron_output
 
     def test_deepspeed_to_megatron(self):
-         # run deepspeed megatron first, then convert to transformers, then compare the difference
+         # run deepspeed to megatron first, then convert to transformers, then compare the difference
         command_args = get_default_args()
 
         # reset the number of layers 
