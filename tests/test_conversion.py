@@ -92,7 +92,6 @@ class TestCheckpointConversion(TestCasePlus):
         ds_config_path = f'{self.test_file_dir_str}/ds_config.json'
         if not self.fp16:
             command_args.pop("--fp16")
-            assert "--fp16" not in command_args
             ds_config = json.load( open( f"{self.test_file_dir_str}/ds_config.json" ) )
             ds_config['fp16']["enabled"] = False
             ds_config_path = os.path.join(self.get_auto_remove_tmp_dir(), "ds_config.json")
