@@ -21,7 +21,7 @@ import unittest
 from pathlib import Path
 
 from megatron.testing_utils import (
-    CaptureStd,
+    CaptureStdout,
     TestCasePlus,
     execute_subprocess_async,
     get_gpu_count,
@@ -64,6 +64,12 @@ class MegDSTestTraining(TestCasePlus):
 
     def setUp(self):
         super().setUp()
+
+        # at times magatron fails to build kernels and doesn't remove the lock file, which makes
+        # subsequent runs hang - so make sure there is no lock when starting the testing
+        meg_lock_file_path = self.repo_root_dir_str + "/megatron/fused_kernels/build/lock"
+        if os.path.exists(meg_lock_file_path):
+            os.unlink(meg_lock_file_path)
 
 
     def test_training_all(self):
@@ -138,7 +144,7 @@ class MegDSTestTraining(TestCasePlus):
         # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
 
         # 1. test training from scratch (no checkpoint)
-        with CaptureStd() as cs:
+        with CaptureStdout() as cs:
             execute_subprocess_async(cmd, env=self.get_env())
 
         # test deepspeed is running
@@ -159,7 +165,7 @@ class MegDSTestTraining(TestCasePlus):
 
         # 2. test training from checkpoint: resume
         # now do it again, this time resuming from the checkpoint
-        with CaptureStd() as cs:
+        with CaptureStdout() as cs:
             execute_subprocess_async(cmd, env=self.get_env())
 
         # test checkpoint loading
