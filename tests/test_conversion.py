@@ -26,6 +26,8 @@ sys.path.append("tools/convert_checkpoint/")
 from test_model import flatten_arguments, get_default_args
 
 from tools.convert_checkpoint import deepspeed_to_megatron, deepspeed_to_transformers
+# FIXME: additional package requirement
+from parameterized import parameterized
 
 
 def reset_global_variables():
@@ -43,14 +45,40 @@ class TestCheckpointConversion(TestCasePlus):
         set_seed()
         reset_global_variables()
 
-        self.fp16 = False
         self.dist_env_1_gpu = dict(
             MASTER_ADDR="localhost",
-            MASTER_PORT="9994",
+            MASTER_PORT="1123",
             RANK="0",
             LOCAL_RANK="0",
             WORLD_SIZE="1",
         )
+
+    def get_megatron_ds_args(self, fp16):
+        # get megatron and deepspeed args
+        megatron_args = get_default_args()
+
+        # reset the number of layers
+        # megatron_args['--num-layers'] = '50'
+
+        ds_config_path = f"{self.test_file_dir_str}/ds_config.json"
+        if not fp16:
+            megatron_args.pop("--fp16")
+            ds_config = json.load(open(f"{self.test_file_dir_str}/ds_config.json"))
+            ds_config["fp16"]["enabled"] = False
+            ds_config_path = os.path.join(
+                self.get_auto_remove_tmp_dir(), "ds_config.json"
+            )
+            with open(ds_config_path, "w") as f:
+                json.dump(ds_config, f)
+
+        ds_args = f"""
+            --deepspeed
+            --deepspeed_config {ds_config_path}
+            --zero-stage 1
+            --deepspeed-activation-checkpointing
+        """.split()
+
+        return megatron_args, ds_args
 
     def save_and_get_ds_megatron_output(
         self, args, ds_megatron_model, ds_megatron_token, ds_megatron_dir
@@ -86,32 +114,17 @@ class TestCheckpointConversion(TestCasePlus):
         ds_megatron_output = ds_megatron_model.pipe_buffers["outputs"][0]
         return ds_megatron_output
 
-    def test_deepspeed_to_megatron(self):
+
+    @parameterized.expand([
+        ("fp32", False),
+        ("fp16", True),
+    ])
+    def test_megatron_ds_to_megatron(self, name, fp16):
         # run deepspeed to megatron first, then convert to transformers, then compare the difference
-        command_args = get_default_args()
-
-        # reset the number of layers
-        # command_args['--num-layers'] = '50'
-
-        ds_config_path = f"{self.test_file_dir_str}/ds_config.json"
-        if not self.fp16:
-            command_args.pop("--fp16")
-            ds_config = json.load(open(f"{self.test_file_dir_str}/ds_config.json"))
-            ds_config["fp16"]["enabled"] = False
-            ds_config_path = os.path.join(
-                self.get_auto_remove_tmp_dir(), "ds_config.json"
-            )
-            with open(ds_config_path, "w") as f:
-                json.dump(ds_config, f)
-
-        ds_args = f"""
-            --deepspeed
-            --deepspeed_config {ds_config_path}
-            --zero-stage 1
-            --deepspeed-activation-checkpointing
-        """.split()
+        
+        megatron_args, ds_args = self.get_megatron_ds_args(fp16)
         # run deepspeed megatron
-        with patch("sys.argv", flatten_arguments(command_args) + ds_args):
+        with patch("sys.argv", flatten_arguments(megatron_args) + ds_args):
             with mockenv_context(**self.dist_env_1_gpu):
                 deepspeed.init_distributed()
                 initialize_megatron()
@@ -150,7 +163,7 @@ class TestCheckpointConversion(TestCasePlus):
             deepspeed_to_megatron.main()
 
         # run megatron
-        with patch("sys.argv", flatten_arguments(command_args)):
+        with patch("sys.argv", flatten_arguments(megatron_args)):
             with mockenv_context(**self.dist_env_1_gpu):
                 args.deepspeed = False
                 assert args.deepspeed is False
@@ -168,33 +181,16 @@ class TestCheckpointConversion(TestCasePlus):
         # torch_assert_equal(ds_megatron_output.data.cpu(), megatron_output.data.cpu())
         torch_assert_close(ds_megatron_output.data.cpu(), megatron_output.data.cpu())
 
-    def test_deepspeed_to_transformers(self):
+    @parameterized.expand([
+        ("fp32", False),
+        ("fp16", True),
+    ])
+    def test_megatron_ds_to_transformers(self, name, fp16):
         # run megatron first, then convert to transformers, then compare the difference
-        command_args = get_default_args()
-
-        # reset the number of layers
-        # command_args['--num-layers'] = '50'
-
-        ds_config_path = f"{self.test_file_dir_str}/ds_config.json"
-        if not self.fp16:
-            command_args.pop("--fp16")
-            ds_config = json.load(open(f"{self.test_file_dir_str}/ds_config.json"))
-            ds_config["fp16"]["enabled"] = False
-            ds_config_path = os.path.join(
-                self.get_auto_remove_tmp_dir(), "ds_config.json"
-            )
-            with open(ds_config_path, "w") as f:
-                json.dump(ds_config, f)
-
-        ds_args = f"""
-            --deepspeed
-            --deepspeed_config {ds_config_path}
-            --zero-stage 1
-            --deepspeed-activation-checkpointing
-        """.split()
+        megatron_args, ds_args = self.get_megatron_ds_args(fp16)
 
         # run deepspeed megatron
-        with patch("sys.argv", flatten_arguments(command_args) + ds_args):
+        with patch("sys.argv", flatten_arguments(megatron_args) + ds_args):
             with mockenv_context(**self.dist_env_1_gpu):
                 deepspeed.init_distributed()
                 initialize_megatron()
@@ -232,7 +228,8 @@ class TestCheckpointConversion(TestCasePlus):
         with patch("sys.argv", flatten_arguments(conversion_args)):
             deepspeed_to_transformers.main()
 
-        transformers_model = GPT2LMHeadModel.from_pretrained(transformer_dir)
+        torch_dtype = torch.get_default_dtype() if not fp16 else torch.float16
+        transformers_model = GPT2LMHeadModel.from_pretrained(transformer_dir, torch_dtype=torch_dtype)
 
         transformers_model.cuda()
         transformers_model.eval()
@@ -244,6 +241,11 @@ class TestCheckpointConversion(TestCasePlus):
         tokens, position_ids, attention_mask = megatron_token
         transformers_output = transformers_model(input_ids=tokens)
         transformers_output = transformers_output.logits
+
+        if fp16:
+            # from megatron.model.module import float16_to_fp32
+            # transformers_output = float16_to_fp32( transformers_output )
+            ds_megatron_output = ds_megatron_output.half()
 
         # compare the difference
         # FIXME: it could now pass torch_assert_close, but not torch_assert_equal
