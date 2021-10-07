@@ -25,6 +25,12 @@ def parse_arguments():
     parser.add_argument('--target_tp', default=1, type=int, help='Target TP degree')
     parser.add_argument('--target_pp', default=1, type=int, help='Target PP degree')
     parser.add_argument('--for_release', action='store_true', help='Convert for release purpose, reset some (progress) counters.')
+    parser.add_argument(
+        "--tokenizer_type", default="GPT2BPETokenizer", type=str, help="Tokenizer type"
+    )
+    parser.add_argument(
+        "--tokenizer_name_or_path", default="", type=str, help="Name or path to pretrained tokenizer"
+    )
     args = parser.parse_args()
     print(f'args = {args}')
     return args
