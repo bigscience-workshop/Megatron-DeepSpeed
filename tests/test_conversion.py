@@ -14,6 +14,8 @@ from megatron.checkpointing import load_checkpoint, save_checkpoint
 from megatron.testing_utils import (
     TestCasePlus,
     mockenv_context,
+    require_deepspeed,
+    require_torch_gpu,
     set_seed,
     torch_assert_close,
 )
@@ -39,6 +41,8 @@ def reset_global_variables():
     global_vars._GLOBAL_TIMERS = None
 
 
+@require_deepspeed
+@require_torch_gpu
 class TestCheckpointConversion(TestCasePlus):
     def setUp(self) -> None:
         super().setUp()
@@ -80,48 +84,48 @@ class TestCheckpointConversion(TestCasePlus):
 
         return megatron_args, ds_args
 
-    def save_and_get_ds_megatron_output(
-        self, args, ds_megatron_model, ds_megatron_token, ds_megatron_dir
+    def save_and_get_megatron_ds_output(
+        self, args, megatron_ds_model, megatron_ds_token, megatron_ds_dir
     ):
         # args for checkpointing
-        args.save, args.no_save_optim = ds_megatron_dir, True
+        args.save, args.no_save_optim = megatron_ds_dir, True
         # save deepspeed megatron model
-        save_checkpoint(1, ds_megatron_model, None, None)
+        save_checkpoint(1, megatron_ds_model, None, None)
 
-        ds_megatron_model = ds_megatron_model[0]
+        megatron_ds_model = megatron_ds_model[0]
 
         # get processed batch
-        _, _, attention_mask = ds_megatron_token
+        _, _, attention_mask = megatron_ds_token
 
         # disable activation checkpoint
-        ds_megatron_model.module.activation_checkpoint_interval = 0
+        megatron_ds_model.module.activation_checkpoint_interval = 0
         # resemble _exec_schedule in /deepspeed/runtine/pipe/engine.py
-        ds_megatron_model._compute_loss = False
-        ds_megatron_model.fwd_outputs = []
+        megatron_ds_model._compute_loss = False
+        megatron_ds_model.fwd_outputs = []
 
-        ds_megatron_model.eval()
+        megatron_ds_model.eval()
         # due to the hack in https://github.com/bigscience-workshop/Megatron-DeepSpeed/blob/68b46f201aad8803d0699f76b100663553e89e1b/pretrain_gpt.py#L74
         args.attn_mask = attention_mask
 
         # use deepspeed pipeline thing
-        ds_megatron_model.pipe_buffers["inputs"].append(ds_megatron_token)
-        ds_megatron_model.pipe_buffers["outputs"].append(None)
+        megatron_ds_model.pipe_buffers["inputs"].append(megatron_ds_token)
+        megatron_ds_model.pipe_buffers["outputs"].append(None)
 
         with torch.no_grad():
-            ds_megatron_model._exec_forward_pass(buffer_id=0)
+            megatron_ds_model._exec_forward_pass(buffer_id=0)
 
         # gather output
-        ds_megatron_output = ds_megatron_model.pipe_buffers["outputs"][0]
-        return ds_megatron_output
+        megatron_ds_output = megatron_ds_model.pipe_buffers["outputs"][0]
+        return megatron_ds_output
 
 
-    @parameterized.expand([
-        ("fp32", False),
-        ("fp16", True),
-    ])
-    def test_megatron_ds_to_megatron(self, name, fp16):
-        # run deepspeed to megatron first, then convert to transformers, then compare the difference
-        
+    @parameterized.expand(["fp16", "fp32"])
+    def test_megatron_ds_to_megatron(self, name):
+        # 1. convert megatron-deepspeed to megatron
+        # 2. convert megatron to transformers
+        # 3. compare the difference
+        fp16 = True if name == "fp16" else False
+
         megatron_args, ds_args = self.get_megatron_ds_args(fp16)
         # run deepspeed megatron
         with patch("sys.argv", flatten_arguments(megatron_args) + ds_args):
@@ -131,7 +135,7 @@ class TestCheckpointConversion(TestCasePlus):
                 args = get_args()
 
                 # get deepspeed megatron model
-                ds_megatron_model, _, _ = setup_model_and_optimizer(gpt_model_provider)
+                megatron_ds_model, _, _ = setup_model_and_optimizer(gpt_model_provider)
 
                 megatron_tokenizer = get_tokenizer()
                 # always use this token_ids
@@ -146,17 +150,17 @@ class TestCheckpointConversion(TestCasePlus):
                 megatron_token, _ = get_gpt_batch_pipe({"text": token_ids})
 
                 # save directory
-                ds_megatron_dir = self.get_auto_remove_tmp_dir()
+                megatron_ds_dir = self.get_auto_remove_tmp_dir()
 
                 # gather deepspeed model output
-                ds_megatron_output = self.save_and_get_ds_megatron_output(
-                    args, ds_megatron_model, megatron_token, ds_megatron_dir
+                megatron_ds_output = self.save_and_get_megatron_ds_output(
+                    args, megatron_ds_model, megatron_token, megatron_ds_dir
                 )
 
         # run conversion file
         megatron_dir = self.get_auto_remove_tmp_dir()
         conversion_args = {
-            "--input_folder": f"{ds_megatron_dir}",
+            "--input_folder": f"{megatron_ds_dir}",
             "--output_folder": f"{megatron_dir}",
         }
         with patch("sys.argv", flatten_arguments(conversion_args)):
@@ -178,15 +182,16 @@ class TestCheckpointConversion(TestCasePlus):
                 megatron_output = megatron_model(*megatron_token)
 
         # compare the difference
-        # torch_assert_equal(ds_megatron_output.data.cpu(), megatron_output.data.cpu())
-        torch_assert_close(ds_megatron_output.data.cpu(), megatron_output.data.cpu())
+        # torch_assert_equal(megatron_ds_output.data.cpu(), megatron_output.data.cpu())
+        torch_assert_close(megatron_ds_output.data.cpu(), megatron_output.data.cpu())
 
-    @parameterized.expand([
-        ("fp32", False),
-        ("fp16", True),
-    ])
-    def test_megatron_ds_to_transformers(self, name, fp16):
-        # run megatron first, then convert to transformers, then compare the difference
+
+    @parameterized.expand(["fp16", "fp32"])
+    def test_megatron_ds_to_transformers(self, name):
+        # 1. convert megatron-deepspeed to transformers
+        # 2. compare the difference
+        fp16 = True if name == "fp16" else False
+
         megatron_args, ds_args = self.get_megatron_ds_args(fp16)
 
         # run deepspeed megatron
@@ -197,7 +202,7 @@ class TestCheckpointConversion(TestCasePlus):
                 args = get_args()
 
                 # get deepspeed megatron model
-                ds_megatron_model, _, _ = setup_model_and_optimizer(gpt_model_provider)
+                megatron_ds_model, _, _ = setup_model_and_optimizer(gpt_model_provider)
 
                 megatron_tokenizer = get_tokenizer()
                 # always use this token_ids
@@ -212,17 +217,17 @@ class TestCheckpointConversion(TestCasePlus):
                 megatron_token, _ = get_gpt_batch_pipe({"text": token_ids})
 
                 # save directory
-                ds_megatron_dir = self.get_auto_remove_tmp_dir()
+                megatron_ds_dir = self.get_auto_remove_tmp_dir()
 
                 # gather deepspeed model output
-                ds_megatron_output = self.save_and_get_ds_megatron_output(
-                    args, ds_megatron_model, megatron_token, ds_megatron_dir
+                megatron_ds_output = self.save_and_get_megatron_ds_output(
+                    args, megatron_ds_model, megatron_token, megatron_ds_dir
                 )
 
         # run conversion file
         transformer_dir = self.get_auto_remove_tmp_dir()
         conversion_args = {
-            "--input_folder": f"{ds_megatron_dir}",
+            "--input_folder": f"{megatron_ds_dir}",
             "--output_folder": f"{transformer_dir}",
         }
         with patch("sys.argv", flatten_arguments(conversion_args)):
@@ -245,11 +250,11 @@ class TestCheckpointConversion(TestCasePlus):
         if fp16:
             # from megatron.model.module import float16_to_fp32
             # transformers_output = float16_to_fp32( transformers_output )
-            ds_megatron_output = ds_megatron_output.half()
+            megatron_ds_output = megatron_ds_output.half()
 
         # compare the difference
         # FIXME: it could now pass torch_assert_close, but not torch_assert_equal
-        # torch_assert_equal(ds_megatron_output.data.cpu(), transformers_output.data.cpu())
+        # torch_assert_equal(megatron_ds_output.data.cpu(), transformers_output.data.cpu())
         torch_assert_close(
-            ds_megatron_output.data.cpu(), transformers_output.data.cpu()
+            megatron_ds_output.data.cpu(), transformers_output.data.cpu()
         )
