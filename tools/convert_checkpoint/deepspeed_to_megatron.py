@@ -29,7 +29,7 @@ def parse_arguments():
         "--tokenizer_type", default="GPT2BPETokenizer", type=str, help="Tokenizer type"
     )
     parser.add_argument(
-        "--tokenizer_name_or_path", default="", type=str, help="Name or path to pretrained tokenizer"
+        "--tokenizer_name_or_path", default=None, type=str, help="Name or path to pretrained tokenizer"
     )
     args = parser.parse_args()
     print(f'args = {args}')
