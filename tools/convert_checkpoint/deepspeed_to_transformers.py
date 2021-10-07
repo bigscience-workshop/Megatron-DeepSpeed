@@ -97,7 +97,7 @@ def main():
     torch.save(output_state_dict, output_checkpoint_file)
 
     # Save tokenizer based on args
-    print("Now add tokenizer files")
+    print(f"Adding {tokenizer_class} tokenizer files")
     tokenizer.save_pretrained(basename)
 
 
