@@ -26,6 +26,7 @@ def main():
     ds_checkpoint = DeepSpeedCheckpoint(
         args.input_folder, args.target_tp, args.target_pp
     )
+    ds_args = ds_checkpoint.get_args()
     input_state_dict = _create_rank_checkpoint(ds_checkpoint, 0, 0, args.for_release)
 
     # the 2nd part comes from transformers.models.megatron_gpt2.convert_megatron_gpt2_checkpoint.main
@@ -72,6 +73,20 @@ def main():
     output_config = config.to_dict()
     output_config["architectures"] = ["GPT2LMHeadModel"]
     output_config["model_type"] = "gpt2"
+
+    # Add tokenizer class info to config.json
+    # see https://github.com/huggingface/transformers/issues/13906)
+    tokenizer_type = ds_args.tokenizer_type
+    if tokenizer_type == "GPT2BPETokenizer":
+        tokenizer_model_name = "gpt2"
+    elif tokenizer_type == "PretrainedFromHF":
+        tokenizer_model_name = ds_args.tokenizer_name_or_path
+    else:
+        raise ValueError(f"Unrecognized tokenizer_type {tokenizer_type}")
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_model_name)
+    tokenizer_class = type(tokenizer).__name__
+    output_config["tokenizer_class"] = tokenizer_class
+
     print(f'Saving config to "{output_config_file}"')
     with open(output_config_file, "w") as f:
         json.dump(output_config, f)
@@ -83,14 +98,6 @@ def main():
 
     # Save tokenizer based on args
     print("Now add tokenizer files")
-    tokenizer_type = args.tokenizer_type
-    if tokenizer_type == "GPT2BPETokenizer":
-        tokenizer_model_name = "gpt2"
-    elif tokenizer_type == "PretrainedFromHF":
-        tokenizer_model_name = args.tokenizer_name_or_path
-    else:
-        raise ValueError(f"Unrecognized tokenizer_type {tokenizer_type}")
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_model_name)
     tokenizer.save_pretrained(basename)
 
 
