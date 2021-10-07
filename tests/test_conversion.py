@@ -6,7 +6,6 @@ from unittest.mock import patch
 import deepspeed
 import torch
 
-torch.backends.cudnn.deterministic = True
 from transformers import GPT2LMHeadModel
 
 from megatron import get_args, get_tokenizer, global_vars, initialize_megatron
@@ -48,6 +47,10 @@ class TestCheckpointConversion(TestCasePlus):
         set_seed()
         reset_global_variables()
 
+        # set this for the test's duration only and unset when done
+        self.cudnn_deterministic = torch.backends.cudnn.deterministic
+        torch.backends.cudnn.deterministic = True
+
         self.dist_env_1_gpu = dict(
             MASTER_ADDR="localhost",
             MASTER_PORT="1123",
@@ -55,6 +58,12 @@ class TestCheckpointConversion(TestCasePlus):
             LOCAL_RANK="0",
             WORLD_SIZE="1",
         )
+
+    def tearDown(self):
+        # restore state
+        torch.backends.cudnn.deterministic = self.cudnn_deterministic
+        super().tearDown()
+
 
     def get_megatron_ds_args(self, fp16):
         # get megatron and deepspeed args
