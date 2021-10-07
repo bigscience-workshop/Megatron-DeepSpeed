@@ -68,16 +68,11 @@ class TestCheckpointConversion(TestCasePlus):
         # reset the number of layers
         # megatron_args['--num-layers'] = '50'
 
-        ds_config_path = f"{self.test_file_dir_str}/ds_config.json"
-        if not fp16:
+        if fp16:
+            ds_config_path = f"{self.test_file_dir_str}/ds_config.json"
+        else:
             megatron_args.pop("--fp16")
-            ds_config = json.load(open(f"{self.test_file_dir_str}/ds_config.json"))
-            ds_config["fp16"]["enabled"] = False
-            ds_config_path = os.path.join(
-                self.get_auto_remove_tmp_dir(), "ds_config.json"
-            )
-            with open(ds_config_path, "w") as f:
-                json.dump(ds_config, f)
+            ds_config_path = f"{self.test_file_dir_str}/ds_config_fp32.json"
 
         ds_args = f"""
             --deepspeed
