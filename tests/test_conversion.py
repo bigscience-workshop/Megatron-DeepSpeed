@@ -22,10 +22,10 @@ from megatron.testing_utils import (
 from megatron.training import setup_model_and_optimizer
 from pretrain_gpt import get_batch_pipe as get_gpt_batch_pipe
 from pretrain_gpt import model_provider as gpt_model_provider
+from test_model import flatten_arguments, get_default_args
 
 # fix the relative path
 sys.path.append("tools/convert_checkpoint/")
-from test_model import flatten_arguments, get_default_args
 
 from tools.convert_checkpoint import deepspeed_to_megatron, deepspeed_to_transformers
 from parameterized import parameterized
