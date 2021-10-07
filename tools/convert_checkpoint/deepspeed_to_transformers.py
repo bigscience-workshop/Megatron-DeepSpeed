@@ -4,8 +4,8 @@ import os
 import torch
 import json
 
-from deepspeed_checkpoint import DeepSpeedCheckpoint
-from deepspeed_to_megatron import _create_rank_checkpoint, parse_arguments
+from .deepspeed_checkpoint import DeepSpeedCheckpoint
+from .deepspeed_to_megatron import _create_rank_checkpoint, parse_arguments
 
 # the import was tested to work with this version
 # https://github.com/huggingface/transformers/commit/0af901e83 if it diverges we may consider
@@ -26,11 +26,11 @@ def main():
     # the 2nd part comes from transformers.models.megatron_gpt2.convert_megatron_gpt2_checkpoint.main
     # Spell out all parameters in case the defaults change.
     ds_args = ds_checkpoint.get_args()
-    if ds_args.bias_gelu_fusion: 
+    if ds_args.bias_gelu_fusion:
         activation_function = 'gelu_fast'
-    elif ds_args.openai_gelu: 
+    elif ds_args.openai_gelu:
         activation_function = 'gelu_new'
-    else: 
+    else:
         activation_function = 'gelu'
 
     config = GPT2Config(

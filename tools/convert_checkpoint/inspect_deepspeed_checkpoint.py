@@ -1,5 +1,5 @@
 import argparse
-from deepspeed_checkpoint import DeepSpeedCheckpoint
+from .deepspeed_checkpoint import DeepSpeedCheckpoint
 
 def list_files(file_list, tag):
     print(f'Listing files: {tag}')
@@ -13,7 +13,7 @@ def parse_arguments():
     parser.add_argument('--target_pp', default=None, type=int, help='Target PP degree')
     args = parser.parse_args()
     print(f'args = {args}')
-    return args 
+    return args
 
 
 def show_input_files(ds_checkpoint):
@@ -66,7 +66,7 @@ def main():
 
     ds_checkpoint = DeepSpeedCheckpoint(args.folder, args.target_tp, args.target_pp)
     ds_checkpoint.validate_files()
-    
+
     show_input_files(ds_checkpoint)
     show_simple_state(ds_checkpoint)
     show_mappings(ds_checkpoint)
