@@ -1,11 +1,14 @@
 #!/usr/bin/env python
 
+# Usage:
+# python tools/convert_checkpoint/deepspeed_to_transformers.py --input_folder path --output_folder path
+
 import os
 import torch
 import json
 
-from .deepspeed_checkpoint import DeepSpeedCheckpoint
-from .deepspeed_to_megatron import _create_rank_checkpoint, parse_arguments
+from megatron.checkpoint.deepspeed_checkpoint import DeepSpeedCheckpoint
+from tools.convert_checkpoint.deepspeed_to_megatron import _create_rank_checkpoint, parse_arguments
 
 # the import was tested to work with this version
 # https://github.com/huggingface/transformers/commit/0af901e83 if it diverges we may consider

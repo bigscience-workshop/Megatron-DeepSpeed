@@ -23,7 +23,8 @@ from megatron.training import setup_model_and_optimizer
 from pretrain_gpt import get_batch_pipe as get_gpt_batch_pipe
 from pretrain_gpt import model_provider as gpt_model_provider
 from test_model import flatten_arguments, get_default_args
-from tools.convert_checkpoint import deepspeed_to_megatron, deepspeed_to_transformers
+from tools.convert_checkpoint.deepspeed_to_megatron import main as megatron_ds_to_megatron_main
+from tools.convert_checkpoint.deepspeed_to_transformers import main as megatron_ds_to_transformers_main
 
 
 def reset_global_variables():
@@ -163,7 +164,7 @@ class TestCheckpointConversion(TestCasePlus):
             "--output_folder": f"{megatron_dir}",
         }
         with patch("sys.argv", flatten_arguments(conversion_args)):
-            deepspeed_to_megatron.main()
+            megatron_ds_to_megatron_main()
 
         # run megatron
         with patch("sys.argv", flatten_arguments(megatron_args)):
@@ -230,7 +231,7 @@ class TestCheckpointConversion(TestCasePlus):
             "--output_folder": f"{transformer_dir}",
         }
         with patch("sys.argv", flatten_arguments(conversion_args)):
-            deepspeed_to_transformers.main()
+            megatron_ds_to_transformers_main()
 
         torch_dtype = torch.get_default_dtype() if not fp16 else torch.float16
         transformers_model = GPT2LMHeadModel.from_pretrained(transformer_dir, torch_dtype=torch_dtype)

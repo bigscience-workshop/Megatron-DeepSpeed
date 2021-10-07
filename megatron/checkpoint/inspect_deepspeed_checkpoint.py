@@ -1,5 +1,5 @@
 import argparse
-from .deepspeed_checkpoint import DeepSpeedCheckpoint
+from megatron.checkpoint.deepspeed_checkpoint import DeepSpeedCheckpoint
 
 def list_files(file_list, tag):
     print(f'Listing files: {tag}')
