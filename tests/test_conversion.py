@@ -28,7 +28,6 @@ sys.path.append("tools/convert_checkpoint/")
 from test_model import flatten_arguments, get_default_args
 
 from tools.convert_checkpoint import deepspeed_to_megatron, deepspeed_to_transformers
-# FIXME: additional package requirement
 from parameterized import parameterized
 
 
