@@ -10,17 +10,23 @@ from deepspeed_to_megatron import _create_rank_checkpoint, parse_arguments
 # the import was tested to work with this version
 # https://github.com/huggingface/transformers/commit/0af901e83 if it diverges we may consider
 # copying that version here instead
-from transformers.models.megatron_gpt2.convert_megatron_gpt2_checkpoint import convert_megatron_checkpoint
-from transformers import GPT2Config
+from transformers.models.megatron_gpt2.convert_megatron_gpt2_checkpoint import (
+    convert_megatron_checkpoint,
+)
+from transformers import GPT2Config, AutoTokenizer
+
 
 def main():
-
     # this first part comes mainly from deepspeed_to_megatron.main
     args = parse_arguments()
-    print(f'Converting DeepSpeed checkpoint in {args.input_folder} to HF Transformers checkpoint in {args.output_folder}')
+    print(
+        f"Converting DeepSpeed checkpoint in {args.input_folder} to HF Transformers checkpoint in {args.output_folder}"
+    )
 
-    ds_checkpoint = DeepSpeedCheckpoint(args.input_folder, args.target_tp, args.target_pp)
-    iteration = ds_checkpoint.get_iteration()
+    ds_checkpoint = DeepSpeedCheckpoint(
+        args.input_folder, args.target_tp, args.target_pp
+    )
+    ds_args = ds_checkpoint.get_args()
     input_state_dict = _create_rank_checkpoint(ds_checkpoint, 0, 0, args.for_release)
 
     # the 2nd part comes from transformers.models.megatron_gpt2.convert_megatron_gpt2_checkpoint.main
@@ -59,7 +65,7 @@ def main():
     os.makedirs(basename, exist_ok=True)
 
     # Print the structure of converted state dict.
-    #if args.print_checkpoint_structure:
+    # if args.print_checkpoint_structure:
     #    recursive_print(None, output_state_dict)
 
     # Store the config to file.
@@ -67,6 +73,20 @@ def main():
     output_config = config.to_dict()
     output_config["architectures"] = ["GPT2LMHeadModel"]
     output_config["model_type"] = "gpt2"
+
+    # Add tokenizer class info to config.json
+    # see https://github.com/huggingface/transformers/issues/13906)
+    tokenizer_type = ds_args.tokenizer_type
+    if tokenizer_type == "GPT2BPETokenizer":
+        tokenizer_model_name = "gpt2"
+    elif tokenizer_type == "PretrainedFromHF":
+        tokenizer_model_name = ds_args.tokenizer_name_or_path
+    else:
+        raise ValueError(f"Unrecognized tokenizer_type {tokenizer_type}")
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_model_name)
+    tokenizer_class = type(tokenizer).__name__
+    output_config["tokenizer_class"] = tokenizer_class
+
     print(f'Saving config to "{output_config_file}"')
     with open(output_config_file, "w") as f:
         json.dump(output_config, f)
@@ -76,7 +96,9 @@ def main():
     print(f'Saving checkpoint to "{output_checkpoint_file}"')
     torch.save(output_state_dict, output_checkpoint_file)
 
-    print("Now add tokenizer files and upload to the hub")
+    # Save tokenizer based on args
+    print(f"Adding {tokenizer_class} tokenizer files")
+    tokenizer.save_pretrained(basename)
 
 
 if __name__ == "__main__":
