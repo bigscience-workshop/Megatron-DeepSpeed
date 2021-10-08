@@ -118,9 +118,17 @@ def pretrain(train_valid_test_dataset_provider,
     if args.deepspeed:
         args.deepspeed_configuration = json.load(
             open(args.deepspeed_config, 'r', encoding='utf-8'))
-        if "curriculum_learning" in args.deepspeed_configuration:
-            if "enabled" in args.deepspeed_configuration["curriculum_learning"]:
-                args.curriculum_learning = args.deepspeed_configuration["curriculum_learning"]["enabled"]
+        if "curriculum_learning" in args.deepspeed_configuration and \
+            "enabled" in args.deepspeed_configuration["curriculum_learning"]:
+            args.curriculum_learning = args.deepspeed_configuration[ \
+                "curriculum_learning"]["enabled"]
+        if args.curriculum_learning and \
+            args.pipeline_model_parallel_size >= 1:
+            from deepspeed.runtime.data_pipeline.curriculum_scheduler \
+                import CurriculumScheduler
+            args.curriculum_scheduler = CurriculumScheduler( \
+                args.deepspeed_configuration["curriculum_learning"])
+
 
     # Model, optimizer, and learning rate.
     timers('model-and-optimizer-setup').start()
@@ -728,6 +736,7 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
                        optimizer,
                        lr_scheduler)
         iteration += 1
+        args.iteration = iteration
         new_samples = mpu.get_data_parallel_world_size() * \
                                        args.micro_batch_size * \
                                        get_num_microbatches()
