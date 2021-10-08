@@ -72,7 +72,7 @@ def model_provider(pre_process=True, post_process=True):
 
             # must be bool or the training crashes expecting bool, but getting Half
             args.attn_mask = attention_mask.to(torch.bool)
-
+            args.attn_mask_original = attention_mask.to(torch.bool)
         else:
             model = GPTModel(
                 num_tokentypes=0,
@@ -159,6 +159,7 @@ def get_batch_pipe(data):
 
             # attention_mask has size [1, 1, seqlen, seqlen]
             attention_mask = attention_mask[:, :, :args.curriculum_seqlen, :args.curriculum_seqlen].contiguous()
+            args.attn_mask = args.attn_mask_original[:, :, :args.curriculum_seqlen, :args.curriculum_seqlen].contiguous()
 
     return (tokens, position_ids, attention_mask), (labels, loss_mask)
 

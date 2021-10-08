@@ -63,7 +63,7 @@ megatron_options=" \
         --global-batch-size ${TARGET_GLOBAL_BATCH_SIZE} \
         --num-layers 12 \
         --hidden-size 768 \
-        --num-attention-heads 12 \
+        --num-attention-heads 16 \
         --seq-length 1024 \
         --max-position-embeddings 1024 \
         --train-samples ${TRAIN_SAMPLES} \
