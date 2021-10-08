@@ -746,7 +746,7 @@ class ParallelTransformer(MegatronModule):
                 'activation checkpointing'
 
         if self.pre_process:
-            # Data format change to avoid explicit tranposes : [b s h] --> [s b h].
+            # Data format change to avoid explicit transposes : [b s h] --> [s b h].
             # If the input flag for fp32 residual connection is set, convert for float.
             if self.fp32_residual_connection:
                 hidden_states = hidden_states.transpose(0, 1).contiguous().float()
