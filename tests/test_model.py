@@ -37,16 +37,15 @@ def get_default_args():
         "--clip-grad": "1.0",
         "--lr-warmup-fraction": ".01",
         "--fp16": "",
-
         "--attention-dropout": "0",
         "--hidden-dropout": "0",
+        "--checkpoint-activations": "",
 
         # OUTPUT_ARGS
         "--log-interval": "10",
         "--save-interval": "500",
         "--eval-interval": "100",
         "--eval-iters": "10",
-        "--checkpoint-activations": "",
 
         # DATA_ARGS
     }
