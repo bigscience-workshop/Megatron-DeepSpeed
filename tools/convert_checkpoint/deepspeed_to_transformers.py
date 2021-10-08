@@ -5,7 +5,6 @@
 
 import os
 import torch
-import json
 
 from megatron.checkpoint.deepspeed_checkpoint import DeepSpeedCheckpoint
 from tools.convert_checkpoint.deepspeed_to_megatron import _create_rank_checkpoint, parse_arguments
@@ -16,7 +15,7 @@ from tools.convert_checkpoint.deepspeed_to_megatron import _create_rank_checkpoi
 from transformers.models.megatron_gpt2.convert_megatron_gpt2_checkpoint import (
     convert_megatron_checkpoint,
 )
-from transformers import GPT2Config, AutoTokenizer
+from transformers import AutoTokenizer, GPT2Config
 
 
 def main():
@@ -36,13 +35,14 @@ def main():
     # Spell out all parameters in case the defaults change.
     ds_args = ds_checkpoint.get_args()
     if ds_args.bias_gelu_fusion:
-        activation_function = 'gelu_fast'
+        activation_function = "gelu_fast"
     elif ds_args.openai_gelu:
-        activation_function = 'gelu_new'
+        activation_function = "gelu_new"
     else:
-        activation_function = 'gelu'
+        activation_function = "gelu"
 
     config = GPT2Config(
+        architectures=["GPT2LMHeadModel"],
         vocab_size=50257,
         n_positions=1024,
         n_ctx=1024,
@@ -79,13 +79,7 @@ def main():
     # if args.print_checkpoint_structure:
     #    recursive_print(None, output_state_dict)
 
-    # Store the config to file.
-    output_config_file = os.path.join(basename, "config.json")
-    output_config = config.to_dict()
-    output_config["architectures"] = ["GPT2LMHeadModel"]
-    output_config["model_type"] = "gpt2"
-
-    # Add tokenizer class info to config.json
+    # Add tokenizer class info to config
     # see https://github.com/huggingface/transformers/issues/13906)
     tokenizer_type = ds_args.tokenizer_type
     if tokenizer_type == "GPT2BPETokenizer":
@@ -96,20 +90,21 @@ def main():
         raise ValueError(f"Unrecognized tokenizer_type {tokenizer_type}")
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_model_name)
     tokenizer_class = type(tokenizer).__name__
-    output_config["tokenizer_class"] = tokenizer_class
+    config.tokenizer_class = tokenizer_class
 
-    print(f'Saving config to "{output_config_file}"')
-    with open(output_config_file, "w") as f:
-        json.dump(output_config, f)
+    # Store the config to file.
+    print("Saving config")
+    config.save_pretrained(basename)
+
+    # Save tokenizer based on args
+    print(f"Adding {tokenizer_class} tokenizer files")
+    tokenizer.save_pretrained(basename)
 
     # Store the state_dict to file.
     output_checkpoint_file = os.path.join(basename, "pytorch_model.bin")
     print(f'Saving checkpoint to "{output_checkpoint_file}"')
     torch.save(output_state_dict, output_checkpoint_file)
 
-    # Save tokenizer based on args
-    print(f"Adding {tokenizer_class} tokenizer files")
-    tokenizer.save_pretrained(basename)
 
 
 if __name__ == "__main__":
