@@ -33,7 +33,6 @@ def main():
 
     # the 2nd part comes from transformers.models.megatron_gpt2.convert_megatron_gpt2_checkpoint.main
     # Spell out all parameters in case the defaults change.
-    ds_args = ds_checkpoint.get_args()
     if ds_args.bias_gelu_fusion:
         activation_function = "gelu_fast"
     elif ds_args.openai_gelu:
