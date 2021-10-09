@@ -4,16 +4,16 @@
 # learning, some parameters are not for actual GPT pretraining.
 
 TARGET_GLOBAL_BATCH_SIZE=512
-TRAIN_SAMPLES=146484375
+TRAIN_SAMPLES=146_484_375
 LR=1.0e-4
 MIN_LR=1.0e-5
-LR_DECAY_SAMPLES=126953125
-LR_WARMUP_SAMPLES=183105
+LR_DECAY_SAMPLES=126_953_125
+LR_WARMUP_SAMPLES=183_105
 SEQLEN=1024
 
 ############################################################
 # New configs for curriculum learning, see README.md
-TRAIN_TOKENS=10000000000
+TRAIN_TOKENS=10_000_000_000
 LR_DECAY_TOKENS=$(($LR_DECAY_SAMPLES*$SEQLEN))
 ############################################################
 
@@ -43,7 +43,7 @@ NAME="gpt-117M-pp${PP_SIZE}-mp${MP_SIZE}-bsz${TARGET_GLOBAL_BATCH_SIZE}-mbsz${MI
 current_time=$(date "+%Y.%m.%d-%H.%M.%S")
 host="${HOSTNAME}"
 TENSORBOARD_DIR="tensorboard/${NAME}_${host}_${current_time}"
-mkdir -p ${TENSORBOARD_DIR} 
+mkdir -p ${TENSORBOARD_DIR}
 CHECKPOINT_PATH="checkpoints/${NAME}"
 
 megatron_options=" \
