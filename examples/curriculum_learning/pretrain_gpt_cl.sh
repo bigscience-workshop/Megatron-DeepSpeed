@@ -56,7 +56,6 @@ megatron_options=" \
         --adam-beta2 0.95 \
         --tensor-model-parallel-size ${MP_SIZE} \
         --init-method-std 0.014 \
-        --lr-decay-samples ${LR_DECAY_SAMPLES} \
         --lr-decay-tokens ${LR_DECAY_TOKENS} \
         --lr-warmup-samples ${LR_WARMUP_SAMPLES} \
         --micro-batch-size ${MICRO_BATCH_SIZE} \
