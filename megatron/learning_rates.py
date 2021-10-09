@@ -87,6 +87,8 @@ class AnnealingLR(object):
             decay_steps_ = self.decay_steps - self.warmup_steps
             decay_ratio = float(num_steps_) / float(decay_steps_)
         else:
+            # token-based decay
+
             if self.num_tokens > self.decay_tokens:
                 return self.min_lr
             num_tokens_ = self.num_tokens - self.warmup_tokens
