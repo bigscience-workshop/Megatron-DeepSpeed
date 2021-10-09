@@ -1,6 +1,7 @@
 datasets
 nltk
 numpy
+parameterized
 pybind11
 regex
 six
