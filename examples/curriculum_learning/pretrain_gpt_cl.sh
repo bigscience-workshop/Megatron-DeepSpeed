@@ -1,14 +1,7 @@
 #!/bin/bash
-sudo pip install pybind11
 
 # This is a dummy train script to show how to use curriculum
 # learning, some parameters are not for actual GPT pretraining.
-
-############################################################
-# New configs for curriculum learning, see README.md
-TRAIN_TOKENS=10000000000
-LR_DECAY_TOKENS=10000000000
-############################################################
 
 TARGET_GLOBAL_BATCH_SIZE=512
 TRAIN_SAMPLES=146484375
@@ -16,6 +9,13 @@ LR=1.0e-4
 MIN_LR=1.0e-5
 LR_DECAY_SAMPLES=126953125
 LR_WARMUP_SAMPLES=183105
+SEQLEN=1024
+
+############################################################
+# New configs for curriculum learning, see README.md
+TRAIN_TOKENS=10000000000
+LR_DECAY_TOKENS=$(($LR_DECAY_SAMPLES*$SEQLEN))
+############################################################
 
 LOG_INTERVAL=100
 EVAL_ITERS=10
@@ -64,8 +64,8 @@ megatron_options=" \
         --num-layers 12 \
         --hidden-size 768 \
         --num-attention-heads 16 \
-        --seq-length 1024 \
-        --max-position-embeddings 1024 \
+        --seq-length ${SEQLEN} \
+        --max-position-embeddings ${SEQLEN} \
         --train-samples ${TRAIN_SAMPLES} \
         --train-tokens ${TRAIN_TOKENS} \
         --lr ${LR} \
