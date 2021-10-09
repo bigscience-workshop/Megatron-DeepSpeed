@@ -80,6 +80,8 @@ class MegDSTestTraining(TestCasePlus):
 
         n_samples = 200 # about 37 iterations
         exit_interval = 20 # some samples in the first half and then some more in the 2nd half after resume
+        seq_len = 128
+
 
         if variation == "base":
             # XXX: refactor repeated elements
@@ -91,7 +93,7 @@ class MegDSTestTraining(TestCasePlus):
                 --num-layers 2
                 --hidden-size 64
                 --num-attention-heads 2
-                --seq-length 128
+                --seq-length {seq_len}
                 --max-position-embeddings 1024
                 --micro-batch-size 1
                 --rampup-batch-size 2 2 {n_samples}
@@ -104,6 +106,8 @@ class MegDSTestTraining(TestCasePlus):
                 --adam-eps 1e-8
                 --lr 1e-4
                 --lr-warmup-samples 5
+                --lr-decay-samples 5
+                --lr-decay-tokens 5
                 --clip-grad 1.0
                 --weight-decay 1e-1
                 --fp16
@@ -137,6 +141,11 @@ class MegDSTestTraining(TestCasePlus):
             """.split()
 
         elif variation == "cl":
+            # CurriculumLearning
+
+            lr_decay_samples = 6
+            lr_decay_tokens = lr_decay_samples * seq_len
+
             args = f"""
                 --tensor-model-parallel-size {tp_size}
                 --pipeline-model-parallel-size {pp_size}
@@ -145,12 +154,12 @@ class MegDSTestTraining(TestCasePlus):
                 --num-layers 2
                 --hidden-size 64
                 --num-attention-heads 2
-                --seq-length 128
+                --seq-length {seq_len}
                 --max-position-embeddings 1024
                 --micro-batch-size 1
-                --rampup-batch-size 2 2 {n_samples}
                 --global-batch-size 16
-                --train-samples {n_samples}
+                --train-samples {n_samples*2}
+                --train-tokens {n_samples}
 
                 --optimizer adam
                 --adam-beta1 0.9
@@ -158,6 +167,8 @@ class MegDSTestTraining(TestCasePlus):
                 --adam-eps 1e-8
                 --lr 1e-4
                 --lr-warmup-samples 5
+                --lr-decay-samples {lr_decay_samples}
+                --lr-decay-tokens {lr_decay_tokens}
                 --clip-grad 1.0
                 --weight-decay 1e-1
                 --fp16
