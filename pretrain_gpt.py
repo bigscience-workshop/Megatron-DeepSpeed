@@ -156,10 +156,11 @@ def get_batch_pipe(data):
             position_ids = position_ids[:, :args.curriculum_seqlen].contiguous()
             labels = labels[:, :args.curriculum_seqlen].contiguous()
             loss_mask = loss_mask[:, :args.curriculum_seqlen].contiguous()
-
+        actual_seqlen = tokens.size()[1]
+        if actual_seqlen != args.attn_mask.size()[2]:
             # attention_mask has size [1, 1, seqlen, seqlen]
-            attention_mask = attention_mask[:, :, :args.curriculum_seqlen, :args.curriculum_seqlen].contiguous()
-            args.attn_mask = args.attn_mask_original[:, :, :args.curriculum_seqlen, :args.curriculum_seqlen].contiguous()
+            attention_mask = attention_mask[:, :, :actual_seqlen, :actual_seqlen].contiguous()
+            args.attn_mask = args.attn_mask_original[:, :, :actual_seqlen, :actual_seqlen].contiguous()
 
     return (tokens, position_ids, attention_mask), (labels, loss_mask)
 
