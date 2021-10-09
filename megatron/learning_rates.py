@@ -76,6 +76,8 @@ class AnnealingLR(object):
             return self.max_lr
 
         if self.decay_tokens is None:
+            # step-based decay
+            
             # For any steps larger than `self.decay_steps`, use `self.min_lr`.
             if self.num_steps > self.decay_steps:
                 return self.min_lr
