@@ -167,7 +167,6 @@ class MegDSTestTraining(TestCasePlus):
                 --adam-eps 1e-8
                 --lr 1e-4
                 --lr-warmup-samples 5
-                --lr-decay-samples {lr_decay_samples}
                 --lr-decay-tokens {lr_decay_tokens}
                 --clip-grad 1.0
                 --weight-decay 1e-1
