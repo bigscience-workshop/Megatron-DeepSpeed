@@ -78,7 +78,7 @@ class MegDSTestTraining(TestCasePlus):
         pp_size, tp_size, dp_size = get_3d_dimensions()
         num_gpus = pp_size * tp_size * dp_size
 
-        n_samples = 200 # about 37 iterations
+        n_samples = 300 # about 56 iterations
         exit_interval = 20 # some samples in the first half and then some more in the 2nd half after resume
         seq_len = 128
 
@@ -145,6 +145,14 @@ class MegDSTestTraining(TestCasePlus):
             lr_decay_samples = 6
             lr_decay_tokens = lr_decay_samples * seq_len
 
+            train_tokens = n_samples * seq_len
+
+            # XXX: if changing seq_len from 128, must adjust ds config to:
+            #  curriculum_learning.max_difficulty: $SEQLEN
+
+            # XXX: probably we should write the ds config on the fly to keep everything in sync,
+            # rather than using the pre-saved config
+
             args = f"""
                 --tensor-model-parallel-size {tp_size}
                 --pipeline-model-parallel-size {pp_size}
@@ -158,7 +166,7 @@ class MegDSTestTraining(TestCasePlus):
                 --micro-batch-size 1
                 --global-batch-size 16
                 --train-samples {n_samples*2}
-                --train-tokens {n_samples}
+                --train-tokens {train_tokens}
 
                 --optimizer adam
                 --adam-beta1 0.9
