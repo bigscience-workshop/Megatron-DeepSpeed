@@ -249,6 +249,8 @@ def parse_args(extra_args_provider=None, defaults={},
             'for distribute-checkpointed-activations to work you '\
             'need to enable checkpoint-activations'
 
+    args.curriculum_learning = False
+
     _print_args(args)
     return args
 
