@@ -25,7 +25,7 @@ from megatron import mpu
 from megatron.data.gpt_dataset import build_train_valid_test_datasets
 from megatron.model import GPTModel, GPTModelPipe
 from megatron.training import pretrain
-from megatron.utils import get_ltor_masks_and_position_ids, get_prefix_indices
+from megatron.utils import get_ltor_masks_and_position_ids
 from megatron.utils import average_losses_across_data_parallel_group
 
 import deepspeed
@@ -33,6 +33,19 @@ from deepspeed.runtime.utils import see_memory_usage
 import os
 import subprocess
 
+collected_sample = {}
+token_dict = {
+    15: 0,
+    16: 1,
+    17: 2,
+    18: 3,
+    19: 4,
+    20: 5,
+    21: 6,
+    22: 7,
+    23: 8,
+    24: 9,
+}
 
 def model_provider(pre_process=True, post_process=True):
     """Build the model."""
@@ -41,31 +54,11 @@ def model_provider(pre_process=True, post_process=True):
     see_memory_usage(f"Before Building Model", force=True)
 
     args = get_args()
-
     with deepspeed.zero.Init(data_parallel_group=mpu.get_data_parallel_group(),
-                             remote_device=None if args.remote_device == 'none' else args.remote_device,
-                             config_dict_or_path=args.deepspeed_config,
-                             enabled=args.zero_stage == 3,
-                             mpu=mpu):
-        if args.deepspeed:
-            # Precompute the attention mask and store it in args. This avoids having to
-            # pipeline it as an activation during training. The mask is constant, and thus
-            # we can reuse it.
-            attention_mask = torch.tril(torch.ones(
-                (1, args.seq_length, args.seq_length), device=torch.cuda.current_device())).view(
-                    1, 1, args.seq_length, args.seq_length)
-
-            # Convert attention mask to binary:
-            attention_mask = (attention_mask < 0.5)
-            if args.fp16:
-                attention_mask = attention_mask.half()
-            elif args.bf16:
-                attention_mask = attention_mask.bfloat16()
-
-            # must be bool or the training crashes expecting bool, but getting Half
-            args.attn_mask = attention_mask.to(torch.bool)
-            args.attn_mask_original = attention_mask.to(torch.bool)
-
+                             remote_device=None if args.remote_device=='none' else args.remote_device,
+                             config=args.deepspeed_config,
+                             enabled=args.zero_stage==3):
+        if args.deepspeed and mpu.get_pipeline_model_parallel_world_size() > 1:
             model = GPTModelPipe(
                 num_tokentypes=0,
                 parallel_output=True
@@ -73,6 +66,23 @@ def model_provider(pre_process=True, post_process=True):
             # This is a hack to give us a reference to get_batch_pipe from within training.py
             # We need to call model.set_batch_fn after deepspeed.initialize
             model._megatron_batch_fn = get_batch_pipe
+
+            # Predompute the attention mask and store it in args. This avoids having to
+            # pipeline it as an activation during training. The mask is constant, and thus
+            # we can reuse it.
+            attention_mask = torch.tril(torch.ones(
+                (1, args.seq_length, args.seq_length), device=torch.cuda.current_device())).view(
+                    1, 1, args.seq_length, args.seq_length)
+            
+            # Convert attention mask to binary:
+            attention_mask = (attention_mask < 0.5)
+            if args.fp16:
+                attention_mask = attention_mask.half()
+            elif args.bf16:
+                attention_mask = attention_mask.bfloat16()
+            
+            args.attn_mask = attention_mask
+
         else:
             model = GPTModel(
                 num_tokentypes=0,
@@ -101,7 +111,8 @@ def get_batch(data_iterator):
     data_b = mpu.broadcast_data(keys, data, datatype)
 
     # Unpack.
-    tokens_ = data_b['text'].long()
+    # tokens_ = data_b['text'].long()
+    tokens_ = data_b[keys[0]].long()
     labels = tokens_[:, 1:].contiguous()
     tokens = tokens_[:, :-1].contiguous()
 
@@ -111,13 +122,9 @@ def get_batch(data_iterator):
         tokenizer.eod,
         args.reset_position_ids,
         args.reset_attention_mask,
-        args.eod_mask_loss,
-        prefix_indices=None,
-        loss_on_targets_only=args.loss_on_targets_only
-    )
+        args.eod_mask_loss)
 
     return tokens, labels, loss_mask, attention_mask, position_ids
-
 
 def get_batch_pipe(data):
     """Modification of `get_batch` to work on `next(data_iterator)` instead of `data_iterator`"""
@@ -136,34 +143,15 @@ def get_batch_pipe(data):
     labels = tokens_[:, 1:].contiguous()
     tokens = tokens_[:, :-1].contiguous()
 
-    # Get the masks and position ids.
+    # Get the masks and postition ids.
     attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
         tokens,
         tokenizer.eod,
         args.reset_position_ids,
         args.reset_attention_mask,
-        args.eod_mask_loss,
-        prefix_indices=None,
-        loss_on_targets_only=args.loss_on_targets_only
-    )
-    if args.curriculum_learning:
-        args.curriculum_seqlen = args.curriculum_scheduler.update_difficulty( \
-                    args.iteration + 1)
-        if args.curriculum_seqlen < tokens.size()[1]:
-            # seqlen-based curriculum learning
-            # tokens, position_ids, labels, loss_mask have size [batch size, seqlen]
-            tokens = tokens[:, :args.curriculum_seqlen].contiguous()
-            position_ids = position_ids[:, :args.curriculum_seqlen].contiguous()
-            labels = labels[:, :args.curriculum_seqlen].contiguous()
-            loss_mask = loss_mask[:, :args.curriculum_seqlen].contiguous()
-        actual_seqlen = tokens.size()[1]
-        if actual_seqlen != args.attn_mask.size()[2]:
-            # attention_mask has size [1, 1, seqlen, seqlen]
-            attention_mask = attention_mask[:, :, :actual_seqlen, :actual_seqlen].contiguous()
-            args.attn_mask = args.attn_mask_original[:, :, :actual_seqlen, :actual_seqlen].contiguous()
+        args.eod_mask_loss)
 
     return (tokens, position_ids, attention_mask), (labels, loss_mask)
-
 
 def loss_func(loss_mask, output_tensor):
     losses = output_tensor.float()
@@ -187,10 +175,17 @@ def forward_step(data_iterator, model):
         data_iterator)
     timers('batch-generator').stop()
 
+    for row in tokens.detach().cpu():
+        token_idx = [i for i in row.tolist() if i in list(token_dict.keys())][0]
+        num = "dataset_{}".format(token_dict[token_idx])
+        if num in collected_sample:
+            collected_sample[num] += 1
+        else:
+            collected_sample[num] = 1
+
+    print_rank_0(collected_sample)
     output_tensor = model(tokens, position_ids, attention_mask,
                           labels=labels)
-    if args.curriculum_learning and args.curriculum_seqlen < args.seq_length:
-        loss_mask = loss_mask[:, :args.curriculum_seqlen].contiguous()
 
     return output_tensor, partial(loss_func, loss_mask)
 
@@ -213,11 +208,9 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
 
     return train_ds, valid_ds, test_ds
 
-
 def command_exists(cmd):
     result = subprocess.Popen(f'type {cmd}', stdout=subprocess.PIPE, shell=True)
     return result.wait() == 0
-
 
 def git_ds_info():
     from deepspeed.env_report import main as ds_report

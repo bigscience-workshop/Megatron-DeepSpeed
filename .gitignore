@@ -115,6 +115,9 @@ venv.bak/
 .idea/
 .iml
 
+# VSCode
+.vscode/
+
 # Rope project settings
 .ropeproject
 

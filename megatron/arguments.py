@@ -170,6 +170,7 @@ def parse_args(extra_args_provider=None, defaults={},
     # Consumed tokens.
     args.consumed_train_samples = 0
     args.consumed_valid_samples = 0
+    args.consumed_train_tokens = 0
     args.gigaflos_no_embeds = 0
 
     # Iteration-based training.
@@ -223,7 +224,7 @@ def parse_args(extra_args_provider=None, defaults={},
         assert args.encoder_seq_length is not None
         args.seq_length = args.encoder_seq_length
 
-    if args.position_embedding_type == PositionEmbeddingType.absolute:
+    if args.position_embedding_type == PositionEmbeddingType.absolute or args.position_embedding_type == PositionEmbeddingType.alibi:
         assert args.max_position_embeddings is not None
         if args.seq_length is not None:
             assert args.max_position_embeddings >= args.seq_length
@@ -247,6 +248,8 @@ def parse_args(extra_args_provider=None, defaults={},
         assert args.checkpoint_activations, \
             'for distribute-checkpointed-activations to work you '\
             'need to enable checkpoint-activations'
+
+    args.curriculum_learning = False
 
     _print_args(args)
     return args
@@ -313,7 +316,7 @@ def _add_network_size_args(parser):
     group.add_argument('--position-embedding-type', type=lambda x: PositionEmbeddingType[x],
                        choices=list(PositionEmbeddingType),
                        default=PositionEmbeddingType.absolute,
-                       help='Define position embedding type ("absolute" | "rotary"). "absolute" by default.'
+                       help='Define position embedding type ("absolute" | "rotary" | "alibi"). "absolute" by default.'
                        )
     group.add_argument('--glu-activation', type=str,
                        choices=megatron.model.glu_activations.GLU_ACTIVATIONS.keys(),
@@ -428,6 +431,9 @@ def _add_training_args(parser):
                        help='Total number of samples to train over all '
                        'training runs. Note that either train-iters or '
                        'train-samples should be provided.')
+    group.add_argument('--train-tokens', type=int, default=None,
+                       help='Total number of tokens to train over all '
+                       'training runs.')
     group.add_argument('--log-interval', type=int, default=100,
                        help='Report loss and timing interval.')
     group.add_argument('--exit-interval', type=int, default=None,
@@ -495,6 +501,9 @@ def _add_learning_rate_args(parser):
     group.add_argument('--lr-decay-samples', type=int, default=None,
                        help='number of samples to decay learning rate over,'
                        ' If None defaults to `--train-samples`')
+    group.add_argument('--lr-decay-tokens', type=int, default=None,
+                       help='number of tokens to decay learning rate over,'
+                       ' If not None will override iter/sample-based decay')
     group.add_argument('--lr-warmup-fraction', type=float, default=None,
                        help='fraction of lr-warmup-(iters/samples) to use '
                        'for warmup (as a float)')
