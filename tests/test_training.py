@@ -271,11 +271,12 @@ class MegDSTestTraining(TestCasePlus):
         # all in one test
         src_dir = self.src_dir
         data_dir = f"{self.data_dir}/gpt2"
+        output_dir = self.get_auto_remove_tmp_dir() # "./xxx", after=False)
 
         pp_size, tp_size, dp_size = get_3d_dimensions()
         num_gpus = pp_size * tp_size * dp_size
 
-        n_samples = 300 # about 56 iterations
+        n_samples = 200 # about 37 iterations
         exit_interval = 20 # some samples in the first half and then some more in the 2nd half after resume
         args = f"""
             --tensor-model-parallel-size {tp_size}
