@@ -727,7 +727,10 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
                                 get_num_microbatches()
             model[0].set_train_batch_size(global_batch_size)
 
-
+        if args.curriculum_learning and \
+            args.pipeline_model_parallel_size >= 1:
+            args.curriculum_seqlen = args.curriculum_scheduler.update_difficulty( \
+                    args.iteration + 1)
         loss_dict, skipped_iter, grad_norm, num_zeros_in_grad = \
             train_step(forward_step_func,
                        train_data_iterator,
