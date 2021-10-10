@@ -43,10 +43,10 @@ def attention_mask_func(attention_scores, attention_mask):
     args = get_args()
     if args.curriculum_learning:
         attention_mask_ = attention_mask
-        assert args.curriculum_seqlen == attention_scores.size()[2]
-        if args.curriculum_seqlen != attention_mask_.size()[2]:
+        actual_seqlen = attention_scores.size()[2]
+        if actual_seqlen != attention_mask_.size()[2]:
             # attention_mask has size [1, 1, seqlen, seqlen]
-            attention_mask_ = attention_mask_[:, :, :args.curriculum_seqlen, :args.curriculum_seqlen].contiguous()
+            attention_mask_ = attention_mask_[:, :, :actual_seqlen, :actual_seqlen].contiguous()
         attention_scores.masked_fill_(attention_mask_, -10000.0)
     else:
         attention_scores.masked_fill_(attention_mask, -10000.0)
