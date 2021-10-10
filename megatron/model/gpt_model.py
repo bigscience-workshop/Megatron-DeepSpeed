@@ -207,9 +207,17 @@ class GPTModelPipe(PipelineModule,MegatronModule):
                                         tied_weight_attr='word_embeddings_weight'))
         
         if args.fp32_residual_connection:
-            self.specs.append(lambda x: x.transpose(0, 1).contiguous().float())
+            if hasattr(args, 'attn_mask'):
+                self.specs.append(lambda x: x.transpose(0, 1).contiguous().float())
+            else:
+                # EmbeddingPipe returns attention mask as well
+                self.specs.append(lambda x: (x[0].transpose(0, 1).contiguous().float(), *x[1:]))
         else:
-            self.specs.append(lambda x: x.transpose(0, 1).contiguous())
+            if hasattr(args, 'attn_mask'):
+                self.specs.append(lambda x: x.transpose(0, 1).contiguous())
+            else:
+                # EmbeddingPipe returns attention mask as well
+                self.specs.append(lambda x: (x[0].transpose(0, 1).contiguous(), *x[1:]))
 
         for layer_idx in range(args.num_layers):
             self.specs.append(
@@ -222,6 +230,10 @@ class GPTModelPipe(PipelineModule,MegatronModule):
                     self_attn_mask_type=AttnMaskType.prefix if prefix_lm else AttnMaskType.causal))
                 
         
+        if not hasattr(args, 'attn_mask'):
+            # We drop attention mask from the pipeline
+            self.specs.append(lambda x: x[0])
+
         # Undo data format change
         self.specs.append(lambda x: x.transpose(0, 1).contiguous())
 
