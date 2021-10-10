@@ -72,7 +72,7 @@ def model_provider(pre_process=True, post_process=True):
 
             # must be bool or the training crashes expecting bool, but getting Half
             args.attn_mask = attention_mask.to(torch.bool)
-
+            args.attn_mask_original = attention_mask.to(torch.bool)
         else:
             model = GPTModel(
                 num_tokentypes=0,
@@ -146,6 +146,21 @@ def get_batch_pipe(data):
         prefix_indices=None,
         loss_on_targets_only=args.loss_on_targets_only
     )
+    if args.curriculum_learning:
+        args.curriculum_seqlen = args.curriculum_scheduler.update_difficulty( \
+                    args.iteration + 1)
+        if args.curriculum_seqlen < tokens.size()[1]:
+            # seqlen-based curriculum learning
+            # tokens, position_ids, labels, loss_mask have size [batch size, seqlen]
+            tokens = tokens[:, :args.curriculum_seqlen].contiguous()
+            position_ids = position_ids[:, :args.curriculum_seqlen].contiguous()
+            labels = labels[:, :args.curriculum_seqlen].contiguous()
+            loss_mask = loss_mask[:, :args.curriculum_seqlen].contiguous()
+        actual_seqlen = tokens.size()[1]
+        if actual_seqlen != args.attn_mask.size()[2]:
+            # attention_mask has size [1, 1, seqlen, seqlen]
+            attention_mask = attention_mask[:, :, :actual_seqlen, :actual_seqlen].contiguous()
+            args.attn_mask = args.attn_mask_original[:, :, :actual_seqlen, :actual_seqlen].contiguous()
 
     return (tokens, position_ids, attention_mask), (labels, loss_mask)
 
@@ -174,6 +189,8 @@ def forward_step(data_iterator, model):
 
     output_tensor = model(tokens, position_ids, attention_mask,
                           labels=labels)
+    if args.curriculum_learning and args.curriculum_seqlen < args.seq_length:
+        loss_mask = loss_mask[:, :args.curriculum_seqlen].contiguous()
 
     return output_tensor, partial(loss_func, loss_mask)
 
