@@ -89,6 +89,7 @@ class GPTModel(MegatronModule):
             # TODO: Change naming of class from GPT to something that encapsulate prefix lm.
             encoder_attn_mask_type=AttnMaskType.prefix if prefix_lm else AttnMaskType.causal,
             init_method=init_method_normal(args.init_method_std),
+            attention_init_method=init_method_normal(args.attention_init_method_std),
             scaled_init_method=scaled_init_method_normal(args.init_method_std,
                                                          args.num_layers),
             pre_process=self.pre_process,
@@ -281,3 +282,4 @@ class GPTModelPipe(PipelineModule,MegatronModule):
                          topology=topo,
                          activation_checkpoint_interval=interval,
                          partition_method='type:transformer')
+                         

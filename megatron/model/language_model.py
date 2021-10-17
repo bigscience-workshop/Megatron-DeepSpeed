@@ -44,7 +44,7 @@ def parallel_lm_logits(input_, word_embeddings_weight, parallel_output,
 
 
 def get_language_model(num_tokentypes, add_pooler,
-                       encoder_attn_mask_type, init_method=None,
+                       encoder_attn_mask_type, init_method=None, attention_init_method=None,
                        scaled_init_method=None, add_decoder=False,
                        decoder_attn_mask_type=AttnMaskType.causal,
                        pre_process=True, post_process=True):
@@ -53,6 +53,10 @@ def get_language_model(num_tokentypes, add_pooler,
 
     if init_method is None:
         init_method = init_method_normal(args.init_method_std)
+
+    if attention_init_method is None:
+        attention_init_method = init_method_normal(args.attention_init_method_std)
+
 
     if scaled_init_method is None:
         scaled_init_method = scaled_init_method_normal(args.init_method_std,
@@ -68,7 +72,8 @@ def get_language_model(num_tokentypes, add_pooler,
         decoder_attn_mask_type=decoder_attn_mask_type,
         add_pooler=add_pooler,
         pre_process=pre_process,
-        post_process=post_process
+        post_process=post_process,
+        attention_init_method=attention_init_method
     )
     # key used for checkpoints.
     language_model_key = 'language_model'
@@ -78,10 +83,8 @@ def get_language_model(num_tokentypes, add_pooler,
 
 class Pooler(MegatronModule):
     """Pooler layer.
-
     Pool hidden states of a specific token (for example start of the
     sequence) and add a linear transformation followed by a tanh.
-
     Arguments:
         hidden_size: hidden size
         init_method: weight initialization method for the linear layer.
@@ -103,7 +106,6 @@ class Pooler(MegatronModule):
 
 class Embedding(MegatronModule):
     """Language model embeddings.
-
     Arguments:
         hidden_size: hidden size
         vocab_size: vocabulary size
@@ -301,7 +303,6 @@ class EmbeddingPipe(Embedding):
 
 class TransformerLanguageModel(MegatronModule):
     """Transformer language model.
-
     Arguments:
         transformer_hparams: transformer hyperparameters
         vocab_size: vocabulary size
@@ -319,7 +320,8 @@ class TransformerLanguageModel(MegatronModule):
                  decoder_attn_mask_type=AttnMaskType.causal,
                  add_pooler=False,
                  pre_process=True,
-                 post_process=True):
+                 post_process=True, 
+                 attention_init_method=None):
         super(TransformerLanguageModel, self).__init__()
         args = get_args()
 
@@ -348,7 +350,8 @@ class TransformerLanguageModel(MegatronModule):
             output_layer_init_method,
             self_attn_mask_type=self.encoder_attn_mask_type,
             pre_process=self.pre_process,
-            post_process=self.post_process
+            post_process=self.post_process,
+            attention_init_method=attention_init_method,
         )
         self._encoder_key = 'encoder'
 

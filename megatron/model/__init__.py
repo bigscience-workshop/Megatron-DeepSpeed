@@ -21,3 +21,14 @@ from .gpt_model import GPTModel, GPTModelPipe
 from .t5_model import T5Model
 from .language_model import get_language_model
 from .module import Float16Module
+
+class ScaleNorm(nn.Module):
+    """ScaleNorm"""
+    def __init__(self, scale=1.0, eps=1e-5):
+        super(ScaleNorm, self).__init__()
+        self.scale = Parameter(torch.tensor(scale))
+        self.eps = eps
+
+    def forward(self, x):
+        norm = self.scale / torch.norm(x, dim=-1, keepdim=True).clamp(min=self.eps)
+        return x * norm
