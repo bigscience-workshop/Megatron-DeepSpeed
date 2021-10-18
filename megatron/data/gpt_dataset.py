@@ -60,13 +60,13 @@ def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
             prefix, data_impl, splits_string,
             datasets_train_valid_test_num_samples[i],
             seq_length, seed, skip_warmup)
-        print(f"split: {splits_string}")
+        print_rank_0(f"split: {splits_string}")
         if train_ds:
             train_datasets.append(train_ds)
-            print(f"train_ds size: {len(train_ds)}")
+            print_rank_0(f"train_ds size: {len(train_ds)}")
         if valid_ds:
             valid_datasets_dict[prefix] = valid_ds
-            print(f"valid_ds size: {len(valid_ds)}")
+            print_rank_0(f"valid_ds size: {len(valid_ds)}")
         if test_ds:
             test_datasets.append(test_ds)
 
@@ -77,7 +77,7 @@ def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
         valid_prefixes, valid_weights, valid_datasets_samples = valid_output
         for i, prefix in enumerate(valid_prefixes):
             if prefix not in valid_datasets_dict:
-                print(f"prefix: {prefix} not found in {valid_datasets_dict.keys()}")
+                print_rank_0(f"prefix: {prefix} not found in {valid_datasets_dict.keys()}")
                 # create the ones from the arguments that are missing
                 train_ds, valid_ds, test_ds = _build_train_valid_test_datasets(
                     valid_prefixes[i], data_impl, '0,100,0',
@@ -87,16 +87,16 @@ def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
                     valid_datasets.append(valid_ds)
             else:
                 # create the ones from the arguments that are missing
-                print(f"prefix: {prefix} found in {valid_datasets_dict.keys()}")
+                print_rank_0(f"prefix: {prefix} found in {valid_datasets_dict.keys()}")
                 valid_datasets.append(valid_datasets_dict[prefix])
     else:
         # in this case we just turn the dict back into a list
         valid_weights = weights
         valid_datasets = valid_datasets_dict.values()
 
-    print(f"valid weights: {valid_weights}")
-    print(f"size of validation sets: {[len(dataset) for dataset in valid_datasets]}")
-    print(f"size of training sets: {[len(dataset) for dataset in train_datasets]}")
+    print_rank_0(f"valid weights: {valid_weights}")
+    print_rank_0(f"size of validation sets: {[len(dataset) for dataset in valid_datasets]}")
+    print_rank_0(f"size of training sets: {[len(dataset) for dataset in train_datasets]}")
 
     # Blend.
     blending_train_dataset = None
@@ -125,7 +125,7 @@ def _build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
 
     total_num_of_documents = indexed_dataset.sizes.shape[0]
     splits = get_train_valid_test_split_(splits_string, total_num_of_documents)
-    print(f"splits: {splits}")
+    print_rank_0(f"splits: {splits}")
 
     # Print stats about the splits.
     print_rank_0(' > dataset split:')
@@ -264,7 +264,7 @@ def _build_index_mappings(name, data_prefix, documents, sizes,
             # not mean anything.
             if num_epochs == 1:
                 separate_last_epoch = False
-                print(' > only one epoch required, setting '
+                print_rank_0(' > only one epoch required, setting '
                       'separate_last_epoch to False', flush=True)
 
             else:
@@ -292,7 +292,7 @@ def _build_index_mappings(name, data_prefix, documents, sizes,
                     string = ' > last epoch number of samples ({}) is larger '\
                              'than 80% of number of samples per epoch ({}), '\
                              'setting separate_last_epoch to False'
-                print(string.format(last_epoch_num_samples,
+                print_rank_0(string.format(last_epoch_num_samples,
                                     num_samples_per_epoch), flush=True)
 
             # doc-idx.
@@ -447,7 +447,7 @@ def _build_sample_idx(sizes, doc_idx, seq_length,
 
 def _build_shuffle_idx(num_samples, total_size, np_rng):
     """Build the range [0, size) and shuffle."""
-    print(' > building shuffle index with split [0, {}) and [{}, {}) '
+    print_rank_0(' > building shuffle index with split [0, {}) and [{}, {}) '
           '...'.format(num_samples, num_samples, total_size), flush=True)
     
     dtype_ = np.uint32
