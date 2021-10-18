@@ -648,7 +648,7 @@ def _add_data_args(parser):
                        '1) a single data path, 2) multiple datasets in the'
                        'form: dataset1-weight dataset1-path dataset2-weight '
                        'dataset2-path ...')
-    group.add_argument('--valid-data', nargs='*', default=None,
+    group.add_argument('--valid-data-path', nargs='*', default=None,
                        help='Path to the validation dataset. If not provided,'
                        'data will be selected from the --data-path based on --split.'
                        'Accepted format : dataset1-weight dataset1-path '

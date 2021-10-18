@@ -127,7 +127,7 @@ options=" \
         --eval-iters 100 \
         --eval-interval 40 \
 	--data-path ${DATASET} \
-    --valid-data ${VALID_DATASET} \
+    --valid-data-path ${VALID_DATASET} \
 	--vocab-file ${VOCAB_PATH} \
 	--merge-file ${MERGE_PATH} \
 	--save-interval 1000 \
