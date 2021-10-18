@@ -20,6 +20,7 @@ import time
 
 import numpy as np
 import torch
+from collections import OrderedDict
 
 from megatron import mpu, print_rank_0
 from megatron.data.blendable_dataset import BlendableDataset
@@ -49,33 +50,54 @@ def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
 
     # Build individual datasets.
     train_datasets = []
+    # we'll temporarily store the validation sets then compare them with the arguments next step
+    # this needs to be ordered so it lines up with the weights
+    valid_datasets_dict = OrderedDict()
     valid_datasets = []
     test_datasets = []
-    for i in range(len(prefixes)):
+    for i, prefix in enumerate(prefixes):
         train_ds, valid_ds, test_ds = _build_train_valid_test_datasets(
-            prefixes[i], data_impl, splits_string,
+            prefix, data_impl, splits_string,
             datasets_train_valid_test_num_samples[i],
             seq_length, seed, skip_warmup)
+        print(f"split: {splits_string}")
         if train_ds:
             train_datasets.append(train_ds)
+            print(f"train_ds size: {len(train_ds)}")
         if valid_ds:
-            valid_datasets.append(valid_ds)
+            valid_datasets_dict[prefix] = valid_ds
+            print(f"valid_ds size: {len(valid_ds)}")
         if test_ds:
             test_datasets.append(test_ds)
 
-    valid_weights = weights
     if valid_data_prefix is not None:
-        valid_datasets = []
+        # in this case we only keep the validation sets in the arguments
         valid_output = get_datasets_weights_and_num_samples(valid_data_prefix,
                                                   [0, train_valid_test_num_samples[1], 0])
         valid_prefixes, valid_weights, valid_datasets_samples = valid_output
-        for i in range(len(valid_prefixes)):
-            train_ds, valid_ds, test_ds = _build_train_valid_test_datasets(
-                valid_prefixes[i], data_impl, '0,100,0',
-                valid_datasets_samples[i],
-                seq_length, seed, skip_warmup)
-            if valid_ds:
-                valid_datasets.append(valid_ds)
+        for i, prefix in enumerate(valid_prefixes):
+            if prefix not in valid_datasets_dict:
+                print(f"prefix: {prefix} not found in {valid_datasets_dict.keys()}")
+                # create the ones from the arguments that are missing
+                train_ds, valid_ds, test_ds = _build_train_valid_test_datasets(
+                    valid_prefixes[i], data_impl, '0,100,0',
+                    valid_datasets_samples[i],
+                    seq_length, seed, skip_warmup)
+                if valid_ds:
+                    valid_datasets.append(valid_ds)
+            else:
+                # create the ones from the arguments that are missing
+                print(f"prefix: {prefix} found in {valid_datasets_dict.keys()}")
+                valid_datasets.append(valid_datasets_dict[prefix])
+    else:
+        # in this case we just turn the dict back into a list
+        valid_weights = weights
+        valid_datasets = valid_datasets_dict.values()
+
+    print(f"valid weights: {valid_weights}")
+    print(f"size of validation sets: {[len(dataset) for dataset in valid_datasets]}")
+    print(f"size of training sets: {[len(dataset) for dataset in train_datasets]}")
+    1[2]
 
     # Blend.
     blending_train_dataset = None
@@ -104,6 +126,7 @@ def _build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
 
     total_num_of_documents = indexed_dataset.sizes.shape[0]
     splits = get_train_valid_test_split_(splits_string, total_num_of_documents)
+    print(f"splits: {splits}")
 
     # Print stats about the splits.
     print_rank_0(' > dataset split:')
