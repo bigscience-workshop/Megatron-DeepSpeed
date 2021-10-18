@@ -40,7 +40,7 @@ def get_launcher(num_gpus):
     return f"deepspeed --num_nodes 1 --num_gpus {num_gpus}".split()
 
 def get_3d_dimensions():
-    num_gpus = get_gpu_count()
+    num_gpus = min(2, get_gpu_count())
 
     # XXX: if we had 8 gpus, could do dp_size too!
     dp_size = 1
