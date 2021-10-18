@@ -97,7 +97,6 @@ def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
     print(f"valid weights: {valid_weights}")
     print(f"size of validation sets: {[len(dataset) for dataset in valid_datasets]}")
     print(f"size of training sets: {[len(dataset) for dataset in train_datasets]}")
-    1[2]
 
     # Blend.
     blending_train_dataset = None
