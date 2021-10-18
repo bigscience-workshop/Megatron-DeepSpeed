@@ -264,7 +264,7 @@ def _build_index_mappings(name, data_prefix, documents, sizes,
             # not mean anything.
             if num_epochs == 1:
                 separate_last_epoch = False
-                print_rank_0(' > only one epoch required, setting '
+                print(' > only one epoch required, setting '
                       'separate_last_epoch to False', flush=True)
 
             else:
@@ -292,7 +292,7 @@ def _build_index_mappings(name, data_prefix, documents, sizes,
                     string = ' > last epoch number of samples ({}) is larger '\
                              'than 80% of number of samples per epoch ({}), '\
                              'setting separate_last_epoch to False'
-                print_rank_0(string.format(last_epoch_num_samples,
+                print(string.format(last_epoch_num_samples,
                                     num_samples_per_epoch), flush=True)
 
             # doc-idx.
@@ -447,7 +447,7 @@ def _build_sample_idx(sizes, doc_idx, seq_length,
 
 def _build_shuffle_idx(num_samples, total_size, np_rng):
     """Build the range [0, size) and shuffle."""
-    print_rank_0(' > building shuffle index with split [0, {}) and [{}, {}) '
+    print(' > building shuffle index with split [0, {}) and [{}, {}) '
           '...'.format(num_samples, num_samples, total_size), flush=True)
     
     dtype_ = np.uint32
