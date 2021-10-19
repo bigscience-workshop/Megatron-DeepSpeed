@@ -19,6 +19,7 @@ from datetime import datetime
 import math
 import sys
 import time
+import json
 # The earliest we can measure the start time.
 _TRAIN_START_TIME = time.time()
 
@@ -112,6 +113,21 @@ def pretrain(train_valid_test_dataset_provider,
 
     args = get_args()
     timers = get_timers()
+
+    if args.deepspeed:
+        args.deepspeed_configuration = json.load(
+            open(args.deepspeed_config, 'r', encoding='utf-8'))
+        if "curriculum_learning" in args.deepspeed_configuration and \
+            "enabled" in args.deepspeed_configuration["curriculum_learning"]:
+            args.curriculum_learning = args.deepspeed_configuration[ \
+                "curriculum_learning"]["enabled"]
+        if args.curriculum_learning and \
+            args.pipeline_model_parallel_size >= 1:
+            from deepspeed.runtime.data_pipeline.curriculum_scheduler \
+                import CurriculumScheduler
+            args.curriculum_scheduler = CurriculumScheduler( \
+                args.deepspeed_configuration["curriculum_learning"])
+
 
     # Model, optimizer, and learning rate.
     timers('model-and-optimizer-setup').start()
@@ -557,10 +573,14 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
        is_last_rank():
         writer.add_scalar('steps-vs-samples/y=steps,x=samples', iteration, args.consumed_train_samples)
         writer.add_scalar('steps-vs-samples/y=samples,x=steps', args.consumed_train_samples, iteration)
+        writer.add_scalar('steps-vs-tokens/y=steps,x=tokens', iteration, args.consumed_train_tokens)
+        writer.add_scalar('steps-vs-tokens/y=tokens,x=steps', args.consumed_train_tokens, iteration)
         if args.log_learning_rate_to_tensorboard:
             writer.add_scalar('learning-rate/learning-rate', learning_rate, iteration)
             writer.add_scalar('learning-rate/learning-rate vs samples', learning_rate,
                               args.consumed_train_samples)
+            writer.add_scalar('learning-rate/learning-rate vs tokens', learning_rate,
+                              args.consumed_train_tokens)
         if args.log_batch_size_to_tensorboard:
             writer.add_scalar('batch-size/batch-size', batch_size, iteration)
             writer.add_scalar('batch-size/batch-size vs samples', batch_size,
@@ -569,24 +589,37 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
             writer.add_scalar(f"lm-loss-training/{key}", loss_dict[key], iteration)
             writer.add_scalar(f"lm-loss-training/{key}" + ' vs samples', loss_dict[key],
                               args.consumed_train_samples)
+            writer.add_scalar(f"lm-loss-training/{key}" + ' vs tokens', loss_dict[key],
+                              args.consumed_train_tokens)
             writer.add_scalar(f"lm-loss-training/{key}" + ' vs gigaflos (without embeddings)', loss_dict[key],
                               args.gigaflos_no_embeds)
         if args.log_loss_scale_to_tensorboard:
             writer.add_scalar('loss-scale/loss-scale', loss_scale, iteration)
             writer.add_scalar('loss-scale/loss-scale vs samples', loss_scale,
                               args.consumed_train_samples)
+            writer.add_scalar('loss-scale/loss-scale vs tokens', loss_scale,
+                              args.consumed_train_tokens)
         if grad_norm is not None:
             writer.add_scalar('grad-norm/grad-norm', grad_norm, iteration)
             writer.add_scalar('grad-norm/grad-norm vs samples', grad_norm,
                               args.consumed_train_samples)
+            writer.add_scalar('grad-norm/grad-norm vs tokens', grad_norm,
+                              args.consumed_train_tokens)
         if num_zeros_in_grad is not None:
             writer.add_scalar('num-zeros/num-zeros', num_zeros_in_grad, iteration)
             writer.add_scalar('num-zeros/num-zeros vs samples', num_zeros_in_grad,
                               args.consumed_train_samples)
+            writer.add_scalar('num-zeros/num-zeros vs tokens', num_zeros_in_grad,
+                              args.consumed_train_tokens)
         if params_norm is not None:
             writer.add_scalar('params-norm/params-norm', params_norm, iteration)
             writer.add_scalar('params-norm/params-norm vs samples', params_norm,
                               args.consumed_train_samples)
+            writer.add_scalar('params-norm/params-norm vs tokens', params_norm,
+                              args.consumed_train_tokens)
+        if args.curriculum_learning:
+            writer.add_scalar('curriculum_seqlen', args.curriculum_seqlen,
+                              iteration)
         if args.log_timers_to_tensorboard:
             timers.write(timers_to_log, writer, iteration,
                          normalizer=total_iterations)
@@ -601,10 +634,14 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
                                   elapsed_time_per_iteration, iteration)
                 writer.add_scalar('iteration-time/iteration-time vs samples',
                                   elapsed_time_per_iteration, args.consumed_train_samples)
+                writer.add_scalar('iteration-time/iteration-time vs tokens',
+                                  elapsed_time_per_iteration, args.consumed_train_tokens)
         log_string = ' iteration {:8d}/{:8d} |'.format(
             iteration, args.train_iters)
         log_string += ' consumed samples: {:12d} |'.format(
             args.consumed_train_samples)
+        log_string += ' consumed tokens: {:12d} |'.format(
+            args.consumed_train_tokens)
         log_string += ' elapsed time per iteration (ms): {:.1f} |'.format(
             elapsed_time_per_iteration * 1000.0)
         log_string += ' learning rate: {:.3E} |'.format(learning_rate)
@@ -624,6 +661,8 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
             log_string += ' num zeros: {:.1f} |'.format(num_zeros_in_grad)
         if params_norm is not None:
             log_string += ' params norm: {:.3f} |'.format(params_norm)
+        if args.curriculum_learning:
+            log_string += ' curriculum seqlen: {:5d} |'.format(args.curriculum_seqlen)
         log_string += ' number of skipped iterations: {:3d} |'.format(
             total_loss_dict[skipped_iters_key])
         log_string += ' number of nan iterations: {:3d} |'.format(
@@ -657,11 +696,13 @@ def save_checkpoint_and_time(iteration, model, optimizer, lr_scheduler):
 def train(forward_step_func, model, optimizer, lr_scheduler,
           train_data_iterator, valid_data_iterator):
     """Train the model function."""
-    print(f"Number of parameters: {get_parameters_in_billions(model)} billion")
-    print(f"Number of parameters without embeddings: {get_parameters_in_billions(model, exclude_embeddings=True)} billion")
     args = get_args()
     timers = get_timers()
 
+    if mpu.get_data_parallel_rank() == 0:
+        print(f"Number of parameters: {get_parameters_in_billions(model)} billion")
+        print(f"Number of parameters without embeddings: {get_parameters_in_billions(model, exclude_embeddings=True)} billion")
+        
     # Write args to tensorboard
     write_args_to_tensorboard()
 
@@ -678,7 +719,8 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
     timers('interval-time').start()
     print_datetime('before the start of training step')
     report_memory_flag = True
-    while iteration < args.train_iters:
+    while iteration < args.train_iters and (args.train_tokens is None or \
+        args.consumed_train_tokens < args.train_tokens):
         update_num_microbatches(args.consumed_train_samples)
         if args.deepspeed:
             # inform deepspeed of any batch size changes
@@ -695,10 +737,15 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
                        optimizer,
                        lr_scheduler)
         iteration += 1
+        args.iteration = iteration
         new_samples = mpu.get_data_parallel_world_size() * \
                                        args.micro_batch_size * \
                                        get_num_microbatches()
         args.consumed_train_samples += new_samples
+        if args.curriculum_learning:
+            args.consumed_train_tokens += new_samples * args.curriculum_seqlen
+        else:
+            args.consumed_train_tokens += new_samples * args.seq_length
         args.gigaflos_no_embeds += (6 * new_samples * args.seq_length * get_parameters_in_billions(model, exclude_embeddings=True))
 
         # Logging.
@@ -841,6 +888,9 @@ def evaluate_and_print_results(prefix, forward_step_func,
             writer.add_scalar(f'lm-loss-validation/{key} validation vs samples',
                               total_loss_dict[key].item(),
                               args.consumed_train_samples)
+            writer.add_scalar(f'lm-loss-validation/{key} validation vs tokens',
+                              total_loss_dict[key].item(),
+                              args.consumed_train_tokens)
             writer.add_scalar(f'lm-loss-validation/{key} validation vs gigaflos (without embeddings)',
                               total_loss_dict[key].item(),
                               args.gigaflos_no_embeds)
@@ -849,6 +899,8 @@ def evaluate_and_print_results(prefix, forward_step_func,
                                   iteration)
                 writer.add_scalar(f'lm-loss-validation/{key} validation ppl vs samples',
                                   ppl, args.consumed_train_samples)
+                writer.add_scalar(f'lm-loss-validation/{key} validation ppl vs tokens',
+                                  ppl, args.consumed_train_tokens)
                 writer.add_scalar(f'lm-loss-validation/{key} validation ppl vs gigaflos (without embeddings)',
                                   ppl, args.gigaflos_no_embeds)
 

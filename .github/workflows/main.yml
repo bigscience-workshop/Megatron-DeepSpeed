@@ -2,9 +2,9 @@ name: Run all tests
 # enable to manually trigger the tests
 #on:  workflow_dispatch
 on:
-  pull_request_target:
+  pull_request:
     paths:
-      - "*"
+      - "**.py"
 
 jobs:
 
@@ -109,7 +109,7 @@ jobs:
       - name: Install Dependencies
         run: |
           pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install --upgrade -r requirements.txt
           pip install pytest-timeout
 
       - name: Run tests

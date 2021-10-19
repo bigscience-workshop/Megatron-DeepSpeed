@@ -1,6 +1,7 @@
 datasets
 nltk
 numpy
+parameterized
 pybind11
 regex
 six
@@ -8,6 +9,6 @@ tensorboard
 parameterized
 torch
 transformers
-DeepSpeed @ git+https://github.com/microsoft/DeepSpeed.git@big-science
-# edit to a higher SHA or future release if needed
-codecarbon @ git+https://github.com/mlco2/codecarbon.git@e6c3863
+DeepSpeed @ git+https://github.com/microsoft/DeepSpeed.git
+# at some point when it starts working freeze with ether min version or sha using the syntax codecarbon.git@deadbeaf 
+codecarbon @ git+https://github.com/mlco2/codecarbon.git
