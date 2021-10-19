@@ -52,7 +52,7 @@ def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
     train_datasets = []
     # we'll temporarily store the validation sets then compare them with the arguments next step
     # this needs to be ordered so it lines up with the weights
-    valid_datasets_dict = OrderedDict()
+    ds_shared_with_train = OrderedDict()
     valid_datasets = []
     test_datasets = []
     for i, prefix in enumerate(prefixes):
@@ -65,19 +65,20 @@ def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
             train_datasets.append(train_ds)
             print_rank_0(f"train_ds size: {len(train_ds)}")
         if valid_ds:
-            valid_datasets_dict[prefix] = valid_ds
+            ds_shared_with_train[prefix] = valid_ds
             print_rank_0(f"valid_ds size: {len(valid_ds)}")
         if test_ds:
             test_datasets.append(test_ds)
 
     if valid_data_prefix is not None:
-        # in this case we only keep the validation sets in the arguments
+        # in this case `valid_data_prefix` defines what is in the validation mix
+        # we make sure there is no overlap with the training mix
         valid_output = get_datasets_weights_and_num_samples(valid_data_prefix,
                                                   [0, train_valid_test_num_samples[1], 0])
         valid_prefixes, valid_weights, valid_datasets_samples = valid_output
         for i, prefix in enumerate(valid_prefixes):
-            if prefix not in valid_datasets_dict:
-                print_rank_0(f"prefix: {prefix} not found in {valid_datasets_dict.keys()}")
+            if prefix not in ds_shared_with_train:
+                print_rank_0(f"prefix: {prefix} not found in {ds_shared_with_train.keys()}")
                 # create the ones from the arguments that are missing
                 train_ds, valid_ds, test_ds = _build_train_valid_test_datasets(
                     valid_prefixes[i], data_impl, '0,100,0',
@@ -87,12 +88,12 @@ def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
                     valid_datasets.append(valid_ds)
             else:
                 # create the ones from the arguments that are missing
-                print_rank_0(f"prefix: {prefix} found in {valid_datasets_dict.keys()}")
-                valid_datasets.append(valid_datasets_dict[prefix])
+                print_rank_0(f"prefix: {prefix} found in {ds_shared_with_train.keys()}")
+                valid_datasets.append(ds_shared_with_train[prefix])
     else:
-        # in this case we just turn the dict back into a list
+        # in this case we assume that the user wants to use the mix of all the validation splits built beforehand.
         valid_weights = weights
-        valid_datasets = valid_datasets_dict.values()
+        valid_datasets = ds_shared_with_train.values()
 
     print_rank_0(f"valid weights: {valid_weights}")
     print_rank_0(f"size of validation sets: {[len(dataset) for dataset in valid_datasets]}")
