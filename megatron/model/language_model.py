@@ -135,7 +135,7 @@ class Embedding(MegatronModule):
 
         # Position embedding (serial).
         self.position_embedding_type = args.position_embedding_type
-        if self.args.use_bnb_optimizer:
+        if args.use_bnb_optimizer:
             try:
                 import bitsandbytes as bnb
                 self.embedding_module = bnb.nn.StableEmbedding
