@@ -72,14 +72,14 @@ def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
 
     if valid_data_prefix is not None:
         # in this case `valid_data_prefix` defines what is in the validation mix
-        # we make sure there is no overlap with the training mix
+        # we make sure there is no overlap with the training mix by comparing with ds_shared_with_train
         valid_output = get_datasets_weights_and_num_samples(valid_data_prefix,
                                                   [0, train_valid_test_num_samples[1], 0])
         valid_prefixes, valid_weights, valid_datasets_samples = valid_output
         for i, prefix in enumerate(valid_prefixes):
             if prefix not in ds_shared_with_train:
                 print_rank_0(f"prefix: {prefix} not found in {ds_shared_with_train.keys()}")
-                # create the ones from the arguments that are missing
+                # those don't have overlap, we can fully add them
                 train_ds, valid_ds, test_ds = _build_train_valid_test_datasets(
                     valid_prefixes[i], data_impl, '0,100,0',
                     valid_datasets_samples[i],
@@ -87,7 +87,7 @@ def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
                 if valid_ds:
                     valid_datasets.append(valid_ds)
             else:
-                # create the ones from the arguments that are missing
+                # those have some overlap, so we use the safe split that we created earlier
                 print_rank_0(f"prefix: {prefix} found in {ds_shared_with_train.keys()}")
                 valid_datasets.append(ds_shared_with_train[prefix])
     else:
