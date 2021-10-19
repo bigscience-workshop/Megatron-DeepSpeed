@@ -84,34 +84,19 @@ class MegDSTestTraining(TestCasePlus):
         exit_interval = 20 # some samples in the first half and then some more in the 2nd half after resume
         seq_len = 128
 
+        # common/shared configs
 
-        if variation == "base":
-            # XXX: refactor repeated elements
-            args = f"""
+        ds_args = f"""
+                --deepspeed
+                --deepspeed_config {self.test_file_dir_str}/ds_config.json
+                --zero-stage 1
+                --deepspeed-activation-checkpointing
+        """.split()
+
+        args = f"""
                 --tensor-model-parallel-size {tp_size}
                 --pipeline-model-parallel-size {pp_size}
                 --distributed-backend nccl
-
-                --num-layers 2
-                --hidden-size 64
-                --num-attention-heads 2
-                --seq-length {seq_len}
-                --max-position-embeddings 1024
-                --micro-batch-size 1
-                --rampup-batch-size 2 2 {n_samples}
-                --global-batch-size 16
-                --train-samples {n_samples}
-
-                --optimizer adam
-                --adam-beta1 0.9
-                --adam-beta2 0.95
-                --adam-eps 1e-8
-                --lr 1e-4
-                --lr-warmup-samples 5
-                --lr-decay-samples 6
-                --clip-grad 1.0
-                --weight-decay 1e-1
-                --fp16
 
                 --log-interval 5
                 --save-interval 10
@@ -132,70 +117,57 @@ class MegDSTestTraining(TestCasePlus):
                 --log-timers-to-tensorboard
                 --log-batch-size-to-tensorboard
                 --log-validation-ppl-to-tensorboard
+
+                --num-layers 2
+                --hidden-size 64
+                --num-attention-heads 2
+                --seq-length {seq_len}
+                --max-position-embeddings 1024
+                --micro-batch-size 1
+                --global-batch-size 16
+
+                --optimizer adam
+                --adam-beta1 0.9
+                --adam-beta2 0.95
+                --adam-eps 1e-8
+                --lr 1e-4
+                --lr-warmup-samples 5
+                --clip-grad 1.0
+                --weight-decay 1e-1
+                --fp16
+
+        """.split()
+
+
+        if variation == "base":
+
+            new_args = f"""
+                --rampup-batch-size 2 2 {n_samples}
+                --train-samples {n_samples}
+
+                --lr-decay-samples 6
+
             """.split()
 
-            ds_args = f"""
-                --deepspeed
+            new_ds_args = f"""
                 --deepspeed_config {self.test_file_dir_str}/ds_config.json
-                --zero-stage 1
-                --deepspeed-activation-checkpointing
             """.split()
+
 
         elif variation == "bnb":
             # BitsAndBytes - 8-bit optimizer
-            args = f"""
-                --tensor-model-parallel-size {tp_size}
-                --pipeline-model-parallel-size {pp_size}
-                --distributed-backend nccl
 
-                --num-layers 2
-                --hidden-size 64
-                --num-attention-heads 2
-                --seq-length {seq_len}
-                --max-position-embeddings 1024
-                --micro-batch-size 1
+            new_args = f"""
                 --rampup-batch-size 2 2 {n_samples}
-                --global-batch-size 16
                 --train-samples {n_samples}
 
-                --use-bnb-optimizer
-                --optimizer adam
-                --adam-beta1 0.9
-                --adam-beta2 0.95
-                --adam-eps 1e-8
-                --lr 1e-4
-                --lr-warmup-samples 5
                 --lr-decay-samples 6
-                --clip-grad 1.0
-                --weight-decay 1e-1
-                --fp16
 
-                --log-interval 5
-                --save-interval 10
-                --eval-interval 10
-                --eval-iters 5
-                --checkpoint-activations
-                --glu-activation geglu
-                --exit-interval {exit_interval}
-
-                --merge-file {data_dir}/gpt2-tiny-merges.txt
-                --vocab-file {data_dir}/gpt2-tiny-vocab.json
-                --save {output_dir}/checkpoints
-                --load {output_dir}/checkpoints
-                --data-path {data_dir}/meg-gpt2-openwebtext_text_document
-                --codecarbon-dir {output_dir}/codecarbon
-                --tensorboard-dir {output_dir}/tensorboard
-                --tensorboard-queue-size 5
-                --log-timers-to-tensorboard
-                --log-batch-size-to-tensorboard
-                --log-validation-ppl-to-tensorboard
+                --use-bnb-optimizer
             """.split()
 
-            ds_args = f"""
-                --deepspeed
+            new_ds_args = f"""
                 --deepspeed_config {self.test_file_dir_str}/ds_config.json
-                --zero-stage 1
-                --deepspeed-activation-checkpointing
             """.split()
 
 
@@ -213,63 +185,23 @@ class MegDSTestTraining(TestCasePlus):
             # XXX: probably we should write the ds config on the fly to keep everything in sync,
             # rather than using the pre-saved config
 
-            args = f"""
-                --tensor-model-parallel-size {tp_size}
-                --pipeline-model-parallel-size {pp_size}
-                --distributed-backend nccl
-
-                --num-layers 2
-                --hidden-size 64
-                --num-attention-heads 2
-                --seq-length {seq_len}
-                --max-position-embeddings 1024
-                --micro-batch-size 1
-                --global-batch-size 16
+            new_args = f"""
                 --train-samples {n_samples*2}
                 --train-tokens {train_tokens}
 
-                --optimizer adam
-                --adam-beta1 0.9
-                --adam-beta2 0.95
-                --adam-eps 1e-8
-                --lr 1e-4
-                --lr-warmup-samples 5
                 --lr-decay-tokens {lr_decay_tokens}
-                --clip-grad 1.0
-                --weight-decay 1e-1
-                --fp16
-
-                --log-interval 5
-                --save-interval 10
-                --eval-interval 10
-                --eval-iters 5
-                --checkpoint-activations
-                --glu-activation geglu
-                --exit-interval {exit_interval}
-
-                --merge-file {data_dir}/gpt2-tiny-merges.txt
-                --vocab-file {data_dir}/gpt2-tiny-vocab.json
-                --save {output_dir}/checkpoints
-                --load {output_dir}/checkpoints
-                --data-path {data_dir}/meg-gpt2-openwebtext_text_document
-                --codecarbon-dir {output_dir}/codecarbon
-                --tensorboard-dir {output_dir}/tensorboard
-                --tensorboard-queue-size 5
-                --log-timers-to-tensorboard
-                --log-batch-size-to-tensorboard
-                --log-validation-ppl-to-tensorboard
             """.split()
 
-            ds_args = f"""
-                --deepspeed
+            new_ds_args = f"""
                 --deepspeed_config {self.test_file_dir_str}/ds_config_cl.json
-                --zero-stage 1
-                --deepspeed-activation-checkpointing
             """.split()
 
 
         else:
             raise ValueError(f"Don't know of variation {variation}")
+
+        args.extend(new_args)
+        ds_args.extend(new_ds_args)
 
         return args, ds_args, num_gpus
 
