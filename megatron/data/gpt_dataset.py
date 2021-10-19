@@ -65,6 +65,7 @@ def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
             train_datasets.append(train_ds)
             print_rank_0(f"train_ds size: {len(train_ds)}")
         if valid_ds:
+            # a safe split without overlap with training that we may use later if `valid_data_prefix` includes it
             ds_shared_with_train[prefix] = valid_ds
             print_rank_0(f"valid_ds size: {len(valid_ds)}")
         if test_ds:
