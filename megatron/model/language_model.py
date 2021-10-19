@@ -26,7 +26,6 @@ from megatron.model.transformer import ParallelTransformer
 from megatron.model.utils import get_linear_layer
 from megatron.model.utils import init_method_normal, scaled_init_method_normal
 
-
 def parallel_lm_logits(input_, word_embeddings_weight, parallel_output,
                        bias=None):
     """LM logits using word embedding weights."""
@@ -221,11 +220,11 @@ class Embedding(MegatronModule):
         if self.position_embedding_type == PositionEmbeddingType.absolute:
             state_dict_[self._position_embeddings_key] \
                 = self.position_embeddings.state_dict(
-                destination, prefix, keep_vars)
+                    destination, prefix, keep_vars)
         if self.num_tokentypes > 0:
             state_dict_[self._tokentype_embeddings_key] \
                 = self.tokentype_embeddings.state_dict(
-                destination, prefix, keep_vars)
+                    destination, prefix, keep_vars)
 
         return state_dict_
 
@@ -301,6 +300,7 @@ class EmbeddingPipe(Embedding):
             return embeddings
         else:
             return embeddings, attention_mask
+
 
     @property
     def word_embeddings_weight(self):
@@ -443,19 +443,19 @@ class TransformerLanguageModel(MegatronModule):
         if self.pre_process:
             state_dict_[self._embedding_key] \
                 = self.embedding.state_dict_for_save_checkpoint(
-                destination, prefix, keep_vars)
+                    destination, prefix, keep_vars)
         state_dict_[self._encoder_key] \
             = self.encoder.state_dict_for_save_checkpoint(
-            destination, prefix, keep_vars)
+                destination, prefix, keep_vars)
         if self.post_process:
             if self.add_pooler:
                 state_dict_[self._pooler_key] \
                     = self.pooler.state_dict_for_save_checkpoint(
-                    destination, prefix, keep_vars)
+                        destination, prefix, keep_vars)
         if self.add_decoder:
             state_dict_[self._decoder_key] \
                 = self.decoder.state_dict_for_save_checkpoint(
-                destination, prefix, keep_vars)
+                    destination, prefix, keep_vars)
 
         return state_dict_
 
@@ -492,7 +492,7 @@ class TransformerLanguageModel(MegatronModule):
         for key in state_dict_.keys():
             if '.attention.' in key:
                 state_dict_self_attention[key.replace(".attention.",
-                                                      ".self_attention.")] = state_dict_[key]
+                    ".self_attention.")] = state_dict_[key]
             else:
                 state_dict_self_attention[key] = state_dict_[key]
         state_dict_ = state_dict_self_attention
