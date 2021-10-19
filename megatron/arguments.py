@@ -457,6 +457,10 @@ def _add_training_args(parser):
     group.add_argument('--optimizer', type=str, default='adam',
                        choices=['adam', 'sgd'],
                        help='Optimizer function')
+    group.add_argument('--use-bnb-optimizer', action='store_true',
+                       help='Use bitsandbytes optimizer for efficient training,'
+                            'please refer https://github.com/facebookresearch/bitsandbytes.',
+                       dest='use_bnb_optimizer')
     group.add_argument('--dataloader-type', type=str, default=None,
                        choices=['single', 'cyclic'],
                        help='Single pass vs multiple pass data loader')
