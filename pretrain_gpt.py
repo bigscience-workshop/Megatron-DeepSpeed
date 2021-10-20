@@ -136,6 +136,14 @@ def get_batch_pipe(data):
     labels = tokens_[:, 1:].contiguous()
     tokens = tokens_[:, :-1].contiguous()
 
+    # HACK: GPTModePipe uses another way to pass down attention mechanism which is why we can to the prefix trick to evaluate
+    prefix_indices = get_prefix_indices(
+        tokens,
+        tokenizer.eod,
+        partial_prefix_indices=None,
+        reset_attention_mask=args.reset_attention_mask
+    )
+
     # Get the masks and position ids.
     attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
         tokens,
@@ -143,7 +151,7 @@ def get_batch_pipe(data):
         args.reset_position_ids,
         args.reset_attention_mask,
         args.eod_mask_loss,
-        prefix_indices=None,
+        prefix_indices=prefix_indices,
         loss_on_targets_only=args.loss_on_targets_only
     )
     if args.curriculum_learning:
