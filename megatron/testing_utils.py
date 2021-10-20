@@ -179,6 +179,18 @@ def require_deepspeed(test_case):
     else:
         return test_case
 
+def is_bnb_available():
+    return importlib.util.find_spec("bitsandbytes") is not None
+
+def require_bnb(test_case):
+    """
+    Decorator marking a test that requires bitsandbytes
+    """
+    if not is_bnb_available():
+        return unittest.skip("test requires bitsandbytes")(test_case)
+    else:
+        return test_case
+
 def set_seed(seed: int=42):
     """
     Helper function for reproducible behavior to set the seed in ``random``, ``numpy``, ``torch``
