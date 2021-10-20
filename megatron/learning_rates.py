@@ -185,6 +185,8 @@ class AnnealingLR(object):
             num_steps = sd['num_iters']
         else:
             num_steps = sd['num_steps']
-        self.warmup_tokens = sd['warmup_tokens']
-        self.num_tokens = sd['num_tokens']
+        if 'warmup_tokens' in sd:
+            self.warmup_tokens = sd['warmup_tokens']
+        if 'num_tokens' in sd:
+            self.num_tokens = sd['num_tokens']
         self.step(num_steps, self.num_tokens)
