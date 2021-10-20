@@ -1,6 +1,6 @@
 import os
 from typing import Dict
-import torch 
+import torch
 
 ZERO_FILE_PREFIX = 'zero_pp_rank_'
 LAYER_FILE_PREFIX = 'layer_'
@@ -32,12 +32,14 @@ class DeepSpeedCheckpoint(object):
         self.layer_keys = self._get_layer_keys()
         self.layer_count = len(self.layer_keys)
         self.original_tp_degree = len(self._get_files_with_prefix(self.layer_files, f'{LAYER_FILE_PREFIX}01'))
+        if self.original_tp_degree == 0:
+            self.original_tp_degree = 1
         self.original_pp_degree = len(self.mp_rank_files) // self.original_tp_degree
         self.dp_degree = len(self.zero_files) // (self.original_pp_degree * self.original_tp_degree)
         self.tp_degree = self.original_tp_degree if tp_degree is None else tp_degree
         self.pp_degree = self.original_pp_degree if pp_degree is None else pp_degree
         self.global_state = {}
-    
+
         self._sanity_check()
         self.pp_to_transformer_map = self._build_pp_transformer_map()
         self.transformer_file_map = self._build_transformer_file_map()
@@ -83,7 +85,7 @@ class DeepSpeedCheckpoint(object):
             self.global_state[ARGS_KEY] = sd.get(ARGS_KEY, None)
 
         return self.global_state[ARGS_KEY]
-    
+
 
     def get_transformer_state(self, tp_index: int, pp_index: int) -> list:
         assert tp_index < self.tp_degree
@@ -93,7 +95,7 @@ class DeepSpeedCheckpoint(object):
             sd_list = [torch.load(fname, map_location=torch.device('cpu')) for fname in fname_list]
             sd = self._merge_state_dicts(sd_list)
             t_list.append(sd)
-        return t_list   
+        return t_list
 
     def get_final_norm_state(self, tp_index:int) -> Dict:
         assert tp_index in self.tp_to_final_norm_map.keys()
@@ -133,29 +135,29 @@ class DeepSpeedCheckpoint(object):
                 if not map_key in file_map.keys():
                     file_map[map_key] = []
                 file_map[map_key].append(layer_file_partitions[tp_index])
-        
+
         return file_map
-        
+
     def _sanity_check(self):
         assert len(self.mp_rank_files) % self.tp_degree == 0
         assert len(self.zero_files) % (self.pp_degree * self.tp_degree) == 0
         assert len(self.layer_keys) > 2
         assert (len(self.layer_keys) - 2) % self.pp_degree == 0
-     
+
     def _get_files_with_prefix(self, all_files, prefix):
         file_list = []
         for file_path in all_files:
             _, fname = os.path.split(file_path)
             if fname.startswith(prefix):
                 file_list.append(file_path)
-        
+
         return sorted(file_list)
 
     def validate_files(self):
         for file in self.file_list:
             if not os.path.isfile(file):
                 print(f'Error: {file} is not existent')
-        
+
     def _get_files(self, dir):
         file_list = []
         for root, dirs, files in os.walk(dir):
@@ -165,7 +167,7 @@ class DeepSpeedCheckpoint(object):
 
     def _get_layer_keys(self):
         key_set = set()
-        key_len = len(LAYER_FILE_PREFIX) + 2 
+        key_len = len(LAYER_FILE_PREFIX) + 2
         for file_path in self.layer_files:
             _, fname = os.path.split(file_path)
             key_set.add(fname[:key_len])
