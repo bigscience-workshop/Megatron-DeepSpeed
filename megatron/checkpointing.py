@@ -340,7 +340,8 @@ def load_checkpoint(model, optimizer, lr_scheduler, load_arg='load', strict=True
     else:
         try:
             iteration = state_dict['iteration']
-            args.consumed_train_tokens = state_dict['tokens']
+            if 'tokens' in state_dict:
+                args.consumed_train_tokens = state_dict['tokens']
         except KeyError:
             try:  # Backward compatible with older checkpoints
                 iteration = state_dict['total_iters']
