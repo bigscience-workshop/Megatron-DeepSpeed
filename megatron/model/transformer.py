@@ -376,7 +376,7 @@ class ParallelAttention(MegatronModule):
         # =================
         # Output. [sq, b, h]
         # =================
-
+        # context_layer[3::,-3:] diverges attn_output before attn_output = self.c_proj(attn_output) in hf
         output, bias = self.dense(context_layer)
 
         if get_key_value:

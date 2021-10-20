@@ -184,7 +184,7 @@ def set_seed(seed: int=42):
     Helper function for reproducible behavior to set the seed in ``random``, ``numpy``, ``torch``
 
     Args:
-        seed (:obj:`int`): The seed to set.
+        seed (:obj:`int`): The seed to set. Defaults to 42.
     """
     random.seed(seed)
     np.random.seed(seed)
