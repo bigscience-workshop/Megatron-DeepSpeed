@@ -103,7 +103,6 @@ class MegDSTestTraining(TestCasePlus):
                 --eval-interval 10
                 --eval-iters 5
                 --checkpoint-activations
-                --glu-activation geglu
                 --exit-interval {exit_interval}
 
                 --merge-file {data_dir}/gpt2-tiny-merges.txt
@@ -196,6 +195,11 @@ class MegDSTestTraining(TestCasePlus):
                 --deepspeed_config {self.test_file_dir_str}/ds_config_cl.json
             """.split()
 
+        elif variation == "glu":
+            new_args = f"""
+                --no-bias-gelu-fusion
+                --glu-activation geglu
+            """.split()
 
         else:
             raise ValueError(f"Don't know of variation {variation}")
@@ -206,7 +210,7 @@ class MegDSTestTraining(TestCasePlus):
         return args, ds_args, num_gpus
 
 
-    @parameterized.expand(["base", "cl", "bnb"])
+    @parameterized.expand(["base", "cl", "bnb", "glu"])
     def test_training_all(self, variation):
 
         # optional runs
@@ -306,7 +310,6 @@ class MegDSTestTraining(TestCasePlus):
             --eval-interval 10
             --eval-iters 5
             --checkpoint-activations
-            --glu-activation geglu
             --exit-interval {exit_interval}
 
             --merge-file {data_dir}/gpt2-tiny-merges.txt
