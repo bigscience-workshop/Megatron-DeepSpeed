@@ -197,6 +197,11 @@ class MegDSTestTraining(TestCasePlus):
 
         elif variation == "glu":
             new_args = f"""
+                --rampup-batch-size 2 2 {n_samples}
+                --train-samples {n_samples}
+
+                --lr-decay-samples 6
+
                 --no-bias-gelu-fusion
                 --glu-activation geglu
             """.split()
