@@ -9,5 +9,8 @@ tensorboard
 torch
 transformers
 DeepSpeed @ git+https://github.com/microsoft/DeepSpeed.git
-# edit to a higher SHA or future release if needed
-codecarbon @ git+https://github.com/mlco2/codecarbon.git@e6c3863
+# at some point when it starts working freeze with ether min version or sha using the syntax codecarbon.git@deadbeaf 
+codecarbon @ git+https://github.com/mlco2/codecarbon.git
+# versions from HF transformers
+black==21.4b0
+isort>=5.5.4
