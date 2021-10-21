@@ -9,7 +9,7 @@ import torch
 
 torch.set_printoptions(precision=8)
 
-from transformers import GPT2LMHeadModel, AutoTokenizer
+from transformers import GPT2LMHeadModel, AutoTokenizer, GPTMegLMHeadModel
 
 from megatron import get_args, get_tokenizer, global_vars, initialize_megatron
 from megatron.checkpointing import load_checkpoint, save_checkpoint
@@ -20,6 +20,7 @@ from megatron.testing_utils import (
     require_torch_gpu,
     set_seed,
     torch_assert_close,
+    torch_assert_equal,
 )
 from megatron.training import setup_model_and_optimizer
 from pretrain_gpt import get_batch_pipe as get_gpt_batch_pipe
@@ -310,16 +311,24 @@ class TestCheckpointConversion(TestCasePlus):
                 deepspeed.init_distributed()
                 initialize_megatron()
                 args = get_args()
-                print(args)
-                #die
+                #print(args)
 
                 # get deepspeed megatron model
                 megatron_ds_model, _, _ = setup_model_and_optimizer(gpt_model_provider)
 
                 megatron_tokenizer = get_tokenizer()
-                text = "This is a big test"
-                token_ids = torch.tensor([megatron_tokenizer.tokenize(text) + [megatron_tokenizer.eod]])
-                print("TOKENS", token_ids)
+                text = "This is a long drill" # fails at fp32
+                #text = "This is a very long drill" # succeeds at fp32
+                #text = "I know what I want and I want it now, I want you cause I'm Mr. Vain"
+                #text = "This"
+#                 text = """
+# No, you can't always get what you want
+# You can't always get what you want
+# But if you try sometime you find
+# You get what you need
+#                 """
+                megatron_token_ids = torch.tensor([megatron_tokenizer.tokenize(text) + [megatron_tokenizer.eod]])
+                print("TOKENS", megatron_token_ids)
 
                 # # always use this token_ids
                 # token_ids = torch.randint(
@@ -330,7 +339,7 @@ class TestCheckpointConversion(TestCasePlus):
                 # token_ids[token_ids == megatron_tokenizer.eod] %= args.padded_vocab_size
 
                 # get processed batch
-                megatron_token, _ = get_gpt_batch_pipe({"text": token_ids})
+                megatron_token, _ = get_gpt_batch_pipe({"text": megatron_token_ids})
 
                 # save directory
                 megatron_ds_dir = self.get_auto_remove_tmp_dir()
@@ -366,7 +375,7 @@ class TestCheckpointConversion(TestCasePlus):
         megatron_ds_output = megatron_output
 
         # run conversion file
-        transformer_dir = self.get_auto_remove_tmp_dir("./xxx")
+        transformer_dir = self.get_auto_remove_tmp_dir() # "./xxx") # XXX: fix
         conversion_args = {
             "--input_folder": f"{megatron_ds_dir}",
             "--output_folder": f"{transformer_dir}",
@@ -374,33 +383,28 @@ class TestCheckpointConversion(TestCasePlus):
         with patch("sys.argv", flatten_arguments(conversion_args)):
             megatron_ds_to_transformers_main()
 
-        if fp16:
-            apply_overrides()
+        #if fp16:
+        #    apply_overrides()
 
         torch_dtype = torch.float16 if fp16 else torch.get_default_dtype()
-        #torch_dtype = torch.float32
-        transformers_model = GPT2LMHeadModel.from_pretrained(transformer_dir, torch_dtype=torch_dtype)
-        #transformers_model.gradient_checkpointing_enable()
+        transformers_model = GPTMegLMHeadModel.from_pretrained(transformer_dir, torch_dtype=torch_dtype)
+        #transformers_model = GPT2LMHeadModel.from_pretrained(transformer_dir, torch_dtype=torch_dtype)
         transformers_model.cuda()
         transformers_model.eval()
         transformers_tokenizer = AutoTokenizer.from_pretrained(transformer_dir)
-        #input_ids = transformers_tokenizer(text, return_tensors="pt").input_ids.to("cuda");
         inputs = transformers_tokenizer(text, return_tensors="pt").to("cuda");
         print("TOKENS", inputs)
+        transformers_token_ids = inputs.input_ids.clone()
+
+        # test tokenization
+        torch_assert_equal(megatron_token_ids[:,:-1].cpu(), transformers_token_ids.cpu(), check_stride=False)
 
         if fp16:
             megatron_logits = megatron_ds_output.data.cpu().half()
-            #transformers_model = transformers_model.half()
-            #megatron_logits = megatron_logits.half()
-            #transformers_model.float()
-            #with torch.cuda.amp.autocast():
-            #     transformers_output = transformers_model(input_ids=input_ids).logits.half()
-            #transformers_output = transformers_model(input_ids=input_ids).logits #.half()
             transformers_output = transformers_model(**inputs).logits #.half()
         else:
             megatron_logits = megatron_ds_output.data.cpu()
             transformers_output = transformers_model(**inputs).logits
-            #transformers_output = transformers_model(input_ids=input_ids).logits
 
         transformers_logits = transformers_output.data.cpu() #[:, :-1, :]
 
@@ -414,6 +418,6 @@ class TestCheckpointConversion(TestCasePlus):
         print(f" HF: {transformers_logits}")
 
         # compare the difference
-        # FIXME: it could now pass torch_assert_close, but not torch_assert_equal
+        # FIXME: it could sometimes now pass torch_assert_close, but not torch_assert_equal
         # torch_assert_equal(megatron_ds_output.data.cpu(), transformers_output.data.cpu())
-        torch_assert_close(megatron_logits, transformers_logits, check_stride=False)
+        torch_assert_close(megatron_logits, transformers_logits, check_stride=False)#, rtol=1e-05, atol=1e-08)
