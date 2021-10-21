@@ -201,6 +201,9 @@ class MegDSTestTraining(TestCasePlus):
                 --glu-activation geglu
             """.split()
 
+            new_ds_args = f"""
+                --deepspeed_config {self.test_file_dir_str}/ds_config.json
+            """.split()
         else:
             raise ValueError(f"Don't know of variation {variation}")
 
