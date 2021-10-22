@@ -20,10 +20,11 @@ from __future__ import (absolute_import, division, print_function,
 
 import sys
 import json
-import logging
 import os
 import regex as re
 from io import open
+
+from megatron import logging
 
 try:
     from functools import lru_cache
@@ -35,7 +36,7 @@ except ImportError:
         return lambda func: func
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 PRETRAINED_VOCAB_ARCHIVE_MAP = {
     'gpt2': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-vocab.json",

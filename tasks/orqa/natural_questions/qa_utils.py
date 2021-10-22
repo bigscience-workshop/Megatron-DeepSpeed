@@ -14,7 +14,6 @@
 """
 
 import collections
-import logging
 import string
 import unicodedata
 from functools import partial
@@ -22,9 +21,11 @@ from multiprocessing import Pool as ProcessPool
 from typing import Tuple, List, Dict
 
 import regex as re
+
+from megatron import logging
 from tasks.orqa.natural_questions.tokenizers import SimpleTokenizer
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 QAMatchStats = collections.namedtuple('QAMatchStats', ['top_k_hits',\
                                         'questions_doc_hits'])
