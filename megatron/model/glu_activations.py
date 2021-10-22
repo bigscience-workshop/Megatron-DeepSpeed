@@ -2,12 +2,15 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+from megatron.logging import debug_log
+
 
 class _GLUBaseModule(nn.Module):
     def __init__(self, activation_fn):
         super().__init__()
         self.activation_fn = activation_fn
 
+    @debug_log("Using GLU activations.")
     def forward(self, x):
         # dim=-1 breaks in jit for pt<1.10
         x1, x2 = x.chunk(2, dim=(x.ndim - 1))

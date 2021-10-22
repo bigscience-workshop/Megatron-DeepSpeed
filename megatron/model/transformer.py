@@ -81,7 +81,6 @@ class ParallelMLP(MegatronModule):
         self.bias_gelu_fusion = args.bias_gelu_fusion
         self.activation_func = F.gelu
         if args.glu_activation:
-            logger.debug(f"Using GLU activations ({args.glu_activation}).")
             self.activation_func = GLU_ACTIVATIONS[args.glu_activation]
         elif args.openai_gelu:
             self.activation_func = openai_gelu

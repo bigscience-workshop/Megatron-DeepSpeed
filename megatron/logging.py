@@ -252,3 +252,14 @@ def reset_format() -> None:
 
     for handler in handlers:
         handler.setFormatter(None)
+
+def debug_log(func, logger: logging.Logger, msg: str):
+    func.__logged_message__ = False
+
+    def wrapped(*args, **kwargs):
+        if func.__logged_message__ is False:
+            logger.debug(msg)
+            func.__logged_message__ = True
+        return func(*args, **kwargs)
+
+    return wrapped
