@@ -152,7 +152,11 @@ def _set_tensorboard_writer(args):
                   'no TensorBoard logs will be written.', flush=True)
 
 
+# Important: the codecarbon is very unstable and its latest incarnation using the python scheduler interferes with the asyncio library we use in the test suite which breaks everything, so making this a no-op for now.
 def _set_codecarbon_tracker(args):
+
+    return # turned off
+
     global _GLOBAL_CODECARBON_TRACKER
     if not hasattr(args, 'codecarbon_dir') or args.codecarbon_dir is None:
         return
@@ -187,6 +191,9 @@ def _set_codecarbon_tracker(args):
 
 
 def codecarbon_tracker_start():
+
+    return # turned off, see the notes above
+
     global _GLOBAL_CODECARBON_TRACKER
     if _GLOBAL_CODECARBON_TRACKER is None:
         return
@@ -196,6 +203,9 @@ def codecarbon_tracker_start():
 
 
 def codecarbon_tracker_stop():
+
+    return # turned off, see the notes above
+
     global _GLOBAL_CODECARBON_TRACKER
     if _GLOBAL_CODECARBON_TRACKER is None:
         return
@@ -205,6 +215,9 @@ def codecarbon_tracker_stop():
 
 
 def codecarbon_tracker_flush():
+
+    return # turned off, see the notes above
+
     global _GLOBAL_CODECARBON_TRACKER
     if _GLOBAL_CODECARBON_TRACKER is None:
         return
