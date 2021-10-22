@@ -12,7 +12,6 @@ class _GLUBaseModule(nn.Module):
     def __init__(self, activation_fn):
         super().__init__()
         self.activation_fn = activation_fn
-        self._logged_forward = False
 
     def forward(self, x):
         # dim=-1 breaks in jit for pt<1.10
