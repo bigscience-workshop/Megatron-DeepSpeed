@@ -28,6 +28,16 @@ class ReGLU(_GLUBaseModule):
     def __init__(self):
         super().__init__(F.relu)
 
+class ReGLUSquared(_GLUBaseModule):
+    def __init__(self):
+        super().__init__(F.relu)
+
+    def forward(self, x):
+        # dim=-1 breaks in jit for pt<1.10
+        x1, x2 = x.chunk(2, dim=(x.ndim - 1))
+        fn =  self.activation_fn(x2)
+        return x1 * fn * fn
+
 
 class SwiGLU(_GLUBaseModule):
     def __init__(self):
@@ -37,6 +47,7 @@ class SwiGLU(_GLUBaseModule):
 liglu = torch.jit.script(LiGLU())
 geglu = torch.jit.script(GEGLU())
 reglu = torch.jit.script(ReGLU())
+reglu_squared = torch.jit.script(ReGLUSquared())
 swiglu = torch.jit.script(SwiGLU())
 
 
@@ -44,5 +55,6 @@ GLU_ACTIVATIONS = {
     "geglu": geglu,
     "liglu": liglu,
     "reglu": reglu,
+    "reglu_squared": reglu_squared,
     "swiglu": swiglu,
 }

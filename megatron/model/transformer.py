@@ -56,7 +56,6 @@ torch._C._jit_override_can_fuse_on_gpu(True)
 
 class ParallelMLP(MegatronModule):
     """MLP.
-
     MLP will take the input with h hidden state, project it to 4*h
     hidden dimension, perform nonlinear transformation, and project the
     state back into h hidden dimension. At the end, dropout is also
@@ -113,7 +112,6 @@ class ParallelMLP(MegatronModule):
 
 class ParallelAttention(MegatronModule):
     """Parallel self-attention layer abstract class.
-
     Self-attention layer takes input with size [b, s, h]
     and returns output of the same size.
     """
@@ -413,14 +411,13 @@ def bias_dropout_add_fused_inference(x, bias, residual, prob):
 
 class ParallelTransformerLayer(MegatronModule):
     """A single transformer layer.
-
     Transformer layer takes input with size [b, s, h] and returns an
     output of the same size.
     """
 
     def __init__(self, init_method, output_layer_init_method,
                  layer_number, layer_type=LayerType.encoder,
-                 self_attn_mask_type=AttnMaskType.padding):
+                 self_attn_mask_type=AttnMaskType.padding, attention_init_method=None):
         args = get_args()
 
         super(ParallelTransformerLayer, self).__init__()
@@ -433,14 +430,23 @@ class ParallelTransformerLayer(MegatronModule):
         self.bf16 = args.bf16
         self.fp32_residual_connection = args.fp32_residual_connection
 
-        # Layernorm on the input data.
-        self.input_layernorm = LayerNorm(
-            args.hidden_size,
-            eps=args.layernorm_epsilon)
+        if args.use_scale_norm:
+          # ScaleNorm on the input data.
+          self.input_layernorm = ScaleNorm(
+              scale=args.hidden_size**0.5, # the original scalenorm implementation uses embedding_dim**0.5.  Can we confirm hidden_size == embedding_dim?? Also, note that gptx-neox sets scale to 1.0
+              eps=args.layernorm_epsilon)
+        else:
+          # Layernorm on the input data.
+          self.input_layernorm = LayerNorm(
+              args.hidden_size,
+              eps=args.layernorm_epsilon)
+          
+        if attention_init_method is None:
+          attention_init_method = init_method
 
         # Self attention.
         self.self_attention = ParallelAttention(
-            init_method,
+            attention_init_method,
             output_layer_init_method,
             layer_number,
             attention_type=AttnType.self_attn,
@@ -448,10 +454,16 @@ class ParallelTransformerLayer(MegatronModule):
         self.hidden_dropout = args.hidden_dropout
         self.bias_dropout_fusion = args.bias_dropout_fusion
 
-        # Layernorm on the attention output
-        self.post_attention_layernorm = LayerNorm(
-            args.hidden_size,
-            eps=args.layernorm_epsilon)
+        if args.use_scale_norm:
+          # ScaleNorm on the attention output
+          self.post_attention_layernorm = ScaleNorm(
+              scale=args.hidden_size**0.5,
+              eps=args.layernorm_epsilon)
+        else:
+          # Layernorm on the attention output
+          self.post_attention_layernorm = LayerNorm(
+              args.hidden_size,
+              eps=args.layernorm_epsilon)
 
         if self.layer_type == LayerType.decoder:
             self.inter_attention = ParallelAttention(
@@ -459,10 +471,16 @@ class ParallelTransformerLayer(MegatronModule):
                 output_layer_init_method,
                 layer_number,
                 attention_type=AttnType.cross_attn)
-            # Layernorm on the attention output.
-            self.post_inter_attention_layernorm = LayerNorm(
-                args.hidden_size,
-                eps=args.layernorm_epsilon)
+            if args.use_scale_norm:
+              # ScaleNorm on the attention output.
+              self.post_inter_attention_layernorm = ScaleNorm(
+                  scale=args.hidden_size**0.5,
+                  eps=args.layernorm_epsilon)
+            else:
+              # Layernorm on the attention output.
+              self.post_inter_attention_layernorm = LayerNorm(
+                  args.hidden_size,
+                  eps=args.layernorm_epsilon)
 
         # MLP
         self.mlp = ParallelMLP(init_method,
@@ -561,21 +579,17 @@ class ParallelTransformerLayer(MegatronModule):
 
 class ParallelTransformerLayerPipe(ParallelTransformerLayer):
     """Extends ParallelTransformerLayer to forward attention_mask through the pipeline.
-
     Forward has two usages that affect attention mask communication:
-
     1) forward((input, attn_mask) , **kwargs) -> (output, mask)
        When the attention mask is provided as the second positional
        argument, typical pipeline behavior is used and both the output
        *and* mask are returned in a tuple. This tuple is then forwarded
        to the next stage in the pipeline.
-
        This version is useful if masks are dynamic.
     
     2) forward(input, **kwargs) -> output
        When the mask is static over all samples, it is advantageous to
        cache the mask and avoid communicating it.
-
        If no mask is provided, the module will query `self._args.attn_mask`
        for the mask and only return `super().forward(...)`
     """
@@ -622,7 +636,7 @@ class ParallelTransformer(MegatronModule):
     def __init__(self, init_method, output_layer_init_method,
                  layer_type=LayerType.encoder,
                  self_attn_mask_type=AttnMaskType.padding,
-                 pre_process=True, post_process=True):
+                 pre_process=True, post_process=True, attention_init_method=None):
         super(ParallelTransformer, self).__init__()
         args = get_args()
 
@@ -648,7 +662,7 @@ class ParallelTransformer(MegatronModule):
                 output_layer_init_method,
                 layer_number,
                 layer_type=layer_type,
-                self_attn_mask_type=self_attn_mask_type)
+                self_attn_mask_type=self_attn_mask_type, attention_init_method=attention_init_method)
         if args.virtual_pipeline_model_parallel_size is not None:
             assert args.num_layers % args.virtual_pipeline_model_parallel_size == 0, \
                 'num_layers_per_stage must be divisible by ' \
@@ -725,7 +739,6 @@ class ParallelTransformer(MegatronModule):
 
     def set_input_tensor(self, input_tensor):
         """Set input tensor to be used instead of forward()'s input.
-
         When doing pipeline parallelism the input from the previous
         stage comes from communication, not from the input, so the
         model's forward_step_func won't have it. This function is thus
