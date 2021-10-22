@@ -8,12 +8,16 @@ from megatron.logging import debug_log
 logger = logging.get_logger(__name__)
 
 class _GLUBaseModule(nn.Module):
+    @debug_log(logger, "Using GLU activations init.")
     def __init__(self, activation_fn):
         super().__init__()
         self.activation_fn = activation_fn
 
-    @debug_log(logger, "Using GLU activations.")
     def forward(self, x):
+        return self._forward(x)
+
+    @debug_log(logger, "Using GLU activations.")
+    def _forward(self, x):
         # dim=-1 breaks in jit for pt<1.10
         x1, x2 = x.chunk(2, dim=(x.ndim - 1))
         return x1 * self.activation_fn(x2)
