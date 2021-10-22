@@ -50,10 +50,10 @@ def log_debug_usage(func, msg: str):
     return wrapped
 
 
-liglu = torch.jit.script(LiGLU())
+liglu = log_debug_usage(torch.jit.script(LiGLU()), "Using GLU activation: LiGLU.")
 geglu = log_debug_usage(torch.jit.script(GEGLU()), "Using GLU activation: GELU.")
-reglu = torch.jit.script(ReGLU())
-swiglu = torch.jit.script(SwiGLU())
+reglu = log_debug_usage(torch.jit.script(ReGLU()), "Using GLU activation: ReGLU.")
+swiglu = log_debug_usage(torch.jit.script(SwiGLU()), "Using GLU activation: SwiGLU.")
 
 
 GLU_ACTIVATIONS = {
