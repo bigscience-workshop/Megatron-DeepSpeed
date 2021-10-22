@@ -260,7 +260,7 @@ class MegDSTestTraining(TestCasePlus):
         self.assertEqual(len(tensorboard_files), 1, "tensorboard files")
 
         if variation == "glu":
-            self.assertIn("Using GLU activations", cs.out)
+            self.assertIn("Using GLU activation: GELU", cs.out)
 
         # 2. test training from checkpoint: resume
         # now do it again, this time resuming from the checkpoint
@@ -281,7 +281,7 @@ class MegDSTestTraining(TestCasePlus):
         self.assertEqual(len(tensorboard_files), 2, "tensorboard files")
 
         if variation == "glu":
-            self.assertIn("Using GLU activations", cs.out)
+            self.assertIn("Using GLU activation: GELU", cs.out)
 
 
     def test_training_prefix_lm_all(self):
