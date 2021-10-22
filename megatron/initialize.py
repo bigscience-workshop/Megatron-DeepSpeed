@@ -22,7 +22,7 @@ import time
 import numpy as np
 import torch
 
-from megatron import fused_kernels
+from megatron import fused_kernels, logging
 from megatron import get_adlr_autoresume
 from megatron import get_args
 from megatron import get_tensorboard_writer
@@ -63,9 +63,17 @@ def initialize_megatron(extra_args_provider=None, args_defaults={},
         # Random seeds for reproducibility.
         if args.rank == 0:
             print('> setting random seeds to {} ...'.format(args.seed))
+
+        if args.rank == 0:
+            if args.log_level is not None:
+                logging.set_verbosity(logging.log_levels[args.log_level])
+        else:
+            if args.log_level_replica is not None:
+                logging.set_verbosity(logging.log_levels[args.log_level_replica])
         _set_random_seed(args.seed)
 
     args = get_args()
+
     if  args.lazy_mpu_init:
         args.use_cpu_initialization=True
         # delayed initialization of DDP-related stuff

@@ -134,6 +134,8 @@ class MegDSTestTraining(TestCasePlus):
                 --weight-decay 1e-1
                 --fp16
 
+                --log-level debug
+                --log-level-replica info
         """.split()
 
 
@@ -257,6 +259,9 @@ class MegDSTestTraining(TestCasePlus):
         tensorboard_files = glob.glob(f"{output_dir}/tensorboard/events*")
         self.assertEqual(len(tensorboard_files), 1, "tensorboard files")
 
+        if variation == "glu":
+            self.assertIn("Using GLU activations", cs.out)
+
         # 2. test training from checkpoint: resume
         # now do it again, this time resuming from the checkpoint
         with CaptureStdout() as cs:
@@ -274,6 +279,10 @@ class MegDSTestTraining(TestCasePlus):
         # test tensorboard (1 file from the first run, plus 1 now)
         tensorboard_files = glob.glob(f"{output_dir}/tensorboard/events*")
         self.assertEqual(len(tensorboard_files), 2, "tensorboard files")
+
+        if variation == "glu":
+            self.assertIn("Using GLU activations", cs.out)
+
 
     def test_training_prefix_lm_all(self):
         # all in one test

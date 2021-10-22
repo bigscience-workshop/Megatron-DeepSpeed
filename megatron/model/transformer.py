@@ -19,7 +19,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from megatron import get_args
+from megatron import get_args, logging
 from megatron import mpu
 from .module import MegatronModule
 from megatron.enums import AttnMaskType, LayerType, AttnType, PositionEmbeddingType
@@ -38,6 +38,8 @@ torch._C._jit_set_profiling_mode(False)
 torch._C._jit_set_profiling_executor(False)
 torch._C._jit_override_can_fuse_on_cpu(True)
 torch._C._jit_override_can_fuse_on_gpu(True)
+
+logger = logging.get_logger(__name__)
 
 """ We use the following notation throughout this file:
      h: hidden size
@@ -79,6 +81,7 @@ class ParallelMLP(MegatronModule):
         self.bias_gelu_fusion = args.bias_gelu_fusion
         self.activation_func = F.gelu
         if args.glu_activation:
+            logger.debug(f"Using GLU activations ({args.glu_activation}).")
             self.activation_func = GLU_ACTIVATIONS[args.glu_activation]
         elif args.openai_gelu:
             self.activation_func = openai_gelu
