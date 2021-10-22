@@ -18,6 +18,7 @@ import logging
 import os
 import sys
 import threading
+from functools import wraps
 from logging import CRITICAL  # NOQA
 from logging import DEBUG  # NOQA
 from logging import ERROR  # NOQA
@@ -253,13 +254,17 @@ def reset_format() -> None:
     for handler in handlers:
         handler.setFormatter(None)
 
-def debug_log(func, logger: logging.Logger, msg: str):
-    func.__logged_message__ = False
+def debug_log(logger: logging.Logger, msg: str):
+    def wrapper(func):
+        func.__logged_message__ = False
 
-    def wrapped(*args, **kwargs):
-        if func.__logged_message__ is False:
-            logger.debug(msg)
-            func.__logged_message__ = True
-        return func(*args, **kwargs)
+        @wraps(func)
+        def wrapped(*args, **kwargs):
+            if func.__logged_message__ is False:
+                logger.debug(msg)
+                func.__logged_message__ = True
+            return func(*args, **kwargs)
 
-    return wrapped
+        return wrapped
+
+    return wrapper
