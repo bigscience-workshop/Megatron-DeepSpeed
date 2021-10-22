@@ -333,7 +333,7 @@ def _add_network_size_args(parser):
                        "'info', 'warning', 'error' and 'critical', plus a 'passive' level which doesn't set anything and lets the "
                        "application set the level."
                        )
-    group.add_argument('--log-level_replica', type=str, choices=list(log_levels.keys()),
+    group.add_argument('--log-level-replica', type=str, choices=list(log_levels.keys()),
                        help="Logger log level to use on replicas. Same choices as ``log_level``"
                        )
     return parser
