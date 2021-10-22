@@ -80,7 +80,7 @@ def initialize_megatron(extra_args_provider=None, args_defaults={},
                 set_verbosity(args.log_level)
         else:
             if args.log_level_replica is not None:
-                logging.set_verbosity(args.log_level_replica)
+                set_verbosity(args.log_level_replica)
         _set_random_seed(args.seed)
 
     args = get_args()
