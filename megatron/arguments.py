@@ -252,7 +252,7 @@ def parse_args(extra_args_provider=None, defaults={},
     args.curriculum_learning = False
 
     # Activation function
-    if args.glu_activation is not None and not args.bias_gelu_fusion:
+    if args.glu_activation is not None and args.bias_gelu_fusion:
         raise ValueError("if glu-activation is used, please set --no-bias-gelu-fusion")
 
     _print_args(args)
