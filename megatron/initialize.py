@@ -70,19 +70,19 @@ def initialize_megatron(extra_args_provider=None, args_defaults={},
             log_level = logging.log_levels[logging_level]
             logging.set_verbosity(log_level)
             logging.disable_default_handler()
-            handler = lg.StreamHandler()
+            handler = lg.StreamHandler(sys.stdout)
             handler.setLevel(log_level)
             handler.flush = sys.stderr.flush
             logging.add_handler(handler)
 
         if args.rank == 0:
             if args.log_level is not None:
-                logging.set_verbosity(logging.log_levels[args.log_level])
-                # set_verbosity(args.log_level)
+                # logging.set_verbosity(logging.log_levels[args.log_level])
+                set_verbosity(args.log_level)
         else:
             if args.log_level_replica is not None:
-                logging.set_verbosity(logging.log_levels[args.log_level_replica])
-                # set_verbosity(args.log_level_replica)
+                # logging.set_verbosity(logging.log_levels[args.log_level_replica])
+                set_verbosity(args.log_level_replica)
         _set_random_seed(args.seed)
 
     args = get_args()
