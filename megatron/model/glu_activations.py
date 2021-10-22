@@ -7,14 +7,15 @@ from megatron import logging
 logger = logging.get_logger(__name__)
 
 class _GLUBaseModule(nn.Module):
-    def __init__(self, activation_fn):
+    def __init__(self, activation_fn, logger):
         super().__init__()
         self.activation_fn = activation_fn
+        self.logger = logger
         self._logged_forward = False
 
     def forward(self, x):
         if self._logged_forward is False:
-            logger.debug("Using GLU activations.")
+            self.logger.debug("Using GLU activations.")
             self._logged_forward = True
         # dim=-1 breaks in jit for pt<1.10
         x1, x2 = x.chunk(2, dim=(x.ndim - 1))
@@ -22,29 +23,29 @@ class _GLUBaseModule(nn.Module):
 
 
 class LiGLU(_GLUBaseModule):
-    def __init__(self):
-        super().__init__(nn.Identity())
+    def __init__(self, logger):
+        super().__init__(nn.Identity(), logger)
 
 
 class GEGLU(_GLUBaseModule):
-    def __init__(self):
-        super().__init__(F.gelu)
+    def __init__(self, logger):
+        super().__init__(F.gelu, logger)
 
 
 class ReGLU(_GLUBaseModule):
-    def __init__(self):
-        super().__init__(F.relu)
+    def __init__(self, logger):
+        super().__init__(F.relu, logger)
 
 
 class SwiGLU(_GLUBaseModule):
-    def __init__(self):
-        super().__init__(F.silu)
+    def __init__(self, logger):
+        super().__init__(F.silu, logger)
 
 
-liglu = torch.jit.script(LiGLU())
-geglu = torch.jit.script(GEGLU())
-reglu = torch.jit.script(ReGLU())
-swiglu = torch.jit.script(SwiGLU())
+liglu = torch.jit.script(LiGLU(logger))
+geglu = torch.jit.script(GEGLU(logger))
+reglu = torch.jit.script(ReGLU(logger))
+swiglu = torch.jit.script(SwiGLU(logger))
 
 
 GLU_ACTIVATIONS = {
