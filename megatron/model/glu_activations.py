@@ -10,12 +10,12 @@ class _GLUBaseModule(nn.Module):
     def __init__(self, activation_fn):
         super().__init__()
         self.activation_fn = activation_fn
-        self.__logged_forward__ = False
+        self._logged_forward = False
 
     def forward(self, x):
-        if self.__logged_forward__ is False:
+        if self._logged_forward is False:
             logger.debug("Using GLU activations.")
-            self.__logged_forward__ = True
+            self._logged_forward = True
         # dim=-1 breaks in jit for pt<1.10
         x1, x2 = x.chunk(2, dim=(x.ndim - 1))
         return x1 * self.activation_fn(x2)
