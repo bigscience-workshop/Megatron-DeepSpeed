@@ -17,10 +17,12 @@
 
 import random
 import os
+import sys
 import time
 
 import numpy as np
 import torch
+import logging as lg
 
 from megatron import fused_kernels, logging
 from megatron import get_adlr_autoresume
@@ -64,12 +66,21 @@ def initialize_megatron(extra_args_provider=None, args_defaults={},
         if args.rank == 0:
             print('> setting random seeds to {} ...'.format(args.seed))
 
+        def set_verbosity(logging_level: str):
+            log_level = logging.log_levels[logging_level]
+            logging.set_verbosity(log_level)
+            logging.disable_default_handler()
+            handler = lg.StreamHandler()
+            handler.setLevel(log_level)
+            handler.flush = sys.stderr.flush
+            logging.add_handler(handler)
+
         if args.rank == 0:
             if args.log_level is not None:
-                logging.set_verbosity(logging.log_levels[args.log_level])
+                set_verbosity(args.log_level)
         else:
             if args.log_level_replica is not None:
-                logging.set_verbosity(logging.log_levels[args.log_level_replica])
+                logging.set_verbosity(args.log_level_replica)
         _set_random_seed(args.seed)
 
     args = get_args()
