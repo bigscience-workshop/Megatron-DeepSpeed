@@ -1,3 +1,5 @@
+from functools import wraps
+
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -40,9 +42,19 @@ class SwiGLU(_GLUBaseModule):
     def __init__(self):
         super().__init__(F.silu)
 
+def log_debug_usage(func, msg: str):
+    func.__logged_message__ = False
+    @wraps(func)
+    def wrapped(*args, **kwargs):
+        if func.__logged_message__ is False:
+            logger.debug(msg)
+            func.__logged_message__ = True
+        return func(*args, **kwargs)
+    return wrapped
+
 
 liglu = torch.jit.script(LiGLU())
-geglu = torch.jit.script(GEGLU())
+geglu = log_debug_usage(torch.jit.script(GEGLU()), "Using GLU activation: GELU.")
 reglu = torch.jit.script(ReGLU())
 swiglu = torch.jit.script(SwiGLU())
 
