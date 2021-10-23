@@ -103,7 +103,6 @@ class MegDSTestTraining(TestCasePlus):
                 --eval-interval 10
                 --eval-iters 5
                 --checkpoint-activations
-                --glu-activation geglu
                 --exit-interval {exit_interval}
 
                 --merge-file {data_dir}/gpt2-tiny-merges.txt
@@ -111,7 +110,6 @@ class MegDSTestTraining(TestCasePlus):
                 --save {output_dir}/checkpoints
                 --load {output_dir}/checkpoints
                 --data-path {data_dir}/meg-gpt2-openwebtext_text_document
-                --codecarbon-dir {output_dir}/codecarbon
                 --tensorboard-dir {output_dir}/tensorboard
                 --tensorboard-queue-size 5
                 --log-timers-to-tensorboard
@@ -136,6 +134,8 @@ class MegDSTestTraining(TestCasePlus):
                 --weight-decay 1e-1
                 --fp16
 
+                --log-level debug
+                --log-level-replica info
         """.split()
 
 
@@ -196,7 +196,20 @@ class MegDSTestTraining(TestCasePlus):
                 --deepspeed_config {self.test_file_dir_str}/ds_config_cl.json
             """.split()
 
+        elif variation == "glu":
+            new_args = f"""
+                --rampup-batch-size 2 2 {n_samples}
+                --train-samples {n_samples}
 
+                --lr-decay-samples 6
+
+                --no-bias-gelu-fusion
+                --glu-activation geglu
+            """.split()
+
+            new_ds_args = f"""
+                --deepspeed_config {self.test_file_dir_str}/ds_config.json
+            """.split()
         else:
             raise ValueError(f"Don't know of variation {variation}")
 
@@ -206,7 +219,7 @@ class MegDSTestTraining(TestCasePlus):
         return args, ds_args, num_gpus
 
 
-    @parameterized.expand(["base", "cl", "bnb"])
+    @parameterized.expand(["base", "cl", "bnb", "glu"])
     def test_training_all(self, variation):
 
         # optional runs
@@ -246,6 +259,9 @@ class MegDSTestTraining(TestCasePlus):
         tensorboard_files = glob.glob(f"{output_dir}/tensorboard/events*")
         self.assertEqual(len(tensorboard_files), 1, "tensorboard files")
 
+        if variation == "glu":
+            self.assertIn("Using GLU activation: GELU", cs.out)
+
         # 2. test training from checkpoint: resume
         # now do it again, this time resuming from the checkpoint
         with CaptureStdout() as cs:
@@ -263,6 +279,10 @@ class MegDSTestTraining(TestCasePlus):
         # test tensorboard (1 file from the first run, plus 1 now)
         tensorboard_files = glob.glob(f"{output_dir}/tensorboard/events*")
         self.assertEqual(len(tensorboard_files), 2, "tensorboard files")
+
+        if variation == "glu":
+            self.assertIn("Using GLU activation: GELU", cs.out)
+
 
     def test_training_prefix_lm_all(self):
         # all in one test
@@ -306,7 +326,6 @@ class MegDSTestTraining(TestCasePlus):
             --eval-interval 10
             --eval-iters 5
             --checkpoint-activations
-            --glu-activation geglu
             --exit-interval {exit_interval}
 
             --merge-file {data_dir}/gpt2-tiny-merges.txt
@@ -314,7 +333,6 @@ class MegDSTestTraining(TestCasePlus):
             --save {output_dir}/checkpoints
             --load {output_dir}/checkpoints
             --data-path {data_dir}/meg-gpt2-openwebtext_text_document
-            --codecarbon-dir {output_dir}/codecarbon
             --tensorboard-dir {output_dir}/tensorboard
             --tensorboard-queue-size 5
             --log-timers-to-tensorboard
