@@ -826,16 +826,14 @@ def evaluate_and_print_results(prefix, forward_step_func,
                                data_iterator, model,
                                iteration, verbose=False, **kwargs):
     """Helper function to evaluate and dump results on screen."""
-    if "ds_name" in kwargs:
-        ds_name = kwargs["ds_name"]
-    else:
-        ds_name = ""  # empty if ds_name is not provided
 
-    # print corresponding dataset name (used for extra-validation dataset option)
-    tf_plot_prefix = f"lm-loss-validation/{ds_name}" if ds_name else "lm-loss-validation"
 
     args = get_args()
     writer = get_tensorboard_writer()
+
+    ds_name = kwargs["ds_name"] if "ds_name" in kwargs else ""
+    # print corresponding dataset name (used for extra-validation dataset option)
+    tf_plot_prefix = f"lm-loss-validation/{ds_name}" if ds_name else "lm-loss-validation"
 
     total_loss_dict = evaluate(forward_step_func, data_iterator, model, verbose)
     string = '{} validation loss at {} | '.format(ds_name, prefix)
