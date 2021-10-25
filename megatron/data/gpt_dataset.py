@@ -121,10 +121,6 @@ def _build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
     print_split_stats('validation', 1)
     print_split_stats('test', 2)
 
-    # extra validation datasets are passed by --extra-valid
-
-
-
     def build_dataset(index, name):
         dataset = None
         if splits[index + 1] > splits[index]:
