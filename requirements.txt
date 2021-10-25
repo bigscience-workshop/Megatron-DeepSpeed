@@ -6,7 +6,7 @@ pybind11
 regex
 six
 tensorboard
-torch
+torch>=1.7
 transformers
 DeepSpeed @ git+https://github.com/microsoft/DeepSpeed.git
 # versions from HF transformers
