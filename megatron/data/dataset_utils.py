@@ -420,7 +420,6 @@ def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
                                     skip_warmup, binary_head=False,
                                     max_seq_length_dec=None,
                                     dataset_type='standard_bert'):
-
     if len(data_prefix) == 1:
         return _build_train_valid_test_datasets(data_prefix[0],
                                                 data_impl, splits_string,
@@ -605,7 +604,6 @@ def get_indexed_dataset_(data_prefix, data_impl, skip_warmup):
 
 def get_train_valid_test_split_(splits_string, size):
     """ Get dataset splits from comma or '/' separated string list."""
-
     splits = []
     if splits_string.find(',') != -1:
         splits = [float(s) for s in splits_string.split(',')]

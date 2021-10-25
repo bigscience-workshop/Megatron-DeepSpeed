@@ -30,57 +30,76 @@ from megatron.data.indexed_dataset import make_dataset as make_indexed_dataset
 
 def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
                                     train_valid_test_num_samples,
-                                    seq_length, seed, skip_warmup):
+                                    seq_length, seed, skip_warmup, extra_valid_data_prefixes=None):
     """Build train, valid, and test datasets."""
 
     # Single dataset.
     if len(data_prefix) == 1:
-        return _build_train_valid_test_datasets(data_prefix[0],
+        all_train_datasets, all_valid_datasets, all_test_datasets =  _build_train_valid_test_datasets(data_prefix[0],
                                                 data_impl, splits_string,
                                                 train_valid_test_num_samples,
                                                 seq_length, seed, skip_warmup)
-
     # Blending dataset.
-    # Parse the values.
-    output = get_datasets_weights_and_num_samples(data_prefix,
-                                                  train_valid_test_num_samples)
-    prefixes, weights, datasets_train_valid_test_num_samples = output
+    else:
 
-    # Build individual datasets.
-    train_datasets = []
-    valid_datasets = []
-    test_datasets = []
-    for i in range(len(prefixes)):
-        train_ds, valid_ds, test_ds = _build_train_valid_test_datasets(
-            prefixes[i], data_impl, splits_string,
-            datasets_train_valid_test_num_samples[i],
-            seq_length, seed, skip_warmup)
-        if train_ds:
-            train_datasets.append(train_ds)
-        if valid_ds:
-            valid_datasets.append(valid_ds)
-        if test_ds:
-            test_datasets.append(test_ds)
+        output = get_datasets_weights_and_num_samples(data_prefix,
+                                                    train_valid_test_num_samples)
+        prefixes, weights, datasets_train_valid_test_num_samples = output
 
-    # Blend.
-    blending_train_dataset = None
-    if train_datasets:
-        blending_train_dataset = BlendableDataset(train_datasets, weights)
-    blending_valid_dataset = None
-    if valid_datasets:
-        blending_valid_dataset = BlendableDataset(valid_datasets, weights)
-    blending_test_dataset = None
-    if test_datasets:
-        blending_test_dataset = BlendableDataset(test_datasets, weights)
+        # Build individual datasets.
+        train_datasets = []
+        valid_datasets = []
+        test_datasets = []
+        for i in range(len(prefixes)):
+            train_ds, valid_ds, test_ds = _build_train_valid_test_datasets(
+                                            prefixes[i], data_impl, splits_string,
+                                            datasets_train_valid_test_num_samples[i],
+                                            seq_length, seed, skip_warmup)
+            if train_ds:
+                train_datasets.append(train_ds)
+            if valid_ds:
+                valid_datasets.append(valid_ds)
+            if test_ds:
+                test_datasets.append(test_ds)
 
-    return (blending_train_dataset, blending_valid_dataset,
-            blending_test_dataset)
+        if train_datasets:
+            all_train_datasets = BlendableDataset(train_datasets, weights)
+        if valid_datasets:
+            all_valid_datasets = BlendableDataset(valid_datasets, weights)
+        if test_datasets:
+            all_test_datasets = BlendableDataset(test_datasets, weights)
+    # Check extra validation datasets
+    if extra_valid_data_prefixes:
+        all_extra_valid_datasets = []
+        # extra_valid_data_prefixes
+        for _ in range(len(extra_valid_data_prefixes)):
+            output = get_datasets_weights_and_num_samples(data_prefix,
+                                                    train_valid_test_num_samples)
+            prefixes, weights, datasets_train_valid_test_num_samples = output
+            extra_valid_datasets = []
+            for i in range(len(prefixes)):
+
+                # workaround: we only need validation sets
+                # we set the splits strings into 0,100,0
+                _, ex_valid_ds, _ = _build_train_valid_test_datasets(
+                                                prefixes[i], data_impl, "0,100,0",
+                                                datasets_train_valid_test_num_samples[i],
+                                                seq_length, seed, skip_warmup)
+                if ex_valid_ds:
+                    extra_valid_datasets.append(ex_valid_ds)
+
+            all_extra_valid_datasets.append(BlendableDataset(extra_valid_datasets, weights))
+    else:
+        all_extra_valid_datasets = None
+
+    return all_train_datasets, all_valid_datasets, all_test_datasets, all_extra_valid_datasets
 
 
 def _build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
                                      train_valid_test_num_samples,
                                      seq_length, seed, skip_warmup):
     """Build train, valid, and test datasets."""
+
 
     # Indexed dataset.
     indexed_dataset = get_indexed_dataset_(data_prefix,
@@ -101,6 +120,10 @@ def _build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
     print_split_stats('train', 0)
     print_split_stats('validation', 1)
     print_split_stats('test', 2)
+
+    # extra validation datasets are passed by --extra-valid
+
+
 
     def build_dataset(index, name):
         dataset = None
