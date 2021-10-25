@@ -59,7 +59,6 @@ def get_3d_dimensions():
     return pp_size, tp_size, dp_size
 
 
-@require_bnb
 @require_deepspeed
 @require_torch_gpu
 class MegDSTestTraining(TestCasePlus):
