@@ -23,6 +23,7 @@ import deepspeed
 
 from megatron.enums import PositionEmbeddingType
 import megatron
+from megatron.logging import log_levels
 
 
 def parse_args(extra_args_provider=None, defaults={},
@@ -251,6 +252,10 @@ def parse_args(extra_args_provider=None, defaults={},
 
     args.curriculum_learning = False
 
+    # Activation function
+    if args.glu_activation is not None and args.bias_gelu_fusion:
+        raise ValueError("if glu-activation is used, please set --no-bias-gelu-fusion")
+
     _print_args(args)
     return args
 
@@ -323,6 +328,14 @@ def _add_network_size_args(parser):
                        help='GLU activations to use.'
                        )
 
+    group.add_argument('--log-level', type=str, choices=list(log_levels.keys()),
+                       help="Logger log level to use on the main process. Possible choices are the log levels as strings: 'debug', "
+                       "'info', 'warning', 'error' and 'critical', plus a 'passive' level which doesn't set anything and lets the "
+                       "application set the level."
+                       )
+    group.add_argument('--log-level-replica', type=str, choices=list(log_levels.keys()),
+                       help="Logger log level to use on replicas. Same choices as ``log_level``"
+                       )
     return parser
 
 

@@ -152,7 +152,11 @@ def _set_tensorboard_writer(args):
                   'no TensorBoard logs will be written.', flush=True)
 
 
+# Important: the codecarbon is very unstable and its latest incarnation using the python scheduler interferes with the asyncio library we use in the test suite which breaks everything, so making this a no-op for now.
 def _set_codecarbon_tracker(args):
+
+    return # turned off
+
     global _GLOBAL_CODECARBON_TRACKER
     if not hasattr(args, 'codecarbon_dir') or args.codecarbon_dir is None:
         return
@@ -187,6 +191,9 @@ def _set_codecarbon_tracker(args):
 
 
 def codecarbon_tracker_start():
+
+    return # turned off, see the notes above
+
     global _GLOBAL_CODECARBON_TRACKER
     if _GLOBAL_CODECARBON_TRACKER is None:
         return
@@ -196,6 +203,9 @@ def codecarbon_tracker_start():
 
 
 def codecarbon_tracker_stop():
+
+    return # turned off, see the notes above
+
     global _GLOBAL_CODECARBON_TRACKER
     if _GLOBAL_CODECARBON_TRACKER is None:
         return
@@ -205,6 +215,9 @@ def codecarbon_tracker_stop():
 
 
 def codecarbon_tracker_flush():
+
+    return # turned off, see the notes above
+
     global _GLOBAL_CODECARBON_TRACKER
     if _GLOBAL_CODECARBON_TRACKER is None:
         return
@@ -317,11 +330,14 @@ class Timers:
     def log(self, names, normalizer=1.0, reset=True):
         """Log a group of timers."""
         assert normalizer > 0.0
-        string = 'time (ms)'
+        string = ''
         for name in names:
             elapsed_time = self.timers[name].elapsed(
                 reset=reset) * 1000.0 / normalizer
             string += ' | {}: {:.2f}'.format(name, elapsed_time)
+        if not len(string):
+            return
+        string = 'time (ms)' + string
         if torch.distributed.is_initialized():
             if torch.distributed.get_rank() == (
                     torch.distributed.get_world_size() - 1):

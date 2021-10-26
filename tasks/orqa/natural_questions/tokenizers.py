@@ -13,12 +13,13 @@ Most of the tokenizers code here is copied from DrQA codebase to avoid adding ex
 """
 
 import copy
-import logging
 
 import regex
 import spacy
 
-logger = logging.getLogger(__name__)
+from megatron import logging
+
+logger = logging.get_logger(__name__)
 
 
 class Tokens(object):
