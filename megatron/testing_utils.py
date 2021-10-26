@@ -13,23 +13,25 @@
 # limitations under the License.
 
 import contextlib
+import importlib.util
 import inspect
 import logging
 import numpy as np
 import os
+import random
 import re
 import shutil
 import sys
 import tempfile
 import unittest
-import random
+
 from distutils.util import strtobool
 from io import StringIO
 from packaging import version
 from pathlib import Path
 from typing import Iterator, Union
 from unittest import mock
-import importlib.util
+from unittest.case import SkipTest
 
 
 try:
@@ -179,6 +181,27 @@ def require_deepspeed(test_case):
     else:
         return test_case
 
+def is_bnb_available():
+    return importlib.util.find_spec("bitsandbytes") is not None
+
+def require_bnb(test_case):
+    """
+    Decorator marking a test that requires bitsandbytes
+    """
+    if not is_bnb_available():
+        return unittest.skip("test requires bitsandbytes from https://github.com/facebookresearch/bitsandbytes")(test_case)
+    else:
+        return test_case
+
+
+def require_bnb_non_decorator():
+    """
+    Non-Decorator function that would skip a test if bitsandbytes is missing
+    """
+    if not is_bnb_available():
+        raise SkipTest("Test requires bitsandbytes from https://github.com/facebookresearch/bitsandbytes")
+
+
 def set_seed(seed: int=42):
     """
     Helper function for reproducible behavior to set the seed in ``random``, ``numpy``, ``torch``
@@ -208,9 +231,20 @@ def get_gpu_count():
     else:
         return 0
 
-def torch_assert_equal(actual, expected):
-    """ emulates the removed torch.testing.assert_equal """
-    torch.testing.assert_close(actual, expected, rtol=0.0, atol=0.0)
+def torch_assert_equal(actual, expected, **kwargs):
+    # assert_equal was added around pt-1.9, it does better checks - e.g will check dimensions match
+    if hasattr(torch.testing, "assert_equal"):
+        return torch.testing.assert_equal(actual, expected, **kwargs)
+    else:
+        return torch.allclose(actual, expected, rtol=0.0, atol=0.0)
+
+def torch_assert_close(actual, expected, **kwargs):
+    # assert_close was added around pt-1.9, it does better checks - e.g will check dimensions match
+    if hasattr(torch.testing, "assert_close"):
+        return torch.testing.assert_close(actual, expected, **kwargs)
+    else:
+        kwargs.pop("msg", None) # doesn't have msg arg
+        return torch.allclose(actual, expected, **kwargs)
 
 
 def is_torch_bf16_available():
@@ -285,34 +319,55 @@ class CaptureStd:
     """
     Context manager to capture:
 
-        - stdout, clean it up and make it available via obj.out
-        - stderr, and make it available via obj.err
+        - stdout: replay it, clean it up and make it available via ``obj.out``
+        - stderr: replay it and make it available via ``obj.err``
 
         init arguments:
 
-        - out - capture stdout: True/False, default True
-        - err - capture stdout: True/False, default True
+        - out - capture stdout:`` True``/``False``, default ``True``
+        - err - capture stdout: ``True``/``False``, default ``True``
+        - replay - whether to replay or not: ``True``/``False``, default ``True``. By default each
+        captured stream gets replayed back on context's exit, so that one can see what the test was
+        doing. If this is a not wanted behavior and the captured data shouldn't be replayed, pass
+        ``replay=False`` to disable this feature.
 
         Examples::
 
+            # to capture stdout only with auto-replay
             with CaptureStdout() as cs:
                 print("Secret message")
-            print(f"captured: {cs.out}")
+            assert "message" in cs.out
 
+            # to capture stderr only with auto-replay
             import sys
             with CaptureStderr() as cs:
                 print("Warning: ", file=sys.stderr)
-            print(f"captured: {cs.err}")
+            assert "Warning" in cs.err
 
-            # to capture just one of the streams, but not the other
+            # to capture both streams with auto-replay
+            with CaptureStd() as cs:
+                print("Secret message")
+                print("Warning: ", file=sys.stderr)
+            assert "message" in cs.out
+            assert "Warning" in cs.err
+
+            # to capture just one of the streams, and not the other, with auto-replay
             with CaptureStd(err=False) as cs:
                 print("Secret message")
-            print(f"captured: {cs.out}")
+            assert "message" in cs.out
             # but best use the stream-specific subclasses
+
+            # to capture without auto-replay
+            with CaptureStd(replay=False) as cs:
+                print("Secret message")
+            assert "message" in cs.out
 
     """
 
-    def __init__(self, out=True, err=True):
+    def __init__(self, out=True, err=True, replay=True):
+
+        self.replay = replay
+
         if out:
             self.out_buf = StringIO()
             self.out = "error: CaptureStd context is unfinished yet, called too early"
@@ -341,11 +396,17 @@ class CaptureStd:
     def __exit__(self, *exc):
         if self.out_buf:
             sys.stdout = self.out_old
-            self.out = apply_print_resets(self.out_buf.getvalue())
+            captured = self.out_buf.getvalue()
+            if self.replay:
+                sys.stdout.write(captured)
+            self.out = apply_print_resets(captured)
 
         if self.err_buf:
             sys.stderr = self.err_old
-            self.err = self.err_buf.getvalue()
+            captured = self.err_buf.getvalue()
+            if self.replay:
+                sys.stderr.write(captured)
+            self.err = captured
 
     def __repr__(self):
         msg = ""
@@ -365,15 +426,15 @@ class CaptureStd:
 class CaptureStdout(CaptureStd):
     """Same as CaptureStd but captures only stdout"""
 
-    def __init__(self):
-        super().__init__(err=False)
+    def __init__(self, replay=True):
+        super().__init__(err=False, replay=replay)
 
 
 class CaptureStderr(CaptureStd):
     """Same as CaptureStd but captures only stderr"""
 
-    def __init__(self):
-        super().__init__(out=False)
+    def __init__(self, replay=True):
+        super().__init__(out=False, replay=replay)
 
 
 class CaptureLogger:

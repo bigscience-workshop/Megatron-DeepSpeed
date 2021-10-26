@@ -1,12 +1,14 @@
 datasets
 nltk
 numpy
+parameterized
 pybind11
 regex
 six
 tensorboard
-torch
+torch>=1.7
 transformers
-git+https://github.com/microsoft/DeepSpeed.git@big-science
-# edit to a higher SHA or future release if needed
-git+git://github.com/mlco2/codecarbon.git@03479b695a771c28df6b877a809f5af3eb9ef3b8
+DeepSpeed @ git+https://github.com/microsoft/DeepSpeed.git
+# versions from HF transformers
+black==21.4b0
+isort>=5.5.4

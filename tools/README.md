@@ -1,6 +1,12 @@
+
+# Tools
+
+- [sample_idxs_to_text.py](./sample_idxs_to_text.py) - want to see which text was feed at specific iterations? for example to understand why the training went astray? Then use this script. The pre-amble of the script contains the documentation and usage examples.
+
+
 ## A few notes on how we created the datasets:
 
-### Creating the Json Lines text file 
+### Creating the Json Lines text file
 
 First you need to create a jsonl file containing your dataset. For this we exported from the HF-datasets format. For example for C4:
 

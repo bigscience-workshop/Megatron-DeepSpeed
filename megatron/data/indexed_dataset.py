@@ -1038,18 +1038,22 @@ def gather_files_dist_check_impltype(filelist, distctx):
     raise UnreachableCode
 
 
-# Collectively merge files into a new output file specified in filemain.
-# Each rank contributes a distinct list of zero or more files in filelist,
-# and each rank directly merges its set of files into filemain.
-# It is allowed for the input files in filelist to only be readable from the calling process.
-# The output file in filemain should be in a location that is writable by all processes.
-#
-# NOTE: This uses parallel writes to a shared file to achieve high write bandwidth.
-# To do so, this implementation seeks beyond the end of the file to write at different
-# offsets from different processes via the seek() method on a python file handle.
-# The behavior of seek() is not well documented, but it seems to map to fseek()/lseek(),
-# and it works as desired on POSIX-compliant file systems like Lustre and GPFS.
 def gather_files_dist(filemain, filelist, distctx):
+    """Collectively merge files into a new output file specified in filemain.
+
+    Each rank contributes a distinct list of zero or more files in filelist,
+    and each rank directly merges its set of files into filemain.
+    It is allowed for the input files in filelist to only be readable from the calling process.
+    In particular, the input files specified by the calling process may be in storage
+    that only the calling process can access, like /dev/shm or a node-local SSD.
+    The output file in filemain should be in a location that is writable by all processes.
+    
+    NOTE: This uses parallel writes to a shared file to achieve high write bandwidth.
+    To do so, this implementation seeks beyond the end of the file to write at different
+    offsets from different processes via the seek() method on a python file handle.
+    The behavior of seek() is not well documented, but it seems to map to fseek()/lseek(),
+    and it works as desired on POSIX-compliant file systems like Lustre and GPFS."""
+
     # Check that at least one input file is listed
     filecount = distctx.sum(len(filelist))
     assert filecount > 0, "All ranks have no input files to merge"
@@ -1065,3 +1069,57 @@ def gather_files_dist(filemain, filelist, distctx):
         gather_files_dist_idx_cached(filemain, filelist, distctx)
     elif indexstr == "mmap":
         gather_files_dist_idx_mmap(filemain, filelist, distctx)
+
+
+def get_start_end(count, rank, numranks):
+    """Return (start, end) index values for calling rank to evenly divide count items among numranks.
+
+    Example usage:
+        start, end = get_start_end(len(itemlist), distctx.rank, distctx.numranks)
+        sublist = itemlist[start:end]
+
+    Parameters
+    ----------
+    count : int
+        Total number of items to be divided
+    rank : int
+        Rank of the calling process, within range of [0, numranks)
+    numranks : int
+        Number of ranks by which to divide count items
+
+    Returns
+    ----------
+    (start, end) : tuple(int)
+        Start and end index values that define the [start, end) range for rank
+    """
+    num, remainder = divmod(count, numranks)
+    if rank < remainder:
+        start = (num + 1) * rank
+        end = start + num + 1
+    else:
+        start = (num + 1) * remainder + num * (rank - remainder)
+        end = start + num
+    return start, end
+
+
+def merge_files_dist(filemain, filelist, distctx):
+    """Merge list of indexed datasets into a single indexed dataset named in filemain.
+
+    Given a list of indexed datasets in filelist, and the set of processes defined
+    by the distributed environment in distctx, collectively merge files into
+    a new, single output indexed dataset named in filemain.  This overwrites filemain
+    if it already exists.  It does not delete the input datasets in filelist.  The input
+    parameters filemain and filelist must be identical on all calling processes,
+    and all processes in distctx must call this method collectively.
+    It requires that all ranks be able to read any file in filelist, and all
+    ranks must be able to write to the single output file named in filemain."""
+
+    # TODO: if file sizes vary significantly, it might be better to consider
+    # file size when splitting the list to different ranks.
+
+    # evenly divide list of files among ranks
+    start, end = get_start_end(len(filelist), distctx.rank, distctx.numranks)
+    sublist = filelist[start:end]
+
+    # delegate merge to gather implementation
+    return gather_files_dist(filemain, sublist, distctx)

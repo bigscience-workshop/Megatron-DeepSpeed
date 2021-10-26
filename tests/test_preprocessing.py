@@ -95,14 +95,126 @@ class MegDSTestPreprocessing(TestCasePlus):
             self.assertTrue(Path(tgt_path).exists(), )
             self.assertTrue(filecmp.cmp(tgt_path, ref_path, shallow=False))
 
-    @unittest.skip("Skip test until data is fixed.")
+    def preprocess_partitioned_dataset(self, output_dir, dsetname, splitname, linelimit, numparts):
+        """Preprocess a dataset as a whole and in shards to prepare environment for merge test.
+
+        Load specified HF dataset using given split and record limit.
+        Write the dataset to a jsonl file and preprocess.
+        Also split dataset into numparts contiguous shards, write each shard to its own jsonl, and preprocess each.
+        Return path to the full dataset and a list of paths for each shard."""
+
+        src_dir = self.src_dir
+        data_dir = f"{self.data_dir}/gpt2"
+
+        # preproces_data_dist requires one to have already downloaded the input HF dataset.
+        # We do that by running this script before the test.
+        dset = download_hf_dataset(dsetname)[splitname]
+
+        # limit the test to use the first linelimit entries to be faster
+        dset = dset.select(range(linelimit))
+
+        # write jsonl file of full dataset
+        json_ds = f"{output_dir}/ds-full.jsonl"
+        dset.to_json(json_ds)
+
+        # process full jsonl into indexed dataset file
+        ds_full = f"{output_dir}/ds-full"
+        cmd = f"""
+                python {src_dir}/tools/preprocess_data.py
+                    --input {json_ds}
+                    --output-prefix {ds_full}
+                    --dataset-impl mmap
+                    --tokenizer-type GPT2BPETokenizer
+                    --merge-file {data_dir}/gpt2-tiny-merges.txt
+                    --vocab {data_dir}/gpt2-tiny-vocab.json
+                    --append-eod
+                """.split()
+        ds_full += '_text_document'
+
+        # keep for quick debug
+        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
+        execute_subprocess_async(cmd, env=self.get_env())
+
+        # write each part to its own json file
+        ds_parts = []
+        for i in range(numparts):
+            json_part = f"{output_dir}/ds-part-{i}.jsonl"
+            dset.shard(numparts, i, contiguous=True).to_json(json_part)
+
+            ds_part = f"{output_dir}/ds-part-{i}"
+            ds_parts.append(ds_part + '_text_document')
+            cmd = f"""
+                    python {src_dir}/tools/preprocess_data.py
+                        --input {json_part}
+                        --output-prefix {ds_part}
+                        --dataset-impl mmap
+                        --tokenizer-type GPT2BPETokenizer
+                        --merge-file {data_dir}/gpt2-tiny-merges.txt
+                        --vocab {data_dir}/gpt2-tiny-vocab.json
+                        --append-eod
+                    """.split()
+
+            # keep for quick debug
+            # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
+            execute_subprocess_async(cmd, env=self.get_env())
+
+        return ds_full, ds_parts
+
+    def test_merge_serial(self):
+        """Check that serial merge of partial dataset files produces the same file as the full dataset."""
+        src_dir = self.src_dir
+        output_dir = self.get_auto_remove_tmp_dir()  # "./xxx", after=False)
+
+        # process full dataset, and process the full dataset as 3 contiguous chunks
+        ds_full, ds_parts = self.preprocess_partitioned_dataset(output_dir, 'stas/openwebtext-10k', 'train', 100, 3)
+
+        # merge the part files into a single indexed dataset
+        ds_merged = f"{output_dir}/ds-merged"
+        cmd = f"""
+                python {src_dir}/tools/merge_preprocessed_data.py
+                    --datasets {" ".join(ds_parts)}
+                    --output-prefix {ds_merged}
+                """.split()
+
+        # keep for quick debug
+        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
+        execute_subprocess_async(cmd, env=self.get_env())
+
+        # the full dataset and the merged dataset should be identical
+        self.compare_meg_data_files(ds_full, ds_merged)
+
+    def test_merge_distributed(self):
+        """Check that serial merge of partial dataset files produces the same file as the full dataset."""
+        src_dir = self.src_dir
+        output_dir = self.get_auto_remove_tmp_dir()  # "./xxx", after=False)
+
+        # process full dataset, and process the full dataset as 3 contiguous chunks
+        ds_full, ds_parts = self.preprocess_partitioned_dataset(output_dir, 'stas/openwebtext-10k', 'train', 100, 3)
+
+        # merge the part files into a single indexed dataset
+        ds_merged = f"{output_dir}/ds-merged"
+        cmd = f"""
+                python -m torch.distributed.launch --nproc_per_node 6 {src_dir}/tools/merge_preprocessed_data.py
+                    --merge distributed
+                    --datasets {" ".join(ds_parts)}
+                    --output-prefix {ds_merged}
+                    --torch-backend gloo
+                """.split()
+
+        # keep for quick debug
+        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
+        execute_subprocess_async(cmd, env=self.get_env())
+
+        # the full dataset and the merged dataset should be identical
+        self.compare_meg_data_files(ds_full, ds_merged)
+
     def test_process_data_microsoft(self):
         """We want to be stable to Microsoft version."""
         src_dir = self.src_dir
         data_dir = f"{self.data_dir}/gpt2"
         output_dir = self.get_auto_remove_tmp_dir()  # "./xxx", after=False)
 
-        input_path = f"{self.tests_dir}/tools/openwebtext-1000.jsonl"
+        input_path = f"{self.tests_dir}/data/gpt2/openwebtext-1000.jsonl"
 
         output_prefix = f"{output_dir}/test-ds-meg-gpt2-openwebtext"
 

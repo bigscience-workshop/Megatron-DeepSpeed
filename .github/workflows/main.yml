@@ -2,15 +2,9 @@ name: Run all tests
 # enable to manually trigger the tests
 #on:  workflow_dispatch
 on:
-  push:
-    branches:
-      - "*"
+  pull_request:
     paths:
-      - "megatron/**"
-      - "tests/**"
-      - ".github/**"
-      - "tools/**"
-      - "*.py"
+      - "**.py"
 
 jobs:
 
@@ -115,7 +109,7 @@ jobs:
       - name: Install Dependencies
         run: |
           pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install --upgrade -r requirements.txt
           pip install pytest-timeout
 
       - name: Run tests

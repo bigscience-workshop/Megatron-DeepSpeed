@@ -25,7 +25,7 @@ from megatron import mpu
 from megatron.data.gpt_dataset import build_train_valid_test_datasets
 from megatron.model import GPTModel, GPTModelPipe
 from megatron.training import pretrain
-from megatron.utils import get_ltor_masks_and_position_ids
+from megatron.utils import get_ltor_masks_and_position_ids, get_prefix_indices
 from megatron.utils import average_losses_across_data_parallel_group
 
 import deepspeed
@@ -41,21 +41,14 @@ def model_provider(pre_process=True, post_process=True):
     see_memory_usage(f"Before Building Model", force=True)
 
     args = get_args()
+
     with deepspeed.zero.Init(data_parallel_group=mpu.get_data_parallel_group(),
                              remote_device=None if args.remote_device == 'none' else args.remote_device,
                              config_dict_or_path=args.deepspeed_config,
                              enabled=args.zero_stage == 3,
                              mpu=mpu):
         if args.deepspeed:
-            model = GPTModelPipe(
-                num_tokentypes=0,
-                parallel_output=True
-            )
-            # This is a hack to give us a reference to get_batch_pipe from within training.py
-            # We need to call model.set_batch_fn after deepspeed.initialize
-            model._megatron_batch_fn = get_batch_pipe
-
-            # Predompute the attention mask and store it in args. This avoids having to
+            # Precompute the attention mask and store it in args. This avoids having to
             # pipeline it as an activation during training. The mask is constant, and thus
             # we can reuse it.
             attention_mask = torch.tril(torch.ones(
@@ -72,6 +65,13 @@ def model_provider(pre_process=True, post_process=True):
             # must be bool or the training crashes expecting bool, but getting Half
             args.attn_mask = attention_mask.to(torch.bool)
 
+            model = GPTModelPipe(
+                num_tokentypes=0,
+                parallel_output=True
+            )
+            # This is a hack to give us a reference to get_batch_pipe from within training.py
+            # We need to call model.set_batch_fn after deepspeed.initialize
+            model._megatron_batch_fn = get_batch_pipe
         else:
             model = GPTModel(
                 num_tokentypes=0,
@@ -110,7 +110,10 @@ def get_batch(data_iterator):
         tokenizer.eod,
         args.reset_position_ids,
         args.reset_attention_mask,
-        args.eod_mask_loss)
+        args.eod_mask_loss,
+        prefix_indices=None,
+        loss_on_targets_only=args.loss_on_targets_only
+    )
 
     return tokens, labels, loss_mask, attention_mask, position_ids
 
@@ -132,13 +135,23 @@ def get_batch_pipe(data):
     labels = tokens_[:, 1:].contiguous()
     tokens = tokens_[:, :-1].contiguous()
 
-    # Get the masks and postition ids.
+    # Get the masks and position ids.
     attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
         tokens,
         tokenizer.eod,
         args.reset_position_ids,
         args.reset_attention_mask,
-        args.eod_mask_loss)
+        args.eod_mask_loss,
+        prefix_indices=None,
+        loss_on_targets_only=args.loss_on_targets_only
+    )
+    if args.curriculum_learning and args.curriculum_seqlen < tokens.size()[1]:
+        # seqlen-based curriculum learning
+        # tokens, position_ids, labels, loss_mask have size [batch size, seqlen]
+        tokens = tokens[:, :args.curriculum_seqlen].contiguous()
+        position_ids = position_ids[:, :args.curriculum_seqlen].contiguous()
+        labels = labels[:, :args.curriculum_seqlen].contiguous()
+        loss_mask = loss_mask[:, :args.curriculum_seqlen].contiguous()
 
     return (tokens, position_ids, attention_mask), (labels, loss_mask)
 
@@ -167,6 +180,8 @@ def forward_step(data_iterator, model):
 
     output_tensor = model(tokens, position_ids, attention_mask,
                           labels=labels)
+    if args.curriculum_learning and args.curriculum_seqlen < args.seq_length:
+        loss_mask = loss_mask[:, :args.curriculum_seqlen].contiguous()
 
     return output_tensor, partial(loss_func, loss_mask)
 

@@ -23,6 +23,7 @@ import deepspeed
 
 from megatron.enums import PositionEmbeddingType
 import megatron
+from megatron.logging import log_levels
 
 
 def parse_args(extra_args_provider=None, defaults={},
@@ -170,6 +171,8 @@ def parse_args(extra_args_provider=None, defaults={},
     # Consumed tokens.
     args.consumed_train_samples = 0
     args.consumed_valid_samples = 0
+    args.consumed_train_tokens = 0
+    args.gigaflos_no_embeds = 0
 
     # Iteration-based training.
     if args.train_iters:
@@ -222,7 +225,7 @@ def parse_args(extra_args_provider=None, defaults={},
         assert args.encoder_seq_length is not None
         args.seq_length = args.encoder_seq_length
 
-    if args.position_embedding_type == PositionEmbeddingType.absolute:
+    if args.position_embedding_type == PositionEmbeddingType.absolute or args.position_embedding_type == PositionEmbeddingType.alibi:
         assert args.max_position_embeddings is not None
         if args.seq_length is not None:
             assert args.max_position_embeddings >= args.seq_length
@@ -246,6 +249,12 @@ def parse_args(extra_args_provider=None, defaults={},
         assert args.checkpoint_activations, \
             'for distribute-checkpointed-activations to work you '\
             'need to enable checkpoint-activations'
+
+    args.curriculum_learning = False
+
+    # Activation function
+    if args.glu_activation is not None and args.bias_gelu_fusion:
+        raise ValueError("if glu-activation is used, please set --no-bias-gelu-fusion")
 
     _print_args(args)
     return args
@@ -312,13 +321,21 @@ def _add_network_size_args(parser):
     group.add_argument('--position-embedding-type', type=lambda x: PositionEmbeddingType[x],
                        choices=list(PositionEmbeddingType),
                        default=PositionEmbeddingType.absolute,
-                       help='Define position embedding type ("absolute" | "rotary"). "absolute" by default.'
+                       help='Define position embedding type ("absolute" | "rotary" | "alibi"). "absolute" by default.'
                        )
     group.add_argument('--glu-activation', type=str,
                        choices=megatron.model.glu_activations.GLU_ACTIVATIONS.keys(),
                        help='GLU activations to use.'
                        )
 
+    group.add_argument('--log-level', type=str, choices=list(log_levels.keys()),
+                       help="Logger log level to use on the main process. Possible choices are the log levels as strings: 'debug', "
+                       "'info', 'warning', 'error' and 'critical', plus a 'passive' level which doesn't set anything and lets the "
+                       "application set the level."
+                       )
+    group.add_argument('--log-level-replica', type=str, choices=list(log_levels.keys()),
+                       help="Logger log level to use on replicas. Same choices as ``log_level``"
+                       )
     return parser
 
 
@@ -427,6 +444,9 @@ def _add_training_args(parser):
                        help='Total number of samples to train over all '
                        'training runs. Note that either train-iters or '
                        'train-samples should be provided.')
+    group.add_argument('--train-tokens', type=int, default=None,
+                       help='Total number of tokens to train over all '
+                       'training runs.')
     group.add_argument('--log-interval', type=int, default=100,
                        help='Report loss and timing interval.')
     group.add_argument('--exit-interval', type=int, default=None,
@@ -450,6 +470,10 @@ def _add_training_args(parser):
     group.add_argument('--optimizer', type=str, default='adam',
                        choices=['adam', 'sgd'],
                        help='Optimizer function')
+    group.add_argument('--use-bnb-optimizer', action='store_true',
+                       help='Use bitsandbytes optimizer for efficient training,'
+                       'please refer https://github.com/facebookresearch/bitsandbytes.',
+                       dest='use_bnb_optimizer')
     group.add_argument('--dataloader-type', type=str, default=None,
                        choices=['single', 'cyclic'],
                        help='Single pass vs multiple pass data loader')
@@ -494,6 +518,9 @@ def _add_learning_rate_args(parser):
     group.add_argument('--lr-decay-samples', type=int, default=None,
                        help='number of samples to decay learning rate over,'
                        ' If None defaults to `--train-samples`')
+    group.add_argument('--lr-decay-tokens', type=int, default=None,
+                       help='number of tokens to decay learning rate over,'
+                       ' If not None will override iter/sample-based decay')
     group.add_argument('--lr-warmup-fraction', type=float, default=None,
                        help='fraction of lr-warmup-(iters/samples) to use '
                        'for warmup (as a float)')
@@ -718,9 +745,11 @@ def _add_data_args(parser):
                        help='Reset posistion ids after end-of-document token.')
     group.add_argument('--reset-attention-mask', action='store_true',
                        help='Reset self attention maske after '
-                       'end-of-document token.')
+                       'end-of-document token. Attention between tokens from different documents is null.')
     group.add_argument('--eod-mask-loss', action='store_true',
                        help='Mask loss for the end of document tokens.')
+    group.add_argument('--loss-on-targets-only', action='store_true',
+                       help='Mask loss on input sequence.')
 
     return parser
 

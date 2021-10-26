@@ -152,7 +152,11 @@ def _set_tensorboard_writer(args):
                   'no TensorBoard logs will be written.', flush=True)
 
 
+# Important: the codecarbon is very unstable and its latest incarnation using the python scheduler interferes with the asyncio library we use in the test suite which breaks everything, so making this a no-op for now.
 def _set_codecarbon_tracker(args):
+
+    return # turned off
+
     global _GLOBAL_CODECARBON_TRACKER
     if not hasattr(args, 'codecarbon_dir') or args.codecarbon_dir is None:
         return
@@ -163,19 +167,33 @@ def _set_codecarbon_tracker(args):
 
     output_dir = args.codecarbon_dir
     output_file = f"emissions-{args.rank:03d}.csv"
-    log_level = "warning"
-    country_iso_code="FRA"
+    logger_preamble = f"r{args.rank:03d}"
+    log_level = "error"
+    country_iso_code = "FRA"
+
+    # CC was emitting all kinds of warnings about issues with measurements, so the following
+    # settings are supposed to help
+    misfire_grace_time = 3
+    measure_power_secs = 60
+    max_instances = 3
 
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     _GLOBAL_CODECARBON_TRACKER = codecarbon.OfflineEmissionsTracker(
         output_dir=output_dir,
         output_file=output_file,
+        logger_preamble=logger_preamble,
         log_level=log_level,
+        misfire_grace_time=misfire_grace_time,
+        measure_power_secs=measure_power_secs,
+        max_instances=max_instances,
         country_iso_code=country_iso_code,
     )
 
 
 def codecarbon_tracker_start():
+
+    return # turned off, see the notes above
+
     global _GLOBAL_CODECARBON_TRACKER
     if _GLOBAL_CODECARBON_TRACKER is None:
         return
@@ -185,6 +203,9 @@ def codecarbon_tracker_start():
 
 
 def codecarbon_tracker_stop():
+
+    return # turned off, see the notes above
+
     global _GLOBAL_CODECARBON_TRACKER
     if _GLOBAL_CODECARBON_TRACKER is None:
         return
@@ -194,6 +215,9 @@ def codecarbon_tracker_stop():
 
 
 def codecarbon_tracker_flush():
+
+    return # turned off, see the notes above
+
     global _GLOBAL_CODECARBON_TRACKER
     if _GLOBAL_CODECARBON_TRACKER is None:
         return
@@ -306,11 +330,14 @@ class Timers:
     def log(self, names, normalizer=1.0, reset=True):
         """Log a group of timers."""
         assert normalizer > 0.0
-        string = 'time (ms)'
+        string = ''
         for name in names:
             elapsed_time = self.timers[name].elapsed(
                 reset=reset) * 1000.0 / normalizer
             string += ' | {}: {:.2f}'.format(name, elapsed_time)
+        if not len(string):
+            return
+        string = 'time (ms)' + string
         if torch.distributed.is_initialized():
             if torch.distributed.get_rank() == (
                     torch.distributed.get_world_size() - 1):

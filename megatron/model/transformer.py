@@ -19,7 +19,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from megatron import get_args
+from megatron import get_args, logging
 from megatron import mpu
 from .module import MegatronModule
 from megatron.enums import AttnMaskType, LayerType, AttnType, PositionEmbeddingType
@@ -38,6 +38,8 @@ torch._C._jit_set_profiling_mode(False)
 torch._C._jit_set_profiling_executor(False)
 torch._C._jit_override_can_fuse_on_cpu(True)
 torch._C._jit_override_can_fuse_on_gpu(True)
+
+logger = logging.get_logger(__name__)
 
 """ We use the following notation throughout this file:
      h: hidden size
@@ -67,10 +69,11 @@ class ParallelMLP(MegatronModule):
         super(ParallelMLP, self).__init__()
         args = get_args()
 
-        # Project to 4h.
+        # Project to ffn_hidden_size
         self.dense_h_to_4h = mpu.ColumnParallelLinear(
             args.hidden_size,
-            args.ffn_hidden_size,
+            # GLU is a special activation that divides the dimension by a factor 2.
+            2 * args.ffn_hidden_size if args.glu_activation else args.ffn_hidden_size,
             gather_output=False,
             init_method=init_method,
             skip_bias_add=True)
@@ -203,7 +206,7 @@ class ParallelAttention(MegatronModule):
             self.rotary_emb = RotaryEmbedding(self.hidden_size_per_attention_head, precision=args.params_dtype)
 
     def forward(self, hidden_states, attention_mask, layer_past=None,
-                get_key_value=False, encoder_output=None):
+                get_key_value=False, encoder_output=None, alibi=None):
         # hidden_states: [sq, b, h]
 
         # =====================
@@ -277,12 +280,15 @@ class ParallelAttention(MegatronModule):
                                    output_size[0] * output_size[1], -1)
 
         # preallocting result tensor: [b * np, sq, sk]
-        matmul_result = torch.empty(
-            output_size[0]*output_size[1],
-            output_size[2],
-            output_size[3],
-            dtype=query_layer.dtype,
-            device=torch.cuda.current_device())
+        if alibi is None:
+            matmul_result = torch.empty(
+                output_size[0]*output_size[1],
+                output_size[2],
+                output_size[3],
+                dtype=query_layer.dtype,
+                device=torch.cuda.current_device())
+        else:
+            matmul_result = alibi[:output_size[0]*output_size[1], :, :output_size[3]]
 
         # Rotary embeddings
         if self.position_embedding_type == PositionEmbeddingType.rotary:
@@ -301,11 +307,10 @@ class ParallelAttention(MegatronModule):
             matmul_result,
             query_layer.transpose(0, 1),   # [b * np, sq, hn]
             key_layer.transpose(0, 1).transpose(1, 2),  # [b * np, hn, sk]
-            beta=0.0, alpha=(1.0/self.norm_factor))
+            beta=0.0 if alibi is None else 1.0, alpha=(1.0/self.norm_factor))
 
         # change view to [b, np, sq, sk]
         attention_scores = matmul_result.view(*output_size)
-
         # ==================================================
         # Update attention mask for inference. [b, np, sq, sk]
         # ==================================================
@@ -467,7 +472,7 @@ class ParallelTransformerLayer(MegatronModule):
 
     def forward(self, hidden_states, attention_mask,
                 encoder_output=None, enc_dec_attn_mask=None,
-                layer_past=None, get_key_value=False):
+                layer_past=None, get_key_value=False, alibi=None):
         # hidden_states: [b, s, h]
 
         # Layer norm at the beginning of the transformer layer.
@@ -477,7 +482,8 @@ class ParallelTransformerLayer(MegatronModule):
             self.self_attention(layernorm_output,
                                 attention_mask,
                                 layer_past=layer_past,
-                                get_key_value=get_key_value)
+                                get_key_value=get_key_value,
+                                alibi=alibi)
 
         if get_key_value:
             attention_output, presents = attention_output
@@ -594,6 +600,27 @@ class ParallelTransformerLayerPipe(ParallelTransformerLayer):
 class ParallelTransformer(MegatronModule):
     """Transformer class."""
 
+    @staticmethod
+    def _build_alibi_tensor(max_seq_len, num_attention_heads, batch_size):
+        # Based on https://github.com/ofirpress/attention_with_linear_biases/blob/a35aaca144e0eb6b789dfcb46784c4b8e31b7983/fairseq/models/transformer.py#L742
+        """Returns tensor shaped (batch_size * num_attention_heads, 1, max_seq_len)"""
+        def get_slopes(n):
+            def get_slopes_power_of_2(n):
+                start = (2 ** (-2 ** -(math.log2(n) - 3)))
+                ratio = start
+                return [start * ratio ** i for i in range(n)]
+
+            if math.log2(n).is_integer():
+                return get_slopes_power_of_2(n)
+            else:
+                closest_power_of_2 = 2 ** math.floor(math.log2(n))
+                return get_slopes_power_of_2(closest_power_of_2) + get_slopes(2 * closest_power_of_2)[0::2][
+                                                                   :n - closest_power_of_2]
+        slopes = torch.Tensor(get_slopes(num_attention_heads))
+        alibi = slopes.unsqueeze(1).unsqueeze(1) * torch.arange(max_seq_len).unsqueeze(0).unsqueeze(0).expand(num_attention_heads, -1, -1)
+        alibi = alibi.repeat(batch_size, 1, 1)
+        return alibi
+
     def __init__(self, init_method, output_layer_init_method,
                  layer_type=LayerType.encoder,
                  self_attn_mask_type=AttnMaskType.padding,
@@ -660,11 +687,20 @@ class ParallelTransformer(MegatronModule):
             get_cuda_rng_tracker = deepspeed.checkpointing.get_cuda_rng_tracker
             checkpoint = deepspeed.checkpointing.checkpoint
 
+        if args.position_embedding_type == PositionEmbeddingType.alibi:
+            self.alibi = self._build_alibi_tensor(args.seq_length, args.num_attention_heads, args.micro_batch_size).to(torch.cuda.current_device())
+            if args.params_dtype == torch.float16:
+                self.alibi = self.alibi.to(torch.float16)
+            elif args.params_dtype == torch.bfloat16:
+                self.alibi = self.alibi.to(torch.bfloat16)
+        else:
+            self.alibi = None
+
     def _get_layer(self, layer_number):
         return self.layers[layer_number]
 
     def _checkpointed_forward(self, hidden_states, attention_mask,
-                              encoder_output, enc_dec_attn_mask):
+                              encoder_output, enc_dec_attn_mask, alibi=None):
         """Forward method with activation checkpointing."""
         def custom(start, end):
             def custom_forward(*inputs):
@@ -674,7 +710,7 @@ class ParallelTransformer(MegatronModule):
                 enc_dec_attn_mask = inputs[3]
                 for index in range(start, end):
                     layer = self._get_layer(index)
-                    x_ = layer(x_, attention_mask, encoder_output, enc_dec_attn_mask)
+                    x_ = layer(x_, attention_mask, encoder_output, enc_dec_attn_mask, alibi=alibi)
                 return x_
             return custom_forward
 
@@ -731,7 +767,8 @@ class ParallelTransformer(MegatronModule):
             hidden_states = self._checkpointed_forward(hidden_states,
                                                        attention_mask,
                                                        encoder_output,
-                                                       enc_dec_attn_mask)
+                                                       enc_dec_attn_mask,
+                                                       alibi=self.alibi)
         else:
             if get_key_value:
                 presents = []
@@ -745,7 +782,8 @@ class ParallelTransformer(MegatronModule):
                                       encoder_output=encoder_output,
                                       enc_dec_attn_mask=enc_dec_attn_mask,
                                       layer_past=past,
-                                      get_key_value=get_key_value)
+                                      get_key_value=get_key_value,
+                                      alibi=self.alibi)
                 if get_key_value:
                     hidden_states, present = hidden_states
                     presents.append(present)

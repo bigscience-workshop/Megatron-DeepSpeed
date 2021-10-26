@@ -16,8 +16,11 @@
 """General utilities."""
 
 import sys
+import warnings
+from random import randint
 
 import torch
+from torch import nn
 from torch.nn.parallel import DistributedDataParallel as torchDDP
 
 from apex.multi_tensor_apply import multi_tensor_applier
@@ -28,7 +31,7 @@ from megatron import print_rank_0
 from megatron import get_adlr_autoresume
 from megatron import mpu
 from megatron.model.module import param_is_not_shared
-from megatron.mpu.layers import param_is_not_tensor_parallel_duplicate
+from megatron.mpu.layers import param_is_not_tensor_parallel_duplicate, VocabParallelEmbedding
 from megatron import get_num_microbatches
 
 def unwrap_model(model, module_instances=(torchDDP)):
@@ -144,18 +147,31 @@ def check_adlr_autoresume_termination(iteration, model,
         sys.exit(0)
 
 
-def get_ltor_masks_and_position_ids(data,
-                                    eod_token,
-                                    reset_position_ids,
-                                    reset_attention_mask,
-                                    eod_mask_loss):
-    """Build masks and position id for left to right model."""
+def get_ltor_masks_and_position_ids(
+        data,
+        eod_token,
+        reset_position_ids,
+        reset_attention_mask,
+        eod_mask_loss,
+        prefix_indices,
+        loss_on_targets_only,
+    ):
+    """
+    Build masks and position id for left to right model.
+    :param prefix_indices: argument can have multiple types:
+        - None signifies that the model is fully autoregressive.
+        - List[int] the argument holds all prefix indices that split a row into an input and a target
+        - List[List[int]] the argument holds all prefix indices that split documents between input and target.
+    :param loss_on_targets_only: bool to determine if we should mask loss on prefix.
+    """
 
     # Extract batch size and sequence length.
     micro_batch_size, seq_length = data.size()
 
+    assert prefix_indices is None or loss_on_targets_only is True, "Prefix lm requires loss on targets only"
+
     # Attention mask (lower triangular).
-    if reset_attention_mask:
+    if reset_attention_mask or prefix_indices is not None:
         att_mask_batch = micro_batch_size
     else:
         att_mask_batch = 1
@@ -176,12 +192,20 @@ def get_ltor_masks_and_position_ids(data,
     if reset_position_ids:
         position_ids = position_ids.clone()
 
-    if reset_position_ids or reset_attention_mask:
+    if reset_position_ids or reset_attention_mask or prefix_indices is not None:
         # Loop through the batches:
         for b in range(micro_batch_size):
 
             # Find indecies where EOD token is.
             eod_index = position_ids[b, data[b] == eod_token]
+
+            # If the last eod token is not the last token of the sequence, we suppose that there is a partial document
+            # We treat this case as if we add an eod token at the end of the sequence.
+            if data[b][-1] != eod_token:
+                eod_index = torch.cat(
+                    (eod_index, torch.tensor([len(data[b])], dtype=eod_index.dtype, device=eod_index.device))
+                )
+
             # Detach indecies from positions if going to modify positions.
             if reset_position_ids:
                 eod_index = eod_index.clone()
@@ -190,13 +214,31 @@ def get_ltor_masks_and_position_ids(data,
             prev_index = 0
             for j in range(eod_index.size()[0]):
                 i = eod_index[j]
-                # Mask attention loss.
+
                 if reset_attention_mask:
+                    # Prevent cross document interactions.
                     attention_mask[b, 0, (i + 1):, :(i + 1)] = 0
+
+                    # Prefix lm per document.
+                    if prefix_indices:
+                        assert isinstance(prefix_indices[b], list), f"prefix for a row has to be document specific, and consequently return a list, got {prefix_indices[b]}"
+                        attention_mask[b, 0, prev_index: prefix_indices[b][j], prev_index: prefix_indices[b][j]] = 1
+                        if loss_on_targets_only:
+                            loss_mask[b, prev_index: prefix_indices[b][j]] = 0.0
+
                 # Reset positions.
                 if reset_position_ids:
                     position_ids[b, (i + 1):] -= (i + 1 - prev_index)
-                    prev_index = i + 1
+
+                prev_index = i + 1
+
+            # Prefix lm per row.
+            if prefix_indices is not None and (reset_attention_mask is False):
+                assert isinstance(prefix_indices[b], int), \
+                    f"prefix for a row has to be row specific, and consequently return an int, got {prefix_indices[b]}"
+                attention_mask[b, 0, :prefix_indices[b], :prefix_indices[b]] = 1
+                if loss_on_targets_only:
+                    loss_mask[b, :prefix_indices[b]] = 0.0
 
     # Convert attention mask to binary:
     attention_mask = (attention_mask < 0.5)
@@ -204,11 +246,33 @@ def get_ltor_masks_and_position_ids(data,
     return attention_mask, loss_mask, position_ids
 
 
-def get_parameters_in_billions(model):
+def param_size(parameter):
+    return parameter.ds_numel if hasattr(parameter, 'ds_id') else parameter.nelement()
+
+
+def unique_param_count(param_list):
+    # not actually deduplicating tied variables for now (which causes the PP > 1 double-counting bug)
+    return sum(dict((p.data_ptr(), param_size(p)) for p in param_list).values())
+
+
+def non_embedding_params(module):
+    embedding_param_names = [
+        f"{name}.weight" for name, module_type in module.named_modules() if isinstance(module_type, nn.Embedding) or isinstance(module_type, VocabParallelEmbedding)
+    ]
+    non_embedding_parameters = [
+        parameter for name, parameter in module.named_parameters() if name not in embedding_param_names
+    ]
+    return unique_param_count(non_embedding_parameters)
+
+
+def get_parameters_in_billions(model, exclude_embeddings=False):
     gpus_per_model = torch.distributed.get_world_size(group=mpu.get_model_parallel_group())
 
-    approx_parameters_in_billions = sum([sum([p.ds_numel if hasattr(p,'ds_id') else  p.nelement() for p in model_module.parameters()])
-                                        for model_module in model])
+    if exclude_embeddings:
+        approx_parameters_in_billions = sum([non_embedding_params(model_module) for model_module in model])
+    else:
+        warnings.warn("Parameter count with the embeddings will be inaccurate with PP > 1, as the first and last stage hold several copies of the embeddings")
+        approx_parameters_in_billions = unique_param_count([p for model_module in model for p in model_module.parameters()])
 
     return approx_parameters_in_billions*gpus_per_model/(1e9)
 
@@ -226,3 +290,80 @@ def flops_calculator(model, args, iteration_time):
     effective_tera_flops_per_gpu = giga_flops_per_model_per_train_step / (iteration_time * 1000.0 * gpus_per_model)
 
     print_rank_0(f"Effective Tera Flops per GPU: {round(effective_tera_flops_per_gpu, 2)} and total parameters {round(approx_parameters_in_billions, 3)} B")
+
+def get_prefix_indices(data, eod_token, partial_prefix_indices, reset_attention_mask):
+    """
+    Helper function in order to:
+     - randomly choose prefix index when there's no constraint
+     - check that prefix are compatible with convention.
+
+    :param data: torch.Tensor
+    :param eod_token: int, token_id used to signal end of document
+    :param partial_prefix_indices: this agument can have multiple types:
+        - None, it signals that all prefix indices are randomly sampled.
+        - List[Optional[int]], its length has to be equal to mini batch size. It stores all the indices for per row prefix.
+            Optional means that if set to None, we allows ourselves to sample one randomly.
+        - List[List[Optional[int]]], it follows the following rules:
+            - The first dimension refers to that sample, ie len(partial_prefix_indices) == len(data)
+            - The second dimension refers to the number of document of that sample, ie
+                len(partial_prefix_indices[b]) == (data[b] == eod_token).sum() (+1 for the last partial document).
+            - partial_prefix_indices have to be interleaved with eod_indices, ie
+                eod_indices[b][d-1] < partial_prefix_indices[b][d] < eod_indices[b][d] + 1 or is None.
+            - Optional means that if set to None, we allows ourselves to sample one randomly.
+    :param reset_attention_mask: bool, determines if prefixes are to be per document or per row.
+    :return Depending if prefix is per document or per row, the method returns:
+        - List[List[int]]: prefix indices for each document in case of per document prefix
+        - List[int]: prefix indices for rows else.
+    """
+    micro_batch_size, seq_length = data.size()
+    prefix_indices = []
+
+    assert partial_prefix_indices is None or len(partial_prefix_indices) == micro_batch_size, f"partial_prefix_indices has to be None or its length equal to {micro_batch_size}, got {len(partial_prefix_indices)}"
+    for batch_id in range(micro_batch_size):
+        # Prefix lm per document.
+        if reset_attention_mask:
+            prefix_indices.append([])
+
+            # Compute the index of all eod tokens in data.
+            eod_indices = (data[batch_id] == eod_token).nonzero().squeeze(-1)
+
+            # If the last eod token is not the last token of the sequence, we suppose that there is a partial document
+            # We treat this case as if we add an eod token at the end of the sequence.
+            if data[batch_id][-1] != eod_token:
+                eod_indices = torch.cat(
+                    (eod_indices,
+                     torch.tensor([len(data[batch_id])], dtype=eod_indices.dtype, device=eod_indices.device))
+                )
+
+            prev_index = 0
+            assert partial_prefix_indices is None or len(partial_prefix_indices[batch_id]) == len(eod_indices), f"The number of prefixes has to match the number of documents, complete or partial. Got {len(partial_prefix_indices[batch_id])} prefixes and {len(eod_indices)} documents"
+
+            for doc_id, eod_index in enumerate(eod_indices):
+                assert partial_prefix_indices is None or isinstance(partial_prefix_indices[batch_id], list), f"Per document prefix has to store a list on indices for each row, got {partial_prefix_indices[batch_id]}"
+                if partial_prefix_indices is None or partial_prefix_indices[batch_id][doc_id] is None:
+                    # We need to randomly generate a prefix index that satisfies the interleave condition in the docstring
+                    prefix_index = randint(prev_index, eod_index)
+                else:
+                    # We get value from partial_prefix_indices, and run validation on that value
+                    prefix_index = partial_prefix_indices[batch_id][doc_id]
+                    assert prev_index <= prefix_index < eod_index, f"Prefix index needs to be between documents indices, {prev_index} <= {prefix_index} < {eod_index} should be True."
+
+                prefix_indices[batch_id].append(prefix_index)
+                prev_index = eod_index + 1
+
+        # Prefix lm per row.
+        else:
+            assert partial_prefix_indices is None or isinstance(partial_prefix_indices[batch_id], int), \
+                f"Per document prefix has to store an int for each row, got {partial_prefix_indices[batch_id]}"
+
+            prefix_index: int
+            if partial_prefix_indices is None or partial_prefix_indices[batch_id] is None:
+                # We need to randomly generate a prefix index
+                prefix_index = randint(0, seq_length - 1)
+            else:
+                # We get value from partial_prefix_indices, and run validation on that value
+                prefix_index = partial_prefix_indices[batch_id]
+                assert 0 <= prefix_index < seq_length - 1, f"Prefix index needs to be between documents indices, 0 <= {prefix_index} < {seq_length - 1} should be True."
+            prefix_indices.append(prefix_index)
+
+    return prefix_indices
