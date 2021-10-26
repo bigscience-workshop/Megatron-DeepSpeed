@@ -26,7 +26,7 @@ from megatron.testing_utils import (
     TestCasePlus,
     execute_subprocess_async,
     get_gpu_count,
-    require_bnb,
+    require_bnb_non_decorator,
     require_deepspeed,
     require_torch_gpu,
     set_seed
@@ -223,7 +223,7 @@ class MegDSTestTraining(TestCasePlus):
 
         # optional runs
         if variation == "bnb":
-            require_bnb(self)
+            require_bnb_non_decorator()
 
         # all in one test
         src_dir = self.src_dir
