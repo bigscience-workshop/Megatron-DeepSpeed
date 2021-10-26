@@ -52,6 +52,7 @@ from megatron.schedules import forward_backward_pipelining_without_interleaving
 from megatron.schedules import forward_backward_pipelining_with_interleaving
 from megatron.utils import report_memory, flops_calculator
 from megatron.global_vars import codecarbon_tracker_start, codecarbon_tracker_stop
+from megatron.data.dataset_utils import analyze_data_prefix
 
 import deepspeed
 
@@ -135,6 +136,13 @@ def pretrain(train_valid_test_dataset_provider,
         train_data_iterator, valid_data_iterator, test_data_iterator, periodic_eval_data_iterators \
             = build_train_valid_test_data_iterators(
                 train_valid_test_dataset_provider)
+    if len(args.data_path) > 1:
+        prefixes, weights = analyze_data_prefix(args.data_path)
+        setattr(args, "data_prefixes", prefixes)
+        setattr(args, "data_weights", weights)
+    else:
+        setattr(args, "data_prefixes", None)
+        setattr(args, "data_weights", None)
     timers('train/valid/test-data-iterators-setup').stop()
     print_datetime('after dataloaders are built')
 
@@ -585,6 +593,11 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
             writer.add_scalar('params-norm/params-norm', params_norm, iteration)
             writer.add_scalar('params-norm/params-norm vs samples', params_norm,
                               args.consumed_train_samples)
+        if args.data_weights is not None:
+            for prefix, weight in zip(args.data_prefixes, args.data_weights):
+                name = prefix.split(",")[-1]
+                writer.add_scalar(f'samples-per-dataset/{name}', args.consumed_train_samples * weight, args.consumed_train_samples)
+                writer.add_scalar(f'steps-per-dataset/{name}', iteration * weight, iteration)
         if args.log_timers_to_tensorboard:
             timers.write(timers_to_log, writer, iteration,
                          normalizer=total_iterations)

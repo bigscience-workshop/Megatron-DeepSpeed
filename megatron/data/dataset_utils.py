@@ -41,8 +41,7 @@ DSET_TYPE_T5  = 't5'
 DSET_TYPES = [DSET_TYPE_BERT, DSET_TYPE_ICT, DSET_TYPE_T5]
 
 
-def get_datasets_weights_and_num_samples(data_prefix,
-                                         train_valid_test_num_samples):
+def analyze_data_prefix(data_prefix):
 
     # The data prefix should be in the format of:
     #   weight-1, data-prefix-1, weight-2, data-prefix-2, ..
@@ -59,10 +58,16 @@ def get_datasets_weights_and_num_samples(data_prefix,
         weight_sum += weight
     assert weight_sum > 0.0
     weights = [weight / weight_sum for weight in weights]
+    return prefixes, weights
+
+
+def get_datasets_weights_and_num_samples(data_prefix,
+                                         train_valid_test_num_samples):
 
     # Add 0.5% (the 1.005 factor) so in case the bleding dataset does
     # not uniformly distribute the number of samples, we still have
     # samples left to feed to the network.
+    prefixes, weights = analyze_data_prefix(data_prefix)
     datasets_train_valid_test_num_samples = []
     for weight in weights:
         datasets_train_valid_test_num_samples.append(

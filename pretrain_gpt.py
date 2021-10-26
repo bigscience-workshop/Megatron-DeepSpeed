@@ -181,7 +181,7 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
     train_ds, valid_ds, test_ds, ex_valid_ds = build_train_valid_test_datasets(
         data_prefix=args.data_path,
         data_impl=args.data_impl,
-        extra_valid_data_prefixes=args.extra_valid_data_path,
+        periodic_eval_data_prefixes=args.periodic_eval_data_path,
         splits_string=args.split,
         train_valid_test_num_samples=train_val_test_num_samples,
         seq_length=args.seq_length,
