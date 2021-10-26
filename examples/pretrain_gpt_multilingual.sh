@@ -22,7 +22,7 @@ deepspeed --num_gpus 1 pretrain_gpt.py \
        --save $CHECKPOINT_PATH \
        --load $CHECKPOINT_PATH \
        --data-path $DATA_PATH \
-       --extra-valid-data-path \
+       --periodic-eval-data-path \
        VALID-EN 1.0 $DATA_PATH/EN, \
        VALID-FR 1.0 $DATA_PATH/FR, \
        VALID-KR-JP-AR 0.3 $DATA_PATH/KR 0.3 $DATA_PATH/JP 0.3 $DATA_PATH/AR \

@@ -130,9 +130,9 @@ def pretrain(train_valid_test_dataset_provider,
         train_data_iterator = [data_iterators[0] for data_iterators in all_data_iterators]
         valid_data_iterator = [data_iterators[1] for data_iterators in all_data_iterators]
         test_data_iterator = [data_iterators[2] for data_iterators in all_data_iterators]
-        extra_valid_data_iterators = [data_iterators[3] for data_iterators in all_data_iterators]
+        periodic_eval_data_iterators = [data_iterators[3] for data_iterators in all_data_iterators]
     else:
-        train_data_iterator, valid_data_iterator, test_data_iterator, extra_valid_data_iterators \
+        train_data_iterator, valid_data_iterator, test_data_iterator, periodic_eval_data_iterators \
             = build_train_valid_test_data_iterators(
                 train_valid_test_dataset_provider)
     timers('train/valid/test-data-iterators-setup').stop()
@@ -148,7 +148,7 @@ def pretrain(train_valid_test_dataset_provider,
         iteration = train(forward_step_func,
                           model, optimizer, lr_scheduler,
                           train_data_iterator, valid_data_iterator, 
-                          extra_valid_data_iterators)
+                          periodic_eval_data_iterators)
     print_datetime('after training is done')
 
     if args.do_valid:
@@ -653,7 +653,7 @@ def save_checkpoint_and_time(iteration, model, optimizer, lr_scheduler):
 
 
 def train(forward_step_func, model, optimizer, lr_scheduler,
-          train_data_iterator, valid_data_iterator, extra_valid_data_iterators=None):
+          train_data_iterator, valid_data_iterator, periodic_eval_data_iterators=None):
     """Train the model function."""
     args = get_args()
     timers = get_timers()
@@ -724,9 +724,9 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
                                        valid_data_iterator, model,
                                        iteration, False)
 
-            if extra_valid_data_iterators is not None:
+            if periodic_eval_data_iterators is not None:
                 # log evaluation metrics for extra validation datasets
-                for iterator, ds_name in zip(extra_valid_data_iterators, args.extra_valid_data_name):
+                for iterator, ds_name in zip(periodic_eval_data_iterators, args.periodic_eval_data_name):
                         evaluate_and_print_results(prefix, forward_step_func,
                                 iterator, model,
                                 iteration, False, ds_name=ds_name)
@@ -831,12 +831,13 @@ def evaluate_and_print_results(prefix, forward_step_func,
     args = get_args()
     writer = get_tensorboard_writer()
 
-    ds_name = kwargs["ds_name"] if "ds_name" in kwargs else ""
-    # print corresponding dataset name (used for extra-validation dataset option)
-    tf_plot_prefix = f"lm-loss-validation/{ds_name}" if ds_name else "lm-loss-validation"
+    ds_name = kwargs["ds_name"] if "ds_name" in kwargs else None
+    # print corresponding dataset name (used for periodic-eval dataset option)
+    tf_plot_prefix = f"lm-loss/eval/{ds_name}" if ds_name else "lm-loss-validation"
 
     total_loss_dict = evaluate(forward_step_func, data_iterator, model, verbose)
-    string = '{} validation loss at {} | '.format(ds_name, prefix)
+    string = '{} loss at {} | '.format(ds_name, prefix) if ds_name is not None\
+        else 'validation loss at {} | '.format(prefix)
     for key in total_loss_dict:
         string += '{} value: {:.6E} | '.format(key, total_loss_dict[key].item())
         ppl = math.exp(min(20, total_loss_dict[key].item()))
@@ -908,7 +909,7 @@ def build_train_valid_test_data_iterators(
         print_rank_0('    test:       {}'.format(train_val_test_num_samples[2]))
 
         # Build the datasets.
-        train_ds, valid_ds, test_ds, extra_valid_ds = build_train_valid_test_datasets_provider(
+        train_ds, valid_ds, test_ds, periodic_eval_ds = build_train_valid_test_datasets_provider(
         train_val_test_num_samples)
 
         # Build dataloders.
@@ -920,17 +921,17 @@ def build_train_valid_test_data_iterators(
 
         test_dataloader = build_pretraining_data_loader(test_ds, 0)
 
-        if extra_valid_ds:
-            extra_valid_dataloaders = [build_pretraining_data_loader(ds, args.consumed_valid_samples) 
-                                            for ds in extra_valid_ds]
+        if periodic_eval_ds:
+            periodic_eval_dataloaders = [build_pretraining_data_loader(ds, args.consumed_valid_samples) 
+                                            for ds in periodic_eval_ds]
         else:
-            extra_valid_dataloaders = None
+            periodic_eval_dataloaders = None
 
         # Flags to know if we need to do training/validation/testing.
         do_train = train_dataloader is not None and args.train_iters > 0
         do_valid = valid_dataloader is not None and args.eval_iters > 0
         do_test = test_dataloader is not None and args.eval_iters > 0
-        do_extra_valid = extra_valid_dataloaders is not None and args.eval_iters > 0 
+        do_periodic_eval = periodic_eval_dataloaders is not None and args.eval_iters > 0 
 
         # Need to broadcast num_tokens and num_type_tokens.
         flags = torch.cuda.LongTensor(
@@ -963,13 +964,13 @@ def build_train_valid_test_data_iterators(
     else:
         valid_data_iterator = None
 
-    if do_extra_valid is not None and extra_valid_dataloaders is not None: \
-            extra_valid_data_iterators = [iter(loader) \
+    if do_periodic_eval is not None and periodic_eval_dataloaders is not None: \
+            periodic_eval_data_iterators = [iter(loader) \
                             if dl_type == 'single' \
                             else iter(cyclic_iter(loader))
-                            for loader in extra_valid_dataloaders]
+                            for loader in periodic_eval_dataloaders]
     else:
-        extra_valid_data_iterators = None
+        periodic_eval_data_iterators = None
 
     if test_dataloader is not None:
         test_data_iterator = iter(test_dataloader) if dl_type == 'single' \
@@ -977,4 +978,4 @@ def build_train_valid_test_data_iterators(
     else:
         test_data_iterator = None
 
-    return train_data_iterator, valid_data_iterator, test_data_iterator, extra_valid_data_iterators
+    return train_data_iterator, valid_data_iterator, test_data_iterator, periodic_eval_data_iterators

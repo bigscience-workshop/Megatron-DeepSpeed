@@ -648,7 +648,7 @@ def _add_data_args(parser):
                        'form: dataset1-weight dataset1-path dataset2-weight '
                        'dataset2-path ...')
 
-    # helper class to parse the -extra-valid-data-path argument
+    # helper class to parse the -periodic-eval-data-path argument
     # note here two args are set: extra valid dataset paths and names
     class parse_data_paths(argparse.Action):
         def __call__(self, parser, args, values, option_string=None):
@@ -657,11 +657,11 @@ def _add_data_args(parser):
                 assert len(v.split()) % 2 == 1
             paths = [v.split()[1:] for v in vs]
             names = [v.split()[0] for v in vs]
-            setattr(args, "extra_valid_data_path", paths)
-            setattr(args, "extra_valid_data_name", names)
+            setattr(args, "periodic_eval_data_path", paths)
+            setattr(args, "periodic_eval_data_name", names)
 
-    group.add_argument('--extra-valid-data-path', nargs='*', default=None,
-                       help='Path to extra validation dataset to be monitored during training'
+    group.add_argument('--periodic-eval-data-path', nargs='*', default=None,
+                       help='Path to dataset to be evaluated periodically during training'
                        'Accepted format: 1) a single data path, 2) multiple datasets in the form:'
                        'data1-weight data1-path data2-path data2-weight yielding single validation set'
                        '3) allow multiple validation sets by multiple (2) separated by commas each'
