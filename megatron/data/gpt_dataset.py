@@ -30,7 +30,8 @@ from megatron.data.indexed_dataset import make_dataset as make_indexed_dataset
 
 def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
                                     train_valid_test_num_samples,
-                                    seq_length, seed, skip_warmup):
+                                    seq_length, seed, skip_warmup,
+                                    valid_data_prefix=None):
     """Build train, valid, and test datasets."""
 
     # Single dataset.
@@ -62,13 +63,27 @@ def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
         if test_ds:
             test_datasets.append(test_ds)
 
+    valid_weights = weights
+    if valid_data_prefix is not None:
+        valid_datasets = []
+        valid_output = get_datasets_weights_and_num_samples(valid_data_prefix,
+                                                  [0, train_valid_test_num_samples[1], 0])
+        valid_prefixes, valid_weights, valid_datasets_samples = valid_output
+        for i in range(len(valid_prefixes)):
+            train_ds, valid_ds, test_ds = _build_train_valid_test_datasets(
+                valid_prefixes[i], data_impl, '0,100,0',
+                valid_datasets_samples[i],
+                seq_length, seed, skip_warmup)
+            if valid_ds:
+                valid_datasets.append(valid_ds)
+
     # Blend.
     blending_train_dataset = None
     if train_datasets:
         blending_train_dataset = BlendableDataset(train_datasets, weights)
     blending_valid_dataset = None
     if valid_datasets:
-        blending_valid_dataset = BlendableDataset(valid_datasets, weights)
+        blending_valid_dataset = BlendableDataset(valid_datasets, valid_weights)
     blending_test_dataset = None
     if test_datasets:
         blending_test_dataset = BlendableDataset(test_datasets, weights)
