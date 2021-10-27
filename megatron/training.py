@@ -905,7 +905,7 @@ def evaluate_and_print_results(prefix, forward_step_func,
     args = get_args()
     writer = get_tensorboard_writer()
 
-    ds_name = kwargs["ds_name"] if "ds_name" in kwargs else None
+    ds_name = kwargs.get("ds_name", None)
     # print corresponding dataset name (used for extra-eval dataset option)
     tf_plot_prefix = f"lm-loss/eval/{ds_name}" if ds_name else "lm-loss-validation"
 
