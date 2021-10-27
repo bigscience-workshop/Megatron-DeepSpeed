@@ -7,13 +7,13 @@ class DebugGradientNorm:
             except TypeError:
                 self.module2key = {getattr(model, layer): layer for layer in layers}
         else:
-            self.module2key = {module: name for name, module in model.named_parameters()}
+            self.module2key = {module: name for name, module in model.named_modules()}
 
     def backward_hook(self, module, grad_inputs, grad_outputs):
         total_norm = sum(grad_output.norm() ** 2 for grad_output in grad_outputs)
         total_norm_squared = total_norm.sqrt().item()
-        min_grad_norm = grad_inputs.min().item()
-        max_grad_norm = grad_inputs.max().item()
+        min_grad_norm = min(grad_output.min().item() for grad_output in grad_outputs)
+        max_grad_norm = max(grad_output.max().item() for grad_output in grad_outputs)
         module_name = self.module2key[module]
         print(f"{module_name}: total {total_norm_squared}, min {min_grad_norm}, max {max_grad_norm}")
 
