@@ -155,13 +155,14 @@ class MyTestCase(TestCasePlus):
                 token_ids[token_ids == tokenizer.eod] %= args.padded_vocab_size
 
                 # process batch to have non empty prefix
-                for i in range(9, -1, -1):
-                    input_batch, _, prefix_indices = get_prefix_lm_batch_pipe({"text": token_ids})
-                    if (prefix_indices[0][0] != 0):
-                        break
-                    if i == 0:
-                        # FIXME: find a better way to not obtain empty prefix
-                        raise ValueError("Could not obtain non pathological case where prefix is not empty")
+                input_batch, (_, loss_mask), prefix_indices = get_prefix_lm_batch_pipe({"text": token_ids})
+
+                for batch_id in range(len(prefix_indices)):
+                    for id in prefix_indices[batch_id]:
+                        self.assertTrue(loss_mask[batch_id, id] == 1)
+                        self.assertTrue(id > 0)
+                        # Make sure that the last prefix token predicts the first token.
+                        self.assertTrue(loss_mask[batch_id, id -1] == 1)
 
                 output = model(*input_batch)
 
@@ -247,7 +248,14 @@ class MyTestCase(TestCasePlus):
                 model = model[0]
 
                 token_ids = torch.randint(args.padded_vocab_size, (args.micro_batch_size, args.seq_length))
-                input_batch, _, prefix_indices = get_prefix_lm_batch_pipe({"text": token_ids})
+                input_batch, (_, loss_mask), prefix_indices = get_prefix_lm_batch_pipe({"text": token_ids})
+
+                for batch_id in range(len(prefix_indices)):
+                    id = prefix_indices[batch_id]
+                    self.assertTrue(loss_mask[batch_id, id] == 1)
+                    self.assertTrue(id > 0)
+                    # Make sure that the last prefix token predicts the first token.
+                    self.assertTrue(loss_mask[batch_id, id -1] == 1)
 
                 model(*input_batch)
 
