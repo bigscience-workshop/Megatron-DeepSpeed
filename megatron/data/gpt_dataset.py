@@ -30,7 +30,7 @@ from megatron.data.indexed_dataset import make_dataset as make_indexed_dataset
 
 def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
                                     train_valid_test_num_samples,
-                                    seq_length, seed, skip_warmup, periodic_eval_data_prefixes=None):
+                                    seq_length, seed, skip_warmup, extra_eval_data_prefixes=None):
     """Build train, valid, and test datasets."""
 
     # Single dataset.
@@ -69,14 +69,14 @@ def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
         if test_datasets:
             all_test_datasets = BlendableDataset(test_datasets, weights)
     # Check extra validation datasets
-    if periodic_eval_data_prefixes:
-        all_periodic_eval_datasets = []
-        # periodic_eval_data_prefixes
-        for _ in range(len(periodic_eval_data_prefixes)):
+    if extra_eval_data_prefixes:
+        all_extra_eval_datasets = []
+        # extra_eval_data_prefixes
+        for _ in range(len(extra_eval_data_prefixes)):
             output = get_datasets_weights_and_num_samples(data_prefix,
                                                     train_valid_test_num_samples)
             prefixes, weights, datasets_train_valid_test_num_samples = output
-            periodic_eval_datasets = []
+            extra_eval_datasets = []
             for i in range(len(prefixes)):
 
                 # workaround: we only need validation sets
@@ -86,13 +86,13 @@ def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
                                                 datasets_train_valid_test_num_samples[i],
                                                 seq_length, seed, skip_warmup)
                 if ex_valid_ds:
-                    periodic_eval_datasets.append(ex_valid_ds)
+                    extra_eval_datasets.append(ex_valid_ds)
 
-            all_periodic_eval_datasets.append(BlendableDataset(periodic_eval_datasets, weights))
+            all_extra_eval_datasets.append(BlendableDataset(extra_eval_datasets, weights))
     else:
-        all_periodic_eval_datasets = None
+        all_extra_eval_datasets = None
 
-    return all_train_datasets, all_valid_datasets, all_test_datasets, all_periodic_eval_datasets
+    return all_train_datasets, all_valid_datasets, all_test_datasets, all_extra_eval_datasets
 
 
 def _build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
