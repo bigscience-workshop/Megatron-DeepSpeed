@@ -62,12 +62,13 @@ def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
             if test_ds:
                 test_datasets.append(test_ds)
 
-        if train_datasets:
-            all_train_datasets = BlendableDataset(train_datasets, weights)
-        if valid_datasets:
-            all_valid_datasets = BlendableDataset(valid_datasets, weights)
-        if test_datasets:
-            all_test_datasets = BlendableDataset(test_datasets, weights)
+        all_train_datasets = BlendableDataset(train_datasets, weights) \
+                            if train_datasets else None
+        all_valid_datasets = BlendableDataset(valid_datasets, weights) \
+                            if valid_datasets else None
+        all_test_datasets = BlendableDataset(test_datasets, weights) \
+                            if test_datasets else None
+
     # Check extra validation datasets
     if extra_eval_data_prefixes:
         all_extra_eval_datasets = []
