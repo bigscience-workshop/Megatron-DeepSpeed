@@ -5,7 +5,13 @@
 RANK=0
 WORLD_SIZE=1
 
-DATA_PATH=<Specify path and file prefix>_text_document
+# paths to multilingual preprocessed datasets
+DATA_PATH_EN=<Specify path and file prefix>_text_document
+DATA_PATH_AR=<Specify path and file prefix>_text_document
+DATA_PATH_KR=<Specify path and file prefix>_text_document
+DATA_PATH_KR=<Specify path and file prefix>_text_document
+DATA_PATH_JP=<Specify path and file prefix>_text_document
+
 CHECKPOINT_PATH=<Specify path>
 
 
@@ -21,11 +27,11 @@ deepspeed --num_gpus 1 pretrain_gpt.py \
        --lr-decay-iters 320000 \
        --save $CHECKPOINT_PATH \
        --load $CHECKPOINT_PATH \
-       --data-path $DATA_PATH \
-       --periodic-eval-data-path \
-       VALID-EN 1.0 $DATA_PATH/EN, \
-       VALID-FR 1.0 $DATA_PATH/FR, \
-       VALID-KR-JP-AR 0.3 $DATA_PATH/KR 0.3 $DATA_PATH/JP 0.3 $DATA_PATH/AR \
+       --data-path 0.01 $DATA_PATH_EN 0.32 $DATA_PATH_KR 0.33 $DATA_PATH_JP 0.33 $DATA_PATH_AR \
+       --extra-eval-data-path \
+       VALID-EN 1.0 $DATA_PATH_EN, \
+       VALID-FR 1.0 $DATA_PATH_FR, \
+       VALID-KR-JP-AR 0.3 $DATA_PATH_KR 0.3 $DATA_PATH_JP 0.3 $DATA_PATH_AR \
        --vocab-file gpt2-vocab.json \
        --merge-file gpt2-merges.txt \
        --data-impl mmap \
