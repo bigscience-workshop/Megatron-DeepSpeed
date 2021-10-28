@@ -150,11 +150,13 @@ def get_batch_pipe(data):
 
 def loss_func(loss_mask, output_tensor):
     losses = output_tensor.float()
-    loss_mask = loss_mask.view(-1).float()
-    loss = torch.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
+    loss_mask = loss_mask.view(-1)
+    loss_weight = loss_mask.float().sum()
+
+    loss = torch.sum(losses.view(-1)[loss_mask]) / loss_weight
 
     # Reduce loss for logging.
-    averaged_loss = average_losses_across_data_parallel_group([loss])
+    averaged_loss = average_losses_across_data_parallel_group([loss], loss_weight=loss_weight)
 
     return loss, {'lm loss': averaged_loss[0]}
 

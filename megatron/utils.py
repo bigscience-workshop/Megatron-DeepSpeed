@@ -18,6 +18,7 @@
 import sys
 import warnings
 from random import randint
+from typing import Optional
 
 import torch
 from torch import nn
@@ -81,16 +82,21 @@ def calc_params_l2_norm(model):
     return norm_2.item() ** 0.5
 
 
-def average_losses_across_data_parallel_group(losses):
+def average_losses_across_data_parallel_group(losses, loss_weight: Optional[torch.Tensor] =None):
     """Reduce a tensor of losses across all GPUs."""
     averaged_losses = torch.cat(
         [loss.clone().detach().view(1) for loss in losses])
-    torch.distributed.all_reduce(averaged_losses,
-                                 group=mpu.get_data_parallel_group())
-    averaged_losses = averaged_losses / \
-        torch.distributed.get_world_size(group=mpu.get_data_parallel_group())
 
-    return averaged_losses
+    if loss_weight is None:
+        loss_weight = torch.tensor(1., device=averaged_losses.device)
+    normalised_weight = loss_weight / torch.distributed.all_reduce(loss_weight)
+
+    normalised_averaged_losses = averaged_losses * normalised_weight
+
+    torch.distributed.all_reduce(normalised_averaged_losses,
+                                 group=mpu.get_data_parallel_group())
+
+    return normalised_averaged_losses
 
 
 def report_memory(name):
