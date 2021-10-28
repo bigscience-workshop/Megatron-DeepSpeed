@@ -166,7 +166,7 @@ def CrossEntropy(output, labels):
 
     losses = mpu.vocab_parallel_cross_entropy(output.contiguous().float(), labels)
     loss_mask = loss_mask.view(-1)
-    loss = torch.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
+    loss = torch.sum(losses.view(-1)[loss_mask]) / loss_mask.shape[0]
     return loss
 
 
