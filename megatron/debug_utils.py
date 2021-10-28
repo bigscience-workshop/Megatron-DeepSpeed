@@ -1,3 +1,5 @@
+import torch
+from packaging import version
 class DebugGradientNorm:
     def __init__(self, model, layers=[]):
         self.model = model
@@ -26,7 +28,7 @@ class DebugGradientNorm:
         self.model.apply(self._register_backward_hook)
 
     def _register_backward_hook(self, module):
-        if hasattr(module, "register_full_backward_hook"):
+        if version.parse(torch.__version__) >= version.parse("1.10"):
             module.register_full_backward_hook(self.backward_hook)
         else:
             module.register_backward_hook(self.backward_hook)
