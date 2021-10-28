@@ -10,12 +10,17 @@ class DebugGradientNorm:
             self.module2key = {module: name for name, module in model.named_modules()}
 
     def backward_hook(self, module, grad_inputs, grad_outputs):
-        total_norm = sum(grad_output.norm() ** 2 for grad_output in grad_outputs)
-        total_norm_squared = total_norm.sqrt().item()
-        min_grad_norm = min(grad_output.min().item() for grad_output in grad_outputs)
-        max_grad_norm = max(grad_output.max().item() for grad_output in grad_outputs)
+        min_grad_norm = min(
+            grad_output.min().item() for grad_output in grad_outputs if grad_output is not None
+        )
+        max_grad_norm = max(
+            grad_output.max().item() for grad_output in grad_outputs if grad_output is not None
+        )
+        total_norm = sum(
+            grad_output.norm() ** 2 for grad_output in grad_outputs if grad_output is not None
+        ).sqrt().item()
         module_name = self.module2key[module]
-        print(f"{module_name}: total {total_norm_squared}, min {min_grad_norm}, max {max_grad_norm}")
+        print(f"{module_name}: total {total_norm}, min {min_grad_norm}, max {max_grad_norm}")
 
     def register_backward_hook(self):
         self.model.apply(self._register_backward_hook)
