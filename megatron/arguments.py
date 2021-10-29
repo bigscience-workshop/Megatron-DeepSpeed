@@ -17,6 +17,7 @@
 
 import argparse
 import os
+import re
 
 import torch
 import deepspeed
@@ -91,6 +92,27 @@ def parse_args(extra_args_provider=None, defaults={},
                   args.world_size, args.data_parallel_size,
                   args.tensor_model_parallel_size,
                   args.pipeline_model_parallel_size), flush=True)
+
+    # --data-path and --train-weighted-splits-paths
+    message = "Data loading Mode 1: --data-path and --split "\
+            "and Mode 2: --(train|valid|test)-weighted-split-paths"\
+            "are mutually exclusive i.e. cannot be set together."
+
+    if args.data_path:
+        assert args.train_weighted_split_paths is None and \
+                args.valid_weighted_split_paths is None and \
+                args.test_weighted_split_paths is None , message\
+
+        # args.split default value in the args is None it is set here in order
+        # to check that it does not to overlap with the 2nd mode of data loading
+        if args.split is None:
+            args.split = "969, 30, 1"
+
+    if args.train_weighted_split_paths or args.valid_weighted_split_paths or \
+                args.test_weighted_split_paths:
+        assert args.data_path is None and args.split is None, message
+
+
 
     # Deprecated arguments
     assert args.batch_size is None, '--batch-size argument is no longer ' \
@@ -669,38 +691,66 @@ def _add_validation_args(parser):
 def _add_data_args(parser):
     group = parser.add_argument_group(title='data and dataloader')
 
+
+    # option 1 for data loading  (mutually exclusive with option2)
     group.add_argument('--data-path', nargs='*', default=None,
                        help='Path to the training dataset. Accepted format:'
                        '1) a single data path, 2) multiple datasets in the'
                        'form: dataset1-weight dataset1-path dataset2-weight '
                        'dataset2-path ...')
 
-    # helper class to parse the -extra-eval-data-path argument
-    # note here two args are set: extra valid dataset paths and names
-    class parse_data_paths(argparse.Action):
-        def __call__(self, parser, args, values, option_string=None):
-            vs = " ".join(values).split(",")
-            for v in vs:
-                assert len(v.split()) % 2 == 1
-            paths = [v.split()[1:] for v in vs]
-            names = [v.split()[0] for v in vs]
-            setattr(args, "extra_eval_data_path", paths)
-            setattr(args, "extra_eval_data_name", names)
-
-    group.add_argument('--extra-eval-data-path', nargs='*', default=None,
-                       help='Path to dataset to be evaluated periodically during training'
-                       'Accepted format: 1) a single data path, 2) multiple datasets in the form:'
-                       'data1-weight data1-path data2-path data2-weight yielding single validation set'
-                       '3) allow multiple validation sets by multiple (2) separated by commas each'
-                       'starting with the dataset name in the form: '
-                       'dataset-name data1-weight data1-path data2-weight'
-                       ' data2-path, dataset-name data3-weight3'
-                       ' data3-path data3-weight data3-path ...', action=parse_data_paths)
-    group.add_argument('--split', type=str, default='969, 30, 1',
+    group.add_argument('--split', type=str, default=None,
                        help='Comma-separated list of proportions for training,'
                        ' validation, and test split. For example the split '
                        '`90,5,5` will use 90%% of data for training, 5%% for '
                        'validation and 5%% for test.')
+
+    # option 2 for data loading (mutually exclusive with option1)
+
+    # helper class to parse the --xxx-weighted-split-paths
+    # note here two args are set: extra valid dataset paths and names
+    class parse_data_paths(argparse.Action):
+        def __call__(self, parser, args, values, option_string=None):
+
+            if option_string == "--train-weighted-split-paths":
+                assert len(values) == 1, "Only 1 dataset group is allowed to \
+                pass for the argument --train-weighted-split-paths"
+
+            names = [v.split(":")[0] for v in values]
+            paths = [":".join(v.split(":")[1:]).strip() for v in values]
+            setattr(args, self.dest, paths)
+            setattr(args, self.dest.replace("paths","names"), names)
+
+    group.add_argument('--train-weighted-split-paths', nargs='*', default=None,
+                    help='Weights, splits and paths to groups of datasets'
+                    'Accepted format: ONE dataset groups could be'
+                    'submitted in the following form between double quotes'
+                    '"GIVEN_NAME WEIGHT1 START:END PATH1, WEIGHT2 START:END PATH2"'
+                    'e.g.: "NAME_ABC: 0.6 0:0.6 A, 0.3 0:1 B, 0.1 0:1 C" '
+                    'WEIGHT is used to up and down sample each dataset A,B,C in the group'
+                    'START:END indicates the split portion of the dataset',
+                    action=parse_data_paths)
+
+    group.add_argument('--valid-weighted-split-paths', nargs='*', default=None,
+                    help='Weights, splits and paths to groups of datasets'
+                    'Accepted format: one or many dataset groups could be'
+                    'submitted in the following form each between double quotes'
+                    '"GIVEN_NAME WEIGHT1 START:END PATH1, WEIGHT2 START:END PATH2"'
+                    'e.g.: "NAME_ABC: 0.6 0.6:0.8 A, 0.3 0:1 B, 0.1 0:1 C" '
+                    '"NAME_CDE: 0.6 0.6:0.8 C, 0.3 0:1 D, 0.1 0:1 E" '
+                    'validation will be run on each of those groups independently',
+                    action=parse_data_paths)
+
+    group.add_argument('--test-weighted-split-paths', nargs='*', default=None,
+                    help='Weights, splits and paths to groups of datasets'
+                    'Accepted format: one or many dataset groups could be'
+                    'submitted in the following form each between double quotes'
+                    '"GIVEN_NAME WEIGHT1 START:END PATH1, WEIGHT2 START:END PATH2"'
+                    'e.g.: "NAME_ABC: 0.6 0.6:0.8 A, 0.3 0:1 B, 0.1 0:1 C" '
+                    '"NAME_CDE: 0.6 0.6:0.8 C, 0.3 0:1 D, 0.1 0:1 E" '
+                    'test will be run on each of those groups independently',
+                    action=parse_data_paths)
+
     group.add_argument('--vocab-file', type=str, default=None,
                        help='Path to the vocab file.')
     group.add_argument('--merge-file', type=str, default=None,
