@@ -3,8 +3,8 @@ on:
   # enable to manually trigger the tests
   workflow_dispatch:
   pull_request:
-    paths:
-      - "**.py"
+#    paths:
+#      - "**.py"
 
 jobs:
 
