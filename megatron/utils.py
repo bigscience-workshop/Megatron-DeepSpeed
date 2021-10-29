@@ -224,7 +224,8 @@ def get_ltor_masks_and_position_ids(
                         assert isinstance(prefix_indices[b], list), f"prefix for a row has to be document specific, and consequently return a list, got {prefix_indices[b]}"
                         attention_mask[b, 0, prev_index: prefix_indices[b][j], prev_index: prefix_indices[b][j]] = 1
                         if loss_on_targets_only:
-                            loss_mask[b, prev_index: prefix_indices[b][j]] = 0.0
+                            # Last token of the prefix should predict the prefix_index id
+                            loss_mask[b, prev_index: prefix_indices[b][j] - 1] = 0.0
 
                 # Reset positions.
                 if reset_position_ids:
@@ -238,7 +239,8 @@ def get_ltor_masks_and_position_ids(
                     f"prefix for a row has to be row specific, and consequently return an int, got {prefix_indices[b]}"
                 attention_mask[b, 0, :prefix_indices[b], :prefix_indices[b]] = 1
                 if loss_on_targets_only:
-                    loss_mask[b, :prefix_indices[b]] = 0.0
+                    # Last token of the prefix should predict the prefix_index id
+                    loss_mask[b, :prefix_indices[b] - 1] = 0.0
 
     # Convert attention mask to binary:
     attention_mask = (attention_mask < 0.5)
@@ -340,13 +342,14 @@ def get_prefix_indices(data, eod_token, partial_prefix_indices, reset_attention_
 
             for doc_id, eod_index in enumerate(eod_indices):
                 assert partial_prefix_indices is None or isinstance(partial_prefix_indices[batch_id], list), f"Per document prefix has to store a list on indices for each row, got {partial_prefix_indices[batch_id]}"
+                # Prefix index is defined as the first index that isn't attended by all tokens in a document
                 if partial_prefix_indices is None or partial_prefix_indices[batch_id][doc_id] is None:
                     # We need to randomly generate a prefix index that satisfies the interleave condition in the docstring
-                    prefix_index = randint(prev_index, eod_index)
+                    prefix_index = randint(prev_index + 1, eod_index)
                 else:
                     # We get value from partial_prefix_indices, and run validation on that value
                     prefix_index = partial_prefix_indices[batch_id][doc_id]
-                    assert prev_index <= prefix_index < eod_index, f"Prefix index needs to be between documents indices, {prev_index} <= {prefix_index} < {eod_index} should be True."
+                assert prev_index + 1 <= prefix_index <= eod_index, f"Prefix index needs to be between documents indices, {prev_index + 1} <= {prefix_index} <= {eod_index} should be True."
 
                 prefix_indices[batch_id].append(prefix_index)
                 prev_index = eod_index + 1
@@ -356,14 +359,15 @@ def get_prefix_indices(data, eod_token, partial_prefix_indices, reset_attention_
             assert partial_prefix_indices is None or isinstance(partial_prefix_indices[batch_id], int), \
                 f"Per document prefix has to store an int for each row, got {partial_prefix_indices[batch_id]}"
 
+            # Prefix index is defined as the first index that isn't attended by all previous tokens in a document
             prefix_index: int
             if partial_prefix_indices is None or partial_prefix_indices[batch_id] is None:
-                # We need to randomly generate a prefix index
-                prefix_index = randint(0, seq_length - 1)
+                # 0 being the first prefix index makes no sense since 0 always attends to itself, and there are no other tokens before.
+                prefix_index = randint(1, seq_length)
             else:
                 # We get value from partial_prefix_indices, and run validation on that value
                 prefix_index = partial_prefix_indices[batch_id]
-                assert 0 <= prefix_index < seq_length - 1, f"Prefix index needs to be between documents indices, 0 <= {prefix_index} < {seq_length - 1} should be True."
+            assert 1 <= prefix_index <= seq_length, f"Prefix index needs to be between documents indices, 1 <= {prefix_index} <= {seq_length} should be True."
             prefix_indices.append(prefix_index)
 
     return prefix_indices
