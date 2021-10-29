@@ -107,4 +107,6 @@ class _VocabParallelCrossEntropy(torch.autograd.Function):
 
 def vocab_parallel_cross_entropy(vocab_parallel_logits, target):
     """Helper function for the cross entropy."""
+    # cloning is required for backward hook to work properly
+    # see https://github.com/bigscience-workshop/Megatron-DeepSpeed/pull/155
     return _VocabParallelCrossEntropy.apply(vocab_parallel_logits.clone(), target)
