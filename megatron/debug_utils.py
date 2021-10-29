@@ -1,28 +1,45 @@
 import torch
 from packaging import version
+
+
 class DebugGradientNorm:
     def __init__(self, model, layers=[]):
         self.model = model
+        self.total_calls = 0
+        self.prefix = "                 "
+        self.analyze_model(layers)
+    
+    def analyze_model(self, layers):
         if layers:
             try:
-                self.module2key = {model[layer]: layer for layer in layers}
+                self.module_names = {self.model[layer]: layer for layer in layers}
             except TypeError:
-                self.module2key = {getattr(model, layer): layer for layer in layers}
+                self.module_names = {getattr(self.model, layer): layer for layer in layers}
         else:
-            self.module2key = {module: name for name, module in model.named_modules()}
+            self.module_names = {module: name for name, module in self.model.named_modules()}
 
     def backward_hook(self, module, grad_inputs, grad_outputs):
+        if self.total_calls == 0:
+            self.print_header()
+        self.total_calls += 1
         min_grad_norm = min(
-            grad_output.min().item() for grad_output in grad_outputs if grad_output is not None
+            grad_output.abs().min().item() for grad_output in grad_outputs if grad_output is not None
         )
         max_grad_norm = max(
-            grad_output.max().item() for grad_output in grad_outputs if grad_output is not None
+            grad_output.abs().max().item() for grad_output in grad_outputs if grad_output is not None
         )
         total_norm = sum(
             grad_output.norm() ** 2 for grad_output in grad_outputs if grad_output is not None
         ).sqrt().item()
-        module_name = self.module2key[module]
-        print(f"{module_name}: total {total_norm}, min {min_grad_norm}, max {max_grad_norm}")
+        module_name = self.module_names[module] or "full model" 
+        message = (
+            f"{min_grad_norm:8.2e} {max_grad_norm:8.2e} {total_norm:8.2e} {module_name}"
+        )
+        print(message)
+    
+    def print_header(self):
+        print(f"\n\n{self.prefix} *** Starting gradient logging ***")
+        print(f"{'abs min':8} {'abs max':8} {'l2 norm':8} metadata")
 
     def register_backward_hook(self):
         self.model.apply(self._register_backward_hook)
