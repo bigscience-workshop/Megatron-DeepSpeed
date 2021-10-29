@@ -4,6 +4,8 @@ The CI is setup with github actions using the on-demand EC2 backend.
 
 This setup currently uses a 4gpu instance p3.8xlarge - to test tp=2, pp=2.
 
+**Unfortunately this only works for PRs created from non-forked branches**
+
 
 ## The workflow file
 
