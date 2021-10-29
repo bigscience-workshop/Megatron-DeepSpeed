@@ -109,7 +109,7 @@ jobs:
       - name: Install Dependencies
         run: |
           pip install --upgrade pip
-          pip install --upgrade requirements.txt
+          pip install -r requirements.txt
           pip install pytest-timeout
 
       - name: Run tests
