@@ -178,7 +178,7 @@ def get_cross_entropy(is_prefix: bool):
             expected_number_of_tokens /= 2
 
         loss_mask = loss_mask.view(-1)
-        loss = torch.sum(losses.view(-1)[loss_mask]) / expected_number_of_tokens
+        loss = torch.sum(losses.view(-1) * loss_mask) / expected_number_of_tokens
         return loss
     return CrossEntropy
 
