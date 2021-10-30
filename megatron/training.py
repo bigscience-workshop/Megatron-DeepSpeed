@@ -149,18 +149,25 @@ def pretrain(train_valid_test_dataset_provider,
         train_data_iterator = [data_iterators[0] for data_iterators in all_data_iterators]
         valid_data_iterator = [data_iterators[1] for data_iterators in all_data_iterators]
         test_data_iterator = [data_iterators[2] for data_iterators in all_data_iterators]
-        extra_eval_data_iterators = [data_iterators[3] for data_iterators in all_data_iterators]
     else:
-        train_data_iterator, valid_data_iterator, test_data_iterator, extra_eval_data_iterators \
-            = build_train_valid_test_data_iterators(
+        train_data_iterator, valid_data_iterator, test_data_iterator = build_train_valid_test_data_iterators(
                 train_valid_test_dataset_provider)
-    if len(args.data_path) > 1:
+
+    if args.data_path is not None and len(args.data_path) > 1:
         prefixes, weights = analyze_data_prefix(args.data_path)
+        setattr(args, "data_prefixes", prefixes)
+        setattr(args, "data_weights", weights)
+    elif args.train_weighted_split_paths is not None and len(args.train_weighted_split_paths[0]) > 1:
+        paths = args.train_weighted_split_paths[0]
+        weights = args.train_weighted_split_weights[0]
+        data_prefix = [j for i in [[w,p] for w,p in zip(weights, paths)] for j in i]
+        prefixes, weights = analyze_data_prefix(data_prefix)
         setattr(args, "data_prefixes", prefixes)
         setattr(args, "data_weights", weights)
     else:
         setattr(args, "data_prefixes", None)
         setattr(args, "data_weights", None)
+
     timers('train/valid/test-data-iterators-setup').stop()
     print_datetime('after dataloaders are built')
 
@@ -173,15 +180,17 @@ def pretrain(train_valid_test_dataset_provider,
     if args.do_train and args.train_iters > 0:
         iteration = train(forward_step_func,
                           model, optimizer, lr_scheduler,
-                          train_data_iterator, valid_data_iterator, 
-                          extra_eval_data_iterators)
+                          train_data_iterator, valid_data_iterator)
     print_datetime('after training is done')
 
     if args.do_valid:
-        prefix = 'the end of training for val data'
-        evaluate_and_print_results(prefix, forward_step_func,
-                                   valid_data_iterator, model,
-                                   iteration, False)
+        names = args.valid_weighted_split_names
+        names = names if names is not None else ['valid'] * len(valid_data_iterator)
+        for iterator, name in zip(valid_data_iterator, names):
+            prefix = 'the end of training for val data'
+            evaluate_and_print_results(prefix, forward_step_func,
+                                       iterator, model,
+                                       iteration, False, data_group_name=name)
 
     if args.save and iteration != 0:
         save_checkpoint(iteration, model, optimizer, lr_scheduler)
@@ -189,9 +198,12 @@ def pretrain(train_valid_test_dataset_provider,
     if args.do_test:
         # Run on test data.
         prefix = 'the end of training for test data'
-        evaluate_and_print_results(prefix, forward_step_func,
-                                   test_data_iterator, model,
-                                   0, True)
+        names = args.test_weighted_split_names
+        names = names if names is not None else ['test'] * len(test_data_iterator)
+        for iterator, name in zip(test_data_iterator, names):
+            evaluate_and_print_results(prefix, forward_step_func,
+                                       test_data_iterator, model,
+                                       0, True, data_group_name=name)
 
     codecarbon_tracker_stop()
 
@@ -630,14 +642,14 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
         if args.curriculum_learning:
             writer.add_scalar('curriculum_seqlen', args.curriculum_seqlen,
                               iteration)
-       
+
         if args.data_weights is not None:
             for prefix, weight in zip(args.data_prefixes, args.data_weights):
                 name = prefix.split(",")[-1]
                 writer.add_scalar(f'samples-per-dataset/{name}', args.consumed_train_samples * weight, args.consumed_train_samples)
                 writer.add_scalar(f'steps-per-dataset/{name}', iteration * weight, iteration)
                 writer.add_scalar(f'tokens-per-dataset/{name}', args.consumed_train_tokens * weight, args.consumed_train_tokens)
-                
+
         if args.log_timers_to_tensorboard:
             timers.write(timers_to_log, writer, iteration,
                          normalizer=total_iterations)
@@ -712,7 +724,7 @@ def save_checkpoint_and_time(iteration, model, optimizer, lr_scheduler):
 
 
 def train(forward_step_func, model, optimizer, lr_scheduler,
-          train_data_iterator, valid_data_iterator, extra_eval_data_iterators=None):
+          train_data_iterator, valid_data_iterator):
     """Train the model function."""
     args = get_args()
     timers = get_timers()
@@ -720,7 +732,6 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
     if mpu.get_data_parallel_rank() == 0:
         print(f"Number of parameters: {get_parameters_in_billions(model)} billion")
         print(f"Number of parameters without embeddings: {get_parameters_in_billions(model, exclude_embeddings=True)} billion")
-        
     # Write args to tensorboard
     write_args_to_tensorboard()
 
@@ -794,16 +805,12 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
         if args.eval_interval and iteration % args.eval_interval == 0 and \
            args.do_valid:
             prefix = 'iteration {}'.format(iteration)
-            evaluate_and_print_results(prefix, forward_step_func,
-                                       valid_data_iterator, model,
-                                       iteration, False)
-
-            if extra_eval_data_iterators is not None:
-                # log evaluation metrics for extra validation datasets
-                for iterator, ds_name in zip(extra_eval_data_iterators, args.extra_eval_data_name):
-                        evaluate_and_print_results(prefix, forward_step_func,
-                                iterator, model,
-                                iteration, False, ds_name=ds_name)
+            names = args.valid_weighted_split_names
+            names = names if names is not None else ['valid'] * len(valid_data_iterator)
+            for iterator, name in zip(valid_data_iterator, names):
+                evaluate_and_print_results(prefix, forward_step_func,
+                                           iterator, model,
+                                           iteration, False, data_group_name = name)
 
         # Checkpointing
         saved_checkpoint = False
@@ -836,7 +843,6 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
             torch.distributed.barrier()
             print_datetime('exiting program at iteration {}'.format(iteration))
             sys.exit()
-
 
     return iteration
 
@@ -905,7 +911,7 @@ def evaluate_and_print_results(prefix, forward_step_func,
     args = get_args()
     writer = get_tensorboard_writer()
 
-    ds_name = kwargs.get("ds_name", None)
+    ds_name = kwargs.get("data_group_name", None)
     # print corresponding dataset name (used for extra-eval dataset option)
     tf_plot_prefix = f"lm-loss/eval/{ds_name}" if ds_name else "lm-loss-validation"
 
@@ -993,29 +999,37 @@ def build_train_valid_test_data_iterators(
         print_rank_0('    test:       {}'.format(train_val_test_num_samples[2]))
 
         # Build the datasets.
-        train_ds, valid_ds, test_ds, extra_eval_ds = build_train_valid_test_datasets_provider(
+        train_ds, valid_ds, test_ds = build_train_valid_test_datasets_provider(
         train_val_test_num_samples)
 
+        # if dataloading option is not 2 convert to list to allow
+        # same interface for multiple data groups
+        # for validation and testing in option 2
+        if type(train_ds) != list and train_ds is not None:
+            train_ds = [train_ds]
+        if type(valid_ds) != list and valid_ds is not None:
+            valid_ds = [valid_ds]
+        if type(test_ds) != list and test_ds is not None:
+            test_ds = [test_ds]
+
         # Build dataloders.
+        assert len(train_ds) == 1, "only one training dataset group is allowed"
+
+        # train_dataloader is a single item while valid_dataloader
+        # and test_dataloader are arrays
         train_dataloader = build_pretraining_data_loader(
-            train_ds, args.consumed_train_samples)
+            train_ds[0], args.consumed_train_samples)
 
-        valid_dataloader = build_pretraining_data_loader(
-            valid_ds, args.consumed_valid_samples)
-
-        test_dataloader = build_pretraining_data_loader(test_ds, 0)
-
-        if extra_eval_ds:
-            extra_eval_dataloaders = [build_pretraining_data_loader(ds, args.consumed_valid_samples) 
-                                            for ds in extra_eval_ds]
-        else:
-            extra_eval_dataloaders = None
+        valid_dataloader = [build_pretraining_data_loader(d, args.consumed_valid_samples)\
+                            for d in valid_ds] \
+                            if valid_ds is not None else None
+        test_dataloader = [build_pretraining_data_loader(d, 0) for d in test_ds] \
+                            if test_ds is not None else None
 
         # Flags to know if we need to do training/validation/testing.
         do_train = train_dataloader is not None and args.train_iters > 0
         do_valid = valid_dataloader is not None and args.eval_iters > 0
         do_test = test_dataloader is not None and args.eval_iters > 0
-        do_extra_eval = extra_eval_dataloaders is not None and args.eval_iters > 0 
 
         # Need to broadcast num_tokens and num_type_tokens.
         flags = torch.cuda.LongTensor(
@@ -1043,23 +1057,16 @@ def build_train_valid_test_data_iterators(
         train_data_iterator = None
 
     if valid_dataloader is not None:
-        valid_data_iterator = iter(valid_dataloader) if dl_type == 'single' \
+        valid_data_iterator = [iter(vdl) if dl_type == 'single' \
                               else iter(cyclic_iter(valid_dataloader))
+                                 for vdl in valid_dataloader]
     else:
         valid_data_iterator = None
 
-    if do_extra_eval is not None and extra_eval_dataloaders is not None: \
-            extra_eval_data_iterators = [iter(loader) \
-                            if dl_type == 'single' \
-                            else iter(cyclic_iter(loader))
-                            for loader in extra_eval_dataloaders]
-    else:
-        extra_eval_data_iterators = None
-
     if test_dataloader is not None:
-        test_data_iterator = iter(test_dataloader) if dl_type == 'single' \
+        test_data_iterator = [iter(tdl) if dl_type == 'single' \
                              else iter(cyclic_iter(test_dataloader))
+                            for tdl in test_dataloader]
     else:
         test_data_iterator = None
-
-    return train_data_iterator, valid_data_iterator, test_data_iterator, extra_eval_data_iterators
+    return train_data_iterator, valid_data_iterator, test_data_iterator

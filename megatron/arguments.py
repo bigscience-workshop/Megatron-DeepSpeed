@@ -99,9 +99,10 @@ def parse_args(extra_args_provider=None, defaults={},
             "are mutually exclusive i.e. cannot be set together."
 
     if args.data_path:
-        assert args.train_weighted_split_paths is None and \
-                args.valid_weighted_split_paths is None and \
-                args.test_weighted_split_paths is None , message\
+        assert args.train_weighted_split_paths is None, message
+        setattr(args,"valid_weighted_split_names", None)
+        setattr(args,"valid_weighted_split_weights", None)
+        setattr(args,"valid_weighted_split_splits", None)
 
         # args.split default value in the args is None it is set here in order
         # to check that it does not to overlap with the 2nd mode of data loading
@@ -713,13 +714,43 @@ def _add_data_args(parser):
         def __call__(self, parser, args, values, option_string=None):
 
             if option_string == "--train-weighted-split-paths":
-                assert len(values) == 1, "Only 1 dataset group is allowed to \
-                pass for the argument --train-weighted-split-paths"
+                assert len(values) == 1, 'Only 1 dataset group is allowed to'
+                'be passed for the argument --train-weighted-split-paths'
+
+            # make sure string given in the correct format
+            err_message = 'Each data group should be input on the following format'
+            '"GIVEN_NAME WEIGHT1 START:END PATH1, WEIGHT2 START:END PATH2"'
+            'where START < END'
+            for v in values:
+                # each prefix consists several datasets separated by commas
+                prefix = ":".join(v.split(":")[1:]) # remove GIVEN_NAME
+                datasets = prefix.split(",")
+                # check if each dataset is formatted like `WEIGHT START:END PATH`
+                for d in datasets:
+                    assert len(d.split()) == 3, err_message
+                    start, end = d.split()[1].split(":")
+                    assert float(start) < float(end), err_message
 
             names = [v.split(":")[0] for v in values]
-            paths = [":".join(v.split(":")[1:]).strip() for v in values]
+
+            prefixes = [":".join(v.split(":")[1:]).strip() for v in values]
+            weights = [[d.split()[0] for d in p.split(",")] for p in prefixes]
+            splits = [[d.split()[1] for d in p.split(",")] for p in prefixes]
+            paths = [[d.split()[2] for d in p.split(",")] for p in prefixes]
+
+            # # to keep consistency with Option 1 of data loading (through --data-path)
+            # #  paths will contain strings on the following form
+            # # "WEIGHTS1 PATH1 WEIGHTS2 PATH2 WEIGHTS3 PATH3" for each dataset group
+            # # while data will be parsed in additional arguments below
+            # paths_option1_style = []
+            # for p, w in zip(paths, weights):
+            #   paths_option1_style.append(" ".join([f"{w_i} {p_i}" for p_i, w_i in zip(p,w)]))
+            # setattr(args, self.dest, paths_option1_style)
             setattr(args, self.dest, paths)
+            setattr(args, self.dest.replace("paths", "weights"), weights)
+            setattr(args, self.dest.replace("paths", "splits"), splits)
             setattr(args, self.dest.replace("paths","names"), names)
+
 
     group.add_argument('--train-weighted-split-paths', nargs='*', default=None,
                     help='Weights, splits and paths to groups of datasets'
