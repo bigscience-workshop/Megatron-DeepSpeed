@@ -88,10 +88,11 @@ def build_dataset_group(dataset_group_name, paths, weights, splits, data_impl,
     # Single dataset.
     if len(paths) == 1:
         dataset =  _build_single_datasets(paths[0],
-                                                data_impl,
-                                                train_valid_test_num_samples,
-                                                seq_length, seed, skip_warmup,
-                                                dataset_group_name, train_valid_test)
+                                          splits[0],
+                                          data_impl,
+                                          train_valid_test_num_samples,
+                                          seq_length, seed, skip_warmup,
+                                          dataset_group_name, train_valid_test)
         return dataset
     # Blending dataset.
     else:

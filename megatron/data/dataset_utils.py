@@ -615,7 +615,7 @@ def get_split_by_range_(range_string, size):
     # some checks that range is given in the correct form
     splits = [float(i) for i in range_string.split(":")]
     assert len(splits) == 2, "splits should be passed as start:end"
-    assert splits[0] < 1 and splits[1] < 1
+    assert splits[0] <= 1 and splits[1] <= 1
     splits_sum = sum(splits)
     assert splits_sum > 0.0
     splits_index = [round(s * float(size)) for s in splits]
