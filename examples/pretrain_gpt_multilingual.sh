@@ -9,7 +9,6 @@ WORLD_SIZE=1
 DATA_PATH_EN=<Specify path and file prefix>_text_document
 DATA_PATH_AR=<Specify path and file prefix>_text_document
 DATA_PATH_KR=<Specify path and file prefix>_text_document
-DATA_PATH_KR=<Specify path and file prefix>_text_document
 DATA_PATH_JP=<Specify path and file prefix>_text_document
 
 CHECKPOINT_PATH=<Specify path>
@@ -27,11 +26,19 @@ deepspeed --num_gpus 1 pretrain_gpt.py \
        --lr-decay-iters 320000 \
        --save $CHECKPOINT_PATH \
        --load $CHECKPOINT_PATH \
-       --data-path 0.01 $DATA_PATH_EN 0.32 $DATA_PATH_KR 0.33 $DATA_PATH_JP 0.33 $DATA_PATH_AR \
-       --extra-eval-data-path \
-       VALID-EN 1.0 $DATA_PATH_EN, \
-       VALID-FR 1.0 $DATA_PATH_FR, \
-       VALID-KR-JP-AR 0.3 $DATA_PATH_KR 0.3 $DATA_PATH_JP 0.3 $DATA_PATH_AR \
+       --train-weighted-split-paths "TRAIN: 0.3 0:0.6 $DATA_EN 1 0:0.6 $DATA_AR 1 0:0.6 $DATA_KR 1 0:0.6 $DATA_JP" \
+       --valid-weighted-split-paths \
+       "VALID_EN: 1 0.6:0.8 $DATA_EN" \
+       "VALID_AR: 1 0.6:0.8 $DATA_AR" \
+       "VALID_JP: 1 0.6:0.8 $DATA_KR" \
+       "VALID_KR: 1 0.6:0.8 $DATA_JP" \
+       "VALID_EN-AR-JP-KR_BALANCED: 1 0.6:0.8 $DATA_EN, 1 0.6:0.8 $DATA_AR, 1 0.6:0.8 $DATA_JP, 1 0.6:0.8 $DATA_KR" \
+       --test-weighted-split-paths \
+       "TEST_EN: 1 0.8:1 $DATA_EN" \
+       "TEST_AR: 1 0.8:1 $DATA_AR" \
+       "TEST_JP: 1 0.8:1 $DATA_JP" \
+       "TEST_KR: 1 0.8:1 $DATA_KR" \
+       "TEST_EN-AR-JP-KR_BALANCED: 1 0.8:1 $DATA_EN, 1 0.8:1 $DATA_AR, 1 0.8:1 $DATA_JP, 1 0.8:1 $DATA_KR" \
        --vocab-file gpt2-vocab.json \
        --merge-file gpt2-merges.txt \
        --data-impl mmap \
