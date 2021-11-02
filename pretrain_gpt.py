@@ -229,8 +229,8 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
                                         (not args.mmap_warmup),
                                         train_valid_test=s)
                 eval(f"{s}_ds").append(d)
-        else:
-            raise NotImplementedError("No dataloading argument passed")
+    else:
+        raise NotImplementedError("No dataloading argument passed")
 
     print_rank_0("> finished creating GPT datasets ...")
     return train_ds, valid_ds, test_ds
