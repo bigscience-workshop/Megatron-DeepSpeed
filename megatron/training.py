@@ -201,8 +201,9 @@ def pretrain(train_valid_test_dataset_provider,
         names = args.test_weighted_split_names
         names = names if names is not None else ['test'] * len(test_data_iterator)
         for iterator, name in zip(test_data_iterator, names):
+            print(iterator)
             evaluate_and_print_results(prefix, forward_step_func,
-                                       test_data_iterator, model,
+                                       iterator, model,
                                        0, True, data_group_name=name)
 
     codecarbon_tracker_stop()
@@ -912,7 +913,7 @@ def evaluate_and_print_results(prefix, forward_step_func,
     writer = get_tensorboard_writer()
 
     ds_name = kwargs.get("data_group_name", None)
-    # print corresponding dataset name (used for extra-eval dataset option)
+    # print corresponding dataset name (used for multiple validation datasets)
     tf_plot_prefix = f"lm-loss/eval/{ds_name}" if ds_name else "lm-loss-validation"
 
     total_loss_dict = evaluate(forward_step_func, data_iterator, model, verbose)

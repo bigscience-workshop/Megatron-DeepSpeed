@@ -100,9 +100,13 @@ def parse_args(extra_args_provider=None, defaults={},
 
     if args.data_path:
         assert args.train_weighted_split_paths is None, message
-        setattr(args,"valid_weighted_split_names", None)
-        setattr(args,"valid_weighted_split_weights", None)
-        setattr(args,"valid_weighted_split_splits", None)
+        setattr(args, "valid_weighted_split_names", None)
+        setattr(args, "valid_weighted_split_weights", None)
+        setattr(args, "valid_weighted_split_splits", None)
+
+        setattr(args, "test_weighted_split_names", None)
+        setattr(args, "test_weighted_split_weights", None)
+        setattr(args, "test_weighted_split_splits", None)
 
         # args.split default value in the args is None it is set here in order
         # to check that it does not to overlap with the 2nd mode of data loading
