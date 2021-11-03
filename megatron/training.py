@@ -914,7 +914,7 @@ def evaluate_and_print_results(prefix, forward_step_func,
 
     ds_name = kwargs.get("data_group_name", None)
     # print corresponding dataset name (used for multiple validation datasets)
-    tf_plot_prefix = f"lm-loss/eval/{ds_name}" if ds_name else "lm-loss-validation"
+    tf_plot_prefix = f"lm-loss-validation/{ds_name}" if ds_name else "lm-loss-validation"
 
     total_loss_dict = evaluate(forward_step_func, data_iterator, model, verbose)
     string = '{} loss at {} | '.format(ds_name, prefix) if ds_name is not None\
@@ -930,10 +930,10 @@ def evaluate_and_print_results(prefix, forward_step_func,
             writer.add_scalar(f'{tf_plot_prefix}/{key} validation vs samples',
                               total_loss_dict[key].item(),
                               args.consumed_train_samples)
-            writer.add_scalar(f'lm-loss-validation/{key} validation vs tokens',
+            writer.add_scalar(f'{tf_plot_prefix}/{key} validation vs tokens',
                               total_loss_dict[key].item(),
                               args.consumed_train_tokens)
-            writer.add_scalar(f'lm-loss-validation/{key} validation vs gigaflos (without embeddings)',
+            writer.add_scalar(f'{tf_plot_prefix}/{key} validation vs gigaflos (without embeddings)',
                               total_loss_dict[key].item(),
                               args.gigaflos_no_embeds)
             if args.log_validation_ppl_to_tensorboard:
@@ -941,9 +941,9 @@ def evaluate_and_print_results(prefix, forward_step_func,
                                   iteration)
                 writer.add_scalar(f'{tf_plot_prefix}/{key} validation ppl vs samples',
                                   ppl, args.consumed_train_samples)
-                writer.add_scalar(f'lm-loss-validation/{key} validation ppl vs tokens',
+                writer.add_scalar(f'{tf_plot_prefix}/{key} validation ppl vs tokens',
                                   ppl, args.consumed_train_tokens)
-                writer.add_scalar(f'lm-loss-validation/{key} validation ppl vs gigaflos (without embeddings)',
+                writer.add_scalar(f'{tf_plot_prefix}/{key} validation ppl vs gigaflos (without embeddings)',
                                   ppl, args.gigaflos_no_embeds)
 
     length = len(string) + 1
