@@ -154,7 +154,7 @@ def _build_single_datasets(data_prefix, range_string, data_impl, train_valid_tes
         if splits[1] > splits[0]:
             documents = np.arange(start=splits[0], stop=splits[1],
                                   step=1, dtype=np.int32)
-            dataset = GPTDataset(train_valid_test, data_prefix,
+            dataset = GPTDataset(name, data_prefix,
                                   documents, indexed_dataset,
                                   train_valid_test_num_samples[index],
                                   seq_length, seed)
@@ -276,7 +276,7 @@ class GPTDataset(torch.utils.data.Dataset):
 
 
 def _build_index_mappings(name, data_prefix, documents, sizes,
-                          num_samples, seq_length, seed):
+                          num_samples, seq_length, seed, cutoff_last_epoch=0.95):
     """Build doc-idx, sample-idx, and shuffle-idx.
     doc-idx: is an array (ordered) of documents to be used in training.
     sample-idx: is the start document index and document offset for each
@@ -329,21 +329,19 @@ def _build_index_mappings(name, data_prefix, documents, sizes,
                 num_samples_per_epoch = (tokens_per_epoch - 1) // seq_length
                 assert last_epoch_num_samples <= num_samples_per_epoch, \
                     f'last epoch number of samples {last_epoch_num_samples} exceeded max value {num_samples_per_epoch}.'
-                # If we have less than 80% of the samples for the last epoch,
+                # If we have less than cutoff_last_epoch * samples_per_epoch of the samples for the last epoch,
                 # seperate out the epoch and treat it differently.
-                # Note: the 80% number is just based on common sense and can
-                # be adjusted if needed.
                 separate_last_epoch = (last_epoch_num_samples <
-                                       int(0.80 * num_samples_per_epoch))
+                                       int(cutoff_last_epoch * num_samples_per_epoch))
                 if separate_last_epoch:
                     string = ' > last epoch number of samples ({}) is smaller '\
-                             'than 80% of number of samples per epoch ({}), '\
+                             'than {}% of number of samples per epoch ({}), '\
                              'setting separate_last_epoch to True'
                 else:
                     string = ' > last epoch number of samples ({}) is larger '\
-                             'than 80% of number of samples per epoch ({}), '\
+                             'than {}% of number of samples per epoch ({}), '\
                              'setting separate_last_epoch to False'
-                print(string.format(last_epoch_num_samples,
+                print(string.format(last_epoch_num_samples, cutoff_last_epoch * 100,
                                     num_samples_per_epoch), flush=True)
 
             # doc-idx.
