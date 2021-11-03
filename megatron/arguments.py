@@ -16,6 +16,7 @@
 """Megatron arguments."""
 
 import argparse
+import collections
 import os
 import re
 
@@ -282,6 +283,18 @@ def parse_args(extra_args_provider=None, defaults={},
     # Activation function
     if args.glu_activation is not None and args.bias_gelu_fusion:
         raise ValueError("if glu-activation is used, please set --no-bias-gelu-fusion")
+    
+    # Train skip iterations
+    if args.skip_train_iteration_range is not None:
+        args.skip_train_iteration_range = [
+            list(map(int, range_.split("-"))) for range_ in args.skip_train_iteration_range
+        ]
+        args.skip_train_iteration_range.sort()
+        for (start, end) in args.skip_train_iteration_range:
+            assert end >= start, \
+            'end of skip range cannot be smaller than start of skip range'
+        # NOTE: to skip a single iteration, need iter_idx-iter_idx
+        args.skip_train_iteration_range = collections.deque(args.skip_train_iteration_range)
 
     _print_args(args)
     return args
@@ -510,6 +523,8 @@ def _add_training_args(parser):
                        help='Use Torch Adam as optimizer on CPU.')
     group.add_argument('--codecarbon-dir', type=str, default=None,
                        help='Write CodeCarbon logs to this directory.')
+    group.add_argument('--skip-train-iteration-range', type=str, nargs='+', default=None,
+                       help='Iterations to skip in dash-separated notation.')
 
     return parser
 
