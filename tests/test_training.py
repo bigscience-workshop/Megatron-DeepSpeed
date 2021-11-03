@@ -391,7 +391,7 @@ class MegDSTestTraining(TestCasePlus):
         tensorboard_files = glob.glob(f"{output_dir}/tensorboard/events*")
         self.assertEqual(len(tensorboard_files), 2, "tensorboard files")
 
-    @parameterized.expand(["prefix", "gpt"])
+    @parameterized.expand(["gpt", "prefix", "no_eval"])
     def test_mode2_dataloading(self, variation):
         src_dir = self.src_dir
         data_dir = f"{self.data_dir}/gpt2"
@@ -438,7 +438,6 @@ class MegDSTestTraining(TestCasePlus):
             --merge-file {data_dir}/gpt2-tiny-merges.txt
             --vocab-file {data_dir}/gpt2-tiny-vocab.json
             --save {output_dir}/checkpoints
-            --load {output_dir}/checkpoints
             --tensorboard-dir {output_dir}/tensorboard
             --tensorboard-queue-size 5
             --log-timers-to-tensorboard
@@ -447,11 +446,11 @@ class MegDSTestTraining(TestCasePlus):
         """.split()
 
         data_args = [
-            "--train-weighted-split-paths", f'TRAIN: 1 0:0.95 {data_dir}/meg-gpt2-openwebtext_text_document, 0.3 0:0.90 {data_dir}/meg-gpt2-openwebtext_text_document',
-            "--valid-weighted-split-paths", f'VALID1: 1 0.95:0.98 {data_dir}/meg-gpt2-openwebtext_text_document, 0.3 0.90:0.99 {data_dir}/meg-gpt2-openwebtext_text_document',
-                                            f'VALID2: 0.5 0.95:0.97 {data_dir}/meg-gpt2-openwebtext_text_document, 0.5 0.90:0.98 {data_dir}/meg-gpt2-openwebtext_text_document',
-            "--test-weighted-split-paths", f'TEST1: 1 0.97:1 {data_dir}/meg-gpt2-openwebtext_text_document, 0.3 0.98:1 {data_dir}/meg-gpt2-openwebtext_text_document',
-                                           f'TEST2: 0.5 0.97:1 {data_dir}/meg-gpt2-openwebtext_text_document, 0.5 0.98:1 {data_dir}/meg-gpt2-openwebtext_text_document']
+            "--train-weighted-split-paths", f'TRAIN: 1 0:0.95 {data_dir}/meg-gpt2-openwebtext_text_document, 0.3 0:0.90 {data_dir}/meg-gpt2-openwebtext_text_document']
+
+        if variation != "no_eval":
+            data_args += ["--valid-weighted-split-paths", f'VALID1: 1 0.95:0.98 {data_dir}/meg-gpt2-openwebtext_text_document, 0.3 0.90:0.99 {data_dir}/meg-gpt2-openwebtext_text_document',
+                                            f'VALID2: 0.5 0.95:0.97 {data_dir}/meg-gpt2-openwebtext_text_document, 0.5 0.90:0.98 {data_dir}/meg-gpt2-openwebtext_text_document']
 
         ds_args = f"""
             --deepspeed
@@ -462,10 +461,8 @@ class MegDSTestTraining(TestCasePlus):
 
         if variation == "prefix":
             script = [f"{src_dir}/pretrain_prefix_lm.py"]
-        elif variation == "gpt":
-            script = [f"{src_dir}/pretrain_gpt.py"]
         else:
-            raise NotImplementedError(f"Unknown variation {variation}")
+            script = [f"{src_dir}/pretrain_gpt.py"]
         launcher = get_launcher(num_gpus)
 
         cmd = launcher + script + args + data_args + ds_args
@@ -482,30 +479,9 @@ class MegDSTestTraining(TestCasePlus):
         # test reports
         self.assertIn("consumed samples", cs.out)
 
-        # test there should be no checkpoint this round
-        self.assertIn(f"Unable to find latest file at {output_dir}/checkpoints/latest", cs.out)
-
         # test checkpoint saving
         self.assertIn("successfully saved checkpoint at iteration", cs.out)
 
         # test tensorboard
         tensorboard_files = glob.glob(f"{output_dir}/tensorboard/events*")
         self.assertEqual(len(tensorboard_files), 1, "tensorboard files")
-
-        # 2. test training from checkpoint: resume
-        # now do it again, this time resuming from the checkpoint
-        with CaptureStdout() as cs:
-            execute_subprocess_async(cmd, env=self.get_env())
-
-        # test checkpoint loading
-        self.assertIn(f"successfully loaded checkpoint from {output_dir}/checkpoints", cs.out)
-
-        # test reports
-        self.assertIn("consumed samples", cs.out)
-
-        # test checkpoint saving
-        self.assertIn("successfully saved checkpoint at iteration", cs.out)
-
-        # test tensorboard (1 file from the first run, plus 1 now)
-        tensorboard_files = glob.glob(f"{output_dir}/tensorboard/events*")
-        self.assertEqual(len(tensorboard_files), 2, "tensorboard files")
