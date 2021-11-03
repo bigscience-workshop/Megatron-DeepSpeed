@@ -284,16 +284,22 @@ def parse_args(extra_args_provider=None, defaults={},
     if args.glu_activation is not None and args.bias_gelu_fusion:
         raise ValueError("if glu-activation is used, please set --no-bias-gelu-fusion")
     
-    # Train skip iterations
+    # Skip train iterations
     if args.skip_train_iteration_range is not None:
         args.skip_train_iteration_range = [
             list(map(int, range_.split("-"))) for range_ in args.skip_train_iteration_range
         ]
         args.skip_train_iteration_range.sort()
-        for (start, end) in args.skip_train_iteration_range:
-            assert end >= start, \
-            'end of skip range cannot be smaller than start of skip range'
-        # NOTE: to skip a single iteration, need iter_idx-iter_idx
+        for i, range_ in enumerate(args.skip_train_iteration_range):
+            if len(range_) == 1:
+                args.skip_train_iteration_range[i].append(range_[0])
+            elif len(range_) == 2:
+                assert range_[1] >= range_[0], \
+                "end of skip range cannot be smaller than start of skip range"
+            else:
+                raise ValueError(
+                    "skip train iterations should be specified as two numbers, i.e. start-end"
+                )
         args.skip_train_iteration_range = collections.deque(args.skip_train_iteration_range)
 
     _print_args(args)
