@@ -1018,37 +1018,37 @@ def build_train_valid_test_data_iterators(
         train_dataloader = build_pretraining_data_loader(
             train_ds[0], args.consumed_train_samples)
 
+        # We collapse None and empty list as both should mean we don't run validation
         valid_dataloader = [build_pretraining_data_loader(d, args.consumed_valid_samples)\
                             for d in valid_ds] \
-                            if valid_ds is not None else None
+                            if valid_ds is not None else []
+        # We collapse None and empty list as both should mean we don't run test
         test_dataloader = [build_pretraining_data_loader(d, 0) for d in test_ds] \
-                            if test_ds is not None else None
+                            if test_ds is not None else []
 
         # Flags to know if we need to do training/validation/testing.
-        do_train = train_dataloader is not None and args.train_iters > 0
-        do_valid = valid_dataloader is not None and args.eval_iters > 0
-        do_test = test_dataloader is not None and args.eval_iters > 0
+        do_train = len(train_dataloader) > 0 and args.train_iters > 0
 
         # Need to broadcast num_tokens and num_type_tokens.
         flags = torch.cuda.LongTensor([
             int(do_train),
-            int(do_valid),
-            int(do_test),
-            len(valid_ds) if valid_ds is not None else -1,
-            len(test_ds) if test_ds is not None else -1
+            len(valid_dataloader) if args.eval_iters > 0 else 0, # eval_iters == 0 is equivalent to having no validation
+            len(test_dataloader) if args.eval_iters > 0 else 0, # eval_iters == 0 is equivalent to having no test
         ])
     else:
-        flags = torch.cuda.LongTensor([0, 0, 0, 0, 0])
+        flags = torch.cuda.LongTensor([0, 0, 0])
 
     # Broadcast num tokens.
     torch.distributed.broadcast(flags,
                                 mpu.get_tensor_model_parallel_src_rank(),
                                 group=mpu.get_tensor_model_parallel_group())
     args.do_train = flags[0].item()
-    args.do_valid = flags[1].item()
-    args.do_test = flags[2].item()
-    num_valid_ds = flags[3].item()
-    num_test_ds = flags[4].item()
+    num_valid_ds = flags[1].item()
+    num_test_ds = flags[2].item()
+    assert num_test_ds >= 0
+    assert num_valid_ds >= 0
+    args.do_valid = num_valid_ds > 0
+    args.do_test = num_test_ds > 0
 
     # Build iterators.
     dl_type = args.dataloader_type
@@ -1064,18 +1064,14 @@ def build_train_valid_test_data_iterators(
         valid_data_iterator = [iter(vdl) if dl_type == 'single' \
                               else iter(cyclic_iter(valid_dataloader))
                                  for vdl in valid_dataloader]
-    elif num_valid_ds >= 0:
-        valid_data_iterator = [None] * num_valid_ds
     else:
-        valid_data_iterator = None
+        valid_data_iterator = [None] * num_valid_ds
 
     if test_dataloader is not None:
         test_data_iterator = [iter(tdl) if dl_type == 'single' \
                              else iter(cyclic_iter(test_dataloader))
                             for tdl in test_dataloader]
-    elif num_test_ds >= 0:
-        test_data_iterator = [None] * num_test_ds
     else:
-        test_data_iterator = None
+        test_data_iterator = [None] * num_test_ds
 
     return train_data_iterator, valid_data_iterator, test_data_iterator
