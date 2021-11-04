@@ -133,8 +133,8 @@ def pretrain(train_valid_test_dataset_provider,
     # Model, optimizer, and learning rate.
     timers('model-and-optimizer-setup').start()
     model, optimizer, lr_scheduler = setup_model_and_optimizer(model_provider)
-    print(f'estimated model parameters: {get_parameters_in_billions(model)}')
-    print(f'estimated model parameters without embeddings: {get_parameters_in_billions(model, exclude_embeddings=True)}')
+    print_rank_0(f'estimated model parameters: {get_parameters_in_billions(model)}')
+    print_rank_0(f'estimated model parameters without embeddings: {get_parameters_in_billions(model, exclude_embeddings=True)}')
     timers('model-and-optimizer-setup').stop()
     print_datetime('after model, optimizer, and learning rate '
                    'scheduler are built')
@@ -201,7 +201,6 @@ def pretrain(train_valid_test_dataset_provider,
         names = args.test_weighted_split_names
         names = names if names is not None else ['test'] * len(test_data_iterator)
         for iterator, name in zip(test_data_iterator, names):
-            print(iterator)
             evaluate_and_print_results(prefix, forward_step_func,
                                        iterator, model,
                                        0, True, data_group_name=name)
@@ -811,7 +810,7 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
             for iterator, name in zip(valid_data_iterator, names):
                 evaluate_and_print_results(prefix, forward_step_func,
                                            iterator, model,
-                                           iteration, False, data_group_name = name)
+                                           iteration, False, data_group_name=name)
 
         # Checkpointing
         saved_checkpoint = False
@@ -980,38 +979,37 @@ def build_train_valid_test_data_iterators(
         args.consumed_valid_samples = (args.iteration // args.eval_interval) * \
             args.eval_iters * args.global_batch_size
 
+    # Number of train/valid/test samples.
+    if args.train_samples:
+        train_samples = args.train_samples
+    else:
+        train_samples = args.train_iters * args.global_batch_size
+    eval_iters = (args.train_iters // args.eval_interval + 1) * \
+                 args.eval_iters
+    test_iters = args.eval_iters
+    train_val_test_num_samples = [train_samples,
+                                  eval_iters * args.global_batch_size,
+                                  test_iters * args.global_batch_size]
+    print_rank_0(' > datasets target sizes (minimum size):')
+    print_rank_0('    train:      {}'.format(train_val_test_num_samples[0]))
+    print_rank_0('    validation: {}'.format(train_val_test_num_samples[1]))
+    print_rank_0('    test:       {}'.format(train_val_test_num_samples[2]))
+
+    # Build the datasets.
+    train_ds, valid_ds, test_ds = build_train_valid_test_datasets_provider(train_val_test_num_samples)
+
+    # if dataloading option is not 2 convert to list to allow
+    # same interface for multiple data groups
+    # for validation and testing in option 2
+    if type(train_ds) != list and train_ds is not None:
+        train_ds = [train_ds]
+    if type(valid_ds) != list and valid_ds is not None:
+        valid_ds = [valid_ds]
+    if type(test_ds) != list and test_ds is not None:
+        test_ds = [test_ds]
+
     # Data loader only on rank 0 of each model parallel group.
     if mpu.get_tensor_model_parallel_rank() == 0:
-
-        # Number of train/valid/test samples.
-        if args.train_samples:
-            train_samples = args.train_samples
-        else:
-            train_samples = args.train_iters * args.global_batch_size
-        eval_iters = (args.train_iters // args.eval_interval + 1) * \
-                     args.eval_iters
-        test_iters = args.eval_iters
-        train_val_test_num_samples = [train_samples,
-                                      eval_iters * args.global_batch_size,
-                                      test_iters * args.global_batch_size]
-        print_rank_0(' > datasets target sizes (minimum size):')
-        print_rank_0('    train:      {}'.format(train_val_test_num_samples[0]))
-        print_rank_0('    validation: {}'.format(train_val_test_num_samples[1]))
-        print_rank_0('    test:       {}'.format(train_val_test_num_samples[2]))
-
-        # Build the datasets.
-        train_ds, valid_ds, test_ds = build_train_valid_test_datasets_provider(
-        train_val_test_num_samples)
-
-        # if dataloading option is not 2 convert to list to allow
-        # same interface for multiple data groups
-        # for validation and testing in option 2
-        if type(train_ds) != list and train_ds is not None:
-            train_ds = [train_ds]
-        if type(valid_ds) != list and valid_ds is not None:
-            valid_ds = [valid_ds]
-        if type(test_ds) != list and test_ds is not None:
-            test_ds = [test_ds]
 
         # Build dataloders.
         assert len(train_ds) == 1, "only one training dataset group is allowed"
@@ -1062,12 +1060,12 @@ def build_train_valid_test_data_iterators(
                               else iter(cyclic_iter(valid_dataloader))
                                  for vdl in valid_dataloader]
     else:
-        valid_data_iterator = None
+        valid_data_iterator = [None] * len(valid_ds)
 
     if test_dataloader is not None:
         test_data_iterator = [iter(tdl) if dl_type == 'single' \
                              else iter(cyclic_iter(test_dataloader))
                             for tdl in test_dataloader]
     else:
-        test_data_iterator = None
+        test_data_iterator = [None] * len(valid_ds)
     return train_data_iterator, valid_data_iterator, test_data_iterator
