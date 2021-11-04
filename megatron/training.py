@@ -751,6 +751,31 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
     report_memory_flag = True
     while iteration < args.train_iters and (args.train_tokens is None or \
         args.consumed_train_tokens < args.train_tokens):
+        if (
+            args.skip_train_iteration_range
+            and iteration == args.skip_train_iteration_range[0][0]
+            and train_data_iterator is not None
+        ):
+            _, end = args.skip_train_iteration_range.popleft()
+            while iteration <= end:
+                _ = next(train_data_iterator)
+                # TODO: refactor copied code
+                iteration += 1
+                args.iteration = iteration
+                update_num_microbatches(args.consumed_train_samples)
+                new_samples = mpu.get_data_parallel_world_size() * \
+                                       args.micro_batch_size * \
+                                       get_num_microbatches()
+                args.consumed_train_samples += new_samples
+                if args.curriculum_learning and \
+                    args.pipeline_model_parallel_size >= 1:
+                    args.curriculum_seqlen = args.curriculum_scheduler.update_difficulty( \
+                            args.iteration + 1)
+                if args.curriculum_learning:
+                    args.consumed_train_tokens += new_samples * args.curriculum_seqlen
+                else:
+                    args.consumed_train_tokens += new_samples * args.seq_length
+            continue
         update_num_microbatches(args.consumed_train_samples)
         if args.deepspeed:
             # inform deepspeed of any batch size changes
