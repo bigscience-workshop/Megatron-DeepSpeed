@@ -979,37 +979,36 @@ def build_train_valid_test_data_iterators(
         args.consumed_valid_samples = (args.iteration // args.eval_interval) * \
             args.eval_iters * args.global_batch_size
 
-    # Number of train/valid/test samples.
-    if args.train_samples:
-        train_samples = args.train_samples
-    else:
-        train_samples = args.train_iters * args.global_batch_size
-    eval_iters = (args.train_iters // args.eval_interval + 1) * \
-                 args.eval_iters
-    test_iters = args.eval_iters
-    train_val_test_num_samples = [train_samples,
-                                  eval_iters * args.global_batch_size,
-                                  test_iters * args.global_batch_size]
-    print_rank_0(' > datasets target sizes (minimum size):')
-    print_rank_0('    train:      {}'.format(train_val_test_num_samples[0]))
-    print_rank_0('    validation: {}'.format(train_val_test_num_samples[1]))
-    print_rank_0('    test:       {}'.format(train_val_test_num_samples[2]))
-
-    # Build the datasets.
-    train_ds, valid_ds, test_ds = build_train_valid_test_datasets_provider(train_val_test_num_samples)
-
-    # if dataloading option is not 2 convert to list to allow
-    # same interface for multiple data groups
-    # for validation and testing in option 2
-    if type(train_ds) != list and train_ds is not None:
-        train_ds = [train_ds]
-    if type(valid_ds) != list and valid_ds is not None:
-        valid_ds = [valid_ds]
-    if type(test_ds) != list and test_ds is not None:
-        test_ds = [test_ds]
-
     # Data loader only on rank 0 of each model parallel group.
     if mpu.get_tensor_model_parallel_rank() == 0:
+        # Number of train/valid/test samples.
+        if args.train_samples:
+            train_samples = args.train_samples
+        else:
+            train_samples = args.train_iters * args.global_batch_size
+        eval_iters = (args.train_iters // args.eval_interval + 1) * \
+                     args.eval_iters
+        test_iters = args.eval_iters
+        train_val_test_num_samples = [train_samples,
+                                      eval_iters * args.global_batch_size,
+                                      test_iters * args.global_batch_size]
+        print_rank_0(' > datasets target sizes (minimum size):')
+        print_rank_0('    train:      {}'.format(train_val_test_num_samples[0]))
+        print_rank_0('    validation: {}'.format(train_val_test_num_samples[1]))
+        print_rank_0('    test:       {}'.format(train_val_test_num_samples[2]))
+
+        # Build the datasets.
+        train_ds, valid_ds, test_ds = build_train_valid_test_datasets_provider(train_val_test_num_samples)
+
+        # if dataloading option is not 2 convert to list to allow
+        # same interface for multiple data groups
+        # for validation and testing in option 2
+        if type(train_ds) != list and train_ds is not None:
+            train_ds = [train_ds]
+        if type(valid_ds) != list and valid_ds is not None:
+            valid_ds = [valid_ds]
+        if type(test_ds) != list and test_ds is not None:
+            test_ds = [test_ds]
 
         # Build dataloders.
         assert len(train_ds) == 1, "only one training dataset group is allowed"
@@ -1031,10 +1030,15 @@ def build_train_valid_test_data_iterators(
         do_test = test_dataloader is not None and args.eval_iters > 0
 
         # Need to broadcast num_tokens and num_type_tokens.
-        flags = torch.cuda.LongTensor(
-            [int(do_train), int(do_valid), int(do_test)])
+        flags = torch.cuda.LongTensor([
+            int(do_train),
+            int(do_valid),
+            int(do_test),
+            len(valid_ds) if valid_ds is not None else -1,
+            len(test_ds) if test_ds is not None else -1
+        ])
     else:
-        flags = torch.cuda.LongTensor([0, 0, 0])
+        flags = torch.cuda.LongTensor([0, 0, 0, 0, 0])
 
     # Broadcast num tokens.
     torch.distributed.broadcast(flags,
@@ -1043,7 +1047,8 @@ def build_train_valid_test_data_iterators(
     args.do_train = flags[0].item()
     args.do_valid = flags[1].item()
     args.do_test = flags[2].item()
-
+    num_valid_ds = flags[3].item()
+    num_test_ds = flags[4].item()
 
     # Build iterators.
     dl_type = args.dataloader_type
@@ -1059,13 +1064,18 @@ def build_train_valid_test_data_iterators(
         valid_data_iterator = [iter(vdl) if dl_type == 'single' \
                               else iter(cyclic_iter(valid_dataloader))
                                  for vdl in valid_dataloader]
+    elif num_valid_ds >= 0:
+        valid_data_iterator = [None] * num_valid_ds
     else:
-        valid_data_iterator = [None] * len(valid_ds)
+        valid_data_iterator = None
 
     if test_dataloader is not None:
         test_data_iterator = [iter(tdl) if dl_type == 'single' \
                              else iter(cyclic_iter(test_dataloader))
                             for tdl in test_dataloader]
+    elif num_test_ds >= 0:
+        test_data_iterator = [None] * num_test_ds
     else:
-        test_data_iterator = [None] * len(valid_ds)
+        test_data_iterator = None
+
     return train_data_iterator, valid_data_iterator, test_data_iterator
