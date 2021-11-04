@@ -767,10 +767,6 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
                                        args.micro_batch_size * \
                                        get_num_microbatches()
                 args.consumed_train_samples += new_samples
-                if args.curriculum_learning and \
-                    args.pipeline_model_parallel_size >= 1:
-                    args.curriculum_seqlen = args.curriculum_scheduler.update_difficulty( \
-                            args.iteration + 1)
                 if args.curriculum_learning:
                     args.consumed_train_tokens += new_samples * args.curriculum_seqlen
                 else:
