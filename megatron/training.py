@@ -961,7 +961,7 @@ def build_train_valid_test_data_iterators(
     """XXX"""
     args = get_args()
 
-    (train_dataloader, valid_dataloader, test_dataloader) = (None, None, None)
+    (train_dataloader, valid_dataloaders, test_dataloaders) = (None, None, None)
 
     print_rank_0('> building train, validation, and test datasets ...')
 
@@ -1013,17 +1013,17 @@ def build_train_valid_test_data_iterators(
         # Build dataloders.
         assert len(train_ds) == 1, "only one training dataset group is allowed"
 
-        # train_dataloader is a single item while valid_dataloader
-        # and test_dataloader are arrays
+        # train_dataloader is a single item while valid_dataloaders
+        # and test_dataloaders are arrays
         train_dataloader = build_pretraining_data_loader(
             train_ds[0], args.consumed_train_samples)
 
         # We collapse None and empty list as both should mean we don't run validation
-        valid_dataloader = [build_pretraining_data_loader(d, args.consumed_valid_samples)\
+        valid_dataloaders = [build_pretraining_data_loader(d, args.consumed_valid_samples)\
                             for d in valid_ds] \
                             if valid_ds is not None else []
         # We collapse None and empty list as both should mean we don't run test
-        test_dataloader = [build_pretraining_data_loader(d, 0) for d in test_ds] \
+        test_dataloaders = [build_pretraining_data_loader(d, 0) for d in test_ds] \
                             if test_ds is not None else []
 
         # Flags to know if we need to do training/validation/testing.
@@ -1032,8 +1032,8 @@ def build_train_valid_test_data_iterators(
         # Need to broadcast num_tokens and num_type_tokens.
         flags = torch.cuda.LongTensor([
             int(do_train),
-            len(valid_dataloader) if args.eval_iters > 0 else 0, # eval_iters == 0 is equivalent to having no validation
-            len(test_dataloader) if args.eval_iters > 0 else 0, # eval_iters == 0 is equivalent to having no test
+            len(valid_dataloaders) if args.eval_iters > 0 else 0, # eval_iters == 0 is equivalent to having no validation
+            len(test_dataloaders) if args.eval_iters > 0 else 0, # eval_iters == 0 is equivalent to having no test
         ])
     else:
         flags = torch.cuda.LongTensor([0, 0, 0])
@@ -1060,18 +1060,18 @@ def build_train_valid_test_data_iterators(
     else:
         train_data_iterator = None
 
-    if valid_dataloader is not None:
-        valid_data_iterator = [iter(vdl) if dl_type == 'single' \
-                              else iter(cyclic_iter(valid_dataloader))
-                                 for vdl in valid_dataloader]
+    if valid_dataloaders is not None:
+        valid_data_iterators = [iter(vdl) if dl_type == 'single' \
+                              else iter(cyclic_iter(valid_dataloaders))
+                                 for vdl in valid_dataloaders]
     else:
-        valid_data_iterator = [None] * num_valid_ds
+        valid_data_iterators = [None] * num_valid_ds
 
-    if test_dataloader is not None:
-        test_data_iterator = [iter(tdl) if dl_type == 'single' \
-                             else iter(cyclic_iter(test_dataloader))
-                            for tdl in test_dataloader]
+    if test_dataloaders is not None:
+        test_data_iterators = [iter(tdl) if dl_type == 'single' \
+                             else iter(cyclic_iter(test_dataloaders))
+                            for tdl in test_dataloaders]
     else:
-        test_data_iterator = [None] * num_test_ds
+        test_data_iterators = [None] * num_test_ds
 
-    return train_data_iterator, valid_data_iterator, test_data_iterator
+    return train_data_iterator, valid_data_iterators, test_data_iterators
