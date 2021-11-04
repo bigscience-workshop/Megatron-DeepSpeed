@@ -282,8 +282,8 @@ class MegDSTestTraining(TestCasePlus):
         if variation == "glu":
             self.assertIn("Using GLU activation: GELU", cs.out)
 
-
-    def test_training_prefix_lm_all(self):
+    @parameterized.expand([(True, ), (False, )])
+    def test_training_prefix_lm_all(self, loss_on_targets_only):
         # all in one test
         src_dir = self.src_dir
         data_dir = f"{self.data_dir}/gpt2"
@@ -308,7 +308,7 @@ class MegDSTestTraining(TestCasePlus):
             --rampup-batch-size 2 2 {n_samples}
             --global-batch-size 16
             --train-samples {n_samples}
-            --loss-on-targets-only
+            {"--loss-on-targets-only" if loss_on_targets_only else ""}
 
             --optimizer adam
             --adam-beta1 0.9

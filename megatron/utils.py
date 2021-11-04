@@ -168,8 +168,6 @@ def get_ltor_masks_and_position_ids(
     # Extract batch size and sequence length.
     micro_batch_size, seq_length = data.size()
 
-    assert prefix_indices is None or loss_on_targets_only is True, "Prefix lm requires loss on targets only"
-
     # Attention mask (lower triangular).
     if reset_attention_mask or prefix_indices is not None:
         att_mask_batch = micro_batch_size
