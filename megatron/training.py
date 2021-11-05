@@ -762,7 +762,8 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
         args.consumed_train_tokens < args.train_tokens):
         if (
             train_data_iterator is not None
-            and args.skip_train_iteration_range
+            and args.skip_train_iteration_range is not None
+            and len(args.skip_train_iteration_range) > 0
             and args.skip_train_iteration_range[0][0] <= iteration <= args.skip_train_iteration_range[0][1]
         ):
             _, end = args.skip_train_iteration_range.popleft()
