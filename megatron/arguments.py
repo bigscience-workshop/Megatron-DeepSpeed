@@ -290,17 +290,24 @@ def parse_args(extra_args_provider=None, defaults={},
             list(map(int, range_.split("-"))) for range_ in args.skip_train_iteration_range
         ]
         args.skip_train_iteration_range.sort()
-        for i, range_ in enumerate(args.skip_train_iteration_range):
-            if len(range_) == 1:
-                args.skip_train_iteration_range[i].append(range_[0])
-            elif len(range_) == 2:
-                assert range_[1] >= range_[0], \
+        skip_train_iteration_range = collections.deque()
+        for range_ in args.skip_train_iteration_range:
+            if len(range_) == 2:
+                start, end = range_
+                assert end >= start, \
                 "end of skip range cannot be smaller than start of skip range"
+                # merge overlapping intervals (e.g. 1-5 2-6 -> 1-6)
+                if not skip_train_iteration_range:
+                    skip_train_iteration_range.append([start, end])
+                elif skip_train_iteration_range[-1][1] >= start:
+                    skip_train_iteration_range[-1][1] = max(end, skip_train_iteration_range[-1][1])
+                else:
+                    skip_train_iteration_range.append([start, end])
             else:
                 raise ValueError(
                     "skip train iterations should be specified as two numbers, i.e. start-end"
                 )
-        args.skip_train_iteration_range = collections.deque(args.skip_train_iteration_range)
+        args.skip_train_iteration_range = skip_train_iteration_range
 
     _print_args(args)
     return args
