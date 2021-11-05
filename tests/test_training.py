@@ -209,6 +209,22 @@ class MegDSTestTraining(TestCasePlus):
             new_ds_args = f"""
                 --deepspeed_config {self.test_file_dir_str}/ds_config.json
             """.split()
+
+        elif variation == "skip":
+            new_args = f"""
+                --rampup-batch-size 2 2 {n_samples}
+                --train-samples {n_samples}
+
+                --lr-decay-samples 6
+                --log-interval 1
+
+                --skip-train-iteration-range 2-2 4-7
+            """.split()
+
+            new_ds_args = f"""
+                --deepspeed_config {self.test_file_dir_str}/ds_config.json
+            """.split()
+
         else:
             raise ValueError(f"Don't know of variation {variation}")
 
@@ -487,90 +503,29 @@ class MegDSTestTraining(TestCasePlus):
         self.assertEqual(len(tensorboard_files), 1, "tensorboard files")
     
     
-    def test_skip_train_iteration(self):
+    @parameterized.expand(["skip"])
+    def test_skip_train_iteration(self, variation):
         src_dir = self.src_dir
-        data_dir = f"{self.data_dir}/gpt2"
         output_dir = self.get_auto_remove_tmp_dir() # "./xxx", after=False)
 
-        pp_size, tp_size, dp_size = get_3d_dimensions()
-        num_gpus = pp_size * tp_size * dp_size
-
-        n_samples = 200 # about 37 iterations
-        exit_interval = 20 # some samples in the first half and then some more in the 2nd half after resume
-        args = f"""
-            --tensor-model-parallel-size {tp_size}
-            --pipeline-model-parallel-size {pp_size}
-            --distributed-backend nccl
-
-            --num-layers 2
-            --hidden-size 64
-            --num-attention-heads 2
-            --seq-length 128
-            --max-position-embeddings 1024
-            --micro-batch-size 1
-            --rampup-batch-size 2 2 {n_samples}
-            --global-batch-size 16
-            --train-samples {n_samples}
-            --loss-on-targets-only
-
-            --optimizer adam
-            --adam-beta1 0.9
-            --adam-beta2 0.95
-            --adam-eps 1e-8
-            --lr 1e-4
-            --lr-warmup-samples 5
-            --clip-grad 1.0
-            --weight-decay 1e-1
-            --fp16
-
-            --log-interval 5
-            --save-interval 10
-            --eval-interval 10
-            --eval-iters 5
-            --checkpoint-activations
-            --exit-interval {exit_interval}
-            --skip-train-iteration-range 2-3
-
-            --merge-file {data_dir}/gpt2-tiny-merges.txt
-            --vocab-file {data_dir}/gpt2-tiny-vocab.json
-            --save {output_dir}/checkpoints
-            --load {output_dir}/checkpoints
-            --data-path {data_dir}/meg-gpt2-openwebtext_text_document
-            --tensorboard-dir {output_dir}/tensorboard
-            --tensorboard-queue-size 5
-            --log-timers-to-tensorboard
-            --log-batch-size-to-tensorboard
-            --log-validation-ppl-to-tensorboard
-        """.split()
-
-        ds_args = f"""
-            --deepspeed
-            --deepspeed_config {self.test_file_dir_str}/ds_config.json
-            --zero-stage 1
-            --deepspeed-activation-checkpointing
-        """.split()
-
+        args, ds_args, num_gpus = self.get_variation_config(variation, output_dir)
         script = [f"{src_dir}/pretrain_gpt.py"]
         launcher = get_launcher(num_gpus)
-
         cmd = launcher + script + args + ds_args
-        # keep for quick debug
-        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
 
-        # 1. test training from scratch (no checkpoint)
         with CaptureStdout() as cs:
             execute_subprocess_async(cmd, env=self.get_env())
 
-        # test deepspeed is running
-        self.assertIn("DeepSpeed info", cs.out)
+        # test iterations were skipped
+        self.assertIn("Skipped iterations 2 2 due to --skip-iterations flag", cs.out)
+        self.assertIn("Skipped iterations 4 7 due to --skip-iterations flag", cs.out)
 
-        # test reports
-        self.assertIn("consumed samples", cs.out)
-
-        # test checkpoint saving
-        self.assertIn("successfully saved checkpoint at iteration", cs.out)
-
-        # test tensorboard
-        tensorboard_files = glob.glob(f"{output_dir}/tensorboard/events*")
-        self.assertEqual(len(tensorboard_files), 1, "tensorboard files")
-
+        assert("iteration        2/" not in cs.out)
+        for i in range(4, 8):
+            assert(f"iteration {i:8d}/" not in cs.out)
+             
+        
+        # test other intervals were not skipped
+        assert("iteration        1/" in cs.out)
+        assert("iteration        3/" in cs.out)
+        assert("iteration        8/" in cs.out)
