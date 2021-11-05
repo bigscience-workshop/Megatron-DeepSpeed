@@ -16,6 +16,7 @@
 """Pretrain utilities."""
 
 from datetime import datetime
+import bisect
 import math
 import sys
 import time
@@ -749,12 +750,20 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
     timers('interval-time').start()
     print_datetime('before the start of training step')
     report_memory_flag = True
+
+    # flush intervals prior to current iteration
+    if args.skip_train_iteration_range is not None:
+        ends = [end for start, end in args.skip_train_iteration_range]
+        index = bisect.bisect_left(ends, iteration)
+        for _ in range(index):
+            args.skip_train_iteration_range.popleft()
+
     while iteration < args.train_iters and (args.train_tokens is None or \
         args.consumed_train_tokens < args.train_tokens):
         if (
-            args.skip_train_iteration_range
-            and iteration == args.skip_train_iteration_range[0][0]
-            and train_data_iterator is not None
+            train_data_iterator is not None
+            and args.skip_train_iteration_range
+            and args.skip_train_iteration_range[0][0] <= iteration <= args.skip_train_iteration_range[0][1]
         ):
             _, end = args.skip_train_iteration_range.popleft()
             while iteration <= end:
