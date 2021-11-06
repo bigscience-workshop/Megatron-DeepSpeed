@@ -503,7 +503,7 @@ class MegDSTestTraining(TestCasePlus):
         self.assertEqual(len(tensorboard_files), 1, "tensorboard files")
     
     
-    @parameterized.expand(["skip"])
+    @parameterized.expand(["skip-iterations"])
     def test_skip_train_iteration(self, variation):
         src_dir = self.src_dir
         output_dir = self.get_auto_remove_tmp_dir() # "./xxx", after=False)
