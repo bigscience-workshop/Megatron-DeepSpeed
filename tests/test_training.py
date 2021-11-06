@@ -210,7 +210,7 @@ class MegDSTestTraining(TestCasePlus):
                 --deepspeed_config {self.test_file_dir_str}/ds_config.json
             """.split()
 
-        elif variation == "skip":
+        elif variation == "skip-iterations":
             new_args = f"""
                 --rampup-batch-size 2 2 {n_samples}
                 --train-samples {n_samples}
