@@ -286,7 +286,6 @@ def parse_args(extra_args_provider=None, defaults={},
     if args.use_bnb_optimizer:
         try:
             import bitsandbytes as bnb
-            self.embedding_module = bnb.nn.StableEmbedding
         except ModuleNotFoundError:
             raise ModuleNotFoundError("Please install bitsandbytes from https://github.com/facebookresearch/bitsandbytes.")
 

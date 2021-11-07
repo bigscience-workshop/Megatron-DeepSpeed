@@ -24,6 +24,7 @@ import torch
 import torch.nn.functional as F
 import torch.nn.init as init
 from torch.nn.parameter import Parameter
+from functools import partial
 
 from .initialize import get_tensor_model_parallel_rank
 from .initialize import get_tensor_model_parallel_world_size
@@ -131,6 +132,26 @@ def _initialize_affine_weight_cpu(weight, output_size, input_size,
     return None
 
 
+def xavier_uniform_tensor_parallel_(tensor, gain=1., tp_degree=1):
+    r"""
+    This is a modified torch.nn.init.xavier_uniform_ with changes to support
+    partitioned on the vocab size dim embedding with tensor parallel.
+
+    Additional args:
+    - tp_degree: degree of tensor parallel
+
+    Note: the code assumes all partitions are equal in size
+    """
+    # receptive_field_size=1 as dim==2, so we don't need init._calculate_fan_in_and_fan_out
+    fan_out, fan_in = tensor.shape
+    fan_out *= tp_degree # tp splits on num_embeddings dim
+
+    std = gain * math.sqrt(2.0 / float(fan_in + fan_out))
+    a = math.sqrt(3.0) * std  # Calculate uniform bounds from standard deviation
+
+    return torch.nn.init._no_grad_uniform_(tensor, -a, a)
+
+
 class VocabParallelEmbedding(torch.nn.Module):
     """Embedding parallelized in the vocabulary dimension.
 
@@ -166,6 +187,14 @@ class VocabParallelEmbedding(torch.nn.Module):
 
         # Allocate weights and initialize.
         args = get_args()
+
+        if args.use_bnb_optimizer:
+            self.norm = torch.nn.LayerNorm(embedding_dim)
+
+            # for BNB we ignore the passed init_method and use torch.nn.init.xavier_uniform_
+            # modified to calculate std on the unpartitioned embedding
+            init_method = partial(xavier_uniform_tensor_parallel_, tp_degree=self.tensor_model_parallel_size)
+
         if args.use_cpu_initialization:
             self.weight = Parameter(torch.empty(
                 self.num_embeddings_per_partition, self.embedding_dim,
@@ -179,6 +208,13 @@ class VocabParallelEmbedding(torch.nn.Module):
                 device=torch.cuda.current_device(), dtype=args.params_dtype))
             _initialize_affine_weight_gpu(self.weight, init_method,
                                           partition_dim=0, stride=1)
+
+        if args.use_bnb_optimizer:
+            from bitsandbytes.optim import GlobalOptimManager
+            # XXX: ok doing it for the shard?
+            GlobalOptimManager.get_instance().override_config(self.weight, 'optim_bits', 32)
+            GlobalOptimManager.get_instance().register_parameters(self.weight)
+
 
     def forward(self, input_):
         if self.tensor_model_parallel_size > 1:
@@ -200,6 +236,10 @@ class VocabParallelEmbedding(torch.nn.Module):
             output_parallel[input_mask, :] = 0.0
         # Reduce across all the model parallel GPUs.
         output = reduce_from_tensor_model_parallel_region(output_parallel)
+
+        if hasattr(self, 'norm'):
+            output = self.norm(output)
+
         return output
 
 

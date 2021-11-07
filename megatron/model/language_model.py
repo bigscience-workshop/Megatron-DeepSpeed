@@ -134,6 +134,7 @@ class Embedding(MegatronModule):
         self._word_embeddings_key = 'word_embeddings'
 
         # Position embedding (serial).
+        self.position_embedding_type = args.position_embedding_type
         if self.position_embedding_type == PositionEmbeddingType.absolute:
             max_position_embeddings = args.max_position_embeddings
             assert max_position_embeddings is not None
@@ -172,8 +173,8 @@ class Embedding(MegatronModule):
             print('adding embedding for {} tokentypes'.format(num_tokentypes),
                   flush=True)
         self.num_tokentypes = num_tokentypes
-        self.tokentype_embeddings = self.embedding_module(num_tokentypes,
-                                                          self.hidden_size)
+        self.tokentype_embeddings = self.torch.nn.Embedding(num_tokentypes,
+                                                            self.hidden_size)
         # Initialize the token-type embeddings.
         args = get_args()
         self.init_method(self.tokentype_embeddings.weight)
