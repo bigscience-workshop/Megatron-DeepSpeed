@@ -212,7 +212,6 @@ class MegDSTestTraining(TestCasePlus):
 
         elif variation == "skip-iterations":
             new_args = f"""
-                --rampup-batch-size 2 2 {n_samples}
                 --train-samples {n_samples}
 
                 --lr-decay-samples 6
@@ -516,16 +515,16 @@ class MegDSTestTraining(TestCasePlus):
         with CaptureStdout() as cs:
             execute_subprocess_async(cmd, env=self.get_env())
 
-        # test iterations were skipped
+        # skipped iterations
         self.assertIn("Skipped iterations 2 2 due to --skip-iterations flag", cs.out)
         self.assertIn("Skipped iterations 4 7 due to --skip-iterations flag", cs.out)
 
-        assert("iteration        2/" not in cs.out)
-        for i in range(4, 8):
-            assert(f"iteration {i:8d}/" not in cs.out)
+        skip_iterations = [2] + list(range(4, 8))
+        for i in skip_iterations:
+            self.assertTrue(f"iteration {i:8d}/" not in cs.out)
              
-        
-        # test other intervals were not skipped
-        assert("iteration        1/" in cs.out)
-        assert("iteration        3/" in cs.out)
-        assert("iteration        8/" in cs.out)
+        # train iterations
+        unskipped_iterations = [1, 3, 8]
+        for i in unskipped_iterations:
+            self.assertTrue(f"iteration {i:8d}/" in cs.out)
+
