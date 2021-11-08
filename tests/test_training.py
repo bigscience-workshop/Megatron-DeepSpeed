@@ -17,6 +17,7 @@ import io
 import json
 import os
 import glob
+import re
 import unittest
 from pathlib import Path
 from parameterized import parameterized
@@ -524,7 +525,13 @@ class MegDSTestTraining(TestCasePlus):
             self.assertTrue(f"iteration {i:8d}/" not in cs.out)
              
         # train iterations
-        unskipped_iterations = [1, 3, 8]
-        for i in unskipped_iterations:
+        train_iterations = [1, 3, 8]
+        for i in train_iterations:
             self.assertTrue(f"iteration {i:8d}/" in cs.out)
 
+        # check consumed quantities
+        consumed_token_logs = re.findall(r"consumed tokens:\s+\d+", cs.out)
+        num_tokens = [int(log.split()[-1]) for log in consumed_token_logs]
+        multiple = num_tokens[0]
+        for iteration, num_token in zip(train_iterations, num_tokens):
+            self.assertEqual(iteration * multiple, num_token)
