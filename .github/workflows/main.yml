@@ -8,6 +8,14 @@ on:
 
 jobs:
 
+# GPU sizes and types that we could use:
+# g4dn.12xlarge  4x 16GB T4 (CC 7.5) (low availability)
+# p3.8xlarge     4x 16GB V100 (CC 7.0) (very low availability)
+
+# Unfit:
+# g3.16xlarge    4x 8GB Tesla M60 (CC 5.2) (not supported by cuda-11)
+# p2.8xlarge     8x 12GB K80 (CC 3.7 not supported by cuda-11)
+
   start-runner:
     name: Start self-hosted EC2 runner
     runs-on: ubuntu-latest
@@ -33,7 +41,7 @@ jobs:
           mode: start
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           ec2-image-id: ami-04933c2edcc56a03a
-          ec2-instance-type: p3.8xlarge
+          ec2-instance-type: g4dn.12xlarge
           security-group-id: sg-f2a4e2fc
           subnet-id: subnet-b7533b96 # us-east-1c
           aws-resource-tags: > # optional, requires additional permissions
@@ -50,7 +58,7 @@ jobs:
           mode: start
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           ec2-image-id: ami-04933c2edcc56a03a
-          ec2-instance-type: p3.8xlarge
+          ec2-instance-type: g4dn.12xlarge
           security-group-id: sg-f2a4e2fc
           subnet-id: subnet-a396b2ad # us-east-1f
           aws-resource-tags: > # optional, requires additional permissions
@@ -66,7 +74,7 @@ jobs:
           mode: start
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           ec2-image-id: ami-04933c2edcc56a03a
-          ec2-instance-type: p3.8xlarge
+          ec2-instance-type: g4dn.12xlarge
           security-group-id: sg-f2a4e2fc
           subnet-id: subnet-df0f6180 # us-east-1a
           aws-resource-tags: > # optional, requires additional permissions
