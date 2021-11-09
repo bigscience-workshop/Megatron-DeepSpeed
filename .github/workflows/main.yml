@@ -9,10 +9,12 @@ on:
 jobs:
 
 # GPU sizes and types that we could use:
-# g4dn.12xlarge  4x 16GB T4 (CC 7.5)
+# g4dn.12xlarge  4x 16GB T4 (CC 7.5) (low availability)
+# p3.8xlarge     4x 16GB V100 (CC 7.0) (very low availability)
+
+# Unfit:
+# g3.16xlarge    4x 8GB Tesla M60 (CC 5.2) (not supported by cuda-11)
 # p2.8xlarge     8x 12GB K80 (CC 3.7 not supported by cuda-11)
-# p3.8xlarge     4x 16GB V100 (very low availability)
-# g3.16xlarge    4x 8GB Tesla M60 (CC 5.2)
 
   start-runner:
     name: Start self-hosted EC2 runner
