@@ -11,6 +11,7 @@ jobs:
 # GPU sizes:
 # g4ad.16xlarge - 4x 8GB
 # g4dn.12xlarge - 4x 12GB
+# p2.8xlarge - 4x 12GB
 # p3.8xlarge - 4x 16GB
   start-runner:
     name: Start self-hosted EC2 runner
@@ -37,7 +38,7 @@ jobs:
           mode: start
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           ec2-image-id: ami-04933c2edcc56a03a
-          ec2-instance-type: g4ad.16xlarge
+          ec2-instance-type: p2.8xlarge
           security-group-id: sg-f2a4e2fc
           subnet-id: subnet-b7533b96 # us-east-1c
           aws-resource-tags: > # optional, requires additional permissions
@@ -54,7 +55,7 @@ jobs:
           mode: start
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           ec2-image-id: ami-04933c2edcc56a03a
-          ec2-instance-type: g4ad.16xlarge
+          ec2-instance-type: p2.8xlarge
           security-group-id: sg-f2a4e2fc
           subnet-id: subnet-a396b2ad # us-east-1f
           aws-resource-tags: > # optional, requires additional permissions
@@ -70,7 +71,7 @@ jobs:
           mode: start
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           ec2-image-id: ami-04933c2edcc56a03a
-          ec2-instance-type: g4ad.16xlarge
+          ec2-instance-type: p2.8xlarge
           security-group-id: sg-f2a4e2fc
           subnet-id: subnet-df0f6180 # us-east-1a
           aws-resource-tags: > # optional, requires additional permissions
