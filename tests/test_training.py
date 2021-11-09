@@ -489,19 +489,11 @@ class MegDSTestTraining(TestCasePlus):
         self.assertEqual(len(tensorboard_files), 1, "tensorboard files")
     
     
-    @parameterized.expand(["base", "cl", "bnb", "glu"])
+    @parameterized.expand(["base", "cl"])
     def test_skip_train_iteration(self, variation):
-
-        # optional runs
-        if variation == "bnb":
-            require_bnb_non_decorator()
-
-        n_samples = 200
-        exit_interval = 20
-
         # specify skip iterations
         new_args = f"""
-            --train-samples {n_samples}
+            --train-samples 200
             --lr-decay-samples 6
             --log-interval 1
             --skip-train-iteration-range 2-2 4-7
