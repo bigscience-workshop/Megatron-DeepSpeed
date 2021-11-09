@@ -82,6 +82,58 @@ jobs:
               {"Key": "Name", "Value": "ec2-github-runner"},
               {"Key": "GitHubRepository", "Value": "${{ github.repository }}"}
             ]
+
+      - name: Try to start EC2 runner (a-2)
+        id: try-us-east-1a-2
+        if: steps.try-us-east-1c.outcome == 'failure'
+        uses: machulav/ec2-github-runner@v2
+        continue-on-error: true
+        with:
+          mode: start
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          ec2-image-id: ami-04933c2edcc56a03a
+          ec2-instance-type: p3.8xlarge
+          security-group-id: sg-f2a4e2fc
+          subnet-id: subnet-b7533b96 # us-east-1c
+          aws-resource-tags: > # optional, requires additional permissions
+            [
+              {"Key": "Name", "Value": "ec2-github-runner"},
+              {"Key": "GitHubRepository", "Value": "${{ github.repository }}"}
+            ]
+      - name: Try to start EC2 runner (b-2)
+        id: try-us-east-1b-2
+        if: steps.try-us-east-1a-2.outcome == 'failure'
+        uses: machulav/ec2-github-runner@v2
+        continue-on-error: true
+        with:
+          mode: start
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          ec2-image-id: ami-04933c2edcc56a03a
+          ec2-instance-type: p3.8xlarge
+          security-group-id: sg-f2a4e2fc
+          subnet-id: subnet-a396b2ad # us-east-1f
+          aws-resource-tags: > # optional, requires additional permissions
+            [
+              {"Key": "Name", "Value": "ec2-github-runner"},
+              {"Key": "GitHubRepository", "Value": "${{ github.repository }}"}
+            ]
+      - name: Try to start EC2 runner (c-2)
+        id: try-us-east-1c-2
+        if: steps.try-us-east-1b-2.outcome == 'failure'
+        uses: machulav/ec2-github-runner@v2
+        with:
+          mode: start
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          ec2-image-id: ami-04933c2edcc56a03a
+          ec2-instance-type: p3.8xlarge
+          security-group-id: sg-f2a4e2fc
+          subnet-id: subnet-df0f6180 # us-east-1a
+          aws-resource-tags: > # optional, requires additional permissions
+            [
+              {"Key": "Name", "Value": "ec2-github-runner"},
+              {"Key": "GitHubRepository", "Value": "${{ github.repository }}"}
+            ]
+
       - name: See if any of 3 sub-regions had the resource
         id: start-ec2-runner
         run: |
@@ -96,6 +148,18 @@ jobs:
           if [ "${{ steps.try-us-east-1c.outcome }}" = "success" ]; then
             echo "::set-output name=label::${{ steps.try-us-east-1c.outputs.label }}"
             echo "::set-output name=ec2-instance-id::${{ steps.try-us-east-1c.outputs.ec2-instance-id }}"
+          fi
+          if [ "${{ steps.try-us-east-1a-2.outcome }}" = "success" ]; then
+            echo "::set-output name=label::${{ steps.try-us-east-1a-2.outputs.label }}"
+            echo "::set-output name=ec2-instance-id::${{ steps.try-us-east-1a-2.outputs.ec2-instance-id }}"
+          fi
+          if [ "${{ steps.try-us-east-1b-2.outcome }}" = "success" ]; then
+            echo "::set-output name=label::${{ steps.try-us-east-1b-2.outputs.label }}"
+            echo "::set-output name=ec2-instance-id::${{ steps.try-us-east-1b-2.outputs.ec2-instance-id }}"
+          fi
+          if [ "${{ steps.try-us-east-1c-2.outcome }}" = "success" ]; then
+            echo "::set-output name=label::${{ steps.try-us-east-1c-2.outputs.label }}"
+            echo "::set-output name=ec2-instance-id::${{ steps.try-us-east-1c-2.outputs.ec2-instance-id }}"
           fi
 
 
