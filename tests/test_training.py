@@ -41,18 +41,22 @@ def get_launcher(num_gpus):
     return f"deepspeed --num_nodes 1 --num_gpus {num_gpus}".split()
 
 def get_3d_dimensions():
-    num_gpus = min(2, get_gpu_count())
+    num_gpus = get_gpu_count()
 
-    # XXX: if we had 8 gpus, could do dp_size too!
-    dp_size = 1
-
+    if num_gpus >= 8:
+        dp_size = 2
+        pp_size = 2
+        tp_size = 2
     if num_gpus >= 4:
+        dp_size = 1
         pp_size = 2
         tp_size = 2
     elif num_gpus >= 2:
+        dp_size = 1
         pp_size = 2
         tp_size = 1
     else:
+        dp_size = 1
         pp_size = 1
         tp_size = 1
 
@@ -78,6 +82,7 @@ class MegDSTestTraining(TestCasePlus):
 
         pp_size, tp_size, dp_size = get_3d_dimensions()
         num_gpus = pp_size * tp_size * dp_size
+        print(f"Using {num_gpus} GPUs")
 
         n_samples = 300 # about 56 iterations
         exit_interval = 20 # some samples in the first half and then some more in the 2nd half after resume
