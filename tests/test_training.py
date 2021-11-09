@@ -211,20 +211,6 @@ class MegDSTestTraining(TestCasePlus):
                 --deepspeed_config {self.test_file_dir_str}/ds_config.json
             """.split()
 
-        elif variation == "skip-iterations":
-            new_args = f"""
-                --train-samples {n_samples}
-
-                --lr-decay-samples 6
-                --log-interval 1
-
-                --skip-train-iteration-range 2-2 4-7
-            """.split()
-
-            new_ds_args = f"""
-                --deepspeed_config {self.test_file_dir_str}/ds_config.json
-            """.split()
-
         else:
             raise ValueError(f"Don't know of variation {variation}")
 
@@ -503,12 +489,33 @@ class MegDSTestTraining(TestCasePlus):
         self.assertEqual(len(tensorboard_files), 1, "tensorboard files")
     
     
-    @parameterized.expand(["skip-iterations"])
+    @parameterized.expand(["base", "cl", "bnb", "glu"])
     def test_skip_train_iteration(self, variation):
-        src_dir = self.src_dir
-        output_dir = self.get_auto_remove_tmp_dir() # "./xxx", after=False)
 
+        # optional runs
+        if variation == "bnb":
+            require_bnb_non_decorator()
+
+        n_samples = 200
+        exit_interval = 20
+
+        # specify skip iterations
+        new_args = f"""
+            --train-samples {n_samples}
+            --lr-decay-samples 6
+            --log-interval 1
+            --skip-train-iteration-range 2-2 4-7
+        """.split()
+
+        new_ds_args = f"""
+            --deepspeed_config {self.test_file_dir_str}/ds_config.json
+        """.split()
+
+        src_dir = self.src_dir
+        output_dir = self.get_auto_remove_tmp_dir()
         args, ds_args, num_gpus = self.get_variation_config(variation, output_dir)
+        args.extend(new_args)
+        ds_args.extend(new_ds_args)
         script = [f"{src_dir}/pretrain_gpt.py"]
         launcher = get_launcher(num_gpus)
         cmd = launcher + script + args + ds_args
@@ -516,7 +523,7 @@ class MegDSTestTraining(TestCasePlus):
         with CaptureStdout() as cs:
             execute_subprocess_async(cmd, env=self.get_env())
 
-        # skipped iterations
+        # check skipped iterations
         self.assertIn("Skipped iterations 2 2 due to --skip-iterations flag", cs.out)
         self.assertIn("Skipped iterations 4 7 due to --skip-iterations flag", cs.out)
 
@@ -524,12 +531,12 @@ class MegDSTestTraining(TestCasePlus):
         for i in skip_iterations:
             self.assertTrue(f"iteration {i:8d}/" not in cs.out)
              
-        # train iterations
+        # check train iterations
         train_iterations = [1, 3, 8]
         for i in train_iterations:
             self.assertTrue(f"iteration {i:8d}/" in cs.out)
 
-        # check consumed quantities
+        # check consumed tokens
         consumed_token_logs = re.findall(r"consumed tokens:\s+\d+", cs.out)
         num_tokens = [int(log.split()[-1]) for log in consumed_token_logs]
         multiple = num_tokens[0]
