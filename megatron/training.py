@@ -760,15 +760,18 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
     while iteration < args.train_iters and (args.train_tokens is None or \
         args.consumed_train_tokens < args.train_tokens):
         if (
-            train_data_iterator is not None
-            and args.skip_train_iteration_range is not None
+            # train_data_iterator is not None
+            args.skip_train_iteration_range is not None
             and len(args.skip_train_iteration_range) > 0
             and args.skip_train_iteration_range[0][0] <= iteration + 1 <= args.skip_train_iteration_range[0][1]
         ):
             start, end = args.skip_train_iteration_range.popleft()
             print_rank_0(f"Skipped iterations {start} {end} due to --skip-iterations flag.")
-            while iteration + 1 <= end:
-                _ = next(train_data_iterator)
+            while args.iteration + 1 <= end:
+                try:
+                    _ = next(train_data_iterator)
+                except TypeError:
+                    pass
                 # TODO: refactor copied code
                 iteration += 1
                 args.iteration = iteration
