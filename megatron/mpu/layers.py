@@ -211,7 +211,6 @@ class VocabParallelEmbedding(torch.nn.Module):
 
         if args.use_bnb_optimizer:
             from bitsandbytes.optim import GlobalOptimManager
-            # XXX: ok doing it for the shard?
             GlobalOptimManager.get_instance().override_config(self.weight, 'optim_bits', 32)
             GlobalOptimManager.get_instance().register_parameters(self.weight)
 
