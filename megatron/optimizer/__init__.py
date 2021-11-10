@@ -57,12 +57,8 @@ def get_megatron_optimizer(model):
     param_groups = _get_params_for_weight_decay_optimization(model)
     if args.optimizer == 'adam':
         if args.use_bnb_optimizer:
-            try:
-                import bitsandbytes as bnb
-                adam_optimizer = bnb.optim.Adam8bit
-            except ModuleNotFoundError:
-                print("Please install bitsandbytes following https://github.com/facebookresearch/bitsandbytes.")
-                raise Exception
+            import bitsandbytes as bnb
+            adam_optimizer = bnb.optim.Adam8bit
         else:
             adam_optimizer = Adam
         optimizer = adam_optimizer(param_groups,

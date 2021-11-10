@@ -283,6 +283,12 @@ def parse_args(extra_args_provider=None, defaults={},
     if args.glu_activation is not None and args.bias_gelu_fusion:
         raise ValueError("if glu-activation is used, please set --no-bias-gelu-fusion")
 
+    if args.use_bnb_optimizer:
+        try:
+            import bitsandbytes as bnb
+        except ModuleNotFoundError:
+            raise ModuleNotFoundError("Please install bitsandbytes from https://github.com/facebookresearch/bitsandbytes.")
+
     _print_args(args)
     return args
 
