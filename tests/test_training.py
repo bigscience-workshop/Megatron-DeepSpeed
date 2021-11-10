@@ -43,6 +43,8 @@ def get_launcher(num_gpus):
 def get_3d_dimensions():
     num_gpus = min(2, get_gpu_count())
 
+    # note: with fewer gpus the preference is first to to do PP>1, then TP>1, then DP>1
+
     # XXX: if we had 8 gpus, could do dp_size too!
     dp_size = 1
 
@@ -78,6 +80,10 @@ class MegDSTestTraining(TestCasePlus):
 
         pp_size, tp_size, dp_size = get_3d_dimensions()
         num_gpus = pp_size * tp_size * dp_size
+
+        if variation == "bnb":
+            # we want to make sure at least tp=2 is used, so we swap tp and pp
+            pp_size, tp_size = tp_size, pp_size
 
         n_samples = 300 # about 56 iterations
         exit_interval = 20 # some samples in the first half and then some more in the 2nd half after resume
