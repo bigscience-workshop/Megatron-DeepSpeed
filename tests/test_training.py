@@ -495,7 +495,7 @@ class MegDSTestTraining(TestCasePlus):
     
     
     @parameterized.expand(["base", "cl"])
-    def test_zskip_train_iteration(self, variation):
+    def test_skip_train_iteration(self, variation):
         # specify skip iterations
         new_args = f"""
             --train-samples 200
