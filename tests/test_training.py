@@ -552,15 +552,13 @@ class MegDSTestTraining(TestCasePlus):
             step_size = 4
             total = 0
             for iter in range(1, 10):
-                seqlen_real += step_size
+                seqlen += step_size
                 if iter in skip_iterations:
                     total += gbs*seqlen_real
                 else:
-                    seqlen += step_size
-                    total += gbs*seqlen
+                    seqlen_real = seqlen
+                    total += gbs*seqlen_real
                 num_tokens_expected.append(total)
-
-#        train_iterations = [1] + list(range(3, 9))
 
         print("actual  ", num_tokens_actual)
         print("expected", num_tokens_expected[1:])
