@@ -535,8 +535,6 @@ class MegDSTestTraining(TestCasePlus):
         for i in train_iterations:
             self.assertTrue(f"iteration {i:8d}/" in cs.out)
 
-        train_iterations = [1, 2, 3, 4, 5, 6, 7, 8]
-
         # check consumed tokens
         consumed_token_logs = re.findall(r"consumed tokens:\s+\d+", cs.out)
         num_tokens = [int(log.split()[-1]) for log in consumed_token_logs]
