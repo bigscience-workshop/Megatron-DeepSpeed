@@ -78,14 +78,15 @@ class MegDSTestTraining(TestCasePlus):
         if os.path.exists(meg_lock_file_path):
             os.unlink(meg_lock_file_path)
 
-    def get_variation_config(self, variation, output_dir):
+    def get_variation_config(self, variation, output_dir, n_samples=None):
         data_dir = f"{self.data_dir}/gpt2"
 
         pp_size, tp_size, dp_size = get_3d_dimensions()
         num_gpus = pp_size * tp_size * dp_size
         print(f"Using {num_gpus} GPUs")
 
-        n_samples = 300 # about 56 iterations
+        if n_samples is None:
+            n_samples = 300 # about 56 iterations
         exit_interval = 20 # some samples in the first half and then some more in the 2nd half after resume
         seq_len = 128
 
@@ -103,7 +104,7 @@ class MegDSTestTraining(TestCasePlus):
                 --pipeline-model-parallel-size {pp_size}
                 --distributed-backend nccl
 
-                --log-interval 5
+                --log-interval 1
                 --save-interval 10
                 --eval-interval 10
                 --eval-iters 5
@@ -492,28 +493,20 @@ class MegDSTestTraining(TestCasePlus):
         # test tensorboard
         tensorboard_files = glob.glob(f"{output_dir}/tensorboard/events*")
         self.assertEqual(len(tensorboard_files), 1, "tensorboard files")
-    
-    
-    
+
+
+
     @parameterized.expand(["base", "cl"])
     def test_skip_train_iteration(self, variation):
-        # specify skip iterations
-        new_args = f"""
-            --train-samples 200
-            --lr-decay-samples 6
-            --log-interval 1
+        # skip iterations setup
+        extra_args = f"""
             --skip-train-iteration-range 2-2 4-7
-        """.split()
-
-        new_ds_args = f"""
-            --deepspeed_config {self.test_file_dir_str}/ds_config.json
         """.split()
 
         src_dir = self.src_dir
         output_dir = self.get_auto_remove_tmp_dir()
-        args, ds_args, num_gpus = self.get_variation_config(variation, output_dir)
-        args.extend(new_args)
-        ds_args.extend(new_ds_args)
+        args, ds_args, num_gpus = self.get_variation_config(variation, output_dir, n_samples=200)
+        args.extend(extra_args)
         script = [f"{src_dir}/pretrain_gpt.py"]
         launcher = get_launcher(num_gpus)
         cmd = launcher + script + args + ds_args
@@ -530,15 +523,25 @@ class MegDSTestTraining(TestCasePlus):
         skip_iterations = [2] + list(range(4, 8))
         for i in skip_iterations:
             self.assertTrue(f"iteration {i:8d}/" not in cs.out)
-             
+
         # check train iterations
         train_iterations = [1, 3, 8]
         for i in train_iterations:
             self.assertTrue(f"iteration {i:8d}/" in cs.out)
 
+        train_iterations = [1, 2, 3, 4, 5, 6, 7, 8]
+
         # check consumed tokens
         consumed_token_logs = re.findall(r"consumed tokens:\s+\d+", cs.out)
         num_tokens = [int(log.split()[-1]) for log in consumed_token_logs]
-        multiple = num_tokens[0]
-        for iteration, num_token in zip(train_iterations, num_tokens):
-            self.assertEqual(iteration * multiple, num_token)
+        if variation == "base":
+            num_tokens_expected = [num_tokens[0]*iter for iter in range(20)]
+        elif variation == "cl":
+            # the seqlen is progressively increased starting with min_difficulty in difficulty_step
+            # steps over total_curriculum_step steps, see ds_config_cl.json for details
+            num_tokens_expected = [int(16*4*(iter*(1+iter)/2-3)) for iter in range(2, 20)]
+
+        print(num_tokens)
+        print(num_tokens_expected)
+        for iteration, num_tokens_actual_this_iter in zip(train_iterations, num_tokens):
+            self.assertEqual(num_tokens_expected[iteration], num_tokens_actual_this_iter)
