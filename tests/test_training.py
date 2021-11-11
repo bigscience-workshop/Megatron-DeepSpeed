@@ -526,7 +526,7 @@ class MegDSTestTraining(TestCasePlus):
         self.assertIn("Skipped iterations 2 2 due to --skip-iterations flag", cs.out)
         self.assertIn("Skipped iterations 4 7 due to --skip-iterations flag", cs.out)
 
-        skip_iterations = [2] + list(range(4, 8))
+        skip_iterations = [2, 4, 5, 6, 7]
         for i in skip_iterations:
             self.assertTrue(f"iteration {i:8d}/" not in cs.out)
 
@@ -537,15 +537,33 @@ class MegDSTestTraining(TestCasePlus):
 
         # check consumed tokens
         consumed_token_logs = re.findall(r"consumed tokens:\s+\d+", cs.out)
-        num_tokens = [int(log.split()[-1]) for log in consumed_token_logs]
+        num_tokens_actual = [int(log.split()[-1]) for log in consumed_token_logs]
         if variation == "base":
-            num_tokens_expected = [num_tokens[0]*iter for iter in range(20)]
+            num_tokens_expected = [num_tokens_actual[0]*iter for iter in range(20)]
         elif variation == "cl":
             # the seqlen is progressively increased starting with min_difficulty in difficulty_step
             # steps over total_curriculum_step steps, see ds_config_cl.json for details
-            num_tokens_expected = [int(16*4*(iter*(1+iter)/2-3)) for iter in range(2, 20)]
+            # num_tokens_expected = [int(16*4*(iter*(1+iter)/2-3)) for iter in range(2, 20)]
+            # but it's not that, it's this:
+            num_tokens_expected = [0]
+            gbs = 16
+            seqlen = 8
+            seqlen_real = seqlen
+            step_size = 4
+            total = 0
+            for iter in range(1, 10):
+                seqlen_real += step_size
+                if iter in skip_iterations:
+                    total += gbs*seqlen_real
+                else:
+                    seqlen += step_size
+                    total += gbs*seqlen
+                num_tokens_expected.append(total)
 
-        print(num_tokens)
-        print(num_tokens_expected)
-        for iteration, num_tokens_actual_this_iter in zip(train_iterations, num_tokens):
+#        train_iterations = [1] + list(range(3, 9))
+
+        print("actual  ", num_tokens_actual)
+        print("expected", num_tokens_expected[1:])
+        for iteration, num_tokens_actual_this_iter in zip(train_iterations, num_tokens_actual):
+            print(num_tokens_expected[iteration], num_tokens_actual_this_iter)
             self.assertEqual(num_tokens_expected[iteration], num_tokens_actual_this_iter)

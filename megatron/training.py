@@ -766,6 +766,8 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
             and args.skip_train_iteration_range[0][0] <= iteration + 1 <= args.skip_train_iteration_range[0][1]
         ):
             start, end = args.skip_train_iteration_range.popleft()
+            print_rank_0(f"RANGE: {start} {end}")
+            print_rank_0(f"iteration {args.iteration}")
             print_rank_0(f"Skipped iterations {start} {end} due to --skip-iterations flag.")
             while args.iteration + 1 <= end:
                 try:
@@ -773,18 +775,20 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
                 except TypeError:
                     pass
                 # TODO: refactor copied code
-                iteration += 1
-                args.iteration = iteration
                 update_num_microbatches(args.consumed_train_samples)
                 new_samples = mpu.get_data_parallel_world_size() * \
                                        args.micro_batch_size * \
                                        get_num_microbatches()
                 args.consumed_train_samples += new_samples
                 if args.curriculum_learning:
+                    print_rank_0(f"{args.consumed_train_tokens}, {new_samples}, {args.curriculum_seqlen}")
                     args.consumed_train_tokens += new_samples * args.curriculum_seqlen
                 else:
                     args.consumed_train_tokens += new_samples * args.seq_length
+                iteration += 1
+                args.iteration = iteration
             continue
+
         update_num_microbatches(args.consumed_train_samples)
         if args.deepspeed:
             # inform deepspeed of any batch size changes
