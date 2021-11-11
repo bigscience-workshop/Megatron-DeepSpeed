@@ -309,6 +309,12 @@ def parse_args(extra_args_provider=None, defaults={},
                 )
         args.skip_train_iteration_range = skip_train_iteration_range
 
+    if args.use_bnb_optimizer:
+        try:
+            import bitsandbytes as bnb
+        except ModuleNotFoundError:
+            raise ModuleNotFoundError("Please install bitsandbytes from https://github.com/facebookresearch/bitsandbytes.")
+
     _print_args(args)
     return args
 

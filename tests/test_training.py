@@ -44,6 +44,7 @@ def get_launcher(num_gpus):
 def get_3d_dimensions():
     num_gpus = get_gpu_count()
 
+    # with fewer gpus the preference is first to to do PP>1, then TP>1, then DP>1
     if num_gpus >= 8:
         dp_size = 2
         pp_size = 2
@@ -85,8 +86,13 @@ class MegDSTestTraining(TestCasePlus):
         num_gpus = pp_size * tp_size * dp_size
         print(f"Using {num_gpus} GPUs")
 
+        if variation == "bnb":
+            # we want to make sure at least tp=2 is used, so we swap tp and pp
+            pp_size, tp_size = tp_size, pp_size
+
         if n_samples is None:
             n_samples = 300 # about 56 iterations
+
         exit_interval = 20 # some samples in the first half and then some more in the 2nd half after resume
         seq_len = 128
 
@@ -290,8 +296,8 @@ class MegDSTestTraining(TestCasePlus):
         if variation == "glu":
             self.assertIn("Using GLU activation: GELU", cs.out)
 
-
-    def test_training_prefix_lm_all(self):
+    @parameterized.expand([(True, ), (False, )])
+    def test_training_prefix_lm_all(self, loss_on_targets_only):
         # all in one test
         src_dir = self.src_dir
         data_dir = f"{self.data_dir}/gpt2"
@@ -316,7 +322,7 @@ class MegDSTestTraining(TestCasePlus):
             --rampup-batch-size 2 2 {n_samples}
             --global-batch-size 16
             --train-samples {n_samples}
-            --loss-on-targets-only
+            {"--loss-on-targets-only" if loss_on_targets_only else ""}
 
             --optimizer adam
             --adam-beta1 0.9
