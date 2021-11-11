@@ -300,7 +300,7 @@ def parse_args(extra_args_provider=None, defaults={},
                 if not skip_train_iteration_range:
                     skip_train_iteration_range.append([start, end])
                 elif skip_train_iteration_range[-1][1] >= start:
-                    skip_train_iteration_range[-1][1] = end
+                    skip_train_iteration_range[-1][1] = max(end, skip_train_iteration_range[-1][1])
                 else:
                     skip_train_iteration_range.append([start, end])
             else:
