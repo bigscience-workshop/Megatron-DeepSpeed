@@ -16,6 +16,7 @@
 """Pretrain utilities."""
 
 from datetime import datetime
+import bisect
 import math
 import sys
 import time
@@ -669,7 +670,34 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
     timers('interval-time').start()
     print_datetime('before the start of training step')
     report_memory_flag = True
+
+    # flush intervals prior to current iteration
+    if args.skip_train_iteration_range is not None:
+        ends = [end for start, end in args.skip_train_iteration_range]
+        index = bisect.bisect_left(ends, iteration)
+        for _ in range(index):
+            args.skip_train_iteration_range.popleft()
+
     while iteration < args.train_iters:
+        if (
+            # train_data_iterator is not None
+            args.skip_train_iteration_range is not None
+            and len(args.skip_train_iteration_range) > 0
+            and args.skip_train_iteration_range[0][0] <= iteration + 1 <= args.skip_train_iteration_range[0][1]
+        ):
+            start, end = args.skip_train_iteration_range.popleft()
+            print_rank_0(f"RANGE: {start} {end}")
+            print_rank_0(f"iteration {args.iteration}")
+            print_rank_0(f"Skipped iterations {start} {end} due to --skip-iterations flag.")
+            iteration_for_skipping = args.iteration
+            while iteration_for_skipping + 1 <= end:
+                try:
+                    _ = next(train_data_iterator)
+                except TypeError:
+                    pass
+                iteration_for_skipping += 1
+            continue
+
         update_num_microbatches(args.consumed_train_samples)
         if args.deepspeed:
             # inform deepspeed of any batch size changes
