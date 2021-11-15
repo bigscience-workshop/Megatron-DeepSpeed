@@ -13,23 +13,25 @@
 # limitations under the License.
 
 import contextlib
+import importlib.util
 import inspect
 import logging
 import numpy as np
 import os
+import random
 import re
 import shutil
 import sys
 import tempfile
 import unittest
-import random
+
 from distutils.util import strtobool
 from io import StringIO
 from packaging import version
 from pathlib import Path
 from typing import Iterator, Union
 from unittest import mock
-import importlib.util
+from unittest.case import SkipTest
 
 
 try:
@@ -178,6 +180,27 @@ def require_deepspeed(test_case):
         return unittest.skip("test requires deepspeed")(test_case)
     else:
         return test_case
+
+def is_bnb_available():
+    return importlib.util.find_spec("bitsandbytes") is not None
+
+def require_bnb(test_case):
+    """
+    Decorator marking a test that requires bitsandbytes
+    """
+    if not is_bnb_available():
+        return unittest.skip("test requires bitsandbytes from https://github.com/facebookresearch/bitsandbytes")(test_case)
+    else:
+        return test_case
+
+
+def require_bnb_non_decorator():
+    """
+    Non-Decorator function that would skip a test if bitsandbytes is missing
+    """
+    if not is_bnb_available():
+        raise SkipTest("Test requires bitsandbytes from https://github.com/facebookresearch/bitsandbytes")
+
 
 def set_seed(seed: int=42):
     """

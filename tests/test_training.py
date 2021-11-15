@@ -19,12 +19,14 @@ import os
 import glob
 import unittest
 from pathlib import Path
+from parameterized import parameterized
 
 from megatron.testing_utils import (
     CaptureStdout,
     TestCasePlus,
     execute_subprocess_async,
     get_gpu_count,
+    require_bnb_non_decorator,
     require_deepspeed,
     require_torch_gpu,
     set_seed
@@ -41,16 +43,21 @@ def get_launcher(num_gpus):
 def get_3d_dimensions():
     num_gpus = get_gpu_count()
 
-    # XXX: if we had 8 gpus, could do dp_size too!
-    dp_size = 1
-
+    # with fewer gpus the preference is first to to do PP>1, then TP>1, then DP>1
+    if num_gpus >= 8:
+        dp_size = 2
+        pp_size = 2
+        tp_size = 2
     if num_gpus >= 4:
+        dp_size = 1
         pp_size = 2
         tp_size = 2
     elif num_gpus >= 2:
+        dp_size = 1
         pp_size = 2
         tp_size = 1
     else:
+        dp_size = 1
         pp_size = 1
         tp_size = 1
 
@@ -71,8 +78,222 @@ class MegDSTestTraining(TestCasePlus):
         if os.path.exists(meg_lock_file_path):
             os.unlink(meg_lock_file_path)
 
+    def get_variation_config(self, variation, output_dir):
+        data_dir = f"{self.data_dir}/gpt2"
 
-    def test_training_all(self):
+        pp_size, tp_size, dp_size = get_3d_dimensions()
+        num_gpus = pp_size * tp_size * dp_size
+        print(f"Using {num_gpus} GPUs")
+
+        if variation == "bnb":
+            # we want to make sure at least tp=2 is used, so we swap tp and pp
+            pp_size, tp_size = tp_size, pp_size
+
+        n_samples = 300 # about 56 iterations
+        exit_interval = 20 # some samples in the first half and then some more in the 2nd half after resume
+        seq_len = 128
+
+        # common/shared configs
+
+        ds_args = f"""
+                --deepspeed
+                --deepspeed_config {self.test_file_dir_str}/ds_config.json
+                --zero-stage 1
+                --deepspeed-activation-checkpointing
+        """.split()
+
+        args = f"""
+                --tensor-model-parallel-size {tp_size}
+                --pipeline-model-parallel-size {pp_size}
+                --distributed-backend nccl
+
+                --log-interval 5
+                --save-interval 10
+                --eval-interval 10
+                --eval-iters 5
+                --checkpoint-activations
+                --exit-interval {exit_interval}
+
+                --merge-file {data_dir}/gpt2-tiny-merges.txt
+                --vocab-file {data_dir}/gpt2-tiny-vocab.json
+                --save {output_dir}/checkpoints
+                --load {output_dir}/checkpoints
+                --data-path {data_dir}/meg-gpt2-openwebtext_text_document
+                --tensorboard-dir {output_dir}/tensorboard
+                --tensorboard-queue-size 5
+                --log-timers-to-tensorboard
+                --log-batch-size-to-tensorboard
+                --log-validation-ppl-to-tensorboard
+
+                --num-layers 2
+                --hidden-size 64
+                --num-attention-heads 2
+                --seq-length {seq_len}
+                --max-position-embeddings 1024
+                --micro-batch-size 1
+                --global-batch-size 16
+
+                --optimizer adam
+                --adam-beta1 0.9
+                --adam-beta2 0.95
+                --adam-eps 1e-8
+                --lr 1e-4
+                --lr-warmup-samples 5
+                --clip-grad 1.0
+                --weight-decay 1e-1
+                --fp16
+
+                --log-level debug
+                --log-level-replica info
+        """.split()
+
+
+        if variation == "base":
+
+            new_args = f"""
+                --rampup-batch-size 2 2 {n_samples}
+                --train-samples {n_samples}
+
+                --lr-decay-samples 6
+
+            """.split()
+
+            new_ds_args = f"""
+                --deepspeed_config {self.test_file_dir_str}/ds_config.json
+            """.split()
+
+
+        elif variation == "bnb":
+            # BitsAndBytes - 8-bit optimizer
+
+            new_args = f"""
+                --rampup-batch-size 2 2 {n_samples}
+                --train-samples {n_samples}
+
+                --lr-decay-samples 6
+
+                --use-bnb-optimizer
+            """.split()
+
+            new_ds_args = f"""
+                --deepspeed_config {self.test_file_dir_str}/ds_config.json
+            """.split()
+
+
+        elif variation == "cl":
+            # CurriculumLearning
+
+            lr_decay_samples = 6
+            lr_decay_tokens = lr_decay_samples * seq_len
+
+            train_tokens = n_samples * seq_len
+
+            # XXX: if changing seq_len from 128, must adjust ds config to:
+            #  curriculum_learning.max_difficulty: $SEQLEN
+
+            # XXX: probably we should write the ds config on the fly to keep everything in sync,
+            # rather than using the pre-saved config
+
+            new_args = f"""
+                --train-samples {n_samples*2}
+                --train-tokens {train_tokens}
+
+                --lr-decay-tokens {lr_decay_tokens}
+            """.split()
+
+            new_ds_args = f"""
+                --deepspeed_config {self.test_file_dir_str}/ds_config_cl.json
+            """.split()
+
+        elif variation == "glu":
+            new_args = f"""
+                --rampup-batch-size 2 2 {n_samples}
+                --train-samples {n_samples}
+
+                --lr-decay-samples 6
+
+                --no-bias-gelu-fusion
+                --glu-activation geglu
+            """.split()
+
+            new_ds_args = f"""
+                --deepspeed_config {self.test_file_dir_str}/ds_config.json
+            """.split()
+        else:
+            raise ValueError(f"Don't know of variation {variation}")
+
+        args.extend(new_args)
+        ds_args.extend(new_ds_args)
+
+        return args, ds_args, num_gpus
+
+
+    @parameterized.expand(["base", "cl", "bnb", "glu"])
+    def test_training_all(self, variation):
+
+        # optional runs
+        if variation == "bnb":
+            require_bnb_non_decorator()
+
+        # all in one test
+        src_dir = self.src_dir
+        output_dir = self.get_auto_remove_tmp_dir() # "./xxx", after=False)
+
+        args, ds_args, num_gpus = self.get_variation_config(variation, output_dir)
+
+        script = [f"{src_dir}/pretrain_gpt.py"]
+        launcher = get_launcher(num_gpus)
+
+        cmd = launcher + script + args + ds_args
+        # keep for quick debug
+        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
+
+        # 1. test training from scratch (no checkpoint)
+        with CaptureStdout() as cs:
+            execute_subprocess_async(cmd, env=self.get_env())
+
+        # test deepspeed is running
+        self.assertIn("DeepSpeed info", cs.out)
+
+        # test reports
+        self.assertIn("consumed samples", cs.out)
+
+        # test there should be no checkpoint this round
+        self.assertIn(f"Unable to find latest file at {output_dir}/checkpoints/latest", cs.out)
+
+        # test checkpoint saving
+        self.assertIn("successfully saved checkpoint at iteration", cs.out)
+
+        # test tensorboard
+        tensorboard_files = glob.glob(f"{output_dir}/tensorboard/events*")
+        self.assertEqual(len(tensorboard_files), 1, "tensorboard files")
+
+        if variation == "glu":
+            self.assertIn("Using GLU activation: GELU", cs.out)
+
+        # 2. test training from checkpoint: resume
+        # now do it again, this time resuming from the checkpoint
+        with CaptureStdout() as cs:
+            execute_subprocess_async(cmd, env=self.get_env())
+
+        # test checkpoint loading
+        self.assertIn(f"successfully loaded checkpoint from {output_dir}/checkpoints", cs.out)
+
+        # test reports
+        self.assertIn("consumed samples", cs.out)
+
+        # test checkpoint saving
+        self.assertIn("successfully saved checkpoint at iteration", cs.out)
+
+        # test tensorboard (1 file from the first run, plus 1 now)
+        tensorboard_files = glob.glob(f"{output_dir}/tensorboard/events*")
+        self.assertEqual(len(tensorboard_files), 2, "tensorboard files")
+
+        if variation == "glu":
+            self.assertIn("Using GLU activation: GELU", cs.out)
+
+    @parameterized.expand([(True, ), (False, )])
+    def test_training_prefix_lm_all(self, loss_on_targets_only):
         # all in one test
         src_dir = self.src_dir
         data_dir = f"{self.data_dir}/gpt2"
@@ -97,6 +318,7 @@ class MegDSTestTraining(TestCasePlus):
             --rampup-batch-size 2 2 {n_samples}
             --global-batch-size 16
             --train-samples {n_samples}
+            {"--loss-on-targets-only" if loss_on_targets_only else ""}
 
             --optimizer adam
             --adam-beta1 0.9
@@ -113,7 +335,6 @@ class MegDSTestTraining(TestCasePlus):
             --eval-interval 10
             --eval-iters 5
             --checkpoint-activations
-            --glu-activation geglu
             --exit-interval {exit_interval}
 
             --merge-file {data_dir}/gpt2-tiny-merges.txt
@@ -121,7 +342,6 @@ class MegDSTestTraining(TestCasePlus):
             --save {output_dir}/checkpoints
             --load {output_dir}/checkpoints
             --data-path {data_dir}/meg-gpt2-openwebtext_text_document
-            --codecarbon-dir {output_dir}/codecarbon
             --tensorboard-dir {output_dir}/tensorboard
             --tensorboard-queue-size 5
             --log-timers-to-tensorboard
@@ -136,7 +356,7 @@ class MegDSTestTraining(TestCasePlus):
             --deepspeed-activation-checkpointing
         """.split()
 
-        script = [f"{src_dir}/pretrain_gpt.py"]
+        script = [f"{src_dir}/pretrain_prefix_lm.py"]
         launcher = get_launcher(num_gpus)
 
         cmd = launcher + script + args + ds_args
@@ -180,3 +400,98 @@ class MegDSTestTraining(TestCasePlus):
         # test tensorboard (1 file from the first run, plus 1 now)
         tensorboard_files = glob.glob(f"{output_dir}/tensorboard/events*")
         self.assertEqual(len(tensorboard_files), 2, "tensorboard files")
+
+    @parameterized.expand(["gpt", "prefix", "no_eval"])
+    def test_mode2_dataloading(self, variation):
+        src_dir = self.src_dir
+        data_dir = f"{self.data_dir}/gpt2"
+        output_dir = self.get_auto_remove_tmp_dir() # "./xxx", after=False)
+
+        pp_size, tp_size, dp_size = get_3d_dimensions()
+        num_gpus = pp_size * tp_size * dp_size
+
+        n_samples = 200 # about 37 iterations
+        exit_interval = 20 # some samples in the first half and then some more in the 2nd half after resume
+        args = f"""
+            --tensor-model-parallel-size {tp_size}
+            --pipeline-model-parallel-size {pp_size}
+            --distributed-backend nccl
+
+            --num-layers 2
+            --hidden-size 64
+            --num-attention-heads 2
+            --seq-length 128
+            --max-position-embeddings 1024
+            --micro-batch-size 1
+            --rampup-batch-size 2 2 {n_samples}
+            --global-batch-size 16
+            --train-samples {n_samples}
+            --loss-on-targets-only
+
+            --optimizer adam
+            --adam-beta1 0.9
+            --adam-beta2 0.95
+            --adam-eps 1e-8
+            --lr 1e-4
+            --lr-warmup-samples 5
+            --clip-grad 1.0
+            --weight-decay 1e-1
+            --fp16
+
+            --log-interval 5
+            --save-interval 10
+            --eval-interval 10
+            --eval-iters 5
+            --checkpoint-activations
+            --exit-interval {exit_interval}
+
+            --merge-file {data_dir}/gpt2-tiny-merges.txt
+            --vocab-file {data_dir}/gpt2-tiny-vocab.json
+            --save {output_dir}/checkpoints
+            --tensorboard-dir {output_dir}/tensorboard
+            --tensorboard-queue-size 5
+            --log-timers-to-tensorboard
+            --log-batch-size-to-tensorboard
+            --log-validation-ppl-to-tensorboard
+        """.split()
+
+        data_args = [
+            "--train-weighted-split-paths", f'TRAIN: 1 0:0.95 {data_dir}/meg-gpt2-openwebtext_text_document, 0.3 0:0.90 {data_dir}/meg-gpt2-openwebtext_text_document']
+
+        if variation != "no_eval":
+            data_args += ["--valid-weighted-split-paths", f'VALID1: 1 0.95:0.98 {data_dir}/meg-gpt2-openwebtext_text_document, 0.3 0.90:0.99 {data_dir}/meg-gpt2-openwebtext_text_document',
+                                            f'VALID2: 0.5 0.95:0.97 {data_dir}/meg-gpt2-openwebtext_text_document, 0.5 0.90:0.98 {data_dir}/meg-gpt2-openwebtext_text_document']
+
+        ds_args = f"""
+            --deepspeed
+            --deepspeed_config {self.test_file_dir_str}/ds_config.json
+            --zero-stage 1
+            --deepspeed-activation-checkpointing
+        """.split()
+
+        if variation == "prefix":
+            script = [f"{src_dir}/pretrain_prefix_lm.py"]
+        else:
+            script = [f"{src_dir}/pretrain_gpt.py"]
+        launcher = get_launcher(num_gpus)
+
+        cmd = launcher + script + args + data_args + ds_args
+        # keep for quick debug
+        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
+
+        # 1. test training from scratch (no checkpoint)
+        with CaptureStdout() as cs:
+            execute_subprocess_async(cmd, env=self.get_env())
+
+        # test deepspeed is running
+        self.assertIn("DeepSpeed info", cs.out)
+
+        # test reports
+        self.assertIn("consumed samples", cs.out)
+
+        # test checkpoint saving
+        self.assertIn("successfully saved checkpoint at iteration", cs.out)
+
+        # test tensorboard
+        tensorboard_files = glob.glob(f"{output_dir}/tensorboard/events*")
+        self.assertEqual(len(tensorboard_files), 1, "tensorboard files")

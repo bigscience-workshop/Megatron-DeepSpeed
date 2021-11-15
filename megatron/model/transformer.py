@@ -19,7 +19,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from megatron import get_args
+from megatron import get_args, logging
 from megatron import mpu
 from .module import MegatronModule
 from megatron.enums import AttnMaskType, LayerType, AttnType, PositionEmbeddingType
@@ -38,6 +38,8 @@ torch._C._jit_set_profiling_mode(False)
 torch._C._jit_set_profiling_executor(False)
 torch._C._jit_override_can_fuse_on_cpu(True)
 torch._C._jit_override_can_fuse_on_gpu(True)
+
+logger = logging.get_logger(__name__)
 
 """ We use the following notation throughout this file:
      h: hidden size
@@ -67,10 +69,11 @@ class ParallelMLP(MegatronModule):
         super(ParallelMLP, self).__init__()
         args = get_args()
 
-        # Project to 4h.
+        # Project to ffn_hidden_size
         self.dense_h_to_4h = mpu.ColumnParallelLinear(
             args.hidden_size,
-            args.ffn_hidden_size,
+            # GLU is a special activation that divides the dimension by a factor 2.
+            2 * args.ffn_hidden_size if args.glu_activation else args.ffn_hidden_size,
             gather_output=False,
             init_method=init_method,
             skip_bias_add=True)

@@ -152,8 +152,8 @@ class Embedding(MegatronModule):
         # token types and add them as needed.
         self._tokentype_embeddings_key = 'tokentype_embeddings'
         if self.num_tokentypes > 0:
-            self.tokentype_embeddings = torch.nn.Embedding(self.num_tokentypes,
-                                                           self.hidden_size)
+            self.tokentype_embeddings = torch.nn.Embedding(
+                self.num_tokentypes, self.hidden_size)
             # Initialize the token-type embeddings.
             self.init_method(self.tokentype_embeddings.weight)
         else:
@@ -173,8 +173,8 @@ class Embedding(MegatronModule):
             print('adding embedding for {} tokentypes'.format(num_tokentypes),
                   flush=True)
         self.num_tokentypes = num_tokentypes
-        self.tokentype_embeddings = torch.nn.Embedding(num_tokentypes,
-                                                       self.hidden_size)
+        self.tokentype_embeddings = self.torch.nn.Embedding(num_tokentypes,
+                                                            self.hidden_size)
         # Initialize the token-type embeddings.
         args = get_args()
         self.init_method(self.tokentype_embeddings.weight)
@@ -283,14 +283,13 @@ class EmbeddingPipe(Embedding):
             tokentype_ids = inputs[3]
         else:
             tokentype_ids = None
-        
+
         embeddings = super().forward(input_ids, position_ids, tokentype_ids=tokentype_ids)
 
         # If cmd args has attn_mask, we don't forward it as an activation.
         if hasattr(self._args, 'attn_mask'):
             return embeddings
         else:
-            assert False
             return embeddings, attention_mask
 
 

@@ -130,6 +130,7 @@ def save_checkpoint(iteration, model, optimizer, lr_scheduler):
         state_dict['args'] = args
         state_dict['checkpoint_version'] = 3.0
         state_dict['iteration'] = iteration
+        state_dict['tokens'] = args.consumed_train_tokens
 
         # DeepSpeed saves the model/optimizer/scheduler
         if not args.deepspeed:
@@ -178,7 +179,8 @@ def save_checkpoint(iteration, model, optimizer, lr_scheduler):
         iteration, args.save))
 
     # And update the latest iteration
-    if not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0:
+    if (not args.deepspeed
+        and (not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0)):
         tracker_filename = get_checkpoint_tracker_filename(args.save)
         with open(tracker_filename, 'w') as f:
             f.write(str(iteration))
@@ -342,6 +344,8 @@ def load_checkpoint(model, optimizer, lr_scheduler, load_arg='load', strict=True
     else:
         try:
             iteration = state_dict['iteration']
+            if 'tokens' in state_dict:
+                args.consumed_train_tokens = state_dict['tokens']
         except KeyError:
             try:  # Backward compatible with older checkpoints
                 iteration = state_dict['total_iters']
