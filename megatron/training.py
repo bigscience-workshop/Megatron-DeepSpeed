@@ -768,7 +768,9 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
             start, end = args.skip_train_iteration_range.popleft()
             print_rank_0(f"RANGE: {start} {end}")
             print_rank_0(f"iteration {args.iteration}")
-            print_rank_0(f"Skipped iterations {start} {end} due to --skip-iterations flag.")
+            print_rank_0(
+                f"Skipped iterations {start} to {end} due to --skip-train-iteration-range flag."
+            )
             while args.iteration + 1 <= end:
                 try:
                     _ = next(train_data_iterator)

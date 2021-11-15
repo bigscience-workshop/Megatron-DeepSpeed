@@ -523,8 +523,8 @@ class MegDSTestTraining(TestCasePlus):
             execute_subprocess_async(cmd, env=self.get_env())
 
         # check skipped iterations
-        self.assertIn("Skipped iterations 2 2 due to --skip-iterations flag", cs.out)
-        self.assertIn("Skipped iterations 4 7 due to --skip-iterations flag", cs.out)
+        self.assertIn("Skipped iterations 2 to 2 due to --skip-train-iteration-range flag", cs.out)
+        self.assertIn("Skipped iterations 4 to 7 due to --skip-train-iteration-range flag", cs.out)
 
         skip_iterations = [2, 4, 5, 6, 7]
         for i in skip_iterations:
