@@ -500,10 +500,7 @@ class MegDSTestTraining(TestCasePlus):
         tensorboard_files = glob.glob(f"{output_dir}/tensorboard/events*")
         self.assertEqual(len(tensorboard_files), 1, "tensorboard files")
 
-
-
-    @parameterized.expand(["base", "cl"])
-    def test_skip_train_iteration(self, variation):
+    def test_skip_train_iteration(self):
         # skip iterations setup
         extra_args = f"""
             --skip-train-iteration-range 2-2 4-7
@@ -511,7 +508,7 @@ class MegDSTestTraining(TestCasePlus):
 
         src_dir = self.src_dir
         output_dir = self.get_auto_remove_tmp_dir()
-        args, ds_args, num_gpus = self.get_variation_config(variation, output_dir, n_samples=200)
+        args, ds_args, num_gpus = self.get_variation_config("base", output_dir, n_samples=200)
         args.extend(extra_args)
         script = [f"{src_dir}/pretrain_gpt.py"]
         launcher = get_launcher(num_gpus)
@@ -525,43 +522,3 @@ class MegDSTestTraining(TestCasePlus):
         # check skipped iterations
         self.assertIn("Skipped iterations 2 to 2 due to --skip-train-iteration-range flag", cs.out)
         self.assertIn("Skipped iterations 4 to 7 due to --skip-train-iteration-range flag", cs.out)
-
-        skip_iterations = [2, 4, 5, 6, 7]
-        for i in skip_iterations:
-            self.assertTrue(f"iteration {i:8d}/" not in cs.out)
-
-        # check train iterations
-        train_iterations = [1, 3, 8]
-        for i in train_iterations:
-            self.assertTrue(f"iteration {i:8d}/" in cs.out)
-
-        # check consumed tokens
-        consumed_token_logs = re.findall(r"consumed tokens:\s+\d+", cs.out)
-        num_tokens_actual = [int(log.split()[-1]) for log in consumed_token_logs]
-        if variation == "base":
-            num_tokens_expected = [num_tokens_actual[0]*iter for iter in range(20)]
-        elif variation == "cl":
-            # the seqlen is progressively increased starting with min_difficulty in difficulty_step
-            # steps over total_curriculum_step steps, see ds_config_cl.json for details
-            # num_tokens_expected = [int(16*4*(iter*(1+iter)/2-3)) for iter in range(2, 20)]
-            # but it's not that, it's this:
-            num_tokens_expected = [0]
-            gbs = 16
-            seqlen = 8
-            seqlen_real = seqlen
-            step_size = 4
-            total = 0
-            for iter in range(1, 10):
-                seqlen += step_size
-                if iter in skip_iterations:
-                    total += gbs*seqlen_real
-                else:
-                    seqlen_real = seqlen
-                    total += gbs*seqlen_real
-                num_tokens_expected.append(total)
-
-        print("actual  ", num_tokens_actual)
-        print("expected", num_tokens_expected[1:])
-        for iteration, num_tokens_actual_this_iter in zip(train_iterations, num_tokens_actual):
-            print(num_tokens_expected[iteration], num_tokens_actual_this_iter)
-            self.assertEqual(num_tokens_expected[iteration], num_tokens_actual_this_iter)
