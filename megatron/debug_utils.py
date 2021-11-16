@@ -114,23 +114,16 @@ class DebugUnderflowOverflow:
 
     """
 
-    def __init__(self, model, max_frames_to_save=21, trace_batch_nums=[], abort_after_batch_num=None, print_fh=sys.stdout, tb_path=None, rank=0):
+    def __init__(self, args, model, print_fh=sys.stdout):
+        self.args = args
         self.model = model
-        self.trace_batch_nums = trace_batch_nums
-        self.abort_after_batch_num = abort_after_batch_num
         self.print_fh = print_fh
-        self.tb_path = tb_path
-        self.rank = rank
+        self.tb_path = args.tensorboard_debug_dir
+        self.rank = args.rank
 
-        self.file_handles = {}
         self.tbs = {}
 
-        # keep a LIFO buffer of frames to dump as soon as inf/nan is encountered to give context to the problem emergence
-        self.frames = collections.deque([], max_frames_to_save)
         self.frame = []
-        self.batch_number = 0
-        self.total_calls = 0
-        self.detected_overflow = False
         self.prefix = "                 "
 
         self.analyse_model()
@@ -156,13 +149,6 @@ class DebugUnderflowOverflow:
     def reset_saved_frames(self):
         self.frames = []
 
-    def dump_saved_frames(self):
-        self.print(f"\nDetected inf/nan during batch_number={self.batch_number}")
-        self.print(f"Last {len(self.frames)} forward frames:")
-        self.print(f"{'abs min':8} {'abs max':8} metadata")
-        self.print("\n".join(self.frames))
-        self.print("\n\n")
-        self.frames = []
 
     def analyse_model(self):
         # extract the fully qualified module names, to be able to report at run time. e.g.:
@@ -175,26 +161,11 @@ class DebugUnderflowOverflow:
     def analyse_variable(self, var, ctx):
         if torch.is_tensor(var):
             self.expand_frame(get_abs_min_max(var, ctx))
-            if detect_overflow(var, ctx):
-                self.detected_overflow = True
-        elif var is None:
-            self.expand_frame(f"{'None':>17} {ctx}")
-        else:
-            self.expand_frame(f"{'not a tensor':>17} {ctx}")
-
-    # def batch_start_frame(self):
-    #     self.expand_frame(f"\n\n{self.prefix} *** Starting batch number={self.batch_number} ***")
-    #     self.expand_frame(f"{'abs min':8} {'abs max':8} metadata")
-
-    # def batch_end_frame(self):
-    #     self.expand_frame(f"{self.prefix} *** Finished batch number={self.batch_number-1} ***\n\n")
 
     def create_frame(self, module, input, output):
 
         # XXX: hack
         self.frame = []
-
-#        self.expand_frame(f"{self.prefix} {self.module_names[module]} {module.__class__.__name__}")
 
         # params
         for name, p in module.named_parameters(recurse=False):
@@ -258,7 +229,7 @@ class DebugUnderflowOverflow:
             rec_min, rec_max, name = segments
             # if first_time:
             #     headers.append(name)
-            tb.add_scalar(name, float(rec_max), self.batch_number)
+            tb.add_scalar(name, float(rec_max), self.args.iteration)
 
         #     records_max.append(str(rec_max))
         # if first_time:
