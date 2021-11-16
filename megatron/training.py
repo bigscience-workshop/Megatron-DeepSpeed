@@ -344,6 +344,16 @@ def setup_model_and_optimizer(model_provider_func):
     unwrapped_model = unwrap_model(model,
                                    (torchDDP, LocalDDP, Float16Module))
 
+    if args.tensorboard_debug_dir:
+        from megatron.debug_utils import DebugUnderflowOverflow, DebugGradientNorm
+        DebugUnderflowOverflow(unwrapped_model[0], trace_batch_nums=[1,2,3], tb_path=args.tensorboard_debug_dir, rank=args.rank)
+
+    #x = DebugGradientNorm(model).register_backward_hook()
+    #for module in model:
+    #    DebugGradientNorm(module).register_backward_hook()
+
+
+
     optimizer = get_megatron_optimizer(unwrapped_model)
 
     lr_scheduler = get_learning_rate_scheduler(optimizer)
@@ -702,7 +712,7 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
     if mpu.get_data_parallel_rank() == 0:
         print(f"Number of parameters: {get_parameters_in_billions(model)} billion")
         print(f"Number of parameters without embeddings: {get_parameters_in_billions(model, exclude_embeddings=True)} billion")
-        
+
     # Write args to tensorboard
     write_args_to_tensorboard()
 
