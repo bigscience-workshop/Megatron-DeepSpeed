@@ -757,8 +757,7 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
         for _ in range(index):
             args.skip_train_iteration_range.popleft()
 
-    while iteration < args.train_iters and (args.train_tokens is None or \
-        args.consumed_train_tokens < args.train_tokens):
+    while iteration < args.train_iters:
         if (
             # train_data_iterator is not None
             args.skip_train_iteration_range is not None
@@ -766,29 +765,18 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
             and args.skip_train_iteration_range[0][0] <= iteration + 1 <= args.skip_train_iteration_range[0][1]
         ):
             start, end = args.skip_train_iteration_range.popleft()
-            print_rank_0(f"RANGE: {start} {end}")
-            print_rank_0(f"iteration {args.iteration}")
+            # print_rank_0(f"RANGE: {start} {end}")
+            # print_rank_0(f"iteration {args.iteration}")
             print_rank_0(
                 f"Skipped iterations {start} to {end} due to --skip-train-iteration-range flag."
             )
-            while args.iteration + 1 <= end:
+            iteration_for_skipping = args.iteration
+            while iteration_for_skipping + 1 <= end:
                 try:
                     _ = next(train_data_iterator)
                 except TypeError:
                     pass
-                # TODO: refactor copied code
-                update_num_microbatches(args.consumed_train_samples)
-                new_samples = mpu.get_data_parallel_world_size() * \
-                                       args.micro_batch_size * \
-                                       get_num_microbatches()
-                args.consumed_train_samples += new_samples
-                if args.curriculum_learning:
-                    print_rank_0(f"{args.consumed_train_tokens}, {new_samples}, {args.curriculum_seqlen}")
-                    args.consumed_train_tokens += new_samples * args.curriculum_seqlen
-                else:
-                    args.consumed_train_tokens += new_samples * args.seq_length
-                iteration += 1
-                args.iteration = iteration
+                iteration_for_skipping += 1
             continue
 
         update_num_microbatches(args.consumed_train_samples)
