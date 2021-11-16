@@ -53,6 +53,7 @@ from megatron.schedules import forward_backward_pipelining_without_interleaving
 from megatron.schedules import forward_backward_pipelining_with_interleaving
 from megatron.utils import report_memory, flops_calculator
 from megatron.global_vars import codecarbon_tracker_start, codecarbon_tracker_stop
+from megatron.data.dataset_utils import analyze_data_prefix
 
 import deepspeed
 
@@ -132,8 +133,8 @@ def pretrain(train_valid_test_dataset_provider,
     # Model, optimizer, and learning rate.
     timers('model-and-optimizer-setup').start()
     model, optimizer, lr_scheduler = setup_model_and_optimizer(model_provider)
-    print(f'estimated model parameters: {get_parameters_in_billions(model)}')
-    print(f'estimated model parameters without embeddings: {get_parameters_in_billions(model, exclude_embeddings=True)}')
+    print_rank_0(f'estimated model parameters: {get_parameters_in_billions(model)}')
+    print_rank_0(f'estimated model parameters without embeddings: {get_parameters_in_billions(model, exclude_embeddings=True)}')
     timers('model-and-optimizer-setup').stop()
     print_datetime('after model, optimizer, and learning rate '
                    'scheduler are built')
@@ -149,9 +150,24 @@ def pretrain(train_valid_test_dataset_provider,
         valid_data_iterator = [data_iterators[1] for data_iterators in all_data_iterators]
         test_data_iterator = [data_iterators[2] for data_iterators in all_data_iterators]
     else:
-        train_data_iterator, valid_data_iterator, test_data_iterator \
-            = build_train_valid_test_data_iterators(
+        train_data_iterator, valid_data_iterator, test_data_iterator = build_train_valid_test_data_iterators(
                 train_valid_test_dataset_provider)
+
+    if args.data_path is not None and len(args.data_path) > 1:
+        prefixes, weights = analyze_data_prefix(args.data_path)
+        setattr(args, "data_prefixes", prefixes)
+        setattr(args, "data_weights", weights)
+    elif args.train_weighted_split_paths is not None and len(args.train_weighted_split_paths[0]) > 1:
+        paths = args.train_weighted_split_paths[0]
+        weights = args.train_weighted_split_weights[0]
+        data_prefix = [j for i in [[w,p] for w,p in zip(weights, paths)] for j in i]
+        prefixes, weights = analyze_data_prefix(data_prefix)
+        setattr(args, "data_prefixes", prefixes)
+        setattr(args, "data_weights", weights)
+    else:
+        setattr(args, "data_prefixes", None)
+        setattr(args, "data_weights", None)
+
     timers('train/valid/test-data-iterators-setup').stop()
     print_datetime('after dataloaders are built')
 
@@ -168,10 +184,13 @@ def pretrain(train_valid_test_dataset_provider,
     print_datetime('after training is done')
 
     if args.do_valid:
-        prefix = 'the end of training for val data'
-        evaluate_and_print_results(prefix, forward_step_func,
-                                   valid_data_iterator, model,
-                                   iteration, False)
+        names = args.valid_weighted_split_names
+        names = names if names is not None else ['valid'] * len(valid_data_iterator)
+        for iterator, name in zip(valid_data_iterator, names):
+            prefix = 'the end of training for val data'
+            evaluate_and_print_results(prefix, forward_step_func,
+                                       iterator, model,
+                                       iteration, False, data_group_name=name)
 
     if args.save and iteration != 0:
         save_checkpoint(iteration, model, optimizer, lr_scheduler)
@@ -179,9 +198,12 @@ def pretrain(train_valid_test_dataset_provider,
     if args.do_test:
         # Run on test data.
         prefix = 'the end of training for test data'
-        evaluate_and_print_results(prefix, forward_step_func,
-                                   test_data_iterator, model,
-                                   0, True)
+        names = args.test_weighted_split_names
+        names = names if names is not None else ['test'] * len(test_data_iterator)
+        for iterator, name in zip(test_data_iterator, names):
+            evaluate_and_print_results(prefix, forward_step_func,
+                                       iterator, model,
+                                       0, True, data_group_name=name)
 
     codecarbon_tracker_stop()
 
@@ -630,6 +652,14 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
         if args.curriculum_learning:
             writer.add_scalar('curriculum_seqlen', args.curriculum_seqlen,
                               iteration)
+
+        if args.data_weights is not None:
+            for prefix, weight in zip(args.data_prefixes, args.data_weights):
+                name = prefix.split(",")[-1]
+                writer.add_scalar(f'samples-per-dataset/{name}', args.consumed_train_samples * weight, args.consumed_train_samples)
+                writer.add_scalar(f'steps-per-dataset/{name}', iteration * weight, iteration)
+                writer.add_scalar(f'tokens-per-dataset/{name}', args.consumed_train_tokens * weight, args.consumed_train_tokens)
+
         if args.log_timers_to_tensorboard:
             timers.write(timers_to_log, writer, iteration,
                          normalizer=total_iterations)
@@ -786,9 +816,12 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
         if args.eval_interval and iteration % args.eval_interval == 0 and \
            args.do_valid:
             prefix = 'iteration {}'.format(iteration)
-            evaluate_and_print_results(prefix, forward_step_func,
-                                       valid_data_iterator, model,
-                                       iteration, False)
+            names = args.valid_weighted_split_names
+            names = names if names is not None else ['valid'] * len(valid_data_iterator)
+            for iterator, name in zip(valid_data_iterator, names):
+                evaluate_and_print_results(prefix, forward_step_func,
+                                           iterator, model,
+                                           iteration, False, data_group_name=name)
 
         # Checkpointing
         saved_checkpoint = False
@@ -822,7 +855,6 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
             print_datetime('exiting program at iteration {}'.format(iteration))
             sys.exit()
 
-
     return iteration
 
 
@@ -833,6 +865,17 @@ def evaluate(forward_step_func, data_iterator, model, verbose=False):
     # Turn on evaluation mode which disables dropout.
     for model_module in model:
         model_module.eval()
+
+    if args.curriculum_learning and \
+        args.pipeline_model_parallel_size >= 1:
+        # When curriculum learning is used with pipeline parallelism, we need
+        # this logic to ensure that the eval data is not truncated. If there
+        # is a seqlen change due to that, we need to call
+        # reset_activation_shape() to reset some buffers in deepspeed pipeline
+        # engine.
+        if args.curriculum_seqlen < args.seq_length:
+            args.curriculum_seqlen = args.seq_length
+            model[0].reset_activation_shape()
 
     total_loss_dict = {}
 
@@ -879,42 +922,57 @@ def evaluate(forward_step_func, data_iterator, model, verbose=False):
     for key in total_loss_dict:
         total_loss_dict[key] /= args.eval_iters * get_num_microbatches()
 
+    if args.curriculum_learning and \
+        args.pipeline_model_parallel_size >= 1:
+        # roll back to actual curriculum seqlen at the end of eval.
+        args.curriculum_seqlen = args.curriculum_scheduler.update_difficulty( \
+            args.iteration + 1)
+        if args.curriculum_seqlen < args.seq_length:
+            model[0].reset_activation_shape()
+
     return total_loss_dict
 
 def evaluate_and_print_results(prefix, forward_step_func,
                                data_iterator, model,
-                               iteration, verbose=False):
+                               iteration, verbose=False, **kwargs):
     """Helper function to evaluate and dump results on screen."""
+
+
     args = get_args()
     writer = get_tensorboard_writer()
 
+    ds_name = kwargs.get("data_group_name", None)
+    # print corresponding dataset name (used for multiple validation datasets)
+    tf_plot_prefix = f"lm-loss-validation/{ds_name}" if ds_name else "lm-loss-validation"
+
     total_loss_dict = evaluate(forward_step_func, data_iterator, model, verbose)
-    string = ' validation loss at {} | '.format(prefix)
+    string = '{} loss at {} | '.format(ds_name, prefix) if ds_name is not None\
+        else 'validation loss at {} | '.format(prefix)
     for key in total_loss_dict:
         string += '{} value: {:.6E} | '.format(key, total_loss_dict[key].item())
         ppl = math.exp(min(20, total_loss_dict[key].item()))
         string += '{} PPL: {:.6E} | '.format(key, ppl)
         if writer and is_last_rank():
-            writer.add_scalar(f'lm-loss-validation/{key} validation',
+            writer.add_scalar(f'{tf_plot_prefix}/{key} validation',
                               total_loss_dict[key].item(),
                               iteration)
-            writer.add_scalar(f'lm-loss-validation/{key} validation vs samples',
+            writer.add_scalar(f'{tf_plot_prefix}/{key} validation vs samples',
                               total_loss_dict[key].item(),
                               args.consumed_train_samples)
-            writer.add_scalar(f'lm-loss-validation/{key} validation vs tokens',
+            writer.add_scalar(f'{tf_plot_prefix}/{key} validation vs tokens',
                               total_loss_dict[key].item(),
                               args.consumed_train_tokens)
-            writer.add_scalar(f'lm-loss-validation/{key} validation vs gigaflos (without embeddings)',
+            writer.add_scalar(f'{tf_plot_prefix}/{key} validation vs gigaflos (without embeddings)',
                               total_loss_dict[key].item(),
                               args.gigaflos_no_embeds)
             if args.log_validation_ppl_to_tensorboard:
-                writer.add_scalar(f'lm-loss-validation/{key} validation ppl', ppl,
+                writer.add_scalar(f'{tf_plot_prefix}/{key} validation ppl', ppl,
                                   iteration)
-                writer.add_scalar(f'lm-loss-validation/{key} validation ppl vs samples',
+                writer.add_scalar(f'{tf_plot_prefix}/{key} validation ppl vs samples',
                                   ppl, args.consumed_train_samples)
-                writer.add_scalar(f'lm-loss-validation/{key} validation ppl vs tokens',
+                writer.add_scalar(f'{tf_plot_prefix}/{key} validation ppl vs tokens',
                                   ppl, args.consumed_train_tokens)
-                writer.add_scalar(f'lm-loss-validation/{key} validation ppl vs gigaflos (without embeddings)',
+                writer.add_scalar(f'{tf_plot_prefix}/{key} validation ppl vs gigaflos (without embeddings)',
                                   ppl, args.gigaflos_no_embeds)
 
     length = len(string) + 1
@@ -933,7 +991,7 @@ def build_train_valid_test_data_iterators(
     """XXX"""
     args = get_args()
 
-    (train_dataloader, valid_dataloader, test_dataloader) = (None, None, None)
+    (train_dataloader, valid_dataloaders, test_dataloaders) = (None, None, None)
 
     print_rank_0('> building train, validation, and test datasets ...')
 
@@ -953,7 +1011,6 @@ def build_train_valid_test_data_iterators(
 
     # Data loader only on rank 0 of each model parallel group.
     if mpu.get_tensor_model_parallel_rank() == 0:
-
         # Number of train/valid/test samples.
         if args.train_samples:
             train_samples = args.train_samples
@@ -971,23 +1028,43 @@ def build_train_valid_test_data_iterators(
         print_rank_0('    test:       {}'.format(train_val_test_num_samples[2]))
 
         # Build the datasets.
-        train_ds, valid_ds, test_ds = build_train_valid_test_datasets_provider(
-            train_val_test_num_samples)
+        train_ds, valid_ds, test_ds = build_train_valid_test_datasets_provider(train_val_test_num_samples)
+
+        # if dataloading option is not 2 convert to list to allow
+        # same interface for multiple data groups
+        # for validation and testing in option 2
+        if type(train_ds) != list and train_ds is not None:
+            train_ds = [train_ds]
+        if type(valid_ds) != list and valid_ds is not None:
+            valid_ds = [valid_ds]
+        if type(test_ds) != list and test_ds is not None:
+            test_ds = [test_ds]
 
         # Build dataloders.
+        assert len(train_ds) == 1, "only one training dataset group is allowed"
+
+        # train_dataloader is a single item while valid_dataloaders
+        # and test_dataloaders are arrays
         train_dataloader = build_pretraining_data_loader(
-            train_ds, args.consumed_train_samples)
-        valid_dataloader = build_pretraining_data_loader(
-            valid_ds, args.consumed_valid_samples)
-        test_dataloader = build_pretraining_data_loader(test_ds, 0)
+            train_ds[0], args.consumed_train_samples)
+
+        # We collapse None and empty list as both should mean we don't run validation
+        valid_dataloaders = [build_pretraining_data_loader(d, args.consumed_valid_samples)\
+                            for d in valid_ds] \
+                            if valid_ds is not None else []
+        # We collapse None and empty list as both should mean we don't run test
+        test_dataloaders = [build_pretraining_data_loader(d, 0) for d in test_ds] \
+                            if test_ds is not None else []
 
         # Flags to know if we need to do training/validation/testing.
         do_train = train_dataloader is not None and args.train_iters > 0
-        do_valid = valid_dataloader is not None and args.eval_iters > 0
-        do_test = test_dataloader is not None and args.eval_iters > 0
+
         # Need to broadcast num_tokens and num_type_tokens.
-        flags = torch.cuda.LongTensor(
-            [int(do_train), int(do_valid), int(do_test)])
+        flags = torch.cuda.LongTensor([
+            int(do_train),
+            len(valid_dataloaders) if args.eval_iters > 0 else 0, # eval_iters == 0 is equivalent to having no validation
+            len(test_dataloaders) if args.eval_iters > 0 else 0, # eval_iters == 0 is equivalent to having no test
+        ])
     else:
         flags = torch.cuda.LongTensor([0, 0, 0])
 
@@ -996,9 +1073,12 @@ def build_train_valid_test_data_iterators(
                                 mpu.get_tensor_model_parallel_src_rank(),
                                 group=mpu.get_tensor_model_parallel_group())
     args.do_train = flags[0].item()
-    args.do_valid = flags[1].item()
-    args.do_test = flags[2].item()
-
+    num_valid_ds = flags[1].item()
+    num_test_ds = flags[2].item()
+    assert num_test_ds >= 0
+    assert num_valid_ds >= 0
+    args.do_valid = num_valid_ds > 0
+    args.do_test = num_test_ds > 0
 
     # Build iterators.
     dl_type = args.dataloader_type
@@ -1010,16 +1090,18 @@ def build_train_valid_test_data_iterators(
     else:
         train_data_iterator = None
 
-    if valid_dataloader is not None:
-        valid_data_iterator = iter(valid_dataloader) if dl_type == 'single' \
-                              else iter(cyclic_iter(valid_dataloader))
+    if valid_dataloaders is not None:
+        valid_data_iterators = [iter(vdl) if dl_type == 'single' \
+                              else iter(cyclic_iter(valid_dataloaders))
+                                 for vdl in valid_dataloaders]
     else:
-        valid_data_iterator = None
+        valid_data_iterators = [None] * num_valid_ds
 
-    if test_dataloader is not None:
-        test_data_iterator = iter(test_dataloader) if dl_type == 'single' \
-                             else iter(cyclic_iter(test_dataloader))
+    if test_dataloaders is not None:
+        test_data_iterators = [iter(tdl) if dl_type == 'single' \
+                             else iter(cyclic_iter(test_dataloaders))
+                            for tdl in test_dataloaders]
     else:
-        test_data_iterator = None
+        test_data_iterators = [None] * num_test_ds
 
-    return train_data_iterator, valid_data_iterator, test_data_iterator
+    return train_data_iterator, valid_data_iterators, test_data_iterators

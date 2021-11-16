@@ -330,11 +330,14 @@ class Timers:
     def log(self, names, normalizer=1.0, reset=True):
         """Log a group of timers."""
         assert normalizer > 0.0
-        string = 'time (ms)'
+        string = ''
         for name in names:
             elapsed_time = self.timers[name].elapsed(
                 reset=reset) * 1000.0 / normalizer
             string += ' | {}: {:.2f}'.format(name, elapsed_time)
+        if not len(string):
+            return
+        string = 'time (ms)' + string
         if torch.distributed.is_initialized():
             if torch.distributed.get_rank() == (
                     torch.distributed.get_world_size() - 1):

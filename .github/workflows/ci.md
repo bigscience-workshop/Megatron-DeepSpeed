@@ -4,6 +4,8 @@ The CI is setup with github actions using the on-demand EC2 backend.
 
 This setup currently uses a 4gpu instance p3.8xlarge - to test tp=2, pp=2.
 
+**Unfortunately this only works for PRs created from non-forked branches**
+
 
 ## The workflow file
 
@@ -95,26 +97,30 @@ pip install -r requirements-ms.txt
 
 ```
 
-install it:
+install it: (it was cloned from `git clone https://github.com/NVIDIA/apex`)
+
 ```
-git clone https://github.com/NVIDIA/apex
 cd code/apex
-build.sh
+# I copied this script from my setup
+./build.sh
 ```
 
 
 ## make a new AMI image
 
-Once the needed things got installed (and every time anything new is installed) a new AMI must created (this is like an .iso image snapshot)
+Once the needed things got installed (and every time anything new is installed) a new AMI must be created (this is like an .iso image snapshot)
 
 1. go to https://us-east-2.console.aws.amazon.com/ec2/v2/home?region=us-east-1#Instances:
 2. choose the image to create a new image from
-3. Actions -> Create Image
+3. Actions -> Image and Templates -> Create Image
 
 Must ensure it's created in the correct region (same as in script) - or can copy it to the right region.
 
-Finally, once created, the script needs to be updated to that new AMI id (key `ec2-image-id`)
+The process of creating the image can be done while the instance that has been updated is still running.
 
+Just don't forget to turn the instance off when validated it to work.
+
+Finally, once created, the script needs to be updated to that new AMI id (key `ec2-image-id`) in `.github/workflows/main.py`
 
 
 ## Guides
