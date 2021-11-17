@@ -368,7 +368,7 @@ def _add_network_size_args(parser):
                        help='If set, use original BERT residula connection '
                        'ordering.')
     group.add_argument('--embed-layernorm', action='store_true',
-                       help='use layernorm for embedding")
+                       help='use layernorm for embedding')
     group.add_argument('--openai-gelu', action='store_true',
                        help='Use OpenAIs GeLU implementation. This option'
                        'should not be used unless for backward compatibility'
