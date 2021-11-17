@@ -283,7 +283,7 @@ def parse_args(extra_args_provider=None, defaults={},
     # Activation function
     if args.glu_activation is not None and args.bias_gelu_fusion:
         raise ValueError("if glu-activation is used, please set --no-bias-gelu-fusion")
-    
+
     # Skip train iterations
     if args.skip_train_iteration_range is not None:
         args.skip_train_iteration_range = [
@@ -543,7 +543,7 @@ def _add_training_args(parser):
     group.add_argument('--codecarbon-dir', type=str, default=None,
                        help='Write CodeCarbon logs to this directory.')
     group.add_argument('--skip-train-iteration-range', type=str, nargs='+', default=None,
-                       help='Iterations to skip in dash-separated notation.')
+                       help='Iteration ranges to skip. The values are one or more dash-separated ranges. e.g., 101-200 251-300.')
 
     return parser
 

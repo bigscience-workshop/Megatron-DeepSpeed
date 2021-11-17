@@ -522,3 +522,7 @@ class MegDSTestTraining(TestCasePlus):
         # check skipped iterations
         self.assertIn("Skipped iterations 2 to 2 due to --skip-train-iteration-range flag", cs.out)
         self.assertIn("Skipped iterations 4 to 7 due to --skip-train-iteration-range flag", cs.out)
+
+        train_iterations = range(1,10)
+        for i in train_iterations:
+            self.assertTrue(f"iteration {i:8d}/" in cs.out)
