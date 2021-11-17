@@ -148,9 +148,9 @@ def get_batch_pipe(data):
 
     # weight loss_mask
     if args.reweight_loss_based_on_position_frequency:
-        micro_batch_size, seq_length = tokens.shape
-        weight_loss = torch.arange(seq_length - 1, 0, -1, dtype=torch.float, device=loss_mask.device) / (seq_length - 1) * 2
-        loss_mask *= weight_loss
+        _, seq_length = tokens.shape
+        weight_loss = torch.arange(seq_length, 0, -1, dtype=torch.float, device=loss_mask.device) / (seq_length + 1) * 2
+        loss_mask *= weight_loss[None, :]
 
     return (tokens, position_ids, attention_mask), (labels, loss_mask), prefix_indices
 
