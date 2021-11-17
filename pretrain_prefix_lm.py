@@ -146,6 +146,12 @@ def get_batch_pipe(data):
         loss_on_targets_only=args.loss_on_targets_only
     )
 
+    # weight loss_mask
+    if args.reweight_loss_based_on_position_frequency:
+        micro_batch_size, seq_length = tokens.shape
+        weight_loss = torch.arange(seq_length - 1, 0, -1, dtype=torch.float, device=loss_mask.device) / (seq_length - 1) * 2
+        loss_mask *= weight_loss
+
     return (tokens, position_ids, attention_mask), (labels, loss_mask), prefix_indices
 
 def loss_func(loss_mask, output_tensor):
