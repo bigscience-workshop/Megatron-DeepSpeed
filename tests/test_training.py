@@ -144,7 +144,7 @@ class MegDSTestTraining(TestCasePlus):
                 --lr-warmup-samples 5
                 --clip-grad 1.0
                 --weight-decay 1e-1
-                --embed_layernorm
+                --embed-layernorm
                 --fp16
 
                 --log-level debug
