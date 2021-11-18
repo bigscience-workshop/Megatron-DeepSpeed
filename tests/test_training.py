@@ -343,6 +343,8 @@ class MegDSTestTraining(TestCasePlus):
             --log-timers-to-tensorboard
             --log-batch-size-to-tensorboard
             --log-validation-ppl-to-tensorboard
+
+            --log-level debug
         """.split()
 
         ds_args = f"""
