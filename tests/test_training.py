@@ -379,6 +379,9 @@ class MegDSTestTraining(TestCasePlus):
         tensorboard_files = glob.glob(f"{output_dir}/tensorboard/events*")
         self.assertEqual(len(tensorboard_files), 1, "tensorboard files")
 
+        if reweight_loss_based_on_position_frequency:
+            self.assertIn("Using loss reweighting", cs.out)
+
         # 2. test training from checkpoint: resume
         # now do it again, this time resuming from the checkpoint
         with CaptureStdout() as cs:
