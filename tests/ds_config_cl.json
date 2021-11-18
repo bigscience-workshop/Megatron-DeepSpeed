@@ -20,8 +20,8 @@
     "max_difficulty": 128,
     "schedule_type": "fixed_linear",
     "schedule_config": {
-      "total_curriculum_step": 25,
-      "difficulty_step": 2
+      "total_curriculum_step": 30,
+      "difficulty_step": 4
     }
   },
   "steps_per_print": 2000,

@@ -17,6 +17,7 @@ import io
 import json
 import os
 import glob
+import re
 import unittest
 from pathlib import Path
 from parameterized import parameterized
@@ -78,7 +79,7 @@ class MegDSTestTraining(TestCasePlus):
         if os.path.exists(meg_lock_file_path):
             os.unlink(meg_lock_file_path)
 
-    def get_variation_config(self, variation, output_dir):
+    def get_variation_config(self, variation, output_dir, n_samples=None):
         data_dir = f"{self.data_dir}/gpt2"
 
         pp_size, tp_size, dp_size = get_3d_dimensions()
@@ -89,7 +90,9 @@ class MegDSTestTraining(TestCasePlus):
             # we want to make sure at least tp=2 is used, so we swap tp and pp
             pp_size, tp_size = tp_size, pp_size
 
-        n_samples = 300 # about 56 iterations
+        if n_samples is None:
+            n_samples = 300 # about 56 iterations
+
         exit_interval = 20 # some samples in the first half and then some more in the 2nd half after resume
         seq_len = 128
 
@@ -107,7 +110,7 @@ class MegDSTestTraining(TestCasePlus):
                 --pipeline-model-parallel-size {pp_size}
                 --distributed-backend nccl
 
-                --log-interval 5
+                --log-interval 1
                 --save-interval 10
                 --eval-interval 10
                 --eval-iters 5
@@ -141,6 +144,7 @@ class MegDSTestTraining(TestCasePlus):
                 --lr-warmup-samples 5
                 --clip-grad 1.0
                 --weight-decay 1e-1
+                --embed-layernorm
                 --fp16
 
                 --log-level debug
@@ -219,6 +223,7 @@ class MegDSTestTraining(TestCasePlus):
             new_ds_args = f"""
                 --deepspeed_config {self.test_file_dir_str}/ds_config.json
             """.split()
+
         else:
             raise ValueError(f"Don't know of variation {variation}")
 
@@ -495,3 +500,30 @@ class MegDSTestTraining(TestCasePlus):
         # test tensorboard
         tensorboard_files = glob.glob(f"{output_dir}/tensorboard/events*")
         self.assertEqual(len(tensorboard_files), 1, "tensorboard files")
+
+    def test_skip_train_iteration(self):
+        # skip iterations setup
+        extra_args = f"""
+            --skip-train-iteration-range 2-2 4-7
+        """.split()
+
+        src_dir = self.src_dir
+        output_dir = self.get_auto_remove_tmp_dir()
+        args, ds_args, num_gpus = self.get_variation_config("base", output_dir, n_samples=200)
+        args.extend(extra_args)
+        script = [f"{src_dir}/pretrain_gpt.py"]
+        launcher = get_launcher(num_gpus)
+        cmd = launcher + script + args + ds_args
+        # keep for quick debug
+        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
+
+        with CaptureStdout() as cs:
+            execute_subprocess_async(cmd, env=self.get_env())
+
+        # check skipped iterations
+        self.assertIn("Skipped iterations 2 to 2 due to --skip-train-iteration-range flag", cs.out)
+        self.assertIn("Skipped iterations 4 to 7 due to --skip-train-iteration-range flag", cs.out)
+
+        train_iterations = range(1,10)
+        for i in train_iterations:
+            self.assertTrue(f"iteration {i:8d}/" in cs.out)
