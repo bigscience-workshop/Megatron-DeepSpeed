@@ -135,19 +135,10 @@ class Embedding(MegatronModule):
 
         # Position embedding (serial).
         self.position_embedding_type = args.position_embedding_type
-        if args.use_bnb_optimizer:
-            try:
-                import bitsandbytes as bnb
-                self.embedding_module = bnb.nn.StableEmbedding
-            except ModuleNotFoundError:
-                print("Please install bitsandbytes following https://github.com/facebookresearch/bitsandbytes.")
-                raise Exception
-        else:
-            self.embedding_module = torch.nn.Embedding
         if self.position_embedding_type == PositionEmbeddingType.absolute:
             max_position_embeddings = args.max_position_embeddings
             assert max_position_embeddings is not None
-            self.position_embeddings = self.embedding_module(
+            self.position_embeddings = torch.nn.Embedding(
                 max_position_embeddings, self.hidden_size)
             self._position_embeddings_key = 'position_embeddings'
             # Initialize the position embeddings.
@@ -161,8 +152,8 @@ class Embedding(MegatronModule):
         # token types and add them as needed.
         self._tokentype_embeddings_key = 'tokentype_embeddings'
         if self.num_tokentypes > 0:
-            self.tokentype_embeddings = self.embedding_module(self.num_tokentypes,
-                                                              self.hidden_size)
+            self.tokentype_embeddings = torch.nn.Embedding(
+                self.num_tokentypes, self.hidden_size)
             # Initialize the token-type embeddings.
             self.init_method(self.tokentype_embeddings.weight)
         else:
@@ -182,8 +173,8 @@ class Embedding(MegatronModule):
             print('adding embedding for {} tokentypes'.format(num_tokentypes),
                   flush=True)
         self.num_tokentypes = num_tokentypes
-        self.tokentype_embeddings = self.embedding_module(num_tokentypes,
-                                                          self.hidden_size)
+        self.tokentype_embeddings = self.torch.nn.Embedding(num_tokentypes,
+                                                            self.hidden_size)
         # Initialize the token-type embeddings.
         args = get_args()
         self.init_method(self.tokentype_embeddings.weight)

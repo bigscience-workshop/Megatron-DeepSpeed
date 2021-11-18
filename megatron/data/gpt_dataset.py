@@ -24,7 +24,7 @@ import torch
 from megatron import mpu, print_rank_0
 from megatron.data.blendable_dataset import BlendableDataset
 from megatron.data.dataset_utils import get_datasets_weights_and_num_samples
-from megatron.data.dataset_utils import get_train_valid_test_split_
+from megatron.data.dataset_utils import get_train_valid_test_split_, get_split_by_range_
 from megatron.data.indexed_dataset import make_dataset as make_indexed_dataset
 
 
@@ -35,52 +35,100 @@ def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
 
     # Single dataset.
     if len(data_prefix) == 1:
-        return _build_train_valid_test_datasets(data_prefix[0],
+        all_train_datasets, all_valid_datasets, all_test_datasets =  _build_train_valid_test_datasets(data_prefix[0],
                                                 data_impl, splits_string,
                                                 train_valid_test_num_samples,
                                                 seq_length, seed, skip_warmup)
-
     # Blending dataset.
-    # Parse the values.
-    output = get_datasets_weights_and_num_samples(data_prefix,
-                                                  train_valid_test_num_samples)
-    prefixes, weights, datasets_train_valid_test_num_samples = output
+    else:
 
-    # Build individual datasets.
-    train_datasets = []
-    valid_datasets = []
-    test_datasets = []
-    for i in range(len(prefixes)):
-        train_ds, valid_ds, test_ds = _build_train_valid_test_datasets(
-            prefixes[i], data_impl, splits_string,
-            datasets_train_valid_test_num_samples[i],
-            seq_length, seed, skip_warmup)
-        if train_ds:
-            train_datasets.append(train_ds)
-        if valid_ds:
-            valid_datasets.append(valid_ds)
-        if test_ds:
-            test_datasets.append(test_ds)
+        output = get_datasets_weights_and_num_samples(data_prefix,
+                                                    train_valid_test_num_samples)
+        prefixes, weights, datasets_train_valid_test_num_samples = output
 
-    # Blend.
-    blending_train_dataset = None
-    if train_datasets:
-        blending_train_dataset = BlendableDataset(train_datasets, weights)
-    blending_valid_dataset = None
-    if valid_datasets:
-        blending_valid_dataset = BlendableDataset(valid_datasets, weights)
-    blending_test_dataset = None
-    if test_datasets:
-        blending_test_dataset = BlendableDataset(test_datasets, weights)
+        # Build individual datasets.
+        train_datasets = []
+        valid_datasets = []
+        test_datasets = []
+        for i in range(len(prefixes)):
+            train_ds, valid_ds, test_ds = _build_train_valid_test_datasets(
+                                            prefixes[i], data_impl, splits_string,
+                                            datasets_train_valid_test_num_samples[i],
+                                            seq_length, seed, skip_warmup)
+            if train_ds:
+                train_datasets.append(train_ds)
+            if valid_ds:
+                valid_datasets.append(valid_ds)
+            if test_ds:
+                test_datasets.append(test_ds)
 
-    return (blending_train_dataset, blending_valid_dataset,
-            blending_test_dataset)
+        all_train_datasets = BlendableDataset(train_datasets, weights) \
+                            if train_datasets else None
+        all_valid_datasets = BlendableDataset(valid_datasets, weights) \
+                            if valid_datasets else None
+        all_test_datasets = BlendableDataset(test_datasets, weights) \
+                            if test_datasets else None
+
+    return all_train_datasets, all_valid_datasets, all_test_datasets
 
 
-def _build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
-                                     train_valid_test_num_samples,
-                                     seq_length, seed, skip_warmup):
-    """Build train, valid, and test datasets."""
+def build_dataset_group(dataset_group_name, paths, weights, splits, data_impl,
+                        train_valid_test_num_samples,
+                        seq_length, seed, skip_warmup, train_valid_test):
+    '''
+    Build a single dataset group corresponding to Option 2 of data loading see arguments.py
+    a dataset group is passed on the following form
+    GIVEN_NAME WEIGHT1 START:END PATH1, WEIGHT2 START:END PATH2, WEIGHT2 START:END PATH2
+    or alternatively
+    GIVEN_NAME PATH1    # for a single dataset to be used fully
+    '''
+
+    assert train_valid_test in ["train","valid","test"]
+
+    # Single dataset.
+    if len(paths) == 1:
+        dataset =  _build_single_datasets(paths[0],
+                                          splits[0],
+                                          data_impl,
+                                          train_valid_test_num_samples,
+                                          seq_length, seed, skip_warmup,
+                                          dataset_group_name, train_valid_test)
+        return dataset
+    # Blending dataset.
+    else:
+
+        data_prefix = []
+        # data_prefix is on the shape:
+        # ["WEIGHT1", "PATH1", "WEIGHT2", "PATH2", "WEIGHT3", "PATH3"]
+        for w,p in zip(weights, paths):
+            data_prefix += [w,p]
+
+        output = get_datasets_weights_and_num_samples(data_prefix,
+                                                    train_valid_test_num_samples)
+        prefixes, weights, datasets_train_valid_test_num_samples = output
+
+        # Build individual datasets.
+        datasets = []
+        for i in range(len(prefixes)):
+            ds = _build_single_datasets(prefixes[i],
+                                        splits[i],
+                                        data_impl,
+                                        datasets_train_valid_test_num_samples[i],
+                                        seq_length,
+                                        seed, skip_warmup,
+                                        dataset_group_name, train_valid_test)
+
+            datasets.append(ds)
+        all_datasets = BlendableDataset(datasets, weights)
+
+        return all_datasets
+
+def _build_single_datasets(data_prefix, range_string, data_impl, train_valid_test_num_samples,
+                            seq_length, seed, skip_warmup, dataset_group_name, train_valid_test):
+    """Build a single dataset"""
+
+    assert train_valid_test in ["train","valid","test"]
+    index = ["train","valid","test"].index(train_valid_test)
 
     # Indexed dataset.
     indexed_dataset = get_indexed_dataset_(data_prefix,
@@ -88,8 +136,49 @@ def _build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
                                            skip_warmup)
 
     total_num_of_documents = indexed_dataset.sizes.shape[0]
-    splits = get_train_valid_test_split_(splits_string, total_num_of_documents)
+    # this corresponds to option2 for data loading on the form
+    # WEIGHT1 START:END PATH1, WEIGHT2 START:END PATH2, WEIGHT3 START:END PATH3
+    # splits here is an array of size 2  [start_index, end_index]
+    splits = get_split_by_range_(range_string=range_string, size=total_num_of_documents)
 
+    # Print stats about the splits.
+    print_rank_0(' > dataset split:')
+
+    print_rank_0('    {}:'.format(dataset_group_name))
+    print_rank_0('     document indices in [{}, {}) total of {} '
+                     'documents'.format(splits[0], splits[1],
+                                        splits[1] - splits[0]))
+
+    def build_dataset(name):
+        dataset = None
+        if splits[1] > splits[0]:
+            documents = np.arange(start=splits[0], stop=splits[1],
+                                  step=1, dtype=np.int32)
+            dataset = GPTDataset(name, data_prefix,
+                                  documents, indexed_dataset,
+                                  train_valid_test_num_samples[index],
+                                  seq_length, seed)
+        return dataset
+
+    dataset = build_dataset(dataset_group_name)
+
+    return dataset
+
+
+def _build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
+                                     train_valid_test_num_samples,
+                                     seq_length, seed, skip_warmup):
+    """Build train, valid, and test datasets."""
+
+
+    # Indexed dataset.
+    indexed_dataset = get_indexed_dataset_(data_prefix,
+                                           data_impl,
+                                           skip_warmup)
+
+    total_num_of_documents = indexed_dataset.sizes.shape[0]
+    # splits here is an array of size 4  [train_start_index, valid_start_index, test_start_index, test_end_index]
+    splits = get_train_valid_test_split_(splits_string, total_num_of_documents)
     # Print stats about the splits.
     print_rank_0(' > dataset split:')
 
@@ -120,12 +209,11 @@ def _build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
     return (train_dataset, valid_dataset, test_dataset)
 
 
-def get_indexed_dataset_(data_prefix, data_impl, skip_warmup):
+def get_indexed_dataset_(path, data_impl, skip_warmup):
     """Build indexed dataset."""
     print_rank_0(' > building dataset index ...')
-
     start_time = time.time()
-    indexed_dataset = make_indexed_dataset(data_prefix,
+    indexed_dataset = make_indexed_dataset(path,
                                            data_impl,
                                            skip_warmup)
     print_rank_0(' > finished creating indexed dataset in {:4f} '
@@ -188,7 +276,7 @@ class GPTDataset(torch.utils.data.Dataset):
 
 
 def _build_index_mappings(name, data_prefix, documents, sizes,
-                          num_samples, seq_length, seed):
+                          num_samples, seq_length, seed, cutoff_last_epoch=0.95):
     """Build doc-idx, sample-idx, and shuffle-idx.
     doc-idx: is an array (ordered) of documents to be used in training.
     sample-idx: is the start document index and document offset for each
@@ -241,21 +329,19 @@ def _build_index_mappings(name, data_prefix, documents, sizes,
                 num_samples_per_epoch = (tokens_per_epoch - 1) // seq_length
                 assert last_epoch_num_samples <= num_samples_per_epoch, \
                     f'last epoch number of samples {last_epoch_num_samples} exceeded max value {num_samples_per_epoch}.'
-                # If we have less than 80% of the samples for the last epoch,
+                # If we have less than cutoff_last_epoch * samples_per_epoch of the samples for the last epoch,
                 # seperate out the epoch and treat it differently.
-                # Note: the 80% number is just based on common sense and can
-                # be adjusted if needed.
                 separate_last_epoch = (last_epoch_num_samples <
-                                       int(0.80 * num_samples_per_epoch))
+                                       int(cutoff_last_epoch * num_samples_per_epoch))
                 if separate_last_epoch:
                     string = ' > last epoch number of samples ({}) is smaller '\
-                             'than 80% of number of samples per epoch ({}), '\
+                             'than {}% of number of samples per epoch ({}), '\
                              'setting separate_last_epoch to True'
                 else:
                     string = ' > last epoch number of samples ({}) is larger '\
-                             'than 80% of number of samples per epoch ({}), '\
+                             'than {}% of number of samples per epoch ({}), '\
                              'setting separate_last_epoch to False'
-                print(string.format(last_epoch_num_samples,
+                print(string.format(last_epoch_num_samples, cutoff_last_epoch * 100,
                                     num_samples_per_epoch), flush=True)
 
             # doc-idx.
@@ -412,7 +498,7 @@ def _build_shuffle_idx(num_samples, total_size, np_rng):
     """Build the range [0, size) and shuffle."""
     print(' > building shuffle index with split [0, {}) and [{}, {}) '
           '...'.format(num_samples, num_samples, total_size), flush=True)
-    
+
     dtype_ = np.uint32
     if total_size >= (np.iinfo(np.uint32).max - 1):
         dtype_ = np.int64
