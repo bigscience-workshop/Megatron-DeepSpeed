@@ -89,6 +89,7 @@ class DebugUnderflowOverflow:
             tb.add_scalar(f"{prefix}/1.abs_max", abs_var.max(), iteration)
             tb.add_scalar(f"{prefix}/2.norm", torch.linalg.norm(var.data), iteration)
 
+        # XXX: can probably skip this one for direction == 'backward' as the same is already logged for fwd
         # params
         for name, p in module.named_parameters(recurse=False):
             log_to_tb(p, name)
