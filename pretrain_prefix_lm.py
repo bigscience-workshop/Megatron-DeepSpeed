@@ -108,6 +108,12 @@ def get_batch(data_iterator):
         loss_on_targets_only=args.loss_on_targets_only
     )
 
+    # weight loss_mask
+    if args.reweight_loss_based_on_position_frequency:
+        _, seq_length = tokens.shape
+        weight_loss = torch.arange(seq_length, 0, -1, dtype=torch.float, device=loss_mask.device) / (seq_length + 1) * 2
+        loss_mask *= weight_loss[None, :]
+
     return tokens, labels, loss_mask, attention_mask, position_ids
 
 def get_batch_pipe(data):
