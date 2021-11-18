@@ -188,9 +188,10 @@ class VocabParallelEmbedding(torch.nn.Module):
         # Allocate weights and initialize.
         args = get_args()
 
-        if args.use_bnb_optimizer:
+        if args.use_bnb_optimizer or args.embed_layernorm:
             self.norm = torch.nn.LayerNorm(embedding_dim)
 
+        if args.use_bnb_optimizer:
             # for BNB we ignore the passed init_method and use torch.nn.init.xavier_uniform_
             # modified to calculate std on the unpartitioned embedding
             init_method = partial(xavier_uniform_tensor_parallel_, tp_degree=self.tensor_model_parallel_size)
