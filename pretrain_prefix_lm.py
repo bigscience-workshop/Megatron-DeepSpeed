@@ -17,24 +17,20 @@
 
 import torch
 from functools import partial
-from megatron import get_args, logging
+from megatron import get_args
 from megatron import print_rank_0
 from megatron import get_timers
 from megatron import get_tokenizer
 from megatron import mpu
 from megatron.data.gpt_dataset import build_train_valid_test_datasets, build_dataset_group
 from megatron.model import GPTModel, GPTModelPipe
-from megatron.model.utils import log_debug_usage
 from megatron.training import pretrain
-from megatron.utils import get_ltor_masks_and_position_ids, get_prefix_indices
+from megatron.utils import get_ltor_masks_and_position_ids, get_prefix_indices, reweight_loss_mask_
 from megatron.utils import average_losses_across_data_parallel_group
 
 import deepspeed
 from deepspeed.runtime.utils import see_memory_usage
-import os
 import subprocess
-
-logger = logging.get_logger(__name__)
 
 def model_provider(pre_process=True, post_process=True):
     """Build the model."""
@@ -116,14 +112,6 @@ def get_batch(data_iterator):
         reweight_loss_mask_(loss_mask, tokens)
 
     return tokens, labels, loss_mask, attention_mask, position_ids
-
-@log_debug_usage(logger, "Using loss reweighting")
-def reweight_loss_mask_(loss_mask: torch.Tensor, tokens: torch.Tensor):
-    """Reweight loss mask in-place"""
-    _, seq_length = tokens.shape
-    weight_loss = torch.arange(seq_length, 0, -1, dtype=torch.float, device=loss_mask.device) / (seq_length + 1) * 2
-    # in-place operation
-    loss_mask *= weight_loss[None, :]
 
 def get_batch_pipe(data):
     """Modification of `get_batch` to work on `next(data_iterator)` instead of `data_iterator`"""
