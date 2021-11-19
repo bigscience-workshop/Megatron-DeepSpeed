@@ -80,7 +80,7 @@ from megatron.data.gpt_dataset import build_train_valid_test_datasets
 from megatron.training import update_train_iters
 
 
-def _add_network_size_args(parser):
+def _add_sample_idxs_args(parser):
     group = parser.add_argument_group(title='Get text from sample idxs.')
     group.add_argument('--sample-id-range', type=int, nargs='+', required=True,
                         help='The number of samples consumed. ex) --sample-id-range 1024 2048')
@@ -88,7 +88,13 @@ def _add_network_size_args(parser):
     group.add_argument('--print-tokens', action='store_true', help='Whether to print tokens')
     group.add_argument('--print-text', action='store_true', help='Whether to print text')
     group.add_argument('--output-file', help='path to file if the dump should be saved into a file')
-
+    group.add_argument(
+        '--skip-train-iteration-range',
+        type=str,
+        nargs='+',
+        default=None,
+        help='Iteration ranges to skip. The values are one or more dash-separated ranges. e.g., 101-200 251-300.'
+    )
     return parser
 
 
@@ -108,7 +114,7 @@ if __name__ == "__main__":
     """.split()
     sys.argv.extend(required_irrelevant_args)
 
-    initialize_megatron(extra_args_provider=_add_network_size_args)
+    initialize_megatron(extra_args_provider=_add_sample_idxs_args)
 
     args = get_args()
     tokenizer = get_tokenizer()
