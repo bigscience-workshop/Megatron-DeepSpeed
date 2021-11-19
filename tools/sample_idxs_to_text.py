@@ -159,8 +159,11 @@ if __name__ == "__main__":
         else:
             print(msg)
 
-    for i in range(args.sample_id_range[0], args.sample_id_range[1]):
+    set_idxs = set(idxs)
+    for i in range(idxs[0], idxs[-1] + 1):
         tokens = next(data_iterator)["text"][0]
+        if i not in set_idxs:
+            continue
 
         if args.print_tokens:
             write(f"{i} {tokens}")
