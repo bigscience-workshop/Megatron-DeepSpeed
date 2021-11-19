@@ -27,9 +27,11 @@ from megatron.testing_utils import (
     TestCasePlus,
     execute_subprocess_async,
     get_gpu_count,
+    require_bnb,
     require_bnb_non_decorator,
     require_deepspeed,
     require_torch_gpu,
+    require_torch_multi_gpu,
     set_seed
 )
 
@@ -41,8 +43,11 @@ def get_launcher(num_gpus):
     # - it won't be able to handle that
     return f"deepspeed --num_nodes 1 --num_gpus {num_gpus}".split()
 
-def get_3d_dimensions():
-    num_gpus = get_gpu_count()
+def get_3d_dimensions(num_gpus=None):
+    # unless explicitly asked to configure for a specific number of gpus will try to use all available gpus
+
+    if num_gpus is None:
+        num_gpus = get_gpu_count()
 
     # with fewer gpus the preference is first to to do PP>1, then TP>1, then DP>1
     if num_gpus >= 8:
@@ -79,10 +84,10 @@ class MegDSTestTraining(TestCasePlus):
         if os.path.exists(meg_lock_file_path):
             os.unlink(meg_lock_file_path)
 
-    def get_variation_config(self, variation, output_dir, n_samples=None):
+    def get_variation_config(self, variation, output_dir, num_samples=None, num_gpus=None):
         data_dir = f"{self.data_dir}/gpt2"
 
-        pp_size, tp_size, dp_size = get_3d_dimensions()
+        pp_size, tp_size, dp_size = get_3d_dimensions(num_gpus)
         num_gpus = pp_size * tp_size * dp_size
         print(f"Using {num_gpus} GPUs")
 
@@ -90,8 +95,8 @@ class MegDSTestTraining(TestCasePlus):
             # we want to make sure at least tp=2 is used, so we swap tp and pp
             pp_size, tp_size = tp_size, pp_size
 
-        if n_samples is None:
-            n_samples = 300 # about 56 iterations
+        if num_samples is None:
+            num_samples = 300 # about 56 iterations
 
         exit_interval = 20 # some samples in the first half and then some more in the 2nd half after resume
         seq_len = 128
@@ -155,8 +160,8 @@ class MegDSTestTraining(TestCasePlus):
         if variation == "base":
 
             new_args = f"""
-                --rampup-batch-size 2 2 {n_samples}
-                --train-samples {n_samples}
+                --rampup-batch-size 2 2 {num_samples}
+                --train-samples {num_samples}
 
                 --lr-decay-samples 6
 
@@ -171,8 +176,8 @@ class MegDSTestTraining(TestCasePlus):
             # BitsAndBytes - 8-bit optimizer
 
             new_args = f"""
-                --rampup-batch-size 2 2 {n_samples}
-                --train-samples {n_samples}
+                --rampup-batch-size 2 2 {num_samples}
+                --train-samples {num_samples}
 
                 --lr-decay-samples 6
 
@@ -190,7 +195,7 @@ class MegDSTestTraining(TestCasePlus):
             lr_decay_samples = 6
             lr_decay_tokens = lr_decay_samples * seq_len
 
-            train_tokens = n_samples * seq_len
+            train_tokens = num_samples * seq_len
 
             # XXX: if changing seq_len from 128, must adjust ds config to:
             #  curriculum_learning.max_difficulty: $SEQLEN
@@ -199,7 +204,7 @@ class MegDSTestTraining(TestCasePlus):
             # rather than using the pre-saved config
 
             new_args = f"""
-                --train-samples {n_samples*2}
+                --train-samples {num_samples*2}
                 --train-tokens {train_tokens}
 
                 --lr-decay-tokens {lr_decay_tokens}
@@ -211,8 +216,8 @@ class MegDSTestTraining(TestCasePlus):
 
         elif variation == "glu":
             new_args = f"""
-                --rampup-batch-size 2 2 {n_samples}
-                --train-samples {n_samples}
+                --rampup-batch-size 2 2 {num_samples}
+                --train-samples {num_samples}
 
                 --lr-decay-samples 6
 
@@ -297,6 +302,36 @@ class MegDSTestTraining(TestCasePlus):
         if variation == "glu":
             self.assertIn("Using GLU activation: GELU", cs.out)
 
+    @require_bnb
+    @require_torch_multi_gpu
+    def test_training_bnb_resume_more_replicas(self):
+        # this test checks that BNB allows us to change DP degree and be able to resume training on
+        # let's say more replicas
+
+        src_dir = self.src_dir
+        output_dir = self.get_auto_remove_tmp_dir() # "./xxx", after=False)
+
+        args, ds_args, num_gpus = self.get_variation_config("bnb", output_dir, num_gpus=1)
+
+        script = [f"{src_dir}/pretrain_gpt.py"]
+        cmd_no_launcher = script + args + ds_args
+
+        # 1. DP=1 TP=1 PP=1 num_gpus=1 from scratch
+        launcher = get_launcher(1)
+        cmd = launcher + cmd_no_launcher
+        # keep for quick debug
+        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
+        execute_subprocess_async(cmd, env=self.get_env())
+
+        # 2. DP=2 TP=1 PP=1 num_gpus=2 resume from the checkpoint of DP=1
+        launcher = get_launcher(2)
+        cmd = launcher + cmd_no_launcher
+        execute_subprocess_async(cmd, env=self.get_env())
+
+        # Currently fails with:
+        # RuntimeError: The size of tensor a (256) must match the size of tensor b (128) at non-singleton dimension 0
+
+
     @parameterized.expand([(True, ), (False, )])
     def test_training_prefix_lm_all(self, loss_on_targets_only):
         # all in one test
@@ -307,7 +342,7 @@ class MegDSTestTraining(TestCasePlus):
         pp_size, tp_size, dp_size = get_3d_dimensions()
         num_gpus = pp_size * tp_size * dp_size
 
-        n_samples = 200 # about 37 iterations
+        num_samples = 200 # about 37 iterations
         exit_interval = 20 # some samples in the first half and then some more in the 2nd half after resume
         args = f"""
             --tensor-model-parallel-size {tp_size}
@@ -320,9 +355,9 @@ class MegDSTestTraining(TestCasePlus):
             --seq-length 128
             --max-position-embeddings 1024
             --micro-batch-size 1
-            --rampup-batch-size 2 2 {n_samples}
+            --rampup-batch-size 2 2 {num_samples}
             --global-batch-size 16
-            --train-samples {n_samples}
+            --train-samples {num_samples}
             {"--loss-on-targets-only" if loss_on_targets_only else ""}
 
             --optimizer adam
@@ -415,7 +450,7 @@ class MegDSTestTraining(TestCasePlus):
         pp_size, tp_size, dp_size = get_3d_dimensions()
         num_gpus = pp_size * tp_size * dp_size
 
-        n_samples = 200 # about 37 iterations
+        num_samples = 200 # about 37 iterations
         exit_interval = 20 # some samples in the first half and then some more in the 2nd half after resume
         args = f"""
             --tensor-model-parallel-size {tp_size}
@@ -428,9 +463,9 @@ class MegDSTestTraining(TestCasePlus):
             --seq-length 128
             --max-position-embeddings 1024
             --micro-batch-size 1
-            --rampup-batch-size 2 2 {n_samples}
+            --rampup-batch-size 2 2 {num_samples}
             --global-batch-size 16
-            --train-samples {n_samples}
+            --train-samples {num_samples}
             --loss-on-targets-only
 
             --optimizer adam
@@ -509,7 +544,7 @@ class MegDSTestTraining(TestCasePlus):
 
         src_dir = self.src_dir
         output_dir = self.get_auto_remove_tmp_dir()
-        args, ds_args, num_gpus = self.get_variation_config("base", output_dir, n_samples=200)
+        args, ds_args, num_gpus = self.get_variation_config("base", output_dir, num_samples=200)
         args.extend(extra_args)
         script = [f"{src_dir}/pretrain_gpt.py"]
         launcher = get_launcher(num_gpus)
