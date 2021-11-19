@@ -39,12 +39,12 @@ from megatron import print_rank_0
 from megatron import print_rank_last
 from megatron.checkpointing import load_checkpoint
 from megatron.checkpointing import save_checkpoint
-from megatron.model import Float16Module
+from megatron.model.module import Float16Module
 from megatron.optimizer import get_megatron_optimizer
 from megatron.initialize import initialize_megatron
 from megatron.initialize import write_args_to_tensorboard
 from megatron.learning_rates import AnnealingLR
-from megatron.model import DistributedDataParallel as LocalDDP
+from megatron.model.distributed import DistributedDataParallel as LocalDDP
 from megatron.utils import check_adlr_autoresume_termination, get_parameters_in_billions
 from megatron.utils import unwrap_model
 from megatron.data.data_samplers import build_pretraining_data_loader
