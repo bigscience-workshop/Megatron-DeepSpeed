@@ -3,7 +3,7 @@ import torch
 
 from megatron import get_args, print_rank_0
 from megatron.checkpointing import get_checkpoint_tracker_filename, get_checkpoint_name
-from megatron.model import BertModel
+from megatron.model.bert_model import BertModel
 from .module import MegatronModule
 from megatron import mpu
 from megatron.enums import AttnMaskType

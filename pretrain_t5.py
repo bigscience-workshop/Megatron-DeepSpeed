@@ -26,7 +26,7 @@ from megatron import (
     print_rank_0
 )
 from megatron.data.dataset_utils import build_train_valid_test_datasets
-from megatron.model import T5Model
+from megatron.model.t5_model import T5Model
 from megatron.training import pretrain
 from megatron.utils import average_losses_across_data_parallel_group
 

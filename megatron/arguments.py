@@ -16,6 +16,7 @@
 """Megatron arguments."""
 
 import argparse
+import collections
 import os
 import re
 
@@ -283,6 +284,31 @@ def parse_args(extra_args_provider=None, defaults={},
     if args.glu_activation is not None and args.bias_gelu_fusion:
         raise ValueError("if glu-activation is used, please set --no-bias-gelu-fusion")
 
+    # Skip train iterations
+    if args.skip_train_iteration_range is not None:
+        args.skip_train_iteration_range = [
+            list(map(int, range_.split("-"))) for range_ in args.skip_train_iteration_range
+        ]
+        args.skip_train_iteration_range.sort()
+        skip_train_iteration_range = collections.deque()
+        for range_ in args.skip_train_iteration_range:
+            if len(range_) == 2:
+                start, end = range_
+                assert end >= start, \
+                "end of skip range cannot be smaller than start of skip range"
+                # merge overlapping intervals (e.g. 1-5 2-6 -> 1-6)
+                if not skip_train_iteration_range:
+                    skip_train_iteration_range.append([start, end])
+                elif skip_train_iteration_range[-1][1] >= start:
+                    skip_train_iteration_range[-1][1] = max(end, skip_train_iteration_range[-1][1])
+                else:
+                    skip_train_iteration_range.append([start, end])
+            else:
+                raise ValueError(
+                    "skip train iterations should be specified as two numbers, i.e. start-end"
+                )
+        args.skip_train_iteration_range = skip_train_iteration_range
+
     if args.use_bnb_optimizer:
         try:
             import bitsandbytes as bnb
@@ -341,6 +367,8 @@ def _add_network_size_args(parser):
                        action='store_true',
                        help='If set, use original BERT residula connection '
                        'ordering.')
+    group.add_argument('--embed-layernorm', action='store_true',
+                       help='use layernorm for embedding')
     group.add_argument('--openai-gelu', action='store_true',
                        help='Use OpenAIs GeLU implementation. This option'
                        'should not be used unless for backward compatibility'
@@ -520,6 +548,8 @@ def _add_training_args(parser):
                        help='If set to True, no train step will be performed.'
                        'and only the evaluation on the `valid` and `test` sets '
                        'will be performed' )
+    group.add_argument('--skip-train-iteration-range', type=str, nargs='+', default=None,
+                       help='Iteration ranges to skip. The values are one or more dash-separated ranges. e.g., 101-200 251-300.')
 
     return parser
 

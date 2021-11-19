@@ -26,7 +26,7 @@ from megatron import get_tokenizer
 from megatron import mpu
 from megatron.checkpointing import load_checkpoint
 from megatron.initialize import initialize_megatron
-from megatron.model import GPTModel
+from megatron.model.gpt_model import GPTModel
 from megatron.training import get_model
 from megatron.text_generation_utils import generate_and_write_samples_unconditional
 from megatron.text_generation_utils import generate_samples_input_from_file
