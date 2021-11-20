@@ -186,7 +186,7 @@ jobs:
           pip install pytest-timeout
 
       - name: Run tests
-        run: pytest --timeout=600 tests/test_training.py -k test_skip_train_iteration
+        run: pytest --timeout=600 tests
 
   stop-runner:
     name: Stop self-hosted EC2 runner
