@@ -183,6 +183,7 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
+          pip install bitsandbytes-cuda111
           pip install pytest-timeout
 
       - name: Run tests
