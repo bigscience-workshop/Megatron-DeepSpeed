@@ -173,14 +173,14 @@ def get_cross_entropy(is_prefix: bool):
             if args.loss_on_targets_only:
                 # HACK: This is useful when we obtain loss masks that are microbatch dependent. Consequently, if we want to
                 #   preserve the notion that all tokens have the same impact on the loss, we can only normalise using a
-                #   microbatch independent value.
+                #   microbatch independent value. It should be expected weight over a microbatch.
                 #   Here we still use `sequence_length`, that's batch size dependent, in order to be backwards compatible with
                 #   current experiment on vanilla gpt.
                 if args.reweight_loss_based_on_position_frequency:
                     reweight = torch.arange(
                         sequence_length, 0, -1, dtype=torch.float, device=loss_mask.device
                     ) / (sequence_length + 1) * 2
-                    expected_number_of_tokens = reweight.flip(-1, dims=[0]).cumsum(-1).mean()
+                    expected_number_of_tokens = reweight.flip(-1).cumsum(-1).mean()
                 else:
                     expected_number_of_tokens /= 2
         else:
