@@ -66,6 +66,13 @@ def initialize_megatron(extra_args_provider=None, args_defaults={},
         if args.rank == 0:
             print('> setting random seeds to {} ...'.format(args.seed))
 
+        def set_verbosity_ds(logging_level: str):
+            if not args.deepspeed:
+                return
+            from deepspeed.utils import logger as ds_logger
+            log_level = logging.log_levels[logging_level]
+            ds_logger.setLevel(log_level)
+
         def set_verbosity(logging_level: str):
             log_level = logging.log_levels[logging_level]
             logging.set_verbosity(log_level)
@@ -78,9 +85,11 @@ def initialize_megatron(extra_args_provider=None, args_defaults={},
         if args.rank == 0:
             if args.log_level is not None:
                 set_verbosity(args.log_level)
+                set_verbosity_ds(args.log_level)
         else:
             if args.log_level_replica is not None:
                 set_verbosity(args.log_level_replica)
+                set_verbosity_ds(args.log_level)
         _set_random_seed(args.seed)
 
     args = get_args()
