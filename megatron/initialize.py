@@ -38,6 +38,7 @@ import deepspeed
 
 
 def git_ds_info():
+    args = get_args()
     if not args.deepspeed:
         return
 
