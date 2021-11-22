@@ -149,8 +149,8 @@ class RampupBatchsizeNumMicroBatches(NumMicroBatchesCalculator):
         if consistency_check:
             assert self.current_global_batch_size % \
                 self.micro_batch_times_data_parallel_size == 0, 'current global ' \
-                'batch size ({}) is not divisible by micro-batch-size ({}) times' \
-                'data parallel size ({})'.format(self.current_global_batch_size,
+                'batch size ({}) is not divisible by micro-batch-size ({}) ' \
+                'times data parallel size ({})'.format(self.current_global_batch_size,
                                                  self.micro_batch_size,
                                                  self.data_parallel_size)
         self.num_micro_batches = self.current_global_batch_size // \
