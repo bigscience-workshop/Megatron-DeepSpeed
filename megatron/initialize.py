@@ -38,6 +38,9 @@ import deepspeed
 
 
 def git_ds_info():
+    if not args.deepspeed:
+        return
+
     from deepspeed.env_report import main as ds_report
     ds_report()
 
