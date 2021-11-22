@@ -23,6 +23,7 @@ import time
 import numpy as np
 import torch
 import logging as lg
+import subprocess
 
 from megatron import fused_kernels, logging
 from megatron import get_adlr_autoresume
@@ -34,6 +35,33 @@ from megatron.mpu import (set_tensor_model_parallel_rank,
                           set_tensor_model_parallel_world_size)
 
 import deepspeed
+
+
+def git_ds_info():
+    from deepspeed.env_report import main as ds_report
+    ds_report()
+
+    def command_exists(cmd):
+        result = subprocess.Popen(f'type {cmd}', stdout=subprocess.PIPE, shell=True)
+        return result.wait() == 0
+
+    # Write out version/git info
+    git_hash_cmd = "git rev-parse --short HEAD  2>&1"
+    git_branch_cmd = "git rev-parse --abbrev-ref HEAD 2>&1"
+    if command_exists('git'):
+        try:
+            result = subprocess.check_output(git_hash_cmd, shell=True)
+            git_hash = result.decode('utf-8').strip()
+            result = subprocess.check_output(git_branch_cmd, shell=True)
+            git_branch = result.decode('utf-8').strip()
+        except subprocess.CalledProcessError:
+            git_hash = "unknown"
+            git_branch = "unknown"
+    else:
+        git_hash = "unknown"
+        git_branch = "unknown"
+
+    print(f'**** Git info for Megatron: git_hash={git_hash} git_branch={git_branch} ****')
 
 
 def initialize_megatron(extra_args_provider=None, args_defaults={},
@@ -93,6 +121,9 @@ def initialize_megatron(extra_args_provider=None, args_defaults={},
         _set_random_seed(args.seed)
 
     args = get_args()
+
+    if args.rank == 0:
+        git_ds_info()
 
     if  args.lazy_mpu_init:
         args.use_cpu_initialization=True
