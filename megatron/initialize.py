@@ -23,6 +23,7 @@ import time
 import numpy as np
 import torch
 import logging as lg
+import subprocess
 
 from megatron import fused_kernels, logging
 from megatron import get_adlr_autoresume
@@ -34,6 +35,37 @@ from megatron.mpu import (set_tensor_model_parallel_rank,
                           set_tensor_model_parallel_world_size)
 
 import deepspeed
+
+
+def git_ds_info():
+    args = get_args()
+    if not args.deepspeed:
+        return
+
+    from deepspeed.env_report import main as ds_report
+    ds_report()
+
+    def command_exists(cmd):
+        result = subprocess.Popen(f'type {cmd}', stdout=subprocess.PIPE, shell=True)
+        return result.wait() == 0
+
+    # Write out version/git info
+    git_hash_cmd = "git rev-parse --short HEAD  2>&1"
+    git_branch_cmd = "git rev-parse --abbrev-ref HEAD 2>&1"
+    if command_exists('git'):
+        try:
+            result = subprocess.check_output(git_hash_cmd, shell=True)
+            git_hash = result.decode('utf-8').strip()
+            result = subprocess.check_output(git_branch_cmd, shell=True)
+            git_branch = result.decode('utf-8').strip()
+        except subprocess.CalledProcessError:
+            git_hash = "unknown"
+            git_branch = "unknown"
+    else:
+        git_hash = "unknown"
+        git_branch = "unknown"
+
+    print(f'**** Git info for Megatron: git_hash={git_hash} git_branch={git_branch} ****')
 
 
 def initialize_megatron(extra_args_provider=None, args_defaults={},
@@ -75,15 +107,39 @@ def initialize_megatron(extra_args_provider=None, args_defaults={},
             handler.flush = sys.stderr.flush
             logging.add_handler(handler)
 
+        def set_verbosity_deepspeed(logging_level: str):
+            if not args.deepspeed:
+                return
+            from deepspeed.utils import logger as ds_logger
+            log_level = logging.log_levels[logging_level]
+            ds_logger.setLevel(log_level)
+
+        def set_verbosity_transformers(logging_level: str):
+            try:
+                # XXX: perhaps we need a better way of knowing when to override transformers logging
+                # currently it's only when using `--tokenizer-type PretrainedFromHF`
+                from transformers.utils import logging as transformers_logging
+                log_level = logging.log_levels[logging_level]
+                logging.set_verbosity(log_level)
+            except:
+                pass
+
         if args.rank == 0:
             if args.log_level is not None:
                 set_verbosity(args.log_level)
+                set_verbosity_deepspeed(args.log_level)
+                set_verbosity_transformers(args.log_level)
         else:
             if args.log_level_replica is not None:
                 set_verbosity(args.log_level_replica)
+                set_verbosity_deepspeed(args.log_level_replica)
+                set_verbosity_transformers(args.log_level_replica)
         _set_random_seed(args.seed)
 
     args = get_args()
+
+    if args.rank == 0:
+        git_ds_info()
 
     if  args.lazy_mpu_init:
         args.use_cpu_initialization=True
@@ -157,7 +213,12 @@ def _compile_dependencies():
         torch.distributed.barrier()
     else:
         torch.distributed.barrier()
-        fused_kernels.load(args)
+        import warnings
+        with warnings.catch_warnings():
+            # ignore loading noise
+            warnings.simplefilter("ignore")
+            fused_kernels.load(args)
+
     # Simple barrier to make sure all ranks have passed the
     # compilation phase successfully before moving on to the
     # rest of the program. We think this might ensure that
