@@ -277,14 +277,17 @@ def get_model(model_provider_func):
         for param in model_module.parameters():
             mpu.set_defaults_if_not_set_tensor_model_parallel_attributes(param)
 
-    # Print number of parameters.
-    if mpu.get_data_parallel_rank() == 0:
-        print(' > number of parameters on (tensor, pipeline) '
-              'model parallel rank ({}, {}): {}'.format(
-            mpu.get_tensor_model_parallel_rank(),
-            mpu.get_pipeline_model_parallel_rank(),
-            sum([sum([p.ds_numel if hasattr(p,'ds_id') else p.nelement() for p in model_module.parameters()])
-                 for model_module in model])), flush=True)
+    # # Print number of parameters.
+    # Moved to `train` with extras
+    # if mpu.get_data_parallel_rank() == 0:
+    #     print('Number of parameters on tensor={}, pipeline={}: {}'.format(
+    #         mpu.get_tensor_model_parallel_rank(),
+    #         mpu.get_pipeline_model_parallel_rank(),
+    #         sum([sum([p.ds_numel if hasattr(p,'ds_id') else p.nelement() for p in model_module.parameters()])
+    #              for model_module in model])), flush=True)
+    #     torch.distributed.barrier()
+    # else:
+    #     torch.distributed.barrier()
 
     if args.deepspeed:
         return model
@@ -730,9 +733,18 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
     args = get_args()
     timers = get_timers()
 
+    if args.rank == 0:
+        print("Number of parameters: [tensor rank - pipeline rank] w/ and w/o embeddings:")
+    torch.distributed.barrier()
     if mpu.get_data_parallel_rank() == 0:
-        print(f"Number of parameters: {get_parameters_in_billions(model)} billion")
-        print(f"Number of parameters without embeddings: {get_parameters_in_billions(model, exclude_embeddings=True)} billion")
+        tp_rank = mpu.get_tensor_model_parallel_rank()
+        pp_rank = mpu.get_pipeline_model_parallel_rank()
+        preamble = f"[{tp_rank:0>3d}-{pp_rank:0>3d}]"
+        print(f"{preamble} {get_parameters_in_billions(model):.4f}B / {get_parameters_in_billions(model, exclude_embeddings=True):.4f}B")
+        torch.distributed.barrier()
+    else:
+        torch.distributed.barrier()
+
     # Write args to tensorboard
     write_args_to_tensorboard()
 
