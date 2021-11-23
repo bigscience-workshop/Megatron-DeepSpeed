@@ -546,6 +546,10 @@ def _add_training_args(parser):
                        help='Use Torch Adam as optimizer on CPU.')
     group.add_argument('--codecarbon-dir', type=str, default=None,
                        help='Write CodeCarbon logs to this directory.')
+    group.add_argument('--eval-only', type=bool, required=False,
+                       help='If set to True, no train step will be performed.'
+                       'and only the evaluation on the `valid` and `test` sets '
+                       'will be performed' )
     group.add_argument('--skip-train-iteration-range', type=str, nargs='+', default=None,
                        help='Iteration ranges to skip. The values are one or more dash-separated ranges. e.g., 101-200 251-300.')
 

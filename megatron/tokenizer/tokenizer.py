@@ -17,10 +17,10 @@
 
 from abc import ABC
 from abc import abstractmethod
+from transformers import AutoTokenizer
 
 from .bert_tokenization import FullTokenizer as FullBertTokenizer
 from .gpt2_tokenization import GPT2Tokenizer
-from transformers import AutoTokenizer
 
 def build_tokenizer(args):
     """Initialize tokenizer."""
@@ -43,10 +43,18 @@ def build_tokenizer(args):
         tokenizer = _GPT2BPETokenizer(args.vocab_file, args.merge_file)
     elif args.tokenizer_type == "PretrainedFromHF":
         assert args.tokenizer_name_or_path is not None
-        print(
-            " vocab file is un-used. loading tokenizer from pre-trained model",
-            flush=True,
-        )
+
+        # prevent transformers from logging info and warnings on each rank
+        import transformers
+        import logging
+        if args.rank == 0:
+            transformers.utils.logging.set_verbosity(logging.INFO)
+        else:
+            # shut the warnings on replicas
+            transformers.utils.logging.set_verbosity(logging.ERROR)
+
+        if args.rank == 0:
+            print(" vocab file is un-used. loading tokenizer from pre-trained model")
         tokenizer = _AutoTokenizer(args.tokenizer_name_or_path)
     else:
         raise NotImplementedError('{} tokenizer is not '

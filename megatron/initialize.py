@@ -23,6 +23,7 @@ import time
 import numpy as np
 import torch
 import logging as lg
+import subprocess
 
 from megatron import fused_kernels, logging
 from megatron import get_adlr_autoresume
@@ -36,14 +37,45 @@ from megatron.mpu import (set_tensor_model_parallel_rank,
 import deepspeed
 
 
+def git_ds_info():
+    args = get_args()
+    if not args.deepspeed:
+        return
+
+    from deepspeed.env_report import main as ds_report
+    ds_report()
+
+    def command_exists(cmd):
+        result = subprocess.Popen(f'type {cmd}', stdout=subprocess.PIPE, shell=True)
+        return result.wait() == 0
+
+    # Write out version/git info
+    git_hash_cmd = "git rev-parse --short HEAD  2>&1"
+    git_branch_cmd = "git rev-parse --abbrev-ref HEAD 2>&1"
+    if command_exists('git'):
+        try:
+            result = subprocess.check_output(git_hash_cmd, shell=True)
+            git_hash = result.decode('utf-8').strip()
+            result = subprocess.check_output(git_branch_cmd, shell=True)
+            git_branch = result.decode('utf-8').strip()
+        except subprocess.CalledProcessError:
+            git_hash = "unknown"
+            git_branch = "unknown"
+    else:
+        git_hash = "unknown"
+        git_branch = "unknown"
+
+    print(f'**** Git info for Megatron: git_hash={git_hash} git_branch={git_branch} ****')
+
+
 def initialize_megatron(extra_args_provider=None, args_defaults={},
                         ignore_unknown_args=False, allow_no_cuda=False):
     """Set global variables, initialize distributed, and
     set autoresume and random seeds.
-    `allow_no_cuda` should not be set unless using megatron for cpu only 
-    data processing. In general this arg should not be set unless you know 
+    `allow_no_cuda` should not be set unless using megatron for cpu only
+    data processing. In general this arg should not be set unless you know
     what you are doing.
-    Returns a function to finalize distributed env initialization 
+    Returns a function to finalize distributed env initialization
     (optionally, only when args.lazy_mpu_init == True)
     """
     if not allow_no_cuda:
@@ -61,7 +93,7 @@ def initialize_megatron(extra_args_provider=None, args_defaults={},
         args = get_args()
         # Pytorch distributed.
         _initialize_distributed()
-        
+
         # Random seeds for reproducibility.
         if args.rank == 0:
             print('> setting random seeds to {} ...'.format(args.seed))
@@ -75,24 +107,48 @@ def initialize_megatron(extra_args_provider=None, args_defaults={},
             handler.flush = sys.stderr.flush
             logging.add_handler(handler)
 
+        def set_verbosity_deepspeed(logging_level: str):
+            if not args.deepspeed:
+                return
+            from deepspeed.utils import logger as ds_logger
+            log_level = logging.log_levels[logging_level]
+            ds_logger.setLevel(log_level)
+
+        def set_verbosity_transformers(logging_level: str):
+            try:
+                # XXX: perhaps we need a better way of knowing when to override transformers logging
+                # currently it's only when using `--tokenizer-type PretrainedFromHF`
+                from transformers.utils import logging as transformers_logging
+                log_level = logging.log_levels[logging_level]
+                logging.set_verbosity(log_level)
+            except:
+                pass
+
         if args.rank == 0:
             if args.log_level is not None:
                 set_verbosity(args.log_level)
+                set_verbosity_deepspeed(args.log_level)
+                set_verbosity_transformers(args.log_level)
         else:
             if args.log_level_replica is not None:
                 set_verbosity(args.log_level_replica)
+                set_verbosity_deepspeed(args.log_level_replica)
+                set_verbosity_transformers(args.log_level_replica)
         _set_random_seed(args.seed)
 
     args = get_args()
 
+    if args.rank == 0:
+        git_ds_info()
+
     if  args.lazy_mpu_init:
         args.use_cpu_initialization=True
         # delayed initialization of DDP-related stuff
-        # We only set basic DDP globals    
+        # We only set basic DDP globals
         set_tensor_model_parallel_world_size(args.tensor_model_parallel_size)
         # and return function for external DDP manager
         # to call when it has DDP initialized
-        set_tensor_model_parallel_rank(args.rank)    
+        set_tensor_model_parallel_rank(args.rank)
         return finish_mpu_init
     else:
         # Megatron's MPU is the master. Complete initialization right away.
@@ -100,7 +156,7 @@ def initialize_megatron(extra_args_provider=None, args_defaults={},
 
         # Initialize memory buffers.
         _initialize_mem_buffs()
-        
+
         # Autoresume.
         _init_autoresume()
 
@@ -148,7 +204,7 @@ def _compile_dependencies():
             print('WARNING: constraints for invoking optimized'
                   ' fused softmax kernel are not met. We default'
                   ' back to unfused kernel invocations.', flush=True)
-    
+
     # Always build on rank zero first.
     if torch.distributed.get_rank() == 0:
         start_time = time.time()
@@ -157,7 +213,12 @@ def _compile_dependencies():
         torch.distributed.barrier()
     else:
         torch.distributed.barrier()
-        fused_kernels.load(args)
+        import warnings
+        with warnings.catch_warnings():
+            # ignore loading noise
+            warnings.simplefilter("ignore")
+            fused_kernels.load(args)
+
     # Simple barrier to make sure all ranks have passed the
     # compilation phase successfully before moving on to the
     # rest of the program. We think this might ensure that
@@ -227,14 +288,9 @@ def _initialize_distributed():
                 args.local_rank = device
             torch.cuda.set_device(device)
         # Call the init process
-        init_method = 'tcp://'
-        master_ip = os.getenv('MASTER_ADDR', 'localhost')
-        master_port = os.getenv('MASTER_PORT', '6000')
-        init_method += master_ip + ':' + master_port
         torch.distributed.init_process_group(
             backend=args.distributed_backend,
-            world_size=args.world_size, rank=args.rank,
-            init_method=init_method)
+            world_size=args.world_size, rank=args.rank)
 
     # Set the tensor model-parallel, pipeline model-parallel, and
     # data-parallel communicators.
