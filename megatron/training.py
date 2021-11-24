@@ -136,8 +136,8 @@ def pretrain(train_valid_test_dataset_provider,
     model, optimizer, lr_scheduler = setup_model_and_optimizer(model_provider)
     args.parameters_in_billions = get_parameters_in_billions(model)
     args.parameters_in_billions_no_embedding = get_parameters_in_billions(model, exclude_embeddings=True)
-    print_rank_0(f'estimated model parameters: {args.parameters_in_billions}')
-    print_rank_0(f'estimated model parameters without embeddings: {args.parameters_in_billions_no_embedding}')
+    print_rank_0(f'estimated model parameters: {args.parameters_in_billions:.4f}B')
+    print_rank_0(f'estimated model parameters without embeddings: {args.parameters_in_billions_no_embedding:.4f}B')
     timers('model-and-optimizer-setup').stop()
     print_datetime('after model, optimizer, and learning rate '
                    'scheduler are built')
