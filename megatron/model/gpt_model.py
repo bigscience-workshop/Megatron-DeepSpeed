@@ -169,7 +169,7 @@ def get_cross_entropy(is_prefix: bool):
 
         if is_prefix:
             micro_batch_size, sequence_length = loss_mask.shape
-            expected_number_of_tokens = micro_batch_size * sequence_length
+            average_tokens_per_sample: torch.Tensor
             if args.loss_on_targets_only:
                 # HACK: This is useful when we obtain loss masks that are microbatch dependent. Consequently, if we want to
                 #   preserve the notion that all tokens have the same impact on the loss, we can only normalise using a
@@ -180,9 +180,12 @@ def get_cross_entropy(is_prefix: bool):
                     reweight = torch.arange(
                         sequence_length, 0, -1, dtype=torch.float, device=loss_mask.device
                     ) / (sequence_length + 1) * 2
-                    expected_number_of_tokens = reweight.flip(-1).cumsum(-1).mean() * micro_batch_size
+                    average_tokens_per_sample = reweight.flip(-1).cumsum(-1).mean()
                 else:
-                    expected_number_of_tokens /= 2
+                    average_tokens_per_sample = (sequence_length + 1) / 2
+            else:
+                average_tokens_per_sample = sequence_length
+            expected_number_of_tokens = average_tokens_per_sample * micro_batch_size
         else:
             expected_number_of_tokens = loss_mask.sum()
 
