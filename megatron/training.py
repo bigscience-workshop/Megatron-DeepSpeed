@@ -742,7 +742,7 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
         tp_rank = mpu.get_tensor_model_parallel_rank()
         pp_rank = mpu.get_pipeline_model_parallel_rank()
         preamble = f"[{tp_rank:0>3d}-{pp_rank:0>3d}]"
-        print(f"{preamble} {args.parameters_in_billions:.4f}B / {args.parameters_in_billions_no_embedding:.4f}B")
+        print(f"{preamble} {get_parameters_in_billions(model):.4f}B / {get_parameters_in_billions(model, exclude_embeddings=True):.4f}B")
         torch.distributed.barrier()
     else:
         torch.distributed.barrier()
