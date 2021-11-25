@@ -180,7 +180,7 @@ def get_cross_entropy(is_prefix: bool):
                     reweight = torch.arange(
                         sequence_length, 0, -1, dtype=torch.float, device=loss_mask.device
                     ) / (sequence_length + 1) * 2
-                    expected_number_of_tokens = reweight.flip(-1).cumsum(-1).mean()
+                    expected_number_of_tokens = reweight.flip(-1).cumsum(-1).mean() * micro_batch_size
                 else:
                     expected_number_of_tokens /= 2
         else:
