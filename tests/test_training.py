@@ -317,7 +317,7 @@ class MegDSTestTraining(TestCasePlus):
 
             --num-layers 2
             --hidden-size 64
-            --num-attention-heads 2
+            --num-attention-heads 4
             --seq-length 128
             --max-position-embeddings 1024
             --micro-batch-size 1
@@ -391,6 +391,10 @@ class MegDSTestTraining(TestCasePlus):
         # test tensorboard
         tensorboard_files = glob.glob(f"{output_dir}/tensorboard/events*")
         self.assertEqual(len(tensorboard_files), 1, "tensorboard files")
+
+        # test use scaled softmax
+        self.assertIn("Using fused softmax", cs.out)
+        self.assertNotIn("Using torch softmax", cs.out)
 
         if reweight_loss_based_on_position_frequency:
             self.assertIn("Using loss reweighting", cs.out)
