@@ -16,6 +16,7 @@
 """Utilities for models."""
 
 import math
+from functools import wraps
 
 import torch
 
@@ -73,3 +74,18 @@ def openai_gelu(x):
 @torch.jit.script
 def erf_gelu(x):
     return x * 0.5 * (torch.erf(x / 1.41421).to(dtype=x.dtype)+torch.ones_like(x).to(dtype=x.dtype))
+
+def log_debug_usage(logger, msg: str):
+    def log_debug_usage_(func):
+        """Helper function in order to log a message when using a function for the first time"""
+        func.__logged_message__ = False
+
+        @wraps(func)
+        def wrapped(*args, **kwargs):
+            if func.__logged_message__ is False:
+                logger.debug(msg)
+                func.__logged_message__ = True
+            return func(*args, **kwargs)
+
+        return wrapped
+    return log_debug_usage_

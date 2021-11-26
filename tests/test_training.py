@@ -298,8 +298,8 @@ class MegDSTestTraining(TestCasePlus):
         if variation == "glu":
             self.assertIn("Using GLU activation: GELU", cs.out)
 
-    @parameterized.expand([(True, ), (False, )])
-    def test_training_prefix_lm_all(self, loss_on_targets_only):
+    @parameterized.expand([(True, True), (False, False), (True, False), (False, True)])
+    def test_training_prefix_lm_all(self, loss_on_targets_only, reweight_loss_based_on_position_frequency):
         # all in one test
         src_dir = self.src_dir
         data_dir = f"{self.data_dir}/gpt2"
@@ -325,6 +325,7 @@ class MegDSTestTraining(TestCasePlus):
             --global-batch-size 16
             --train-samples {n_samples}
             {"--loss-on-targets-only" if loss_on_targets_only else ""}
+            {"--reweight-loss-based-on-position-frequency" if reweight_loss_based_on_position_frequency else ""}
 
             --optimizer adam
             --adam-beta1 0.9
@@ -353,6 +354,8 @@ class MegDSTestTraining(TestCasePlus):
             --log-timers-to-tensorboard
             --log-batch-size-to-tensorboard
             --log-validation-ppl-to-tensorboard
+
+            --log-level debug
         """.split()
 
         ds_args = f"""
@@ -388,6 +391,9 @@ class MegDSTestTraining(TestCasePlus):
         # test tensorboard
         tensorboard_files = glob.glob(f"{output_dir}/tensorboard/events*")
         self.assertEqual(len(tensorboard_files), 1, "tensorboard files")
+
+        if reweight_loss_based_on_position_frequency:
+            self.assertIn("Using loss reweighting", cs.out)
 
         # 2. test training from checkpoint: resume
         # now do it again, this time resuming from the checkpoint
