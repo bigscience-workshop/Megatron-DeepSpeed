@@ -16,7 +16,12 @@
 
 import torch
 import torch.nn as nn
+
+from megatron import logging
 from megatron.enums import AttnMaskType
+from megatron.model import utils
+
+logger = logging.get_logger(__name__)
 
 class ScaledUpperTriangMaskedSoftmax(torch.autograd.Function):
     """
@@ -134,6 +139,13 @@ class FusedScaleMaskSoftmax(nn.Module):
     def is_kernel_available(self, mask, b, np, sq, sk):
         attn_batches = b * np
 
+        print("is_kernel_available")
+        print(f"self.self.scaled_masked_softmax_fusion = {self.scaled_masked_softmax_fusion}")
+        print(f"self.input_in_float16 = {self.input_in_float16}")
+        print(f"mask is not None = {mask is not None}")
+        print(f"sq = {sq}")
+        print(f"sk = {sk}")
+        print(f"attn_batches = {attn_batches}")
         if (
             self.scaled_masked_softmax_fusion  # user want to fuse
             and self.input_in_float16  # input must be fp16
@@ -149,10 +161,12 @@ class FusedScaleMaskSoftmax(nn.Module):
                     if attn_batches % batch_per_block == 0:
                         return True
                 else:
+                    print(sq,  batch_per_block)
                     if sq % batch_per_block == 0:
                         return True
         return False
 
+    @utils.log_debug_usage(logger, "Using fused softmax")
     def forward_fused_softmax(self, input, mask):
         b, np, sq, sk = input.size()
         scale = self.scale if self.scale is not None else 1.0
@@ -168,6 +182,7 @@ class FusedScaleMaskSoftmax(nn.Module):
             # input is 4D tensor (b, np, sq, sk)
             return ScaledMaskedSoftmax.apply(input, mask, scale)
 
+    @utils.log_debug_usage(logger, "Using torch softmax")
     def forward_torch_softmax(self, input, mask):
         if self.input_in_float16 and self.softmax_in_fp32:
             input = input.float()

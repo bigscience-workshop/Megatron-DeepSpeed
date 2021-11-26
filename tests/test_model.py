@@ -6,7 +6,7 @@ import deepspeed
 import torch
 
 from megatron import initialize_megatron, get_args, get_tokenizer, global_vars
-from megatron.testing_utils import TestCasePlus, mockenv_context
+from megatron.testing_utils import TestCasePlus, mockenv_context, CaptureStdout
 from megatron.training import setup_model_and_optimizer
 from pretrain_gpt import model_provider as gpt_model_provider, get_batch_pipe as get_gpt_batch_pipe
 from pretrain_prefix_lm import model_provider as prefix_lm_model_provider, get_batch_pipe as get_prefix_lm_batch_pipe
@@ -49,6 +49,10 @@ def get_default_args():
         "--checkpoint-activations": "",
 
         # DATA_ARGS
+
+        # LOGGING_ARGS
+        "--log-level": "debug",
+        "--log-level-replica": "info",
     }
 
 
@@ -257,9 +261,15 @@ class MyTestCase(TestCasePlus):
                     # Make sure that the last prefix token predicts the first token.
                     self.assertTrue(loss_mask[batch_id, id -1] == 1)
 
-                model(*input_batch)
+                with CaptureStdout() as cs:
+                    model(*input_batch)
+
+                self.assertIn("Using fused softmax", cs.out)
+                self.assertIn("Using torch softmax", cs.out)
 
                 #TODO: Check all invariants
+
+
 
     def test_gpt_rotary_embeddings(self):
         """Test rotary embeddings"""
