@@ -19,28 +19,33 @@ import subprocess
 
 from torch.utils import cpp_extension
 
-# Setting this param to a list has a problem of generating different
-# compilation commands (with diferent order of architectures) and
-# leading to recompilation of fused kernels. Set it to empty string
-# to avoid recompilation and assign arch flags explicity in
-# extra_cuda_cflags below
-os.environ["TORCH_CUDA_ARCH_LIST"] = ""
-
 
 def load(args):
 
-    # Check if cuda 11 is installed for compute capability 8.0
-    cc_flag = []
-    _, bare_metal_major, _ = _get_cuda_bare_metal_version(
-        cpp_extension.CUDA_HOME)
-    if int(bare_metal_major) >= 11:
-        cc_flag.append('-gencode')
-        cc_flag.append('arch=compute_80,code=sm_80')
+    # Setting this param to a list has a problem of generating different
+    # compilation commands (with diferent order of architectures) and
+    # leading to recompilation of fused kernels. Set it to empty string
+    # to avoid recompilation and assign arch flags explicity in
+    # extra_cuda_cflags below
+    #
+    # but if a user wants to set an explicit list of archs to compile to, then let that list
+    # through:
+    arch_list = os.environ.get('TORCH_CUDA_ARCH_LIST', None)
+    if arch_list is None:
+        os.environ["TORCH_CUDA_ARCH_LIST"] = ""
+
+    # # Check if cuda 11 is installed for compute capability 8.0
+    # cc_flag = []
+    # _, bare_metal_major, _ = _get_cuda_bare_metal_version(
+    #     cpp_extension.CUDA_HOME)
+    # if int(bare_metal_major) >= 11:
+    #     cc_flag.append('-gencode')
+    #     cc_flag.append('arch=compute_80,code=sm_80')
 
     # Build path
     srcpath = pathlib.Path(__file__).parent.absolute()
     buildpath = srcpath / 'build'
-    _create_build_dir(buildpath)
+    buildpath.mkdir(parents=True, exist_ok=True)
 
     # Helper function to build the kernels.
     def _cpp_extention_load_helper(name, sources, extra_cuda_flags):
@@ -50,10 +55,10 @@ def load(args):
             build_directory=buildpath,
             extra_cflags=['-O3',],
             extra_cuda_cflags=['-O3',
-                               '-gencode', 'arch=compute_70,code=sm_70',
-                               '--use_fast_math'] + extra_cuda_flags + cc_flag,
+                               '--use_fast_math'] + extra_cuda_flags,
             verbose=(args.rank == 0)
         )
+                               # '-gencode', 'arch=compute_70,code=sm_70',
 
     # ==============
     # Fused softmax.
@@ -64,7 +69,7 @@ def load(args):
                             '-U__CUDA_NO_HALF_CONVERSIONS__',
                             '--expt-relaxed-constexpr',
                             '--expt-extended-lambda']
-        
+
         # Upper triangular softmax.
         sources=[srcpath / 'scaled_upper_triang_masked_softmax.cpp',
                  srcpath / 'scaled_upper_triang_masked_softmax_cuda.cu']
