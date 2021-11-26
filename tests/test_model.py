@@ -102,7 +102,7 @@ class MyTestCase(TestCasePlus):
                 model, _, _ = setup_model_and_optimizer(gpt_model_provider)
                 model = model[0]
 
-                token_ids = torch.randint(args.padded_vocab_size, (args.micro_batch_size, args.seq_length))
+                token_ids = torch.randint(args.padded_vocab_size, (args.micro_batch_size, args.seq_length + 1))
 
                 # eod is a special token
                 token_ids[token_ids == tokenizer.eod] += 1
@@ -145,91 +145,96 @@ class MyTestCase(TestCasePlus):
         with patch('sys.argv', flatten_arguments(command_args)):
             with mockenv_context(**self.dist_env_1_gpu):
                 deepspeed.init_distributed()
-                initialize_megatron()
-                args = get_args()
-                tokenizer = get_tokenizer()
 
-                model, _, _ = setup_model_and_optimizer(prefix_lm_model_provider)
-                model = model[0]
+                with CaptureStdout() as cs:
+                    initialize_megatron()
+                    args = get_args()
+                    tokenizer = get_tokenizer()
 
-                token_ids = torch.randint(args.padded_vocab_size, (args.micro_batch_size, args.seq_length))
+                    model, _, _ = setup_model_and_optimizer(prefix_lm_model_provider)
+                    model = model[0]
 
-                # eod is a special token, this also guarantees that the whole row is considered as a document.
-                token_ids[token_ids == tokenizer.eod] += 1
-                token_ids[token_ids == tokenizer.eod] %= args.padded_vocab_size
+                    token_ids = torch.randint(args.padded_vocab_size, (args.micro_batch_size, args.seq_length + 1))
 
-                # process batch to have non empty prefix
-                input_batch, (_, loss_mask), prefix_indices = get_prefix_lm_batch_pipe({"text": token_ids})
+                    # eod is a special token, this also guarantees that the whole row is considered as a document.
+                    token_ids[token_ids == tokenizer.eod] += 1
+                    token_ids[token_ids == tokenizer.eod] %= args.padded_vocab_size
 
-                for batch_id in range(len(prefix_indices)):
-                    for id in prefix_indices[batch_id]:
-                        self.assertTrue(loss_mask[batch_id, id] == 1)
-                        self.assertTrue(id > 0)
-                        # Make sure that the last prefix token predicts the first token.
-                        self.assertTrue(loss_mask[batch_id, id -1] == 1)
+                    # process batch to have non empty prefix
+                    input_batch, (_, loss_mask), prefix_indices = get_prefix_lm_batch_pipe({"text": token_ids})
 
-                output = model(*input_batch)
+                    for batch_id in range(len(prefix_indices)):
+                        for id in prefix_indices[batch_id]:
+                            self.assertTrue(loss_mask[batch_id, id] == 1)
+                            self.assertTrue(id > 0)
+                            # Make sure that the last prefix token predicts the first token.
+                            self.assertTrue(loss_mask[batch_id, id -1] == 1)
 
-                ## --------------- CHANGE A TARGET TOKEN ---------------------------
-                # get a modified version of the first batch
-                # guaranteed to exist as each row has at least one partial document
-                changed_target_index = prefix_indices[0][0]
-                token_ids_changed_target = input_batch[0].clone()
-                # We increment the token id on the changed index.
-                token_ids_changed_target[0, changed_target_index] = \
-                    (token_ids_changed_target[0, changed_target_index] + 1) % args.padded_vocab_size
-                # make sure we're not changing a token to eod as it's a special token
-                token_ids_changed_target[token_ids_changed_target == tokenizer.eod] += 1
-                token_ids_changed_target[token_ids_changed_target == tokenizer.eod] %= args.padded_vocab_size
+                    output = model(*input_batch)
 
-                # Test change
-                output_changed_target = model(token_ids_changed_target, *input_batch[1:])
+                    ## --------------- CHANGE A TARGET TOKEN ---------------------------
+                    # get a modified version of the first batch
+                    # guaranteed to exist as each row has at least one partial document
+                    changed_target_index = prefix_indices[0][0]
+                    token_ids_changed_target = input_batch[0].clone()
+                    # We increment the token id on the changed index.
+                    token_ids_changed_target[0, changed_target_index] = \
+                        (token_ids_changed_target[0, changed_target_index] + 1) % args.padded_vocab_size
+                    # make sure we're not changing a token to eod as it's a special token
+                    token_ids_changed_target[token_ids_changed_target == tokenizer.eod] += 1
+                    token_ids_changed_target[token_ids_changed_target == tokenizer.eod] %= args.padded_vocab_size
 
-                # All token in past should be unchanged
-                self.assertTrue(
-                    torch.all(
-                        equal_vectors(output[0, :changed_target_index], output_changed_target[0, :changed_target_index])
+                    # Test change
+                    output_changed_target = model(token_ids_changed_target, *input_batch[1:])
+
+                    # All token in past should be unchanged
+                    self.assertTrue(
+                        torch.all(
+                            equal_vectors(output[0, :changed_target_index], output_changed_target[0, :changed_target_index])
+                        )
                     )
-                )
-                # All tokens in the future should have changed
-                self.assertFalse(
-                    torch.any(
-                        equal_vectors(output[0, changed_target_index:], output_changed_target[0, changed_target_index:])
+                    # All tokens in the future should have changed
+                    self.assertFalse(
+                        torch.any(
+                            equal_vectors(output[0, changed_target_index:], output_changed_target[0, changed_target_index:])
+                        )
                     )
-                )
-                # Unchanged changed rows should not change either
-                self.assertTrue(
-                    torch.all(
-                        equal_vectors(output[1, :], output_changed_target[1, :])
+                    # Unchanged changed rows should not change either
+                    self.assertTrue(
+                        torch.all(
+                            equal_vectors(output[1, :], output_changed_target[1, :])
+                        )
                     )
-                )
 
-                ## --------------- CHANGE AN INPUT TOKEN ---------------------------
-                # Let's change the the last prefix token and make sure that the first token changed
-                # guaranteed to be positive as we avoid pathological case previously
-                last_prefix_index = prefix_indices[0][0] - 1
-                token_ids_changed_input = input_batch[0].clone()
-                #  We increment the token id on the changed index.
-                token_ids_changed_input[0, last_prefix_index] = \
-                    (token_ids_changed_input[0, last_prefix_index] + 1) % args.padded_vocab_size
-                # make sure we're not changing a token to eod as it's a special token
-                token_ids_changed_input[token_ids_changed_input == tokenizer.eod] += 1
-                token_ids_changed_input[token_ids_changed_input == tokenizer.eod] %= args.padded_vocab_size
+                    ## --------------- CHANGE AN INPUT TOKEN ---------------------------
+                    # Let's change the the last prefix token and make sure that the first token changed
+                    # guaranteed to be positive as we avoid pathological case previously
+                    last_prefix_index = prefix_indices[0][0] - 1
+                    token_ids_changed_input = input_batch[0].clone()
+                    #  We increment the token id on the changed index.
+                    token_ids_changed_input[0, last_prefix_index] = \
+                        (token_ids_changed_input[0, last_prefix_index] + 1) % args.padded_vocab_size
+                    # make sure we're not changing a token to eod as it's a special token
+                    token_ids_changed_input[token_ids_changed_input == tokenizer.eod] += 1
+                    token_ids_changed_input[token_ids_changed_input == tokenizer.eod] %= args.padded_vocab_size
 
-                output_changed_input = model(token_ids_changed_input, *input_batch[1:])
+                    output_changed_input = model(token_ids_changed_input, *input_batch[1:])
 
-                # All tokens should be changed
-                self.assertFalse(
-                    torch.any(
-                        equal_vectors(output[0, :], output_changed_input[0, :])
+                    # All tokens should be changed
+                    self.assertFalse(
+                        torch.any(
+                            equal_vectors(output[0, :], output_changed_input[0, :])
+                        )
                     )
-                )
-                # Unchanged changed rows should not change either
-                self.assertTrue(
-                    torch.all(
-                        equal_vectors(output[1, :], output_changed_input[1, :])
+                    # Unchanged changed rows should not change either
+                    self.assertTrue(
+                        torch.all(
+                            equal_vectors(output[1, :], output_changed_input[1, :])
+                        )
                     )
-                )
+
+                self.assertIn("Using fused softmax", cs.out)
+                self.assertNotIn("Using torch softmax", cs.out)
 
     def test_prefix_lm_wo_reset_attention_mask(self):
         """
@@ -245,28 +250,28 @@ class MyTestCase(TestCasePlus):
         with patch('sys.argv', flatten_arguments(command_args)):
             with mockenv_context(**self.dist_env_1_gpu):
                 deepspeed.init_distributed()
-                initialize_megatron()
-                args = get_args()
-
-                model, _, _ = setup_model_and_optimizer(prefix_lm_model_provider)
-                model = model[0]
-
-                token_ids = torch.randint(args.padded_vocab_size, (args.micro_batch_size, args.seq_length))
-                input_batch, (_, loss_mask), prefix_indices = get_prefix_lm_batch_pipe({"text": token_ids})
-
-                for batch_id in range(len(prefix_indices)):
-                    id = prefix_indices[batch_id]
-                    self.assertTrue(loss_mask[batch_id, id] == 1)
-                    self.assertTrue(id > 0)
-                    # Make sure that the last prefix token predicts the first token.
-                    self.assertTrue(loss_mask[batch_id, id -1] == 1)
 
                 with CaptureStdout() as cs:
+                    initialize_megatron()
+                    args = get_args()
+
+                    model, _, _ = setup_model_and_optimizer(prefix_lm_model_provider)
+                    model = model[0]
+
+                    token_ids = torch.randint(args.padded_vocab_size, (args.micro_batch_size, args.seq_length + 1))
+                    input_batch, (_, loss_mask), prefix_indices = get_prefix_lm_batch_pipe({"text": token_ids})
+
+                    for batch_id in range(len(prefix_indices)):
+                        id = prefix_indices[batch_id]
+                        self.assertTrue(loss_mask[batch_id, id] == 1)
+                        self.assertTrue(id > 0)
+                        # Make sure that the last prefix token predicts the first token.
+                        self.assertTrue(loss_mask[batch_id, id -1] == 1)
+
                     model(*input_batch)
 
                 self.assertIn("Using fused softmax", cs.out)
-                self.assertIn("Using torch softmax", cs.out)
-
+                self.assertNotIn("Using torch softmax", cs.out)
                 #TODO: Check all invariants
 
 
@@ -288,7 +293,7 @@ class MyTestCase(TestCasePlus):
                 model, _, _ = setup_model_and_optimizer(gpt_model_provider)
                 model = model[0]
 
-                token_ids = torch.randint(args.padded_vocab_size, (args.micro_batch_size, args.seq_length))
+                token_ids = torch.randint(args.padded_vocab_size, (args.micro_batch_size, args.seq_length + 1))
 
                 # eod is a special token
                 token_ids[token_ids == tokenizer.eod] += 1
