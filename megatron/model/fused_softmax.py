@@ -16,12 +16,7 @@
 
 import torch
 import torch.nn as nn
-
-from megatron import logging
 from megatron.enums import AttnMaskType
-from megatron.model.utils import log_debug_usage
-
-logger = logging.get_logger(__name__)
 
 class ScaledUpperTriangMaskedSoftmax(torch.autograd.Function):
     """
@@ -158,7 +153,6 @@ class FusedScaleMaskSoftmax(nn.Module):
                         return True
         return False
 
-    @log_debug_usage(logger, "Using fused softmax")
     def forward_fused_softmax(self, input, mask):
         b, np, sq, sk = input.size()
         scale = self.scale if self.scale is not None else 1.0
@@ -174,7 +168,6 @@ class FusedScaleMaskSoftmax(nn.Module):
             # input is 4D tensor (b, np, sq, sk)
             return ScaledMaskedSoftmax.apply(input, mask, scale)
 
-    @log_debug_usage(logger, "Using torch softmax")
     def forward_torch_softmax(self, input, mask):
         if self.input_in_float16 and self.softmax_in_fp32:
             input = input.float()
