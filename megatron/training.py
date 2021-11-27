@@ -661,6 +661,11 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
     if iteration % args.log_interval == 0:
         elapsed_time = timers('interval-time').elapsed()
         elapsed_time_per_iteration = elapsed_time / total_iterations
+
+        # throughput
+        samples_per_sec = batch_size / (elapsed_time_per_iteration * 1000)
+        samples_per_sec_per_replica = samples_per_sec / args.data_parallel_size
+
         # only the last rank process has a non-None _GLOBAL_TENSORBOARD_WRITER
         if writer and is_last_rank():
             if args.log_timers_to_tensorboard:
@@ -670,6 +675,11 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
                                   elapsed_time_per_iteration, args.consumed_train_samples)
                 writer.add_scalar('iteration-time/iteration-time vs tokens',
                                   elapsed_time_per_iteration, args.consumed_train_tokens)
+                writer.add_scalar('iteration-time/samples per second',
+                                  samples_per_sec, args.iteration)
+                writer.add_scalar('iteration-time/samples per second per replica',
+                                  samples_per_sec_per_replica, args.iteration)
+
         log_string = ' iteration {:8d}/{:8d} |'.format(
             iteration, args.train_iters)
         log_string += ' consumed samples: {:12d} |'.format(
@@ -701,6 +711,7 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
             total_loss_dict[skipped_iters_key])
         log_string += ' number of nan iterations: {:3d} |'.format(
             total_loss_dict[nan_iters_key])
+        log_string += ' samples per second: {:.3f} |'.format(samples_per_sec)
         total_loss_dict[advanced_iters_key] = 0
         total_loss_dict[skipped_iters_key] = 0
         total_loss_dict[nan_iters_key] = 0
