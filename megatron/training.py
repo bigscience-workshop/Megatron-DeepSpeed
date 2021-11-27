@@ -134,6 +134,7 @@ def pretrain(train_valid_test_dataset_provider,
     # Model, optimizer, and learning rate.
     timers('model-and-optimizer-setup').start()
     model, optimizer, lr_scheduler = setup_model_and_optimizer(model_provider)
+    args.parameters_in_billions_no_embedding = get_parameters_in_billions(model, exclude_embeddings=True)
     print_rank_0(f'estimated model parameters: {get_parameters_in_billions(model)}')
     print_rank_0(f'estimated model parameters without embeddings: {get_parameters_in_billions(model, exclude_embeddings=True)}')
     timers('model-and-optimizer-setup').stop()
@@ -663,8 +664,20 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
         elapsed_time_per_iteration = elapsed_time / total_iterations
 
         # throughput
-        samples_per_sec = batch_size / (elapsed_time_per_iteration * 1000)
+        samples_per_sec = batch_size / (elapsed_time_per_iteration * 1e3)
         samples_per_sec_per_replica = samples_per_sec / args.data_parallel_size
+
+        # general TFLOPs formula
+        # model_size_in_B * 4 * 2 * seqlen * global_batch_size / (time_in_sec_per_interation * total_gpus * 1e3)
+        #
+        # The factor of 4 is when used with activation check-pointing,
+        # otherwise it will be 3, but for 200B model, activation check-pointing will always be on.
+        #
+        # here:
+        # model_size_in_B * 4 * 2 * seqlen * batch_size / (time_in_msec_per_interation * total_gpus)
+        checkpoint_activations_factor = 4 if args.checkpoint_activations else 3
+        seq_len = args.curriculum_seqlen if args.curriculum_learning else args.seq_length
+        tflops = args.parameters_in_billions_no_embedding * checkpoint_activations_factor * 2 * seq_len * batch_size / (elapsed_time_per_iteration * args.world_size)
 
         # only the last rank process has a non-None _GLOBAL_TENSORBOARD_WRITER
         if writer and is_last_rank():
@@ -679,6 +692,8 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
                                   samples_per_sec, args.iteration)
                 writer.add_scalar('iteration-time/samples per second per replica',
                                   samples_per_sec_per_replica, args.iteration)
+                writer.add_scalar('iteration-time/TFLOPs per gpu',
+                                  tflops, args.iteration)
 
         log_string = ' iteration {:8d}/{:8d} |'.format(
             iteration, args.train_iters)
@@ -712,6 +727,7 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
         log_string += ' number of nan iterations: {:3d} |'.format(
             total_loss_dict[nan_iters_key])
         log_string += ' samples per second: {:.3f} |'.format(samples_per_sec)
+        log_string += ' TFLOPs: {:.2f} |'.format(tflops)
         total_loss_dict[advanced_iters_key] = 0
         total_loss_dict[skipped_iters_key] = 0
         total_loss_dict[nan_iters_key] = 0
