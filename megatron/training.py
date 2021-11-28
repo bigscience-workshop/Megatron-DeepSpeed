@@ -1075,7 +1075,8 @@ def build_train_valid_test_data_iterators(
             train_ds[0], args.consumed_train_samples)
 
         # We collapse None and empty list as both should mean we don't run validation
-        valid_dataloaders = [build_pretraining_data_loader(d, args.consumed_valid_samples)\
+        # args.consumed_valid_samples accumulates the sum of valid steps for every dataset, which are all equal
+        valid_dataloaders = [build_pretraining_data_loader(d, args.consumed_valid_samples // len(valid_ds))
                             for d in valid_ds] \
                             if valid_ds is not None else []
         # We collapse None and empty list as both should mean we don't run test
