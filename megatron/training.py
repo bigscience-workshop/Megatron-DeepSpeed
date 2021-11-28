@@ -1017,12 +1017,12 @@ def build_train_valid_test_data_iterators(
         # train_dataloader is a single item while valid_dataloader
         # and test_dataloader are arrays
         train_dataloader = build_pretraining_data_loader(
-            train_ds[0], args.consumed_train_samples)
+            train_ds[0], args.consumed_train_samples, args.dataloader_type)
 
-        valid_dataloader = [build_pretraining_data_loader(d, args.consumed_valid_samples)\
+        valid_dataloader = [build_pretraining_data_loader(d, args.consumed_valid_samples, "cyclic")\
                             for d in valid_ds] \
                             if valid_ds is not None else None
-        test_dataloader = [build_pretraining_data_loader(d, 0) for d in test_ds] \
+        test_dataloader = [build_pretraining_data_loader(d, 0, "cyclic") for d in test_ds] \
                             if test_ds is not None else None
 
         # Flags to know if we need to do training/validation/testing.

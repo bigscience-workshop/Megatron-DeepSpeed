@@ -22,7 +22,7 @@ from megatron import get_args
 from megatron import mpu
 
 
-def build_pretraining_data_loader(dataset, consumed_samples):
+def build_pretraining_data_loader(dataset, consumed_samples, dataloader_type="single"):
     """Buld dataloader given an input dataset."""
 
     if dataset is None:
@@ -30,14 +30,14 @@ def build_pretraining_data_loader(dataset, consumed_samples):
     args = get_args()
 
     # Megatron sampler
-    if args.dataloader_type == 'single':
+    if dataloader_type == 'single':
         batch_sampler = MegatronPretrainingSampler(
             total_samples=len(dataset),
             consumed_samples=consumed_samples,
             micro_batch_size=args.micro_batch_size,
             data_parallel_rank=mpu.get_data_parallel_rank(),
             data_parallel_size=mpu.get_data_parallel_world_size())
-    elif args.dataloader_type == 'cyclic':
+    elif dataloader_type == 'cyclic':
         batch_sampler = MegatronPretrainingRandomSampler(
             total_samples=len(dataset),
             consumed_samples=consumed_samples,
