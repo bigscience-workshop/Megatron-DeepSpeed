@@ -191,10 +191,11 @@ def get_tasks_args(parser):
     group = parser.add_argument_group(title='eval harness')
     group.add_argument('--task_list', type=str, default = "all", help='Either "all" or comma separated list of tasks.')
     group.add_argument('--task_load_path', type=str, default = "./task_cache.pickle", help='Path to where the downloaded tasks are stored, or None if download is possible.')
+    group.add_argument('--results_path', type=str, default = "./results.json", help='Path to where the results will be stored.')
     return parser
 
 import pickle
-
+import json
 def main():
     
     initialize_megatron(extra_args_provider=get_tasks_args)
@@ -226,7 +227,12 @@ def main():
     tokenizer = get_tokenizer()
     adaptor = EvalHarnessAdaptor(model, tokenizer) 
     results = evaluator.evaluate(adaptor, task_dict, False, 0, None)
-    print(results)
+    
+    print_rank_0(json.dumps(results, indent=2))
+    if args.rank==0:
+        with open(args.results_path, 'w') as outfile:
+            json.dump(results, outfile, indent = 4)
+
 
 if __name__ == '__main__':
     main()
