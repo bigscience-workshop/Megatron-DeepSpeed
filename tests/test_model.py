@@ -83,10 +83,15 @@ class MyTestCase(TestCasePlus):
         global_vars._GLOBAL_TENSORBOARD_WRITER = None
         global_vars._GLOBAL_ADLR_AUTORESUME = None
         global_vars._GLOBAL_TIMERS = None
+        global_vars._GLOBAL_DEBUG_FUNCTION_TRACKER = None
 
         self.dist_env_1_gpu = dict(
             MASTER_ADDR="localhost", MASTER_PORT="9994", RANK="0", LOCAL_RANK="0", WORLD_SIZE="1"
         )
+
+    def tearDown(self):
+        for func in global_vars._GLOBAL_DEBUG_FUNCTION_TRACKER:
+            del func.__logged_message__
 
     def test_gpt(self):
         """Test causal invariance, ie past token don't depend on future tokens."""

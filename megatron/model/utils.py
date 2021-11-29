@@ -21,6 +21,8 @@ from functools import wraps
 import torch
 
 from megatron import get_args
+from megatron.global_vars import get_debug_function_tracker
+
 
 def init_method_normal(sigma):
     """Init method based on N(0, sigma)."""
@@ -85,6 +87,8 @@ def log_debug_usage(logger, msg: str):
             if func.__logged_message__ is False:
                 logger.debug(msg)
                 func.__logged_message__ = True
+                tracker = get_debug_function_tracker()
+                tracker.add(func)
             return func(*args, **kwargs)
 
         return wrapped
