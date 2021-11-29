@@ -663,9 +663,13 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
         elapsed_time = timers('interval-time').elapsed()
         elapsed_time_per_iteration = elapsed_time / total_iterations
 
+        seq_len = args.curriculum_seqlen if args.curriculum_learning else args.seq_length
+
         # throughput
         samples_per_sec = batch_size / (elapsed_time_per_iteration * 1e3)
         samples_per_sec_per_replica = samples_per_sec / args.data_parallel_size
+        tokens_per_sec = samples_per_sec * seq_len
+        tokens_per_sec_per_replica = tokens_per_sec / args.data_parallel_size
 
         # general TFLOPs formula
         # model_size_in_B * 4 * 2 * seqlen * global_batch_size / (time_in_sec_per_interation * total_gpus * 1e3)
@@ -676,7 +680,6 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
         # here:
         # model_size_in_B * 4 * 2 * seqlen * batch_size / (time_in_msec_per_interation * total_gpus)
         checkpoint_activations_factor = 4 if args.checkpoint_activations else 3
-        seq_len = args.curriculum_seqlen if args.curriculum_learning else args.seq_length
         tflops = args.parameters_in_billions_no_embedding * checkpoint_activations_factor * 2 * seq_len * batch_size / (elapsed_time_per_iteration * args.world_size)
 
         # only the last rank process has a non-None _GLOBAL_TENSORBOARD_WRITER
@@ -692,6 +695,10 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
                                   samples_per_sec, args.iteration)
                 writer.add_scalar('iteration-time/samples per second per replica',
                                   samples_per_sec_per_replica, args.iteration)
+                writer.add_scalar('iteration-time/tokens per second',
+                                  tokens_per_sec, args.iteration)
+                writer.add_scalar('iteration-time/tokens per second per replica',
+                                  tokens_per_sec_per_replica, args.iteration)
                 writer.add_scalar('iteration-time/TFLOPs per gpu (estimated)',
                                   tflops, args.iteration)
 
