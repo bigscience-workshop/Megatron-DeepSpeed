@@ -139,6 +139,13 @@ class FusedScaleMaskSoftmax(nn.Module):
     def is_kernel_available(self, mask, b, np, sq, sk):
         attn_batches = b * np
 
+        print("is_kernel_available")
+        print(f"self.self.scaled_masked_softmax_fusion = {self.scaled_masked_softmax_fusion}")
+        print(f"self.input_in_float16 = {self.input_in_float16}")
+        print(f"mask is not None = {mask is not None}")
+        print(f"sq = {sq}")
+        print(f"sk = {sk}")
+        print(f"attn_batches = {attn_batches}")
         if (
             self.scaled_masked_softmax_fusion  # user want to fuse
             and self.input_in_float16  # input must be fp16
@@ -147,13 +154,16 @@ class FusedScaleMaskSoftmax(nn.Module):
             and sk % 4 == 0  # sk must be divisor of 4
             and attn_batches % 4 == 0  # np * b must be divisor of 4
         ):
+            print("wtf")
             if 0 <= sk <= 2048:
                 batch_per_block = self.get_batch_per_block(sq, sk, b, np)
 
                 if self.attn_mask_type == AttnMaskType.causal:
+                    print(f"causal {attn_batches} / {batch_per_block}")
                     if attn_batches % batch_per_block == 0:
                         return True
                 else:
+                    print(f"non causal {sq} / {batch_per_block}")
                     if sq % batch_per_block == 0:
                         return True
         return False
