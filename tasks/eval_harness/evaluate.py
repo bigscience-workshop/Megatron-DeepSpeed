@@ -35,7 +35,6 @@ from megatron.utils import get_ltor_masks_and_position_ids, unwrap_model
 from megatron.p2p_communication import recv_forward, send_forward
 from tasks.finetune_utils import build_data_loader
 
-
 #from .datasets import build_dataset
 
 # These are needed to unwrap the model, would be nice to put these in megatron.utils if possible?
@@ -53,14 +52,13 @@ class EvalHarnessAdaptor(GPT2LM):
         self.VOCAB_SIZE = tokenizer.vocab_size
         self.EOT_TOKEN_ID = tokenizer.eod
 
-        # Comes form the neox code. Should this not be args.max_position_embeddings - max_gen_tokens?
-        self.max_length = args.max_position_embeddings // 2 
+        self.max_length = args.max_position_embeddings
         self.max_gen_toks = 128
-        self.batch_size = get_current_global_batch_size()
+        self.batch_size = args.micro_batch_size
         self.cache_hook = CacheHook(None)
         self.is_main = args.rank == 0
         self.is_local_main = args.local_rank == 0
-        self.device = f"cuda:{args.local_rank}"
+        self.device = torch.cuda.current_device()
         # TODO
         #self.is_model_parallel = neox_args.model_parallel_size > 1
         #self.is_pipe_parallel = self.model.is_pipe_parallel
@@ -69,22 +67,10 @@ class EvalHarnessAdaptor(GPT2LM):
         self.is_pipe_parallel = mpu.get_pipeline_model_parallel_world_size() > 1
         self.is_data_parallel = mpu.get_data_parallel_world_size() > 1
         
-        if self.is_pipe_parallel:
-            print("***")
-            print("***")
-            print("RUNNING PIPELINE PARALLEL!")
-            print("***")
-            print("***")
-            
-        print(self.model)
-        
-        
         #if self.is_model_parallel:
         #    raise NotImplementedError("Tensor parallelism is currently not supported for evaluation")
         if self.is_data_parallel:
             raise NotImplementedError("Data parallelism is currently not supported for evaluation")
-
-        
 
         self.is_last_stage = True if not self.is_pipe_parallel else mpu.is_pipeline_last_stage()  # only the last stage of the pipeline model will receive the logits
 
@@ -92,6 +78,7 @@ class EvalHarnessAdaptor(GPT2LM):
         disable_tqdm = disable_tqdm if self.is_main else True
         res = []
         res_len = 0  # storing the result length for later
+        self.model.eval()
         with torch.no_grad():
             def _collate(x):
                 toks = x[1] + x[2]
@@ -124,7 +111,6 @@ class EvalHarnessAdaptor(GPT2LM):
 
                 logits = self._model_call(torch.cat(inps, dim=0))
                 res_len += len(chunk)
-
                 if logits is not None:
                     multi_logits = F.log_softmax(logits, dim=-1)  # [batch, seq, vocab]
                     for (cache_key, _, _), logits, inp, inplen, cont_toks in zip(chunk, multi_logits, inps, inplens,
@@ -163,6 +149,7 @@ class EvalHarnessAdaptor(GPT2LM):
 
         return reord.get_original(res)
 
+
     def _model_call(self, inps):
         attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
             inps,
@@ -173,26 +160,28 @@ class EvalHarnessAdaptor(GPT2LM):
             prefix_indices=None,
             loss_on_targets_only=self.args.loss_on_targets_only
         )
-        if False:
-            args = get_args()
-            self.model.eval()
-            args.attn_mask = attention_mask
-            self.model.module.activation_checkpoint_interval = 0
-            self.model._compute_loss = False
-            self.model.fwd_outputs = []
-            self.model.module.pipe_buffers["inputs"].append((inps, position_ids, attention_mask))
-            self.model.module.pipe_buffers["outputs"].append(None)
+        
+        # Since the shape of the micro-batch will change
+        # We need set the correct shapes here 
+        # So that latter pipeline stages knows which shapes to expect.
+        # Otherwise we will deadlock. 
+        args = get_args()
+        args.micro_batch_size = len(inps)
+        args.seq_length = len(inps[0])
 
-            with torch.no_grad():
-                self.model._exec_forward_pass(buffer_id=0)
-            
-            logits = self.model.pipe_buffers["outputs"][0]
-            
-        logits = self.model(inps, position_ids, attention_mask)
-        return logits
+        input_tensor = recv_forward()
 
+        # Forward pass through the model.
+        unwrapped_model = unwrap_model(self.model, (torchDDP, LocalDDP, Float16Module))
+        unwrapped_model.set_input_tensor(input_tensor)
+        output = self.model(inps, position_ids, attention_mask)
+        
+        send_forward(output)
 
-
+        if mpu.is_pipeline_last_stage():
+            return output
+        else:
+            return None
 
 from megatron.initialize import initialize_megatron
 
@@ -208,6 +197,7 @@ import pickle
 def main():
     
     initialize_megatron(extra_args_provider=get_tasks_args)
+
     args = get_args()
     if args.num_layers_per_virtual_pipeline_stage is not None:
         print("Interleaved pipeline schedule is not yet supported for text generation.")
@@ -227,10 +217,8 @@ def main():
         task_dict = tasks.get_task_dict(task_list)
 
     # Set up model and load checkpoint.
-    model = get_model(model_provider)
-    if args.load is not None:
-        _ = load_checkpoint(model, None, None)
-
+    model, _, _  = setup_model_and_optimizer(model_provider)
+    
     assert len(model) == 1, "Above condition should have caught this"
     model = model[0]
 
