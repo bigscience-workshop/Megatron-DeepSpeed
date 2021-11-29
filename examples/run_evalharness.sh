@@ -5,7 +5,7 @@
 
 export HF_DATASETS_CACHE=$SCRATCH/cache/
 
-CHECKPOINT_PATH=checkpoints/gpt2_pipeline
+CHECKPOINT_PATH=checkpoints/gpt2_tensor
 VOCAB_FILE=gpt2-vocab.json
 MERGE_FILE=gpt2-merges.txt
 DATA_PATH=my-gpt2_text_document
@@ -26,8 +26,8 @@ GPT_ARGS=" \
     --merge-file $MERGE_FILE \
     --lr-warmup-fraction .01 \
     --fp16 \
-    --pipeline-model-parallel-size 2\
-    --tensor-model-parallel-size 1\
+    --pipeline-model-parallel-size 1\
+    --tensor-model-parallel-size 2\
     "
 
 DATA_ARGS=" \

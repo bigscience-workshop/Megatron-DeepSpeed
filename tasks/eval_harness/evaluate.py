@@ -30,6 +30,7 @@ from megatron import mpu
 from megatron.checkpointing import load_checkpoint
 from megatron.model.gpt_model import GPTModel
 from megatron.training import get_model,setup_model_and_optimizer
+from megatron.mpu.mappings import gather_from_tensor_model_parallel_region
 
 from megatron.utils import get_ltor_masks_and_position_ids, unwrap_model
 from megatron.p2p_communication import recv_forward, send_forward
@@ -110,6 +111,7 @@ class EvalHarnessAdaptor(GPT2LM):
                     inplens.append(inplen)
 
                 logits = self._model_call(torch.cat(inps, dim=0))
+
                 res_len += len(chunk)
                 if logits is not None:
                     multi_logits = F.log_softmax(logits, dim=-1)  # [batch, seq, vocab]
@@ -177,9 +179,8 @@ class EvalHarnessAdaptor(GPT2LM):
         output = self.model(inps, position_ids, attention_mask)
         
         send_forward(output)
-
         if mpu.is_pipeline_last_stage():
-            return output
+            return gather_from_tensor_model_parallel_region(output)
         else:
             return None
 
