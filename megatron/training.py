@@ -692,7 +692,7 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
                                   samples_per_sec, args.iteration)
                 writer.add_scalar('iteration-time/samples per second per replica',
                                   samples_per_sec_per_replica, args.iteration)
-                writer.add_scalar('iteration-time/TFLOPs per gpu',
+                writer.add_scalar('iteration-time/TFLOPs per gpu (estimated)',
                                   tflops, args.iteration)
 
         log_string = ' iteration {:8d}/{:8d} |'.format(
