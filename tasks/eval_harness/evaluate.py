@@ -1,7 +1,6 @@
 
 import os
 import sys
-import numpy as np
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
                                              os.path.pardir,os.path.pardir)))
 
@@ -10,35 +9,27 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
 # do not have internet access. This way we can pre-download them and use the cached data-set during evaluation.
 
 from lm_eval.models.gpt2 import GPT2LM
-
 from lm_eval import evaluator, tasks, utils
-from megatron.global_vars import get_current_global_batch_size
 from lm_eval.base import CacheHook
 from tqdm import tqdm
 import torch.nn.functional as F 
 
 from lm_eval.tasks import ALL_TASKS
 from pretrain_gpt import model_provider
-import math
 
 import torch
-import megatron.model
 from megatron import get_args
-from megatron import print_rank_0, is_last_rank
+from megatron import print_rank_0
 from megatron import get_tokenizer
 from megatron import mpu
-from megatron.checkpointing import load_checkpoint
-from megatron.model.gpt_model import GPTModel
-from megatron.training import get_model,setup_model_and_optimizer
+from megatron.training import setup_model_and_optimizer
 from megatron.mpu.mappings import gather_from_tensor_model_parallel_region
 
 from megatron.utils import get_ltor_masks_and_position_ids, unwrap_model
 from megatron.p2p_communication import recv_forward, send_forward
-from tasks.finetune_utils import build_data_loader
+import pickle
+import json
 
-#from .datasets import build_dataset
-
-# These are needed to unwrap the model, would be nice to put these in megatron.utils if possible?
 from torch.nn.parallel.distributed import DistributedDataParallel as torchDDP
 from megatron.model.distributed import DistributedDataParallel as LocalDDP
 from megatron.model.module import Float16Module
@@ -60,16 +51,10 @@ class EvalHarnessAdaptor(GPT2LM):
         self.is_main = args.rank == 0
         self.is_local_main = args.local_rank == 0
         self.device = torch.cuda.current_device()
-        # TODO
-        #self.is_model_parallel = neox_args.model_parallel_size > 1
-        #self.is_pipe_parallel = self.model.is_pipe_parallel
-        #self.is_data_parallel = self.model.is_data_parallel
         self.is_model_parallel = mpu.get_tensor_model_parallel_world_size() > 1
         self.is_pipe_parallel = mpu.get_pipeline_model_parallel_world_size() > 1
         self.is_data_parallel = mpu.get_data_parallel_world_size() > 1
         
-        #if self.is_model_parallel:
-        #    raise NotImplementedError("Tensor parallelism is currently not supported for evaluation")
         if self.is_data_parallel:
             raise NotImplementedError("Data parallelism is currently not supported for evaluation")
 
@@ -194,8 +179,6 @@ def get_tasks_args(parser):
     group.add_argument('--results_path', type=str, default = "./results.json", help='Path to where the results will be stored.')
     return parser
 
-import pickle
-import json
 def main():
     
     initialize_megatron(extra_args_provider=get_tasks_args)
