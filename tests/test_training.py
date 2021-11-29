@@ -317,7 +317,7 @@ class MegDSTestTraining(TestCasePlus):
 
             --num-layers 2
             --hidden-size 64
-            --num-attention-heads 4
+            --num-attention-heads 8
             --seq-length 128
             --max-position-embeddings 1024
             --micro-batch-size 1
