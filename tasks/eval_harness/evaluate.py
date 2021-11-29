@@ -1,4 +1,5 @@
 
+from logging import logMultiprocessing
 import os
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
@@ -54,7 +55,7 @@ class EvalHarnessAdaptor(GPT2LM):
         self.is_model_parallel = mpu.get_tensor_model_parallel_world_size() > 1
         self.is_pipe_parallel = mpu.get_pipeline_model_parallel_world_size() > 1
         self.is_data_parallel = mpu.get_data_parallel_world_size() > 1
-        
+        self.deepspeed = args.deepspeed
         if self.is_data_parallel:
             raise NotImplementedError("Data parallelism is currently not supported for evaluation")
 
@@ -84,7 +85,12 @@ class EvalHarnessAdaptor(GPT2LM):
 
                     # since in _collate we make sure length is descending, the longest is always the first one.
                     padding_length = padding_length if padding_length is not None else inplen
-
+                    
+                    if self.deepspeed:
+                        # deepspeed doesn't like chaning seq length.
+                        padding_length = self.max_length
+                        
+                    
                     # pad to length
                     inp = torch.cat([
                         inp,  # [seq]
@@ -96,7 +102,6 @@ class EvalHarnessAdaptor(GPT2LM):
                     inplens.append(inplen)
 
                 logits = self._model_call(torch.cat(inps, dim=0))
-
                 res_len += len(chunk)
                 if logits is not None:
                     multi_logits = F.log_softmax(logits, dim=-1)  # [batch, seq, vocab]
@@ -147,27 +152,62 @@ class EvalHarnessAdaptor(GPT2LM):
             prefix_indices=None,
             loss_on_targets_only=self.args.loss_on_targets_only
         )
-        
-        # Since the shape of the micro-batch will change
-        # We need set the correct shapes here 
-        # So that latter pipeline stages knows which shapes to expect.
-        # Otherwise we will deadlock. 
         args = get_args()
         args.micro_batch_size = len(inps)
         args.seq_length = len(inps[0])
 
-        input_tensor = recv_forward()
-
-        # Forward pass through the model.
-        unwrapped_model = unwrap_model(self.model, (torchDDP, LocalDDP, Float16Module))
-        unwrapped_model.set_input_tensor(input_tensor)
-        output = self.model(inps, position_ids, attention_mask)
+        if args.deepspeed:
+            # This is quite hacky.
+            # I don't know if DS has a good inference api for pipelining.
+            # So we just manually roll our own here, same as with Megatron.
+            # We definitely need to verify that the order of the stages is guaranteed to be the same though.
+            
+            input_tensor = recv_forward()
         
-        send_forward(output)
-        if mpu.is_pipeline_last_stage():
-            return gather_from_tensor_model_parallel_region(output)
+            if input_tensor == None:
+                input_tensor = (inps, position_ids, attention_mask)
+
+            self.model.pipe_buffers["inputs"] = [input_tensor]
+            self.model.pipe_buffers["outputs"] = [None]
+
+            # Run model
+            with torch.no_grad():
+                self.model._exec_forward_pass(buffer_id=0)
+
+            output = self.model.pipe_buffers["outputs"][0]
+
+            send_forward(output)
+
+            # Prevent model from saving any state, to prevent OOM
+            self.model.loss = None
+            self.model.total_loss = None
+            self.model.fwd_outputs = []
+            self.model.pipe_buffers["outputs"] = [None]
+
+            if mpu.is_pipeline_last_stage():
+                return gather_from_tensor_model_parallel_region(output)[..., :self.tokenizer.vocab_size]
+            else:
+                #print("Fist stage: discarding output of shape", output.shape, "probably hidden?")
+                return None
+
         else:
-            return None
+            # Since the shape of the micro-batch will change
+            # We need set the correct shapes here 
+            # So that latter pipeline stages knows which shapes to expect.
+            # Otherwise we will deadlock. 
+
+            input_tensor = recv_forward()
+
+            # Forward pass through the model.
+            unwrapped_model = unwrap_model(self.model, (torchDDP, LocalDDP, Float16Module))
+            unwrapped_model.set_input_tensor(input_tensor)
+            output = self.model(inps, position_ids, attention_mask)
+            
+            send_forward(output)
+            if mpu.is_pipeline_last_stage():
+                return gather_from_tensor_model_parallel_region(output)[..., :self.tokenizer.vocab_size]
+            else:
+                return None
 
 from megatron.initialize import initialize_megatron
 
@@ -203,9 +243,16 @@ def main():
 
     # Set up model and load checkpoint.
     model, _, _  = setup_model_and_optimizer(model_provider)
-    
+
     assert len(model) == 1, "Above condition should have caught this"
     model = model[0]
+
+
+    if args.deepspeed:
+        model.module.activation_checkpoint_interval = 0
+        model._compute_loss = False
+        model.fwd_outputs = []
+
 
     tokenizer = get_tokenizer()
     adaptor = EvalHarnessAdaptor(model, tokenizer) 
