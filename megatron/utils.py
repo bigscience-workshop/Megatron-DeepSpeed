@@ -256,9 +256,9 @@ def unique_param_count(param_list):
 
 
 def non_embedding_params(module):
-    embedding_param_names = [
+    embedding_param_names = set([
         f"{name}.weight" for name, module_type in module.named_modules() if isinstance(module_type, nn.Embedding) or isinstance(module_type, VocabParallelEmbedding)
-    ]
+    ])
     non_embedding_parameters = [
         parameter for name, parameter in module.named_parameters() if name not in embedding_param_names
     ]
