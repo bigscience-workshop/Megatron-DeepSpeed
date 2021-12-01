@@ -265,16 +265,28 @@ def non_embedding_params(module):
     return unique_param_count(non_embedding_parameters)
 
 
+def _param_count_from_deepspeed(model):
+    # from https://github.com/microsoft/DeepSpeed/blob/7a132a9f4b37959f951b7c04a05207aba6054965/deepspeed/runtime/pipe/engine.py#L134-L157
+
+    model_parameters = filter(lambda p: p.requires_grad, model.module.parameters())
+    num_params = sum([p.numel() for p in model_parameters])
+    unique_params = num_params
+    # Subtract tied parameters if we don't own them
+    if model.module.tied_comms:
+        tied_params = 0
+        for key, d in model.module.tied_comms.items():
+            if model.global_rank != min(d['ranks']):
+                tied_params += sum(p.numel() for p in d['module'].parameters())
+        unique_params -= tied_params
+    return unique_params
+
 def get_parameters_in_billions(model, exclude_embeddings=False):
     gpus_per_model = torch.distributed.get_world_size(group=mpu.get_model_parallel_group())
 
     if exclude_embeddings:
         approx_parameters_in_billions = sum([non_embedding_params(model_module) for model_module in model])
     else:
-        args = get_args()
-        if args.rank == 0:
-            warnings.warn("Parameter count with the embeddings will be inaccurate with PP > 1, as the first and last stage hold several copies of the embeddings")
-        approx_parameters_in_billions = unique_param_count([p for model_module in model for p in model_module.parameters()])
+        approx_parameters_in_billions = sum([_param_count_from_deepspeed(model_module) for model_module in model])
 
     return approx_parameters_in_billions*gpus_per_model/(1e9)
 
