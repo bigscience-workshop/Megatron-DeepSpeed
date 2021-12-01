@@ -1,4 +1,5 @@
 
+from functools import reduce
 from logging import logMultiprocessing
 import os
 import sys
@@ -17,7 +18,8 @@ import torch.nn.functional as F
 
 from lm_eval.tasks import ALL_TASKS
 from pretrain_gpt import model_provider
-
+import numpy as np
+    
 import torch
 from megatron import get_args
 from megatron import print_rank_0
@@ -34,6 +36,7 @@ import json
 from torch.nn.parallel.distributed import DistributedDataParallel as torchDDP
 from megatron.model.distributed import DistributedDataParallel as LocalDDP
 from megatron.model.module import Float16Module
+from deepspeed.runtime.pipe import schedule
 
 class EvalHarnessAdaptor(GPT2LM):
     def __init__(self, model, tokenizer):
@@ -47,7 +50,9 @@ class EvalHarnessAdaptor(GPT2LM):
 
         self.max_length = args.max_position_embeddings
         self.max_gen_toks = 128
-        self.batch_size = args.micro_batch_size
+        # For ds we split into mini batches and then micro batches to keep pipelining api happy.
+        # With Megatron we just go to micro_batches directly 
+        self.batch_size = args.micro_batch_size if (not args.deepspeed) else args.global_batch_size
         self.cache_hook = CacheHook(None)
         self.is_main = args.rank == 0
         self.is_local_main = args.local_rank == 0
@@ -61,7 +66,7 @@ class EvalHarnessAdaptor(GPT2LM):
 
         self.is_last_stage = True if not self.is_pipe_parallel else mpu.is_pipeline_last_stage()  # only the last stage of the pipeline model will receive the logits
 
-    def _loglikelihood_tokens(self, requests, disable_tqdm=False):  
+    def _loglikelihood_tokens(self, requests, disable_tqdm=False):
         disable_tqdm = disable_tqdm if self.is_main else True
         res = []
         res_len = 0  # storing the result length for later
@@ -86,10 +91,10 @@ class EvalHarnessAdaptor(GPT2LM):
                     # since in _collate we make sure length is descending, the longest is always the first one.
                     padding_length = padding_length if padding_length is not None else inplen
                     
+                    # Deepspeed doesn't like it when we change the seq len
+                    # The recent curriculum learning patches should fix this, but for now it's let's just do it the slow and easy way.
                     if self.deepspeed:
-                        # deepspeed doesn't like chaning seq length.
                         padding_length = self.max_length
-                        
                     
                     # pad to length
                     inp = torch.cat([
@@ -122,79 +127,62 @@ class EvalHarnessAdaptor(GPT2LM):
 
                         res.append(answer)
 
-        # broadcast results to all ranks
-        if self.is_pipe_parallel:
-            src_rank = mpu.get_pipeline_model_parallel_last_rank()
-
-            if res:
-                logits_sums, max_equals = list(zip(*res))
-                logits_sums = torch.FloatTensor(logits_sums).cuda()
-                max_equals = torch.LongTensor(max_equals).cuda()
-            else:
-                logits_sums = torch.zeros(res_len, dtype=torch.float32).cuda()
-                max_equals = torch.zeros(res_len, dtype=torch.int64).cuda()
-            torch.distributed.broadcast(tensor=logits_sums, src=src_rank)
-            torch.distributed.broadcast(tensor=max_equals, src=src_rank)
-            max_equals = [bool(i) for i in max_equals.tolist()]
-            logits_sums = logits_sums.tolist()
-            res = list(zip(logits_sums, max_equals))
-
+        if not mpu.is_pipeline_last_stage():
+            # @HACK: To make the eval harness happy on threads that don't have access to the results.
+            #        We just randomly generate some data. 
+            res = [(np.random.rand(), np.random.rand()>0.5) for _ in requests]
+        
         return reord.get_original(res)
 
+    def get_batch_pipe(self, tokens):
+        """Modification of `get_batch` to work on `next(data_iterator)` instead of `data_iterator`"""
+        args = get_args()
+        tokenizer = get_tokenizer()
+
+        # Get the masks and postition ids.
+        attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
+            tokens,
+            tokenizer.eod,
+            args.reset_position_ids,
+            args.reset_attention_mask,
+            args.eod_mask_loss,
+            prefix_indices=None,
+            loss_on_targets_only=False)
+        
+        return (tokens, position_ids, attention_mask), (tokens, loss_mask)
 
     def _model_call(self, inps):
-        attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
-            inps,
-            self.tokenizer.eod,
-            self.args.reset_position_ids,
-            self.args.reset_attention_mask,
-            self.args.eod_mask_loss,
-            prefix_indices=None,
-            loss_on_targets_only=self.args.loss_on_targets_only
-        )
         args = get_args()
-        args.micro_batch_size = len(inps)
-        args.seq_length = len(inps[0])
 
         if args.deepspeed:
-            # This is quite hacky.
-            # I don't know if DS has a good inference api for pipelining.
-            # So we just manually roll our own here, same as with Megatron.
-            # We definitely need to verify that the order of the stages is guaranteed to be the same though.
+            self.model.set_batch_fn(self.get_batch_pipe)
             
-            input_tensor = recv_forward()
-        
-            if input_tensor == None:
-                input_tensor = (inps, position_ids, attention_mask)
+            # round up to multiple of micro_batch_size
+            new_size = ((len(inps) + args.micro_batch_size-1)  // args.micro_batch_size) * args.micro_batch_size
+            padded = F.pad(inps, (0, 0, 0, new_size), value = 1) 
 
-            self.model.pipe_buffers["inputs"] = [input_tensor]
-            self.model.pipe_buffers["outputs"] = [None]
+            # dummy data iterator for pipelining.
+            data_iterator = list((torch.stack(inp) for inp in utils.chunks(padded, args.micro_batch_size)))
+            self.model.micro_batches = len(data_iterator)
 
-            # Run model
-            with torch.no_grad():
-                self.model._exec_forward_pass(buffer_id=0)
-
-            output = self.model.pipe_buffers["outputs"][0]
-
-            send_forward(output)
-
-            # Prevent model from saving any state, to prevent OOM
-            self.model.loss = None
-            self.model.total_loss = None
-            self.model.fwd_outputs = []
-            self.model.pipe_buffers["outputs"] = [None]
-
+            output = self.model.eval_batch(iter(data_iterator), compute_loss = False, reduce_output = None)
+            
             if mpu.is_pipeline_last_stage():
+                output = torch.cat(output, 0)[:len(inps)]
                 return gather_from_tensor_model_parallel_region(output)[..., :self.tokenizer.vocab_size]
             else:
-                #print("Fist stage: discarding output of shape", output.shape, "probably hidden?")
                 return None
 
         else:
+
+            _, position_ids, attention_mask = self.get_batch_pipe(inps)[0]
+
             # Since the shape of the micro-batch will change
             # We need set the correct shapes here 
             # So that latter pipeline stages knows which shapes to expect.
             # Otherwise we will deadlock. 
+            args.micro_batch_size = len(inps)
+            args.seq_length = len(inps[0])
 
             input_tensor = recv_forward()
 
@@ -247,19 +235,17 @@ def main():
     assert len(model) == 1, "Above condition should have caught this"
     model = model[0]
 
-
     if args.deepspeed:
         model.module.activation_checkpoint_interval = 0
         model._compute_loss = False
         model.fwd_outputs = []
 
-
     tokenizer = get_tokenizer()
     adaptor = EvalHarnessAdaptor(model, tokenizer) 
     results = evaluator.evaluate(adaptor, task_dict, False, 0, None)
     
-    print_rank_0(json.dumps(results, indent=2))
-    if args.rank==0:
+    if mpu.is_pipeline_last_stage() and mpu.get_tensor_model_parallel_rank() == 0:
+        print(json.dumps(results, indent=2))
         with open(args.results_path, 'w') as outfile:
             json.dump(results, outfile, indent = 4)
 
