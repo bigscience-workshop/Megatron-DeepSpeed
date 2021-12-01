@@ -134,8 +134,10 @@ def pretrain(train_valid_test_dataset_provider,
     # Model, optimizer, and learning rate.
     timers('model-and-optimizer-setup').start()
     model, optimizer, lr_scheduler = setup_model_and_optimizer(model_provider)
-    print_rank_0(f'estimated model parameters: {get_parameters_in_billions(model)}')
-    print_rank_0(f'estimated model parameters without embeddings: {get_parameters_in_billions(model, exclude_embeddings=True)}')
+    args.parameters_in_billions = get_parameters_in_billions(model)
+    args.parameters_in_billions_no_embedding = get_parameters_in_billions(model, exclude_embeddings=True)
+    print_rank_0(f'estimated model parameters: {args.parameters_in_billions:.4f}B')
+    print_rank_0(f'estimated model parameters without embeddings: {args.parameters_in_billions_no_embedding:.4f}B')
     timers('model-and-optimizer-setup').stop()
     print_datetime('after model, optimizer, and learning rate '
                    'scheduler are built')
@@ -815,7 +817,7 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
             args.consumed_train_tokens += new_samples * args.curriculum_seqlen
         else:
             args.consumed_train_tokens += new_samples * args.seq_length
-        args.gigaflos_no_embeds += (6 * new_samples * args.seq_length * get_parameters_in_billions(model, exclude_embeddings=True))
+        args.gigaflos_no_embeds += (6 * new_samples * args.seq_length * args.parameters_in_billions_no_embedding)
 
         # Logging.
         if args.deepspeed:
