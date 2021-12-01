@@ -268,17 +268,15 @@ def non_embedding_params(module):
 def _param_count_from_deepspeed(model):
     # from https://github.com/microsoft/DeepSpeed/blob/7a132a9f4b37959f951b7c04a05207aba6054965/deepspeed/runtime/pipe/engine.py#L134-L157
 
-    model_parameters = filter(lambda p: p.requires_grad, model.module.parameters())
-    num_params = sum([p.numel() for p in model_parameters])
-    unique_params = num_params
+    num_params = sum([p.numel() for p in model.module.parameters() if p.requires_grad])
     # Subtract tied parameters if we don't own them
     if model.module.tied_comms:
         tied_params = 0
         for key, d in model.module.tied_comms.items():
             if model.global_rank != min(d['ranks']):
-                tied_params += sum(p.numel() for p in d['module'].parameters())
-        unique_params -= tied_params
-    return unique_params
+                tied_params += sum([p.numel() for p in d['module'].parameters()])
+        num_params -= tied_params
+    return num_params
 
 def get_parameters_in_billions(model, exclude_embeddings=False):
     gpus_per_model = torch.distributed.get_world_size(group=mpu.get_model_parallel_group())
