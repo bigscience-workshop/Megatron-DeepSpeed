@@ -62,7 +62,8 @@ def check_checkpoint_args(checkpoint_args):
     _compare('num_layers')
     _compare('hidden_size')
     _compare('num_attention_heads')
-    _compare('position_embedding_type')
+    if hasattr(checkpoint_args, 'position_embedding_type'):
+        _compare('position_embedding_type')
     # with alibi we can change `max_position_embeddings`
     if args.position_embedding_type != PositionEmbeddingType.alibi:
         _compare('max_position_embeddings')
@@ -272,7 +273,11 @@ def load_checkpoint(model, optimizer, lr_scheduler, load_arg='load', strict=True
     load_dir = getattr(args, load_arg)
 
     if args.deepspeed:
-        loaded_dir, state_dict = model[0].load_checkpoint(load_dir)
+        loaded_dir, state_dict = model[0].load_checkpoint(
+            load_dir,
+            load_optimizer_states=optimizer is not None,
+            load_lr_scheduler_states=lr_scheduler is not None,
+        )
         if loaded_dir is None:
             print_rank_0('WARNING: could not find the metadata file {} '.format(
                 load_dir))
