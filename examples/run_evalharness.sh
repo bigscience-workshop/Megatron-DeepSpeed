@@ -1,53 +1,32 @@
-#!/bin/bash
+CHECKPOINT_PATH=/gpfsssd/scratch/rech/bbv/utw68ny/checkpoints/final_step
+CHECKPOINT_PATH=/gpfsscratch/rech/bbv/utw68ny/checkpoints/gpt2-350m-en/global_step37876
+#CHECKPOINT_PATH=/gpfsscratch/rech/bbv/utw68ny/checkpoints/tr3m-1B3-pile/global_step296023/
 
-# Example file to run the evaluation harness.
-# 
-
-export HF_DATASETS_CACHE=$SCRATCH/cache/
-
-CHECKPOINT_PATH=checkpoints/gpt2_both_ds
+PP_SIZE=1
+TP_SIZE=2
 VOCAB_FILE=gpt2-vocab.json
 MERGE_FILE=gpt2-merges.txt
-DATA_PATH=my-gpt2_text_document
 
-config_json="./ds_config.json"
-ZERO_STAGE=1
-DEEPSPEED_ARGS=" \
-    --deepspeed \
-    --deepspeed_config ${config_json} \
-    --zero-stage ${ZERO_STAGE} \
-    --deepspeed-activation-checkpointing \
+#dummy arguments to make megatron happy.
+MEGATRON_REQUIRED_ARGS="\
+    --num-layers -1\
+    --hidden-size -1\
+    --num-attention-heads -1\
+    --seq-length -1 \
+    --max-position-embeddings -1
+"
+
+CMD="./tasks/eval_harness/evaluate.py \
+    --load $CHECKPOINT_PATH\
+    --tensor-model-parallel-size $TP_SIZE \
+    --pipeline-model-parallel-size $PP_SIZE\
+    --vocab-file $VOCAB_FILE\
+    --merge-file $MERGE_FILE\
+    --micro-batch-size 1\
+    --task_list piqa\
+    $MEGATRON_REQUIRED_ARGS\
     "
 
-GPT_ARGS=" \
-    --num-layers 12 \
-    --hidden-size 1024 \
-    --num-attention-heads 16 \
-    --seq-length 1024 \
-    --max-position-embeddings 1024 \
-    --micro-batch-size 2 \
-    --global-batch-size 8 \
-    --lr 0.00015 \
-    --train-iters 500000 \
-    --lr-decay-iters 320000 \
-    --lr-decay-style cosine \
-    --vocab-file $VOCAB_FILE \
-    --merge-file $MERGE_FILE \
-    --lr-warmup-fraction .01 \
-    --fp16 \
-    --pipeline-model-parallel-size 2\
-    --tensor-model-parallel-size 2\
-    "
-
-DATA_ARGS=" \
-    --load $CHECKPOINT_PATH \
-    --tokenizer-type GPT2BPETokenizer
-    "
-
-
-CMD="./tasks/eval_harness/evaluate.py $DEEPSPEED_ARGS $GPT_ARGS $DATA_ARGS --task_list piqa"
-N_GPUS=4
+N_GPUS=2
 LAUNCHER="deepspeed --num_gpus $N_GPUS"
-
-
 $LAUNCHER $CMD
