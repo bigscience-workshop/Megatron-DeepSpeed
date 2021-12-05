@@ -1,9 +1,9 @@
-CHECKPOINT_PATH=/gpfsssd/scratch/rech/bbv/utw68ny/checkpoints/final_step
-CHECKPOINT_PATH=/gpfsscratch/rech/bbv/utw68ny/checkpoints/gpt2-350m-en/global_step37876
-#CHECKPOINT_PATH=/gpfsscratch/rech/bbv/utw68ny/checkpoints/tr3m-1B3-pile/global_step296023/
+#CHECKPOINT_PATH=/gpfsscratch/rech/bbv/utw68ny/checkpoints/gpt2-350m-en/global_step37876
+#CHECKPOINT_PATH=checkpoints/gpt2_both_ds/global_step3000
+CHECKPOINT_PATH=/gpfsscratch/rech/bbv/utw68ny/checkpoints/tr3m-1B3-pile/global_step296023/
 
 PP_SIZE=1
-TP_SIZE=2
+TP_SIZE=1
 VOCAB_FILE=gpt2-vocab.json
 MERGE_FILE=gpt2-merges.txt
 
@@ -22,11 +22,13 @@ CMD="./tasks/eval_harness/evaluate.py \
     --pipeline-model-parallel-size $PP_SIZE\
     --vocab-file $VOCAB_FILE\
     --merge-file $MERGE_FILE\
-    --micro-batch-size 1\
-    --task_list piqa\
+    --micro-batch-size 64\
+    --adaptive_seq_len\
+    --eval_fp32\
+    --task_list hellaswag,mrpc,piqa\
     $MEGATRON_REQUIRED_ARGS\
     "
 
-N_GPUS=2
+N_GPUS=1
 LAUNCHER="deepspeed --num_gpus $N_GPUS"
 $LAUNCHER $CMD

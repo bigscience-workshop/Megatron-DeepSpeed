@@ -43,14 +43,13 @@ class EvalHarnessAdaptor(GPT2LM):
         self.args = args
         self.model = model
         self.tokenizer = tokenizer
-        #self.tokenizer.encode = self.tokenizer.tokenize
         self.VOCAB_SIZE = tokenizer.vocab_size
         self.EOT_TOKEN_ID = tokenizer.eod
 
         self.max_length = args.seq_length
         # For ds we split into mini batches and then micro batches to keep pipelining api happy.
         # With Megatron we just go to micro_batches directly 
-        self.batch_size = args.micro_batch_size if (not args.deepspeed) else np.min(args.global_batch_size, 32)
+        self.batch_size = args.micro_batch_size
         self.cache_hook = CacheHook(None)
         self.is_main = args.rank == 0
         self.is_local_main = args.local_rank == 0
@@ -58,7 +57,7 @@ class EvalHarnessAdaptor(GPT2LM):
         self.is_model_parallel = mpu.get_tensor_model_parallel_world_size() > 1
         self.is_pipe_parallel = mpu.get_pipeline_model_parallel_world_size() > 1
         self.is_data_parallel = mpu.get_data_parallel_world_size() > 1
-        self.deepspeed = args.deepspeed
+        self.adaptive_seq_len = args.adaptive_seq_len
         if self.is_data_parallel:
             raise NotImplementedError("Data parallelism is currently not supported for evaluation")
 
@@ -131,7 +130,8 @@ class EvalHarnessAdaptor(GPT2LM):
 
                     # since in _collate we make sure length is descending, the longest is always the first one.
                     padding_length = padding_length if padding_length is not None else inplen
-                    padding_length = self.max_length
+                    if not self.adaptive_seq_len:
+                        padding_length = self.max_length
                     # pad to length
                     inp = torch.cat([
                         inp,  # [seq]
@@ -143,11 +143,9 @@ class EvalHarnessAdaptor(GPT2LM):
                     inplens.append(inplen)
 
                 logits = self._model_call(torch.cat(inps, dim=0))
-                #print(logits)
                 res_len += len(chunk)
                 if logits is not None:
                     multi_logits = F.log_softmax(logits, dim=-1).cpu()  # [batch, seq, vocab]
-
 
                     for (cache_key, _, _), logits, inp, inplen, cont_toks in zip(chunk, multi_logits, inps, inplens, contlens):
                         contlen = len(cont_toks)
@@ -164,7 +162,7 @@ class EvalHarnessAdaptor(GPT2LM):
                         if cache_key is not None:
                             self.cache_hook.add_partial("loglikelihood", cache_key, answer)
                         res.append(answer)
-
+            
         if not mpu.is_pipeline_last_stage():
             # @HACK: To make the eval harness happy on threads that don't have access to the results.
             #        We just randomly generate some data. 
@@ -192,9 +190,11 @@ class EvalHarnessAdaptor(GPT2LM):
         # We need set the correct shapes here 
         # So that latter pipeline stages knows which shapes to expect.
         # Otherwise we will deadlock. 
+        
         args.micro_batch_size = len(inps)
         args.seq_length = len(inps[0])
-
+        args.max_position_embeddings = args.seq_length
+        
         input_tensor = recv_forward()
 
         # Forward pass through the model.
@@ -256,14 +256,17 @@ def load_ds_checkpoint_and_setup_megatron(extra_args_provider):
                                         tp_degree=args.tensor_model_parallel_size, 
                                         pp_degree=args.pipeline_model_parallel_size)
     
+        
     cp_args = ds_checkpoint.get_args()
-    
     # Merge the current args with the checkpoint args.
-    skip_keys = ['world_size', 'rank', 'local_rank','device_count', 'micro_batch_size', 'tensorboard_dir', 'deepspeed', 'deepspeed_config', 
+    skip_keys = ['world_size', 'rank', 'local_rank','device_count', 'micro_batch_size','global_batch_size', 'batch_size', 'tensorboard_dir', 'deepspeed', 'deepspeed_config', 
                      'data_parallel_size', 'pipeline_model_parallel_size', 'tensor_model_parallel_size', 'load']
     
     skip_if_specified = ['merge_file', 'vocab_file']
     
+    if args.eval_fp32:
+        cp_args.fp16 = False
+        cp_args.bf16 = False
     
     override_args(args, cp_args, skip_keys, skip_if_specified)
     
@@ -281,15 +284,22 @@ def load_ds_checkpoint_and_setup_megatron(extra_args_provider):
 
     model = get_model(model_provider)[0]
     model.load_state_dict(sd['model'], strict=True)
-
+    
     torch.distributed.barrier()
+    if args.eval_fp32:
+        model = model.float()
+    
     return model
 
 def tasks_args(parser):
     """Provide extra arguments required for tasks."""
-    parser.add_argument('--task_list', type=str, default = "all", help='Either "all" or comma separated list of tasks.')
-    parser.add_argument('--task_load_path', type=str, default = "./task_cache.pickle", help='Path to where the downloaded tasks are stored, or None if download is possible.')
-    parser.add_argument('--results_path', type=str, default = "./results.json", help='Path to where the results will be stored.')
+    group = parser.add_argument_group(title='Evaluation options')
+    group.add_argument('--task_list', type=str, default = "all", help='Either "all" or comma separated list of tasks.')
+    group.add_argument('--task_load_path', type=str, default = "./task_cache.pickle", help='Path to where the downloaded tasks are stored, or None if download is possible.')
+    group.add_argument('--results_path', type=str, default = "./results.json", help='Path to where the results will be stored.')
+    group.add_argument('--adaptive_seq_len',  default = False, action='store_true', 
+                       help='Should the sequence length be adapted to the batch during evaluation, if in fp16 the results will be slightly different due to numerical errors but greatly speed up evaluation.')
+    group.add_argument('--eval_fp32',  default = False, action='store_true', help='Should the evaluation run in fp32')
     return parser
 
 from megatron.global_vars import _parse_args
@@ -311,7 +321,7 @@ def main():
     else:
         task_list = ALL_TASKS if args.task_list == 'all' else args.task_list.split(',')
         task_dict = tasks.get_task_dict(task_list)
-
+        
     model.module.activation_checkpoint_interval = 0
     model._compute_loss = False
     model.fwd_outputs = []
