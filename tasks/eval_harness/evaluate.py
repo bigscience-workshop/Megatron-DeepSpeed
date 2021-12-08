@@ -267,6 +267,7 @@ def load_ds_checkpoint_and_setup_megatron(extra_args_provider):
     if args.eval_fp32:
         cp_args.fp16 = False
         cp_args.bf16 = False
+        cp_args.params_dtype = torch.float32
     
     override_args(args, cp_args, skip_keys, skip_if_specified)
     
@@ -285,10 +286,10 @@ def load_ds_checkpoint_and_setup_megatron(extra_args_provider):
     model = get_model(model_provider)[0]
     model.load_state_dict(sd['model'], strict=True)
     
-    torch.distributed.barrier()
     if args.eval_fp32:
         model = model.float()
-    
+
+    torch.distributed.barrier()
     return model
 
 def tasks_args(parser):
