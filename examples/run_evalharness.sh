@@ -1,5 +1,3 @@
-#CHECKPOINT_PATH=/gpfsscratch/rech/bbv/utw68ny/checkpoints/gpt2-350m-en/global_step37876
-#CHECKPOINT_PATH=checkpoints/gpt2_both_ds/global_step3000
 CHECKPOINT_PATH=/gpfsscratch/rech/bbv/utw68ny/checkpoints/tr3m-1B3-pile/global_step296023/
 
 PP_SIZE=1
