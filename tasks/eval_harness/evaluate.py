@@ -296,7 +296,6 @@ def tasks_args(parser):
     """Provide extra arguments required for tasks."""
     group = parser.add_argument_group(title='Evaluation options')
     group.add_argument('--task_list', type=str, default = "all", help='Either "all" or comma separated list of tasks.')
-    group.add_argument('--task_load_path', type=str, default = "./task_cache.pickle", help='Path to where the downloaded tasks are stored, or None if download is possible.')
     group.add_argument('--results_path', type=str, default = "./results.json", help='Path to where the results will be stored.')
     group.add_argument('--adaptive_seq_len',  default = False, action='store_true', 
                        help='Should the sequence length be adapted to the batch during evaluation, if in fp16 the results will be slightly different due to numerical errors but greatly speed up evaluation.')
@@ -311,17 +310,8 @@ def main():
     args = get_args()
     assert not args.deepspeed, "Running this script in deepspeed-mode is not supported. We run all models using Megatron."
 
-    #load eval harness task dict
-    if args.task_load_path != 'None':
-        with open(args.task_load_path, 'rb') as file:
-            task_dict = pickle.load(file)
-        
-        if args.task_list != 'all':
-            task_list = args.task_list.split(',')
-            task_dict = dict((k,task_dict[k]) for k in task_list)
-    else:
-        task_list = ALL_TASKS if args.task_list == 'all' else args.task_list.split(',')
-        task_dict = tasks.get_task_dict(task_list)
+    task_list = ALL_TASKS if args.task_list == 'all' else args.task_list.split(',')
+    task_dict = tasks.get_task_dict(task_list)
         
     model.module.activation_checkpoint_interval = 0
     model._compute_loss = False

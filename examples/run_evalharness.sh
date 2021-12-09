@@ -5,6 +5,8 @@ TP_SIZE=1
 VOCAB_FILE=gpt2-vocab.json
 MERGE_FILE=gpt2-merges.txt
 
+export HF_DATASETS_OFFLINE=1
+
 #dummy arguments to make megatron happy.
 MEGATRON_REQUIRED_ARGS="\
     --num-layers -1\
