@@ -25,12 +25,11 @@ from megatron import mpu
 from megatron.data.gpt_dataset import build_train_valid_test_datasets, build_dataset_group
 from megatron.model import GPTModel, GPTModelPipe
 from megatron.training import pretrain
-from megatron.utils import get_ltor_masks_and_position_ids, get_prefix_indices
+from megatron.utils import get_ltor_masks_and_position_ids, get_prefix_indices, reweight_loss_mask_
 from megatron.utils import average_losses_across_data_parallel_group
 
 import deepspeed
 from deepspeed.runtime.utils import see_memory_usage
-import os
 import subprocess
 
 def model_provider(pre_process=True, post_process=True):
@@ -108,6 +107,10 @@ def get_batch(data_iterator):
         loss_on_targets_only=args.loss_on_targets_only
     )
 
+    # weight loss_mask
+    if args.reweight_loss_based_on_position_frequency:
+        reweight_loss_mask_(loss_mask, tokens)
+
     return tokens, labels, loss_mask, attention_mask, position_ids
 
 def get_batch_pipe(data):
@@ -145,6 +148,10 @@ def get_batch_pipe(data):
         prefix_indices=prefix_indices,
         loss_on_targets_only=args.loss_on_targets_only
     )
+
+    # weight loss_mask
+    if args.reweight_loss_based_on_position_frequency:
+        reweight_loss_mask_(loss_mask, tokens)
 
     return (tokens, position_ids, attention_mask), (labels, loss_mask), prefix_indices
 

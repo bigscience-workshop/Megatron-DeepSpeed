@@ -1,10 +1,9 @@
-from functools import wraps
-
 import torch
 from torch import nn
 from torch.nn import functional as F
 
 from megatron import logging
+from megatron.model.utils import log_debug_usage
 
 logger = logging.get_logger(__name__)
 
@@ -38,21 +37,11 @@ class SwiGLU(_GLUBaseModule):
     def __init__(self):
         super().__init__(F.silu)
 
-def log_debug_usage(func, msg: str):
-    func.__logged_message__ = False
-    @wraps(func)
-    def wrapped(*args, **kwargs):
-        if func.__logged_message__ is False:
-            logger.debug(msg)
-            func.__logged_message__ = True
-        return func(*args, **kwargs)
-    return wrapped
 
-
-liglu = log_debug_usage(torch.jit.script(LiGLU()), "Using GLU activation: LiGLU.")
-geglu = log_debug_usage(torch.jit.script(GEGLU()), "Using GLU activation: GELU.")
-reglu = log_debug_usage(torch.jit.script(ReGLU()), "Using GLU activation: ReGLU.")
-swiglu = log_debug_usage(torch.jit.script(SwiGLU()), "Using GLU activation: SwiGLU.")
+liglu = log_debug_usage(logger, "Using GLU activation: LiGLU.")(torch.jit.script(LiGLU()))
+geglu = log_debug_usage(logger, "Using GLU activation: GELU.")(torch.jit.script(GEGLU()))
+reglu = log_debug_usage(logger, "Using GLU activation: ReGLU.")(torch.jit.script(ReGLU()))
+swiglu = log_debug_usage(logger, "Using GLU activation: SwiGLU.")(torch.jit.script(SwiGLU()))
 
 
 GLU_ACTIVATIONS = {

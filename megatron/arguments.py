@@ -877,6 +877,11 @@ def _add_data_args(parser):
                        help='Mask loss for the end of document tokens.')
     group.add_argument('--loss-on-targets-only', action='store_true',
                        help='Mask loss on input sequence.')
+    group.add_argument('--reweight-loss-based-on-position-frequency', action="store_true",
+                       help='Some objectives require us to sample loss_mask. This might introduce bias towards '
+                       'specific positions. This option tries to un-bias the loss by reweighting loss on specific '
+                       'positions based on how frequently we train on that position.'
+                       'This is mostly used for prefix_lm training')
 
     return parser
 
