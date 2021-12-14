@@ -5,10 +5,6 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
                                              os.path.pardir,os.path.pardir)))
 
-# Downloads the tasks in the evaluation harness
-# This is particularly useful when running in environments where the GPU nodes 
-# do not have internet access. This way we can pre-download them and use the cached data-set during evaluation.
-
 from lm_eval.models.gpt2 import GPT2LM
 from lm_eval import evaluator, tasks, utils
 from lm_eval.base import CacheHook
