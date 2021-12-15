@@ -158,7 +158,7 @@ class EvalHarnessAdaptor(GPT2LM):
                         if cache_key is not None:
                             self.cache_hook.add_partial("loglikelihood", cache_key, answer)
                         res.append(answer)
-            
+
         if not mpu.is_pipeline_last_stage():
             # @HACK: To make the eval harness happy on threads that don't have access to the results.
             #        We just randomly generate some data. 
@@ -178,28 +178,39 @@ class EvalHarnessAdaptor(GPT2LM):
             prefix_indices=None,
             loss_on_targets_only=False)
         
-        return (tokens, position_ids, attention_mask)
+        return (tokens, position_ids, attention_mask), (tokens, loss_mask)
 
     def _model_call(self, inps):
         args = get_args()
-        # Since the shape of the micro-batch will change
-        # We need set the correct shapes here 
-        # So that latter pipeline stages knows which shapes to expect.
-        # Otherwise we will deadlock. 
         
-        args.micro_batch_size = len(inps)
-        args.seq_length = len(inps[0])
-        args.max_position_embeddings = args.seq_length
-        
-        input_tensor = recv_forward()
+        if args.deepspeed:
+            self.model.set_batch_fn(self.create_model_inputs)
+            # round up to multiple of micro_batch_size
+            new_size = ((len(inps) + args.micro_batch_size-1)  // args.micro_batch_size) * args.micro_batch_size
+            padded = F.pad(inps, (0, 0, 0, new_size-len(inps)), value = 0) 
+            # dummy data iterator for pipelining.
+            data_iterator = list((torch.stack(inp) for inp in utils.chunks(padded, args.micro_batch_size)))
+            self.model.micro_batches = len(data_iterator)
+            output = self.model.eval_batch(iter(data_iterator), compute_loss = False, reduce_output = None)
+            output = torch.cat(output, 0)[:len(inps)]
+        else:
+            # Since the shape of the micro-batch will change
+            # We need set the correct shapes here 
+            # So that latter pipeline stages knows which shapes to expect.
+            # Otherwise we will deadlock. 
+            
+            args.micro_batch_size = len(inps)
+            args.seq_length = len(inps[0])
+            args.max_position_embeddings = args.seq_length
+            
+            input_tensor = recv_forward()
 
-        # Forward pass through the model.
-        unwrapped_model = unwrap_model(self.model, (torchDDP, LocalDDP, Float16Module))
-        unwrapped_model.set_input_tensor(input_tensor)
-        output = self.model(*self.create_model_inputs(inps))
-        
-        send_forward(output)
-        
+            # Forward pass through the model.
+            unwrapped_model = unwrap_model(self.model, (torchDDP, LocalDDP, Float16Module))
+            unwrapped_model.set_input_tensor(input_tensor)
+            output = self.model(*self.create_model_inputs(inps)[0])
+            send_forward(output)
+            
         if mpu.is_pipeline_last_stage():
             return gather_from_tensor_model_parallel_region(output)[..., :self.tokenizer.vocab_size]
         else:
@@ -246,6 +257,9 @@ def override_args(args, override_args, skip_keys, skip_if_specified_keys):
 # We then use the megatron deepspeed converter to load the deepspeed checkpoints as if they we're megatron checkpoints.
 def load_ds_checkpoint_and_setup_megatron(extra_args_provider):
     # parse the megatorn args. But wait with initalizing megatron.
+    # avoid printing the arguments, since they will later be overridden.
+    _print_args = megatron.arguments._print_args
+    megatron.arguments._print_args = lambda *_args, **kwarg: None
     args = _parse_args(extra_args_provider)
     
     ds_checkpoint = DeepSpeedCheckpoint(args.load,
@@ -256,7 +270,7 @@ def load_ds_checkpoint_and_setup_megatron(extra_args_provider):
     cp_args = ds_checkpoint.get_args()
     # Merge the current args with the checkpoint args.
     skip_keys = ['world_size', 'rank', 'local_rank','device_count', 'micro_batch_size','global_batch_size', 'batch_size', 'tensorboard_dir', 'deepspeed', 'deepspeed_config', 
-                     'data_parallel_size', 'pipeline_model_parallel_size', 'tensor_model_parallel_size', 'load']
+                     'data_parallel_size', 'pipeline_model_parallel_size', 'tensor_model_parallel_size', 'load', 'rampup_batch_size', 'iteration']
     
     skip_if_specified = ['merge_file', 'vocab_file']
     
@@ -272,16 +286,27 @@ def load_ds_checkpoint_and_setup_megatron(extra_args_provider):
     megatron.global_vars._GLOBAL_ARGS = args
     
     initialize_megatron()
+    torch.distributed.barrier()
 
     # Initializing megatron will update eg. tokenizer size. Override again.
     override_args(args, cp_args, skip_keys, skip_if_specified)
 
-    # Initialize megatron model using the parsed state dict.
-    sd = _create_rank_checkpoint(ds_checkpoint, None, mpu.get_tensor_model_parallel_rank(), mpu.get_pipeline_model_parallel_rank(), True)
+    # print final arguments.
+    _print_args(args)
+    if args.deepspeed:
+        args.use_checkpoint_lr_scheduler = True # allow ds to override our lr schedule.
+        cp_path = args.load
+        args.load = None
+        model, _, _ = setup_model_and_optimizer(model_provider)
+        model = model[0]
+        _, _ = model.load_checkpoint(cp_path, tag = '.')
+    else:        
+        model = get_model(model_provider)[0]
+        # Initialize megatron model using the parsed state dict.
+        sd = _create_rank_checkpoint(ds_checkpoint, None, mpu.get_tensor_model_parallel_rank(), mpu.get_pipeline_model_parallel_rank(), True)
 
-    model = get_model(model_provider)[0]
-    model.load_state_dict(sd['model'], strict=True)
-    
+        model.load_state_dict(sd['model'], strict=True)
+            
     if args.eval_fp32:
         model = model.float()
 
@@ -304,7 +329,9 @@ def main():
     model = load_ds_checkpoint_and_setup_megatron(extra_args_provider=tasks_args)
 
     args = get_args()
-    assert not args.deepspeed, "Running this script in deepspeed-mode is not supported. We run all models using Megatron."
+    if args.deepspeed and args.adaptive_seq_len:
+        print("Warning: Currently adaptive_seq_len is not supported with deepspeed. Turning off adaptive_seq_len")
+        args.adaptive_seq_len = False
 
     task_list = ALL_TASKS if args.task_list == 'all' else args.task_list.split(',')
     task_dict = tasks.get_task_dict(task_list)
