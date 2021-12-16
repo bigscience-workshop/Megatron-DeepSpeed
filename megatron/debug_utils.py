@@ -16,7 +16,8 @@ class DebugUnderflowOverflow:
             The model to debug.
     """
 
-    def __init__(self, args, model):
+    def __init__(self, rank, model, args):
+        self.rank = rank # pp_rank usually, or any other unique id
         self.args = args
         self.model = model
         self.tb_path = args.tensorboard_debug_dir
