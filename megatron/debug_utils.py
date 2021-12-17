@@ -6,7 +6,7 @@ from packaging import version
 
 from torch.utils.tensorboard import SummaryWriter
 
-class ModuleInspector:
+class ModelInspector:
     """
 
     Args:

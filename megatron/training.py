@@ -790,7 +790,7 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
     # model[0].apply(_register_backward_hook)
 
     if args.tensorboard_debug_dir:
-        from megatron.debug_utils import ModuleInspector
+        from megatron.debug_utils import ModelInspector
         dp_rank = torch.distributed.get_rank(group=mpu.get_data_parallel_group())
         tp_rank = torch.distributed.get_rank(group=mpu.get_tensor_model_parallel_group())
         pp_rank = torch.distributed.get_rank(group=mpu.get_pipeline_model_parallel_group())
@@ -806,7 +806,7 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
             pp_ranks_to_track = set(map(int, torch.linspace(0, pp_world_size-1, MAX_PROCS_TO_TRACK).tolist()))
             print_rank_0(f"Tracking data values in pp ranks: {pp_ranks_to_track}")
             if pp_rank in pp_ranks_to_track:
-                ModuleInspector(pp_rank, model[0], args)
+                ModelInspector(pp_rank, model[0], args)
 
     #x = DebugGradientNorm(model).register_backward_hook()
     #for module in model:
