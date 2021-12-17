@@ -87,13 +87,15 @@ class DebugUnderflowOverflow:
             prefix += f"/{name}"
             abs_var = var.abs()
             tb.add_scalar(f"{prefix}/0.abs_min", abs_var.min(), iteration)
-            tb.add_scalar(f"{prefix}/1.abs_max", abs_var.max(), iteration)
-            tb.add_scalar(f"{prefix}/2.norm", torch.linalg.norm(var.data), iteration)
+            tb.add_scalar(f"{prefix}/1.abs_argmin", abs_var.argmin(), iteration)
+            tb.add_scalar(f"{prefix}/2.abs_max", abs_var.max(), iteration)
+            tb.add_scalar(f"{prefix}/3.abs_argmax", abs_var.argmax(), iteration)
+            tb.add_scalar(f"{prefix}/4.norm", torch.linalg.norm(var.data), iteration)
 
-        # XXX: can probably skip this one for direction == 'backward' as the same is already logged for fwd
-        # params
-        for name, p in module.named_parameters(recurse=False):
-            log_to_tb(p, name)
+        # should be the same for fwd/bwd, so log only one of them
+        if direction == "forward":
+            for name, p in module.named_parameters(recurse=False):
+                log_to_tb(p, name)
 
         # inputs
         if isinstance(input, tuple):
