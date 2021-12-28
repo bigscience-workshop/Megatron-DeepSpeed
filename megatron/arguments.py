@@ -19,6 +19,7 @@ import argparse
 import collections
 import os
 import re
+import time
 
 import torch
 import deepspeed
@@ -328,8 +329,11 @@ def _print_args(args):
         for arg in vars(args):
             dots = '.' * (48 - len(arg))
             str_list.append('  {} {} {}'.format(arg, dots, getattr(args, arg)))
-        for arg in sorted(str_list, key=lambda x: x.lower()):
-            print(arg, flush=True)
+
+        with open(f'args_{time.strftime("%Y%m%d-%H%M%S")}.txt', 'w') as f:
+            for arg in sorted(str_list, key=lambda x: x.lower()):
+                f.write(str(arg)+"\n")
+                print(arg, flush=True)
         print('-------------------- end of arguments ---------------------',
               flush=True)
 
