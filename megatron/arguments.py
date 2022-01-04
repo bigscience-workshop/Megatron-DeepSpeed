@@ -330,9 +330,9 @@ def _print_args(args):
             dots = '.' * (48 - len(arg))
             str_list.append('  {} {} {}'.format(arg, dots, getattr(args, arg)))
 
-        with open(f'args_{time.strftime("%Y%m%d-%H%M%S")}.txt', 'w') as f:
+        with open(os.path.join(args.log_path,f'args_{time.strftime("%Y-%m-%dT%H:%M:%S")}.txt'), 'w') as f:
             for arg in sorted(str_list, key=lambda x: x.lower()):
-                f.write(str(arg)+"\n")
+                f.write(arg+"\n")
                 print(arg, flush=True)
         print('-------------------- end of arguments ---------------------',
               flush=True)
@@ -830,6 +830,8 @@ def _add_data_args(parser):
                     'test will be run on each of those groups independently',
                     action=parse_data_paths)
 
+    group.add_argument('--log-path', type=str, default=None,
+                       help='Path to the save arguments file.')
     group.add_argument('--vocab-file', type=str, default=None,
                        help='Path to the vocab file.')
     group.add_argument('--merge-file', type=str, default=None,
