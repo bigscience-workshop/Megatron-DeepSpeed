@@ -26,7 +26,7 @@ from megatron.enums import AttnMaskType, LayerType, AttnType, PositionEmbeddingT
 from megatron.model.fused_layer_norm import MixedFusedLayerNorm as LayerNorm
 from megatron.model.fused_softmax import FusedScaleMaskSoftmax
 from megatron.model.fused_bias_gelu import bias_gelu_impl
-from megatron.model.utils import attention_mask_func, openai_gelu, erf_gelu
+from megatron.model.utils import attention_mask_func, log_debug_usage, openai_gelu, erf_gelu
 
 import deepspeed
 
@@ -112,6 +112,63 @@ class ParallelMLP(MegatronModule):
         output, output_bias = self.dense_4h_to_h(intermediate_parallel)
         return output, output_bias
 
+def _compute_attention_score_absolute(query_layer, key_layer, output_size, norm_factor):
+    # preallocting result tensor: [b * np, sq, sk]
+    matmul_result = torch.empty(
+        output_size[0]*output_size[1],
+        output_size[2],
+        output_size[3],
+        dtype=query_layer.dtype,
+        device=torch.cuda.current_device())
+
+    # Raw attention scores. [b * np, sq, sk]
+    attention_scores = torch.baddbmm(
+        matmul_result,
+        query_layer.transpose(0, 1),   # [b * np, sq, hn]
+        key_layer.transpose(0, 1).transpose(1, 2),  # [b * np, hn, sk]
+        beta=0.0, alpha=(1.0/norm_factor))
+    return attention_scores
+
+def _compute_attention_score_alibi(query_layer, key_layer, output_size, norm_factor, alibi):
+    matmul_result = alibi[:output_size[0]*output_size[1], :, :output_size[3]]
+
+    # Raw attention scores. [b * np, sq, sk]
+    attention_scores = torch.baddbmm(
+        matmul_result,
+        query_layer.transpose(0, 1),   # [b * np, sq, hn]
+        key_layer.transpose(0, 1).transpose(1, 2),  # [b * np, hn, sk]
+        beta=1.0, alpha=(1.0/norm_factor))
+    return attention_scores
+
+def _compute_attention_score_rotary(query_layer, key_layer, output_size, norm_factor, bf16, rotary_emb, layer_past, value_layer):
+    # preallocting result tensor: [b * np, sq, sk]
+    matmul_result = torch.empty(
+        output_size[0]*output_size[1],
+        output_size[2],
+        output_size[3],
+        dtype=query_layer.dtype,
+        device=torch.cuda.current_device())
+    apply_rotary_fn = apply_rotary_pos_emb_torch if bf16 else apply_rotary_pos_emb
+
+    seq_len = key_layer.shape[0]
+    offset = 0
+    if layer_past is not None and layer_past.numel() > 0:
+        offset = layer_past[0].shape[0]
+        seq_len += offset
+    cos, sin = rotary_emb(value_layer, seq_len=seq_len)
+    query_layer, key_layer = apply_rotary_fn(query_layer, key_layer, cos, sin, offset=offset)
+    
+    # Raw attention scores. [b * np, sq, sk]
+    attention_scores = torch.baddbmm(
+        matmul_result,
+        query_layer.transpose(0, 1),   # [b * np, sq, hn]
+        key_layer.transpose(0, 1).transpose(1, 2),  # [b * np, hn, sk]
+        beta=0.0, alpha=(1.0/norm_factor))
+    return attention_scores
+
+compute_attention_score_absolute = log_debug_usage(logger, "Computes attention scores with absolute positional embeddings")(_compute_attention_score_absolute)
+compute_attention_score_alibi = log_debug_usage(logger, "Computes attention scores with alibi positional embeddings")(_compute_attention_score_alibi)
+compute_attention_score_rotary = log_debug_usage(logger, "Computes attention scores with rotary positional embeddings")(_compute_attention_score_rotary)
 
 class ParallelAttention(MegatronModule):
     """Parallel self-attention layer abstract class.
@@ -279,38 +336,36 @@ class ParallelAttention(MegatronModule):
         key_layer = key_layer.view(output_size[3],
                                    output_size[0] * output_size[1], -1)
 
-        # preallocting result tensor: [b * np, sq, sk]
-        if alibi is None:
-            matmul_result = torch.empty(
-                output_size[0]*output_size[1],
-                output_size[2],
-                output_size[3],
-                dtype=query_layer.dtype,
-                device=torch.cuda.current_device())
-        else:
-            matmul_result = alibi[:output_size[0]*output_size[1], :, :output_size[3]]
-
         # Rotary embeddings
         if self.position_embedding_type == PositionEmbeddingType.rotary:
-            apply_rotary_fn = apply_rotary_pos_emb_torch if self.bf16 else apply_rotary_pos_emb
-
-            seq_len = key_layer.shape[0]
-            offset = 0
-            if layer_past is not None and layer_past.numel() > 0:
-                offset = layer_past[0].shape[0]
-                seq_len += offset
-            cos, sin = self.rotary_emb(value_layer, seq_len=seq_len)
-            query_layer, key_layer = apply_rotary_fn(query_layer, key_layer, cos, sin, offset=offset)
-
-        # Raw attention scores. [b * np, sq, sk]
-        matmul_result = torch.baddbmm(
-            matmul_result,
-            query_layer.transpose(0, 1),   # [b * np, sq, hn]
-            key_layer.transpose(0, 1).transpose(1, 2),  # [b * np, hn, sk]
-            beta=0.0 if alibi is None else 1.0, alpha=(1.0/self.norm_factor))
+            attention_scores = compute_attention_score_rotary(
+                query_layer=query_layer,
+                key_layer=key_layer,
+                output_size=output_size, 
+                norm_factor=self.norm_factor, 
+                bf16=self.bf16, 
+                rotary_emb=self.rotary_emb, 
+                layer_past=layer_past, 
+                value_layer=value_layer
+            )
+        elif self.position_embedding_type == PositionEmbeddingType.alibi:
+            attention_scores = compute_attention_score_alibi(
+                query_layer=query_layer, 
+                key_layer=key_layer, 
+                output_size=output_size, 
+                norm_factor=self.norm_factor, 
+                alibi=alibi
+            )
+        elif self.position_embedding_type == PositionEmbeddingType.absolute:
+            attention_scores = compute_attention_score_absolute(
+                query_layer=query_layer,
+                key_layer=key_layer,
+                output_size=output_size, 
+                norm_factor=self.norm_factor
+            )
 
         # change view to [b, np, sq, sk]
-        attention_scores = matmul_result.view(*output_size)
+        attention_scores = attention_scores.view(*output_size)
         # ==================================================
         # Update attention mask for inference. [b, np, sq, sk]
         # ==================================================
