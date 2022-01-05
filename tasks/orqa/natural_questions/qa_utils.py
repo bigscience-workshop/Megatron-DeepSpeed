@@ -22,7 +22,7 @@ from typing import Tuple, List, Dict
 
 import regex as re
 
-from megatron import logging
+from megatron import logging_utils
 from tasks.orqa.natural_questions.tokenizers import SimpleTokenizer
 
 logger = logging.get_logger(__name__)

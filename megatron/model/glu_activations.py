@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from megatron import logging
+from megatron import logging_utils
 from megatron.model.utils import log_debug_usage
 
 logger = logging.get_logger(__name__)

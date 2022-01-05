@@ -14,7 +14,6 @@
 # limitations under the License.
 """ Logging utilities. """
 
-import logging
 import os
 import sys
 import threading

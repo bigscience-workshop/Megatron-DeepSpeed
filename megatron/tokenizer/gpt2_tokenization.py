@@ -24,7 +24,7 @@ import os
 import regex as re
 from io import open
 
-from megatron import logging
+from megatron import logging_utils
 
 try:
     from functools import lru_cache

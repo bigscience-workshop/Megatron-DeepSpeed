@@ -19,7 +19,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from megatron import get_args, logging
+from megatron import get_args, logging_utils
 from megatron import mpu
 from .module import MegatronModule
 from megatron.enums import AttnMaskType, LayerType, AttnType, PositionEmbeddingType

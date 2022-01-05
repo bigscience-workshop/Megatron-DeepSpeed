@@ -25,7 +25,7 @@ import deepspeed
 
 from megatron.enums import PositionEmbeddingType
 import megatron
-from megatron.logging import log_levels
+from megatron.logging_utils import log_levels
 
 
 def parse_args(extra_args_provider=None, defaults={},

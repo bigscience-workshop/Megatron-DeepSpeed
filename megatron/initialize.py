@@ -25,7 +25,7 @@ import torch
 import logging as lg
 import subprocess
 
-from megatron import fused_kernels, logging
+from megatron import fused_kernels, logging_utils
 from megatron import get_adlr_autoresume
 from megatron import get_args
 from megatron import get_tensorboard_writer

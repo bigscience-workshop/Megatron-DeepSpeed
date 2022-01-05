@@ -17,7 +17,7 @@ import copy
 import regex
 import spacy
 
-from megatron import logging
+from megatron import logging_utils
 
 logger = logging.get_logger(__name__)
 
