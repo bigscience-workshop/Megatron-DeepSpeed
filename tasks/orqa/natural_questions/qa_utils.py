@@ -25,7 +25,7 @@ import regex as re
 from megatron import logging_utils
 from tasks.orqa.natural_questions.tokenizers import SimpleTokenizer
 
-logger = logging.get_logger(__name__)
+logger = logging_utils.get_logger(__name__)
 
 QAMatchStats = collections.namedtuple('QAMatchStats', ['top_k_hits',\
                                         'questions_doc_hits'])

@@ -99,19 +99,19 @@ def initialize_megatron(extra_args_provider=None, args_defaults={},
             print('> setting random seeds to {} ...'.format(args.seed))
 
         def set_verbosity(logging_level: str):
-            log_level = logging.log_levels[logging_level]
-            logging.set_verbosity(log_level)
-            logging.disable_default_handler()
+            log_level = logging_utils.log_levels[logging_level]
+            logging_utils.set_verbosity(log_level)
+            logging_utils.disable_default_handler()
             handler = lg.StreamHandler(sys.stdout)
             handler.setLevel(log_level)
             handler.flush = sys.stderr.flush
-            logging.add_handler(handler)
+            logging_utils.add_handler(handler)
 
         def set_verbosity_deepspeed(logging_level: str):
             if not args.deepspeed:
                 return
             from deepspeed.utils import logger as ds_logger
-            log_level = logging.log_levels[logging_level]
+            log_level = logging_utils.log_levels[logging_level]
             ds_logger.setLevel(log_level)
 
         def set_verbosity_transformers(logging_level: str):
@@ -119,8 +119,8 @@ def initialize_megatron(extra_args_provider=None, args_defaults={},
                 # XXX: perhaps we need a better way of knowing when to override transformers logging
                 # currently it's only when using `--tokenizer-type PretrainedFromHF`
                 from transformers.utils import logging as transformers_logging
-                log_level = logging.log_levels[logging_level]
-                logging.set_verbosity(log_level)
+                log_level = logging_utils.log_levels[logging_level]
+                logging_utils.set_verbosity(log_level)
             except:
                 pass
 

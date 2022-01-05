@@ -35,7 +35,7 @@ from megatron.model.utils import log_debug_usage
 from megatron.mpu.layers import param_is_not_tensor_parallel_duplicate, VocabParallelEmbedding
 from megatron import get_num_microbatches
 
-logger = logging.get_logger(__name__)
+logger = logging_utils.get_logger(__name__)
 
 def unwrap_model(model, module_instances=(torchDDP)):
     return_list = True

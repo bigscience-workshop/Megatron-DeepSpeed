@@ -19,7 +19,7 @@ import spacy
 
 from megatron import logging_utils
 
-logger = logging.get_logger(__name__)
+logger = logging_utils.get_logger(__name__)
 
 
 class Tokens(object):

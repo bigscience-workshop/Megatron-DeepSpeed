@@ -39,7 +39,7 @@ torch._C._jit_set_profiling_executor(False)
 torch._C._jit_override_can_fuse_on_cpu(True)
 torch._C._jit_override_can_fuse_on_gpu(True)
 
-logger = logging.get_logger(__name__)
+logger = logging_utils.get_logger(__name__)
 
 """ We use the following notation throughout this file:
      h: hidden size

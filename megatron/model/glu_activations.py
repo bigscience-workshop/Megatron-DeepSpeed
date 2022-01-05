@@ -5,7 +5,7 @@ from torch.nn import functional as F
 from megatron import logging_utils
 from megatron.model.utils import log_debug_usage
 
-logger = logging.get_logger(__name__)
+logger = logging_utils.get_logger(__name__)
 
 class _GLUBaseModule(nn.Module):
     def __init__(self, activation_fn):

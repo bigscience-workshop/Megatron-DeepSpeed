@@ -36,7 +36,7 @@ except ImportError:
         return lambda func: func
 
 
-logger = logging.get_logger(__name__)
+logger = logging_utils.get_logger(__name__)
 
 PRETRAINED_VOCAB_ARCHIVE_MAP = {
     'gpt2': "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-vocab.json",
