@@ -225,6 +225,20 @@ class MegDSTestTraining(TestCasePlus):
                 --deepspeed_config {self.test_file_dir_str}/ds_config.json
             """.split()
 
+        elif variation == "alibi":
+            new_args = f"""
+                --rampup-batch-size 2 2 {n_samples}
+                --train-samples {n_samples}
+
+                --lr-decay-samples 6
+                
+                --position-embedding-type alibi
+            """.split()
+
+            new_ds_args = f"""
+                --deepspeed_config {self.test_file_dir_str}/ds_config.json
+            """.split()
+
         else:
             raise ValueError(f"Don't know of variation {variation}")
 
@@ -234,7 +248,7 @@ class MegDSTestTraining(TestCasePlus):
         return args, ds_args, num_gpus
 
 
-    @parameterized.expand(["base", "cl", "bnb", "glu"])
+    @parameterized.expand(["base", "cl", "bnb", "glu", "alibi"])
     def test_training_all(self, variation):
 
         # optional runs
@@ -276,6 +290,9 @@ class MegDSTestTraining(TestCasePlus):
 
         if variation == "glu":
             self.assertIn("Using GLU activation: GELU", cs.out)
+
+        if variation == "alibi":
+            self.assertIn("Using Alibi", cs.out)
 
         # 2. test training from checkpoint: resume
         # now do it again, this time resuming from the checkpoint
