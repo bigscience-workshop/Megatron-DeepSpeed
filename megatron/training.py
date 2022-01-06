@@ -680,8 +680,7 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
         # here:
         # model_size_in_B * 4 * 2 * seqlen * batch_size / (time_in_msec_per_interation * total_gpus * 1e3)
         checkpoint_activations_factor = 4 if args.checkpoint_activations else 3
-        real_seq_len = args.curriculum_seqlen if args.curriculum_learning else seq_len
-        tflops = args.parameters_in_billions_no_embedding * checkpoint_activations_factor * 2 * real_seq_len * batch_size / (elapsed_time_per_iteration * args.world_size * 1e3)
+        tflops = args.parameters_in_billions_no_embedding * checkpoint_activations_factor * 2 * seq_len * batch_size / (elapsed_time_per_iteration * args.world_size * 1e3)
 
         # only the last rank process has a non-None _GLOBAL_TENSORBOARD_WRITER
         if writer and is_last_rank():
