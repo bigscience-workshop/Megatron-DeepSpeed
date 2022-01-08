@@ -10,7 +10,7 @@ SEQ_LEN=2048
 
 # different from the training MICRO_BATCH_SIZE - no optim memory, so can do bigger BS
 # make as big as it can fit into gpu w/o OOM, but not too close to 100%
-EVAL_MICRO_BATCH_SIZE=12
+EVAL_MICRO_BATCH_SIZE=32
 
 #dummy arguments to make megatron happy.
 MEGATRON_REQUIRED_ARGS=" \
@@ -51,7 +51,7 @@ cat <<EOT > $config_json
 }
 EOT
 
-#    --adaptive_seq_len \
+
 CMD="./tasks/eval_harness/evaluate.py  \
     --load $CHECKPOINT_PATH \
     --tensor-model-parallel-size $TP_SIZE  \
@@ -65,6 +65,7 @@ CMD="./tasks/eval_harness/evaluate.py  \
     --deepspeed \
     --deepspeed_config ds_config.json \
     --seq-length $SEQ_LEN \
+    --adaptive_seq_len \
     --eval_fp32 \
     --task_list hellaswag,mrpc,piqa \
     $MEGATRON_REQUIRED_ARGS \
