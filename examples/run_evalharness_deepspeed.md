@@ -15,19 +15,27 @@ pip install lm-eval==0.0.1
 ```
 Note: currently @master doesn't work with this script, later may have to edit the hardcoded version above
 
-
-then install datasets for the tasks:
+some symlinks due to lm-harness' issues with relative position of data
 ```
-python ./tasks/eval_harness/download.py --task_list hellaswag,mrpc,piqa
+mkdir data
+ln -s data tasks/eval_harness/data
+```
+
+Also make sure `data` is not on one of the limited paritions like WORKSF.
+
+Then install datasets for the tasks:
+```
+python ./tasks/eval_harness/download.py --task_list
+arc_challenge,arc_easy,boolq,copa,hellaswag,lambada,logiqa,mathqa,mc_taco,mrpc,multirc,openbookqa,piqa,prost,pubmedqa,qnli,qqp,race,rte,sciq,sst,webqs,wic,winogrande,wnli,wsc
 ```
 
 Prepare the run script:
 
 ```
-cp examples/run_evalharness_deepspeed.sh run_evalharness.sh
+cp examples/run_evalharness_deepspeed.slurm run_evalharness.slurm
 ```
 
-now edit `run_evalharness.sh`
+now edit `run_evalharness.slurm`
 
 you have to replicate the same config as in the original slurm script but you want:
 

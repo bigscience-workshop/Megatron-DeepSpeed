@@ -1,6 +1,27 @@
+#!/bin/bash
+#SBATCH --job-name=eval-harness-deepspeed
+#SBATCH --constraint=v100-32g
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1          # crucial - only 1 task per dist per node!
+#SBATCH --cpus-per-task=40           # number of cores per tasks
+#SBATCH --hint=nomultithread         # we get physical cores not logical
+#SBATCH --gres=gpu:1                 # number of gpus
+#SBATCH --time 20:00:00              # maximum execution time (HH:MM:SS)
+#SBATCH --output=%x-%j.out           # output file name
+#SBATCH --account=six@gpu
+
+
+set -x -e
+
+source $six_ALL_CCFRWORK/start-prod
+
+echo "START TIME: $(date)"
+
 CHECKPOINT_PATH=/gpfsdsstore/projects/rech/six/commun/checkpoints/tr3m-1B3-emb-norm-pile/global_step296023
 MEGATRON_DEEPSPEED_REPO=/gpfsssd/worksf/projects/rech/six/commun/code/eval/Megatron-DeepSpeed
 export HF_DATASETS_OFFLINE=1
+
+cd $MEGATRON_DEEPSPEED_REPO
 
 PP_SIZE=2
 TP_SIZE=1
@@ -67,12 +88,14 @@ CMD="./tasks/eval_harness/evaluate.py  \
     --seq-length $SEQ_LEN \
     --adaptive_seq_len \
     --eval_fp32 \
-    --task_list hellaswag,mrpc,piqa \
+    --task_list arc_challenge,arc_easy,boolq,copa,hellaswag,lambada,logiqa,mathqa,mc_taco,mrpc,multirc,openbookqa,piqa,prost,pubmedqa,qnli,qqp,race,rte,sciq,sst,webqs,wic,winogrande,wnli,wsc \
     $MEGATRON_REQUIRED_ARGS \
     "
 
 N_GPUS=1
 LAUNCHER="deepspeed --num_gpus $N_GPUS"
-$LAUNCHER $CMD
+echo $LAUNCHER $CMD
+
+$LAUNCHER $CMD  | tee eval-harness.log
 
 # want datasets
