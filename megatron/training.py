@@ -370,9 +370,13 @@ def setup_model_and_optimizer(model_provider_func):
     unwrapped_model = unwrap_model(model,
                                    (torchDDP, LocalDDP, Float16Module))
 
-    optimizer = get_megatron_optimizer(unwrapped_model)
+    if args.inference:
+        optimizer = None
+        lr_scheduler = None
+    else:
+        optimizer = get_megatron_optimizer(unwrapped_model)
+        lr_scheduler = get_learning_rate_scheduler(optimizer)
 
-    lr_scheduler = get_learning_rate_scheduler(optimizer)
 
     if args.deepspeed:
         print_rank_0("DeepSpeed is enabled.")

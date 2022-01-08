@@ -550,6 +550,8 @@ def _add_training_args(parser):
                        'will be performed' )
     group.add_argument('--skip-train-iteration-range', type=str, nargs='+', default=None,
                        help='Iteration ranges to skip. The values are one or more dash-separated ranges. e.g., 101-200 251-300.')
+    group.add_argument('--inference', action='store_true',
+                       help='Very basic inference mode: not allocating optim/lr - requires ZERO_STAGE=0')
 
     return parser
 
