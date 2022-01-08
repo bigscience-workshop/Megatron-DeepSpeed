@@ -330,9 +330,13 @@ def _print_args(args):
             dots = '.' * (48 - len(arg))
             str_list.append('  {} {} {}'.format(arg, dots, getattr(args, arg)))
 
-        with open(os.path.join(args.log_path,f'args_{time.strftime("%Y-%m-%dT%H:%M:%S")}.txt'), 'w') as f:
+        if args.log_path is not None:
+            with open(os.path.join(args.log_path,f'args_{time.strftime("%Y-%m-%dT%H:%M:%S")}.txt'), 'w') as f:
+                for arg in sorted(str_list, key=lambda x: x.lower()):
+                    f.write(arg+"\n")
+                    print(arg, flush=True)
+        else:
             for arg in sorted(str_list, key=lambda x: x.lower()):
-                f.write(arg+"\n")
                 print(arg, flush=True)
         print('-------------------- end of arguments ---------------------',
               flush=True)

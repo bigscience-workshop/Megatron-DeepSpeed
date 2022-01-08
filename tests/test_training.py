@@ -304,6 +304,7 @@ class MegDSTestTraining(TestCasePlus):
         src_dir = self.src_dir
         data_dir = f"{self.data_dir}/gpt2"
         output_dir = self.get_auto_remove_tmp_dir() # "./xxx", after=False)
+        logs_dir = f"{output_dir}/logs"
 
         pp_size, tp_size, dp_size = get_3d_dimensions()
         num_gpus = pp_size * tp_size * dp_size
@@ -346,6 +347,7 @@ class MegDSTestTraining(TestCasePlus):
 
             --merge-file {data_dir}/gpt2-tiny-merges.txt
             --vocab-file {data_dir}/gpt2-tiny-vocab.json
+            --log-path {logs_dir}
             --save {output_dir}/checkpoints
             --load {output_dir}/checkpoints
             --data-path {data_dir}/meg-gpt2-openwebtext_text_document
@@ -418,6 +420,7 @@ class MegDSTestTraining(TestCasePlus):
         src_dir = self.src_dir
         data_dir = f"{self.data_dir}/gpt2"
         output_dir = self.get_auto_remove_tmp_dir() # "./xxx", after=False)
+        logs_dir = f"{output_dir}/logs"
 
         pp_size, tp_size, dp_size = get_3d_dimensions()
         num_gpus = pp_size * tp_size * dp_size
@@ -459,6 +462,7 @@ class MegDSTestTraining(TestCasePlus):
 
             --merge-file {data_dir}/gpt2-tiny-merges.txt
             --vocab-file {data_dir}/gpt2-tiny-vocab.json
+            --log-path {logs_dir}
             --save {output_dir}/checkpoints
             --tensorboard-dir {output_dir}/tensorboard
             --tensorboard-queue-size 5
