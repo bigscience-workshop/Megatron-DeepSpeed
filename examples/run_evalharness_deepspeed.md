@@ -40,7 +40,7 @@ export HF_DATASETS_OFFLINE=1
 ```
 if you didn't have one already
 
-Adjust this to fit the GPU, probably ~12 for 32GB and 4-6 for 16GB
+Adjust this to fit the GPU, probably ~12 for 32GB and 4-6 for 16GB for 1.3B model
 ```
 EVAL_MICRO_BATCH_SIZE=12
 ```
@@ -49,7 +49,7 @@ Do not modify `MICRO_BATCH_SIZE` which is from the original slurm training scrip
 
 ## Eval
 
-Currently it takes 8.5h to run on 32GB, so should probably still fit into 16GB over 20h, but will need a smaller --micro-batch-size
+Currently it takes 8.5h to run on 32GB for 1.3B model, so should probably still fit into 16GB over 20h, but will need a smaller --micro-batch-size
 
 ```
 srun --account=six@gpu --constraint=v100-32g --nodes=1 --ntasks=1 --cpus-per-task=40 --gres=gpu:1 --hint=nomultithread --time=20:00:00 bash --rcfile $six_ALL_CCFRWORK/start-prod

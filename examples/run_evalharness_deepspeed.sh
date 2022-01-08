@@ -10,7 +10,7 @@ SEQ_LEN=2048
 
 # different from the training MICRO_BATCH_SIZE - no optim memory, so can do bigger BS
 # make as big as it can fit into gpu w/o OOM, but not too close to 100%
-EVAL_MICRO_BATCH_SIZE=8
+EVAL_MICRO_BATCH_SIZE=12
 
 #dummy arguments to make megatron happy.
 MEGATRON_REQUIRED_ARGS=" \
