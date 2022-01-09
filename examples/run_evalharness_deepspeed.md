@@ -8,10 +8,10 @@ This doc assumes usage on JZ, so some peculiar requirements in places. Ignore th
 
 On login console with external network
 
-Get lm-eval harness (https://github.com/EleutherAI/lm-evaluation-harness)
+Get lm-eval harness (https://github.com/EleutherAI/lm-evaluation-harness) and `best-download==0.0.7` needed to download some tasks.
 ```
 start-prod
-pip install lm-eval==0.0.1
+pip install lm-eval==0.0.1 best-download==0.0.7
 ```
 Note: currently @master doesn't work with this script, later may have to edit the hardcoded version above
 
@@ -26,7 +26,7 @@ Also make sure `data` is not on one of the limited paritions like WORKSF.
 Then install datasets for the tasks:
 ```
 python ./tasks/eval_harness/download.py --task_list
-arc_challenge,arc_easy,boolq,copa,hellaswag,lambada,logiqa,mathqa,mc_taco,mrpc,multirc,openbookqa,piqa,prost,pubmedqa,qnli,qqp,race,rte,sciq,sst,webqs,wic,winogrande,wnli,wsc
+arc_challenge,arc_easy,boolq,copa,hellaswag,lambada,logiqa,mathqa,mc_taco,mrpc,multirc,openbookqa,piqa,prost,pubmedqa,qnli,qqp,race,rte,sciq,sst,triviaqa,webqs,wic,winogrande,wnli,wsc
 ```
 
 Prepare the run script:
@@ -57,16 +57,15 @@ Do not modify `MICRO_BATCH_SIZE` which is from the original slurm training scrip
 
 ## Eval
 
-Currently it takes 8.5h to run on 32GB for 1.3B model, so should probably still fit into 16GB over 20h, but will need a smaller --micro-batch-size
+Currently it takes 2-3 hours to run on 32GB for 1.3B model, so it should easily fit into 16GB over 20h, but will need a smaller `--micro-batch-size`.
 
+When ready, launch:
 ```
-srun --account=six@gpu --constraint=v100-32g --nodes=1 --ntasks=1 --cpus-per-task=40 --gres=gpu:1 --hint=nomultithread --time=20:00:00 bash --rcfile $six_ALL_CCFRWORK/start-prod
+sbatch ./run_evalharness.slurm
 ```
 
-```
-cd /gpfsssd/worksf/projects/rech/six/commun/code/eval/Megatron-DeepSpeed
-PYTHONPATH=. sh ./run_evalharness.sh
-```
+Note that the original ETA at the start of the run can be 10x too longer than the actual outcome. For example it may suggest 18 hours but will complete in 2 hours.
+
 
 ## Short eval
 

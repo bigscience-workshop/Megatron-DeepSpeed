@@ -98,6 +98,4 @@ echo $LAUNCHER $CMD
 
 export PYTHONPATH=$MEGATRON_DEEPSPEED_REPO
 
-$LAUNCHER $CMD  2>&1 | tee eval-harness.log
-
-# want datasets
+$LAUNCHER $CMD 2>&1 | tee eval-harness.log
