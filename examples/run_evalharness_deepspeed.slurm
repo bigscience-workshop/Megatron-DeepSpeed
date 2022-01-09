@@ -31,7 +31,7 @@ SEQ_LEN=2048
 
 # different from the training MICRO_BATCH_SIZE - no optim memory, so can do bigger BS
 # make as big as it can fit into gpu w/o OOM, but not too close to 100%
-EVAL_MICRO_BATCH_SIZE=32
+EVAL_MICRO_BATCH_SIZE=12
 
 #dummy arguments to make megatron happy.
 MEGATRON_REQUIRED_ARGS=" \
@@ -88,7 +88,7 @@ CMD="./tasks/eval_harness/evaluate.py  \
     --seq-length $SEQ_LEN \
     --adaptive_seq_len \
     --eval_fp32 \
-    --task_list arc_challenge,arc_easy,boolq,copa,hellaswag,lambada,logiqa,mathqa,mc_taco,mrpc,multirc,openbookqa,piqa,prost,pubmedqa,qnli,qqp,race,rte,sciq,sst,webqs,wic,winogrande,wnli,wsc \
+    --task_list arc_challenge,arc_easy,boolq,copa,hellaswag,lambada,mathqa,mc_taco,mrpc,multirc,openbookqa,piqa,prost,pubmedqa,qnli,qqp,race,rte,sst,webqs,wic,winogrande,wnli,wsc,triviaqa,sciq \
     $MEGATRON_REQUIRED_ARGS \
     "
 
@@ -96,6 +96,8 @@ N_GPUS=1
 LAUNCHER="deepspeed --num_gpus $N_GPUS"
 echo $LAUNCHER $CMD
 
-$LAUNCHER $CMD  | tee eval-harness.log
+export PYTHONPATH=$MEGATRON_DEEPSPEED_REPO
+
+$LAUNCHER $CMD  2>&1 | tee eval-harness.log
 
 # want datasets
