@@ -76,3 +76,28 @@ if you just want to quickly test that everything can run to the end, edit `tasks
 ```
 
 (XXX: could be a cmd line option so that code won't need to be modified)
+
+
+## Import into spreadsheet
+
+https://docs.google.com/spreadsheets/d/1CI8Q9RCblLRzUOPJ6ViqBmo284-8ojluQ-CmaEuhuv0/edit?usp=sharing
+
+Note that the spreadsheet format is quite different, so use this script:
+```
+./tasks/eval_harness/report-to-csv.py results.json
+```
+to reformat the json results into csv while changing its shape to match the spreadsheet format
+
+Since some records might be missing or extraneous here is the best way to do it:
+
+1. copy the data from first 2 columns to some place under the main spreadsheet
+
+2. put the pointer to the 3rd column next to where the 2 first columns were copied.
+
+3. import `results.csv` using file-> import -> file ->
+
+Import location: Replace data at selected cell
+
+4. Now it should be easy to align the new records with the old ones - delete irrelevant records and Insert->Cells where data is missing until the first 2 columns match
+
+5. now create 2 cols in the main table on top and now it should be safe to Copy-n-Paste the 2-col data range, without the task/metrics columns into the newly created space.
