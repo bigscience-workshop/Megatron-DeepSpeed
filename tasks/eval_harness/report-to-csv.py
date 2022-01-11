@@ -45,9 +45,9 @@ with io.open(csv_file, 'w', encoding='utf-8') as f:
             writer.writerow([k, "acc", v["acc"], v["acc_stderr"]])
         if "acc_norm" in v:
             writer.writerow([k, "acc_norm", v["acc_norm"], v["acc_norm_stderr"]])
-        if "ppl" in v:
-            writer.writerow([k, "ppl", v["ppl"], v["ppl_stderr"]])
-        if "em" in v:
-            writer.writerow([k, "em", v["em"], v["em_stderr"] if "em_stderr" in v else ""])
         if "f1" in v:
             writer.writerow([k, "f1", v["f1"], v["f1_stderr"] if "f1_stderr" in v else ""])
+        # if "ppl" in v:
+        #     writer.writerow([k, "ppl", v["ppl"], v["ppl_stderr"]])
+        # if "em" in v:
+        #     writer.writerow([k, "em", v["em"], v["em_stderr"] if "em_stderr" in v else ""])
