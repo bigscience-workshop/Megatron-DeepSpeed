@@ -38,16 +38,21 @@ with io.open(results_file, 'r', encoding='utf-8') as f:
 with io.open(csv_file, 'w', encoding='utf-8') as f:
 
     writer = csv.writer(f)
-    writer.writerow(["task", "metric", "value", "err"])
+    writer.writerow(["task", "metric", "value", "err", "version"])
+
+    versions = results["versions"]
 
     for k,v in sorted(results["results"].items()):
         if "acc" in v:
-            writer.writerow([k, "acc", v["acc"], v["acc_stderr"]])
+            row = [k, "acc", v["acc"], v["acc_stderr"]]
         if "acc_norm" in v:
-            writer.writerow([k, "acc_norm", v["acc_norm"], v["acc_norm_stderr"]])
+            row = [k, "acc_norm", v["acc_norm"], v["acc_norm_stderr"]]
         if "f1" in v:
-            writer.writerow([k, "f1", v["f1"], v["f1_stderr"] if "f1_stderr" in v else ""])
+            row = [k, "f1", v["f1"], v["f1_stderr"] if "f1_stderr" in v else ""]
         # if "ppl" in v:
-        #     writer.writerow([k, "ppl", v["ppl"], v["ppl_stderr"]])
+        #     row = [k, "ppl", v["ppl"], v["ppl_stderr"]]
         # if "em" in v:
-        #     writer.writerow([k, "em", v["em"], v["em_stderr"] if "em_stderr" in v else ""])
+        #     row = [k, "em", v["em"], v["em_stderr"] if "em_stderr" in v else ""]
+
+        row += [versions[k] if k in versions else -1]
+        writer.writerow(row)
