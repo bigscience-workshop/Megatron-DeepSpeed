@@ -42,14 +42,16 @@ class EvalHarnessAdaptor(GPT2LM):
         self.VOCAB_SIZE = tokenizer.vocab_size
         self.EOT_TOKEN_ID = tokenizer.eod
 
-        self.max_length = args.seq_length
+        self._max_length = args.seq_length
+
         # For ds we split into mini batches and then micro batches to keep pipelining api happy.
         # With Megatron we just go to micro_batches directly
-        self.batch_size = args.micro_batch_size
+        self._batch_size = args.micro_batch_size
+
         self.cache_hook = CacheHook(None)
         self.is_main = args.rank == 0
         self.is_local_main = args.local_rank == 0
-        self.device = torch.cuda.current_device()
+        self._device = torch.cuda.current_device()
         self.is_model_parallel = mpu.get_tensor_model_parallel_world_size() > 1
         self.is_pipe_parallel = mpu.get_pipeline_model_parallel_world_size() > 1
         self.is_data_parallel = mpu.get_data_parallel_world_size() > 1
@@ -58,6 +60,18 @@ class EvalHarnessAdaptor(GPT2LM):
             raise NotImplementedError("Data parallelism is currently not supported for evaluation")
 
         self.is_last_stage = True if not self.is_pipe_parallel else mpu.is_pipeline_last_stage()  # only the last stage of the pipeline model will receive the logits
+
+    @property
+    def max_length(self):
+        return self._max_length
+
+    @property
+    def batch_size(self):
+        return self._batch_size
+
+    @property
+    def device(self):
+        return self._device
 
 
     def loglikelihood(self, requests):
