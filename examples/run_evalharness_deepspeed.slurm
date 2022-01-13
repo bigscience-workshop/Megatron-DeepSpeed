@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=eval-harness-deepspeed
-#SBATCH --constraint=v100-32g
+#SBATCH --constraint=v100-16g
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1          # crucial - only 1 task per dist per node!
 #SBATCH --cpus-per-task=40           # number of cores per tasks
@@ -17,6 +17,9 @@ source $six_ALL_CCFRWORK/start-prod
 
 echo "START TIME: $(date)"
 
+# a unique identifier for the current eval so that multiple evals could run in parallel and not all log into the same "results.json" file.
+VARIANT="tr9c-1B3-swiglu"
+
 CHECKPOINT_PATH=/gpfsdsstore/projects/rech/six/commun/checkpoints/tr3m-1B3-emb-norm-pile/global_step296023
 MEGATRON_DEEPSPEED_REPO=/gpfsssd/worksf/projects/rech/six/commun/code/eval/Megatron-DeepSpeed
 export HF_DATASETS_OFFLINE=1
@@ -31,7 +34,10 @@ SEQ_LEN=2048
 
 # different from the training MICRO_BATCH_SIZE - no optim memory, so can do bigger BS
 # make as big as it can fit into gpu w/o OOM, but not too close to 100%
-EVAL_MICRO_BATCH_SIZE=12
+
+EVAL_MICRO_BATCH_SIZE=6  # 16GB GPU 1.3B model
+#EVAL_MICRO_BATCH_SIZE=12 # 32GB GPU 1.3B model
+
 
 #dummy arguments to make megatron happy.
 MEGATRON_REQUIRED_ARGS=" \
@@ -46,15 +52,11 @@ MEGATRON_REQUIRED_ARGS=" \
 ZERO_STAGE=0
 
 config_json="./ds_config.json"
-
-MICRO_BATCH_SIZE=1
-GLOBAL_BATCH_SIZE=512
-
 # Deepspeed figures out GAS dynamically from dynamic GBS via set_train_batch_size()
 cat <<EOT > $config_json
 {
-  "train_micro_batch_size_per_gpu": $MICRO_BATCH_SIZE,
-  "train_batch_size": $GLOBAL_BATCH_SIZE,
+  "train_micro_batch_size_per_gpu": 1
+  "train_batch_size": 1
   "gradient_clipping": 1.0,
   "zero_optimization": {
     "stage": $ZERO_STAGE
@@ -72,9 +74,9 @@ cat <<EOT > $config_json
 }
 EOT
 
-
 CMD="./tasks/eval_harness/evaluate.py  \
     --load $CHECKPOINT_PATH \
+    --results_path $VARIANT-results.json \
     --tensor-model-parallel-size $TP_SIZE  \
     --pipeline-model-parallel-size $PP_SIZE \
     --vocab-file $VOCAB_FILE \
@@ -98,4 +100,4 @@ echo $LAUNCHER $CMD
 
 export PYTHONPATH=$MEGATRON_DEEPSPEED_REPO
 
-$LAUNCHER $CMD 2>&1 | tee eval-harness.log
+$LAUNCHER $CMD 2>&1 | tee $VARIANT-eval-harness.log

@@ -6,21 +6,24 @@ This doc assumes usage on JZ, so some peculiar requirements in places. Ignore th
 
 ## Prerequisites
 
+1. Install software
+
 On login console with external network
 
 Get lm-eval harness (https://github.com/EleutherAI/lm-evaluation-harness) and `best-download==0.0.7` needed to download some tasks.
 ```
 start-prod
-pip install lm-eval==0.0.1 best-download==0.0.7
+pip install best-download==0.0.7
+pip install git+https://github.com/EleutherAI/lm-evaluation-harness
 ```
-Note: currently @master doesn't work with this script, later may have to edit the hardcoded version above
+
+2. Pre-download needed datasets
 
 some symlinks due to lm-harness' issues with relative position of data
 ```
 mkdir data
 ln -s data tasks/eval_harness/data
 ```
-
 Also make sure `data` is not on one of the limited paritions like WORKSF.
 
 Then install datasets for the tasks:
@@ -29,40 +32,66 @@ python ./tasks/eval_harness/download.py --task_list
 arc_challenge,arc_easy,boolq,copa,hellaswag,lambada,logiqa,mathqa,mc_taco,mrpc,multirc,openbookqa,piqa,prost,pubmedqa,qnli,qqp,race,rte,sciq,sst,triviaqa,webqs,wic,winogrande,wnli,wsc
 ```
 
-Prepare the run script:
+3. Prepare the slurm script
+
+Prepare the run script, replace `variant` with a unique identifier for the current eval so that multiple evals could run in parallel and not all log into the same `results.json` file. so, e.g., `tr9c-1B3-swiglu`
 
 ```
-cp examples/run_evalharness_deepspeed.slurm run_evalharness.slurm
+cp examples/run_evalharness_deepspeed.slurm run_evalharness-variant.slurm
 ```
 
-now edit `run_evalharness.slurm`
+now edit `run_evalharness-variant.slurm`
 
-you have to replicate the same config as in the original slurm script but you want:
+
+1. Edit:
 
 ```
-ZERO_STAGE=0
+PP_SIZE=2
+TP_SIZE=1
 ```
-and add:
-```
-export HF_DATASETS_OFFLINE=1
-```
-if you didn't have one already
+to match the original slurm script. But this is only needed to convert the checkpoint. The actual eval will happen on a single gpu.
 
-Adjust this to fit the GPU, probably ~12 for 32GB and 4-6 for 16GB for 1.3B model
+
+2. Adjust the following to fit the chosen GPU. As of last check for 1.3B model the settings are one of:
 ```
-EVAL_MICRO_BATCH_SIZE=12
+EVAL_MICRO_BATCH_SIZE=6  # 16GB GPU 1.3B model
+EVAL_MICRO_BATCH_SIZE=12 # 32GB GPU 1.3B model
 ```
-Do not modify `MICRO_BATCH_SIZE` which is from the original slurm training script (should remain the same).
+
+3. If not using a Deepspeed path, disable it by removing:
+
+```
+    --deepspeed \
+    --deepspeed_config ds_config.json \
+```
+
+Currently if `TP>1` you can't use the deepspeed path.
+
+If you didn't disable it and the program crashed on checkpoint loading unable to find some key, disable deepspeed as explained above.
 
 
 ## Eval
 
-Currently it takes 2-3 hours to run on 32GB for 1.3B model, so it should easily fit into 16GB over 20h, but will need a smaller `--micro-batch-size`.
+Currently it takes 2-3 hours to run on 32GB for 1.3B model, 6-7h for 16GB GPU, so a 20h slurm job should be enough.
 
 When ready, launch:
 ```
-sbatch ./run_evalharness.slurm
+sbatch ./run_evalharness-variant.slurm
 ```
+
+To monitor progress:
+```
+tail -f tail -f $VARIANT-eval-harness.log
+```
+where the variant is what you set `$VARIANT` to in the slurm script.
+
+The template is set up for 16GB gpu since they are easier to get by. If you change to 32GB, adjust:
+```
+#SBATCH --constraint=v100-32g
+...
+EVAL_MICRO_BATCH_SIZE=12 # 32GB GPU 1.3B model
+```
+
 
 Note that the original ETA at the start of the run can be 10x too longer than the actual outcome. For example it may suggest 18 hours but will complete in 2 hours.
 
