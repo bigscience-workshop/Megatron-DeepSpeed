@@ -207,7 +207,12 @@ class EvalHarnessAdaptor(GPT2LM):
             data_iterator = list((torch.stack(inp) for inp in utils.chunks(padded, args.micro_batch_size)))
             self.model.micro_batches = len(data_iterator)
             output = self.model.eval_batch(iter(data_iterator), compute_loss = False, reduce_output = None)
-            output = torch.cat(output, 0)[:len(inps)]
+
+
+            if output is not None:
+                output = torch.cat(output, 0)[:len(inps)]
+            else:
+                output = None
 
             # hack #2 for adaptive_seq_len to work as total_loss gets appended to and shapes aren't the same
             if args.adaptive_seq_len:
@@ -289,7 +294,7 @@ def load_ds_checkpoint_and_setup_megatron(extra_args_provider):
     cp_args = ds_checkpoint.get_args()
     # Merge the current args with the checkpoint args.
     skip_keys = ['world_size', 'rank', 'local_rank','device_count', 'micro_batch_size','global_batch_size', 'batch_size', 'tensorboard_dir', 'deepspeed', 'deepspeed_config',
-                     'data_parallel_size', 'pipeline_model_parallel_size', 'tensor_model_parallel_size', 'load', 'rampup_batch_size', 'iteration']
+                     'data_parallel_size', 'pipeline_model_parallel_size', 'tensor_model_parallel_size', 'load', 'rampup_batch_size', 'iteration', 'inference']
 
     skip_if_specified = ['merge_file', 'vocab_file']
 
@@ -313,12 +318,25 @@ def load_ds_checkpoint_and_setup_megatron(extra_args_provider):
     # print final arguments.
     _print_args(args)
     if args.deepspeed:
-        args.use_checkpoint_lr_scheduler = True # allow ds to override our lr schedule.
+
+        # Hack #3:
+        # Loading pipelined models in deepspeed with different TP than it was originally trained on fails
+        # due to a sanity check, that makes sure that all state_dicts that we merge contains attention layers.
+        # This, however, is not true for pipelining when we will merge the state_dict for the embeddings which
+        # which does not contain these attention-specific keys.
+        #
+        # Deepspeed does however manage to load the model if we just turn off this sanity check.
+        import deepspeed
+        deepspeed.runtime.state_dict_factory.MegatronSDLoader.sanity_check = lambda self, ckpt_file_name: None
+
+
         cp_path = args.load
         args.load = None
         model, _, _ = setup_model_and_optimizer(model_provider)
         model = model[0]
-        _, _ = model.load_checkpoint(cp_path, tag = '.')
+        model._config.zero_enabled = False
+        _, _ = model.load_checkpoint(cp_path, tag = '.', load_optimizer_states=False, load_lr_scheduler_states=False, load_module_only=True)
+        model._config.zero_enabled = True
     else:
         model = get_model(model_provider)[0]
         # Initialize megatron model using the parsed state dict.
