@@ -43,16 +43,16 @@ with io.open(csv_file, 'w', encoding='utf-8') as f:
     versions = results["versions"]
 
     for k,v in sorted(results["results"].items()):
-        if "acc" in v:
-            row = [k, "acc", v["acc"], v["acc_stderr"]]
-        if "acc_norm" in v:
-            row = [k, "acc_norm", v["acc_norm"], v["acc_norm_stderr"]]
-        if "f1" in v:
-            row = [k, "f1", v["f1"], v["f1_stderr"] if "f1_stderr" in v else ""]
-        # if "ppl" in v:
-        #     row = [k, "ppl", v["ppl"], v["ppl_stderr"]]
-        # if "em" in v:
-        #     row = [k, "em", v["em"], v["em_stderr"] if "em_stderr" in v else ""]
+        if k not in versions:
+            versions[k] = -1
 
-        row += [versions[k] if k in versions else -1]
-        writer.writerow(row)
+        if "acc" in v:
+            writer.writerow([k, "acc", v["acc"], v["acc_stderr"], versions[k]])
+        if "acc_norm" in v:
+            writer.writerow([k, "acc_norm", v["acc_norm"], v["acc_norm_stderr"], versions[k]])
+        if "f1" in v:
+            writer.writerow([k, "f1", v["f1"], v["f1_stderr"] if "f1_stderr" in v else "", versions[k]])
+        # if "ppl" in v:
+        #     writer.writerow([k, "ppl", v["ppl"], v["ppl_stderr"], versions[k]])
+        # if "em" in v:
+        #     writer.writerow([k, "em", v["em"], v["em_stderr"] if "em_stderr" in v else "", versions[k]])
