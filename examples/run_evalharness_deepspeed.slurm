@@ -52,23 +52,12 @@ MEGATRON_REQUIRED_ARGS=" \
 ZERO_STAGE=0
 
 config_json="./ds_config.json"
-# Deepspeed figures out GAS dynamically from dynamic GBS via set_train_batch_size()
 cat <<EOT > $config_json
 {
-  "train_micro_batch_size_per_gpu": 1
-  "train_batch_size": 1
-  "gradient_clipping": 1.0,
-  "zero_optimization": {
-    "stage": $ZERO_STAGE
-  },
-  "fp16": {
-    "enabled": true,
-    "loss_scale": 0,
-    "loss_scale_window": 500,
-    "hysteresis": 2,
-    "min_loss_scale": 1,
-    "initial_scale_power": 12
-  },
+  "train_micro_batch_size_per_gpu": 1,
+  "train_batch_size": 1,
+  "zero_optimization": { "stage": $ZERO_STAGE },
+  "fp16": { "enabled": true },
   "steps_per_print": 2000,
   "wall_clock_breakdown": false
 }
