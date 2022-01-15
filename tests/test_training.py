@@ -231,7 +231,7 @@ class MegDSTestTraining(TestCasePlus):
                 --train-samples {n_samples}
 
                 --lr-decay-samples 6
-                
+
                 --position-embedding-type alibi
             """.split()
 
@@ -322,6 +322,7 @@ class MegDSTestTraining(TestCasePlus):
         data_dir = f"{self.data_dir}/gpt2"
         output_dir = self.get_auto_remove_tmp_dir() # "./xxx", after=False)
         logs_dir = f"{output_dir}/logs"
+        Path(logs_dir).mkdir(parents=True, exist_ok=True)
 
         pp_size, tp_size, dp_size = get_3d_dimensions()
         num_gpus = pp_size * tp_size * dp_size
@@ -438,6 +439,7 @@ class MegDSTestTraining(TestCasePlus):
         data_dir = f"{self.data_dir}/gpt2"
         output_dir = self.get_auto_remove_tmp_dir() # "./xxx", after=False)
         logs_dir = f"{output_dir}/logs"
+        Path(logs_dir).mkdir(parents=True, exist_ok=True)
 
         pp_size, tp_size, dp_size = get_3d_dimensions()
         num_gpus = pp_size * tp_size * dp_size
