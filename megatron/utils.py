@@ -26,13 +26,16 @@ from torch.nn.parallel import DistributedDataParallel as torchDDP
 from apex.multi_tensor_apply import multi_tensor_applier
 import amp_C
 
-from megatron import get_args
+from megatron import get_args, logging
 from megatron import print_rank_0
 from megatron import get_adlr_autoresume
 from megatron import mpu
 from megatron.model.module import param_is_not_shared
+from megatron.model.utils import log_debug_usage
 from megatron.mpu.layers import param_is_not_tensor_parallel_duplicate, VocabParallelEmbedding
 from megatron import get_num_microbatches
+
+logger = logging.get_logger(__name__)
 
 def unwrap_model(model, module_instances=(torchDDP)):
     return_list = True
@@ -371,3 +374,12 @@ def get_prefix_indices(data, eod_token, partial_prefix_indices, reset_attention_
             prefix_indices.append(prefix_index)
 
     return prefix_indices
+
+
+@log_debug_usage(logger, "Using loss reweighting")
+def reweight_loss_mask_(loss_mask: torch.Tensor, tokens: torch.Tensor):
+    """Reweight loss mask in-place"""
+    _, seq_length = tokens.shape
+    weight_loss = torch.arange(seq_length, 0, -1, dtype=torch.float, device=loss_mask.device) / (seq_length + 1) * 2
+    # in-place operation
+    loss_mask *= weight_loss[None, :]

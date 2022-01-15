@@ -225,6 +225,20 @@ class MegDSTestTraining(TestCasePlus):
                 --deepspeed_config {self.test_file_dir_str}/ds_config.json
             """.split()
 
+        elif variation == "alibi":
+            new_args = f"""
+                --rampup-batch-size 2 2 {n_samples}
+                --train-samples {n_samples}
+
+                --lr-decay-samples 6
+
+                --position-embedding-type alibi
+            """.split()
+
+            new_ds_args = f"""
+                --deepspeed_config {self.test_file_dir_str}/ds_config.json
+            """.split()
+
         else:
             raise ValueError(f"Don't know of variation {variation}")
 
@@ -234,7 +248,7 @@ class MegDSTestTraining(TestCasePlus):
         return args, ds_args, num_gpus
 
 
-    @parameterized.expand(["base", "cl", "bnb", "glu"])
+    @parameterized.expand(["base", "cl", "bnb", "glu", "alibi"])
     def test_training_all(self, variation):
 
         # optional runs
@@ -277,6 +291,9 @@ class MegDSTestTraining(TestCasePlus):
         if variation == "glu":
             self.assertIn("Using GLU activation: GELU", cs.out)
 
+        if variation == "alibi":
+            self.assertIn("Using Alibi", cs.out)
+
         # 2. test training from checkpoint: resume
         # now do it again, this time resuming from the checkpoint
         with CaptureStdout() as cs:
@@ -298,12 +315,14 @@ class MegDSTestTraining(TestCasePlus):
         if variation == "glu":
             self.assertIn("Using GLU activation: GELU", cs.out)
 
-    @parameterized.expand([(True, ), (False, )])
-    def test_training_prefix_lm_all(self, loss_on_targets_only):
+    @parameterized.expand([(True, True), (False, False), (True, False), (False, True)])
+    def test_training_prefix_lm_all(self, loss_on_targets_only, reweight_loss_based_on_position_frequency):
         # all in one test
         src_dir = self.src_dir
         data_dir = f"{self.data_dir}/gpt2"
         output_dir = self.get_auto_remove_tmp_dir() # "./xxx", after=False)
+        logs_dir = f"{output_dir}/logs"
+        Path(logs_dir).mkdir(parents=True, exist_ok=True)
 
         pp_size, tp_size, dp_size = get_3d_dimensions()
         num_gpus = pp_size * tp_size * dp_size
@@ -325,6 +344,7 @@ class MegDSTestTraining(TestCasePlus):
             --global-batch-size 16
             --train-samples {n_samples}
             {"--loss-on-targets-only" if loss_on_targets_only else ""}
+            {"--reweight-loss-based-on-position-frequency" if reweight_loss_based_on_position_frequency else ""}
 
             --optimizer adam
             --adam-beta1 0.9
@@ -345,6 +365,7 @@ class MegDSTestTraining(TestCasePlus):
 
             --merge-file {data_dir}/gpt2-tiny-merges.txt
             --vocab-file {data_dir}/gpt2-tiny-vocab.json
+            --log-path {logs_dir}
             --save {output_dir}/checkpoints
             --load {output_dir}/checkpoints
             --data-path {data_dir}/meg-gpt2-openwebtext_text_document
@@ -353,6 +374,8 @@ class MegDSTestTraining(TestCasePlus):
             --log-timers-to-tensorboard
             --log-batch-size-to-tensorboard
             --log-validation-ppl-to-tensorboard
+
+            --log-level debug
         """.split()
 
         ds_args = f"""
@@ -389,6 +412,9 @@ class MegDSTestTraining(TestCasePlus):
         tensorboard_files = glob.glob(f"{output_dir}/tensorboard/events*")
         self.assertEqual(len(tensorboard_files), 1, "tensorboard files")
 
+        if reweight_loss_based_on_position_frequency:
+            self.assertIn("Using loss reweighting", cs.out)
+
         # 2. test training from checkpoint: resume
         # now do it again, this time resuming from the checkpoint
         with CaptureStdout() as cs:
@@ -412,6 +438,8 @@ class MegDSTestTraining(TestCasePlus):
         src_dir = self.src_dir
         data_dir = f"{self.data_dir}/gpt2"
         output_dir = self.get_auto_remove_tmp_dir() # "./xxx", after=False)
+        logs_dir = f"{output_dir}/logs"
+        Path(logs_dir).mkdir(parents=True, exist_ok=True)
 
         pp_size, tp_size, dp_size = get_3d_dimensions()
         num_gpus = pp_size * tp_size * dp_size
@@ -453,6 +481,7 @@ class MegDSTestTraining(TestCasePlus):
 
             --merge-file {data_dir}/gpt2-tiny-merges.txt
             --vocab-file {data_dir}/gpt2-tiny-vocab.json
+            --log-path {logs_dir}
             --save {output_dir}/checkpoints
             --tensorboard-dir {output_dir}/tensorboard
             --tensorboard-queue-size 5
