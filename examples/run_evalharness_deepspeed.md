@@ -43,13 +43,17 @@ cp examples/run_evalharness_deepspeed.slurm run_evalharness-variant.slurm
 now edit `run_evalharness-variant.slurm`
 
 
+Note that the eval code knows to pull the original training args from the checkpoint, so we don't need to pass any of those. And we just need to setup the evaluation args.
+
 1. Edit:
 
 ```
-PP_SIZE=2
+PP_SIZE=1
 TP_SIZE=1
 ```
-to match the original slurm script. But this is only needed to convert the checkpoint. The actual eval will happen on a single gpu.
+to match the eval topology. If the model fits into 1 gpu, then there is nothing to change.
+
+The eval script will automatically reshape the model if it was of a different topology.
 
 
 2. Adjust the following to fit the chosen GPU. As of last check for 1.3B model the settings are one of:
@@ -64,8 +68,6 @@ EVAL_MICRO_BATCH_SIZE=12 # 32GB GPU 1.3B model
     --deepspeed \
     --deepspeed_config ds_config.json \
 ```
-
-Currently if `TP>1` you can't use the deepspeed path.
 
 If you didn't disable it and the program crashed on checkpoint loading unable to find some key, disable deepspeed as explained above.
 
