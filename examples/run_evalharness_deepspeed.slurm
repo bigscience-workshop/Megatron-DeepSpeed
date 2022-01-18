@@ -81,7 +81,7 @@ CMD="./tasks/eval_harness/evaluate.py  \
     --seq-length $SEQ_LEN \
     --adaptive_seq_len \
     --eval_fp32 \
-    --task_list arc_challenge,arc_easy,boolq,copa,hellaswag,lambada,mathqa,mc_taco,mrpc,multirc,openbookqa,piqa,prost,pubmedqa,qnli,qqp,race,rte,sst,webqs,wic,winogrande,wnli,wsc,triviaqa,sciq \
+    --task_list arc_challenge,arc_easy,boolq,copa,hellaswag,lambada,logiqa,mathqa,mc_taco,mrpc,multirc,openbookqa,piqa,prost,pubmedqa,qnli,qqp,race,rte,sst,webqs,wic,winogrande,wnli,wsc,triviaqa,sciq \
     $MEGATRON_REQUIRED_ARGS \
     "
 
