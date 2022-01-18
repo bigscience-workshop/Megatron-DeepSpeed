@@ -120,18 +120,6 @@ def parse_args(extra_args_provider=None, defaults={},
         assert args.data_path is None and args.split is None, message
 
 
-
-    # Deprecated arguments
-    assert args.batch_size is None, '--batch-size argument is no longer ' \
-        'valid, use --micro-batch-size instead'
-    del args.batch_size
-    assert args.warmup is None, '--warmup argument is no longer valid, use ' \
-        '--lr-warmup-fraction instead'
-    del args.warmup
-    assert args.model_parallel_size is None, '--model-parallel-size is no ' \
-        'longer valid, use --tensor-model-parallel-size instead'
-    del args.model_parallel_size
-
     # Set input defaults.
     for key in defaults:
         # For default to be valid, it should not be provided in the
@@ -147,8 +135,6 @@ def parse_args(extra_args_provider=None, defaults={},
             setattr(args, key, defaults[key])
 
     # Batch size.
-    assert args.micro_batch_size is not None
-    assert args.micro_batch_size > 0
     if args.global_batch_size is None:
         args.global_batch_size = args.micro_batch_size * args.data_parallel_size
         if args.rank == 0:
@@ -203,42 +189,6 @@ def parse_args(extra_args_provider=None, defaults={},
     args.consumed_train_tokens = 0
     args.gigaflos_no_embeds = 0
 
-    # Iteration-based training.
-    if args.train_iters:
-        # If we use iteration-based training, make sure the
-        # sample-based options are off.
-        assert args.train_samples is None, \
-            'expected iteration-based training'
-        assert args.lr_decay_samples is None, \
-            'expected iteration-based learning rate decay'
-        assert args.lr_warmup_samples == 0, \
-            'expected iteration-based learning rate warmup'
-        assert args.rampup_batch_size is None, \
-            'expected no batch-size rampup for iteration-based training'
-        if args.lr_warmup_fraction is not None:
-            assert args.lr_warmup_iters == 0, \
-                'can only specify one of lr-warmup-fraction and lr-warmup-iters'
-
-    # Sample-based training.
-    if args.train_samples:
-        # If we use sample-based training, make sure the
-        # iteration-based options are off.
-        assert args.train_iters is None, \
-            'expected sample-based training'
-        assert args.lr_decay_iters is None, \
-            'expected sample-based learning rate decay'
-        assert args.lr_warmup_iters == 0, \
-            'expected sample-based learnig rate warmup'
-        if args.lr_warmup_fraction is not None:
-            assert args.lr_warmup_samples == 0, \
-                'can only specify one of lr-warmup-fraction ' \
-                'and lr-warmup-samples'
-
-    # Check required arguments.
-    required_args = ['num_layers', 'hidden_size', 'num_attention_heads']
-    for req_arg in required_args:
-        _check_arg_is_not_none(args, req_arg)
-
     # Checks.
     if args.ffn_hidden_size is None:
         args.ffn_hidden_size = 4 * args.hidden_size
@@ -263,10 +213,6 @@ def parse_args(extra_args_provider=None, defaults={},
     else:
         assert args.max_position_embeddings is None
 
-    if args.lr is not None:
-        assert args.min_lr <= args.lr
-    if args.save is not None:
-        assert args.save_interval is not None
     # Mixed precision checks.
     if args.fp16_lm_cross_entropy:
         assert args.fp16, 'lm cross entropy in fp16 only support in fp16 mode.'
@@ -316,8 +262,75 @@ def parse_args(extra_args_provider=None, defaults={},
         except ModuleNotFoundError:
             raise ModuleNotFoundError("Please install bitsandbytes from https://github.com/facebookresearch/bitsandbytes.")
 
+    _validate_args(args)
     _print_args(args)
     return args
+
+
+def _validate_args(args):
+    """Validates arguments."""
+
+    # Check required arguments.
+    required_args = ['num_layers', 'hidden_size', 'num_attention_heads']
+    for req_arg in required_args:
+        assert getattr(args, req_arg) is not None, '{} argument is None'.format(req_arg)
+
+    # sanity checks required while configuring the slurm script
+    assert args.num_layers % args.pipeline_model_parallel_size == 0, \
+            'number of layers is not divisible by pipeline parallel size ' \
+
+    # Batch size.
+    assert args.micro_batch_size is not None
+    assert args.micro_batch_size > 0
+
+    if args.lr is not None:
+        assert args.min_lr <= args.lr
+    if args.save is not None:
+        assert args.save_interval is not None
+
+    # Deprecated arguments
+    assert args.batch_size is None, '--batch-size argument is no longer ' \
+        'valid, use --micro-batch-size instead'
+    del args.batch_size
+    assert args.warmup is None, '--warmup argument is no longer valid, use ' \
+        '--lr-warmup-fraction instead'
+    del args.warmup
+    assert args.model_parallel_size is None, '--model-parallel-size is no ' \
+        'longer valid, use --tensor-model-parallel-size instead'
+    del args.model_parallel_size
+
+    # Iteration-based training.
+    if args.train_iters:
+        # If we use iteration-based training, make sure the
+        # sample-based options are off.
+        assert args.train_samples is None, \
+            'expected iteration-based training'
+        assert args.lr_decay_samples is None, \
+            'expected iteration-based learning rate decay'
+        assert args.lr_warmup_samples == 0, \
+            'expected iteration-based learning rate warmup'
+        assert args.rampup_batch_size is None, \
+            'expected no batch-size rampup for iteration-based training'
+        if args.lr_warmup_fraction is not None:
+            assert args.lr_warmup_iters == 0, \
+                'can only specify one of lr-warmup-fraction and lr-warmup-iters'
+
+    # Sample-based training.
+    if args.train_samples:
+        # If we use sample-based training, make sure the
+        # iteration-based options are off.
+        assert args.train_iters is None, \
+            'expected sample-based training'
+        assert args.lr_decay_iters is None, \
+            'expected sample-based learning rate decay'
+        assert args.lr_warmup_iters == 0, \
+            'expected sample-based learnig rate warmup'
+        if args.lr_warmup_fraction is not None:
+            assert args.lr_warmup_samples == 0, \
+                'can only specify one of lr-warmup-fraction ' \
+                'and lr-warmup-samples'
+
+
 
 
 def _print_args(args):
@@ -340,10 +353,6 @@ def _print_args(args):
                 print(arg, flush=True)
         print('-------------------- end of arguments ---------------------',
               flush=True)
-
-
-def _check_arg_is_not_none(args, arg):
-    assert getattr(args, arg) is not None, '{} argument is None'.format(arg)
 
 
 def _add_network_size_args(parser):
