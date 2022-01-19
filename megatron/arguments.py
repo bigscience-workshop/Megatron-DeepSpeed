@@ -265,7 +265,10 @@ def _validate_args(args):
 
     # sanity checks required while configuring the slurm script
     assert args.num_layers % args.pipeline_model_parallel_size == 0, \
-            'number of layers is not divisible by pipeline parallel size ' \
+        'number of layers is not divisible by pipeline parallel size '
+
+    assert args.hidden_size % args.num_attention_heads == 0, \
+        'hidden size is not divisible by number of attention heads '
 
     # validate ds_config json
     with open(args.deepspeed_config) as f:
@@ -278,6 +281,7 @@ def _validate_args(args):
     assert args.micro_batch_size is not None
     assert args.micro_batch_size > 0
     assert args.global_batch_size > 0
+    assert args.global_batch_size % (args.micro_batch_size * args.data_parallel_size) == 0
 
     if args.lr is not None:
         assert args.min_lr <= args.lr, 'min_lr must be smaller or equal lr'
