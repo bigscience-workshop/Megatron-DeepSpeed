@@ -17,6 +17,7 @@
 
 import argparse
 import collections
+import json
 import os
 import re
 import time
@@ -140,7 +141,6 @@ def parse_args(extra_args_provider=None, defaults={},
         if args.rank == 0:
             print('setting global batch size to {}'.format(
                 args.global_batch_size), flush=True)
-    assert args.global_batch_size > 0
     if args.num_layers_per_virtual_pipeline_stage is not None:
         assert args.pipeline_model_parallel_size > 2, \
             'pipeline-model-parallel size should be greater than 2 with ' \
@@ -213,18 +213,6 @@ def parse_args(extra_args_provider=None, defaults={},
     else:
         assert args.max_position_embeddings is None
 
-    # Mixed precision checks.
-    if args.fp16_lm_cross_entropy:
-        assert args.fp16, 'lm cross entropy in fp16 only support in fp16 mode.'
-    if args.fp32_residual_connection:
-        assert args.fp16 or args.bf16, \
-            'residual connection in fp32 only supported when using fp16 or bf16.'
-    # Activation checkpointing.
-    if args.distribute_checkpointed_activations:
-        assert args.checkpoint_activations, \
-            'for distribute-checkpointed-activations to work you '\
-            'need to enable checkpoint-activations'
-
     args.curriculum_learning = False
 
     # Activation function
@@ -279,12 +267,20 @@ def _validate_args(args):
     assert args.num_layers % args.pipeline_model_parallel_size == 0, \
             'number of layers is not divisible by pipeline parallel size ' \
 
+    # validate ds_config json
+    with open(args.deepspeed_config) as f:
+        config_dict = json.load(f)
+
+    assert config_dict['curriculum_type'] % 8 == 0, '`min_difficulty`'\
+        ' in deepspeed json configuration file is not divisible by 8'
+
     # Batch size.
     assert args.micro_batch_size is not None
     assert args.micro_batch_size > 0
+    assert args.global_batch_size > 0
 
     if args.lr is not None:
-        assert args.min_lr <= args.lr
+        assert args.min_lr <= args.lr, 'min_lr must be smaller or equal lr'
     if args.save is not None:
         assert args.save_interval is not None
 
@@ -330,6 +326,17 @@ def _validate_args(args):
                 'can only specify one of lr-warmup-fraction ' \
                 'and lr-warmup-samples'
 
+    # Mixed precision checks.
+    if args.fp16_lm_cross_entropy:
+        assert args.fp16, 'lm cross entropy in fp16 only support in fp16 mode.'
+    if args.fp32_residual_connection:
+        assert args.fp16 or args.bf16, \
+            'residual connection in fp32 only supported when using fp16 or bf16.'
+    # Activation checkpointing.
+    if args.distribute_checkpointed_activations:
+        assert args.checkpoint_activations, \
+            'for distribute-checkpointed-activations to work you '\
+            'need to enable checkpoint-activations'
 
 
 
