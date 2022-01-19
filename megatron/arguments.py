@@ -274,8 +274,9 @@ def _validate_args(args):
     with open(args.deepspeed_config) as f:
         config_dict = json.load(f)
 
-    assert config_dict['curriculum_type'] % 8 == 0, '`min_difficulty`'\
-        ' in deepspeed json configuration file is not divisible by 8'
+    if 'curriculum_type' in config_dict:
+        assert config_dict['curriculum_type']['min_difficulty'] % 8 == 0, \
+            '`min_difficulty` in deepspeed json configuration file is not divisible by 8'
 
     # Batch size.
     assert args.micro_batch_size is not None
