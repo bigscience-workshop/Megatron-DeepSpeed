@@ -22,7 +22,11 @@ VARIANT="tr9c-1B3-swiglu"
 
 CHECKPOINT_PATH=/gpfsdsstore/projects/rech/six/commun/checkpoints/tr3m-1B3-emb-norm-pile/global_step296023
 MEGATRON_DEEPSPEED_REPO=/gpfsssd/worksf/projects/rech/six/commun/code/eval/Megatron-DeepSpeed
+
+# you want these 2 on JZ, and pre-download/cache any datasets/tokenizers/models
+# but comment these out if you're running on a node with Internet access
 export HF_DATASETS_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
 
 cd $MEGATRON_DEEPSPEED_REPO
 

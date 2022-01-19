@@ -31,6 +31,20 @@ Then install datasets for the tasks:
 python ./tasks/eval_harness/download.py --task_list
 arc_challenge,arc_easy,boolq,copa,hellaswag,lambada,logiqa,mathqa,mc_taco,mrpc,multirc,openbookqa,piqa,prost,pubmedqa,qnli,qqp,race,rte,sciq,sst,triviaqa,webqs,wic,winogrande,wnli,wsc
 ```
+and make sure that `export HF_DATASETS_OFFLINE=1`
+
+If there are things like custom tokenizers, pre-download those too, e.g.:
+
+```
+python -c "frransformers import AutoTokenizer; AutoTokenizer.from_pretrained('bigscience/oscar_13_languages_alpha_weight')"
+```
+and make sure that `export TRANSFORMERS_OFFLINE=1` is in the script.
+You know there is a custom tokenizer if the training script had something like:
+
+```
+--tokenizer-type PretrainedFromHF \
+ --tokenizer-name-or-path bigscience/oscar_13_languages_alpha_weight \
+```
 
 3. Prepare the slurm script
 
@@ -62,7 +76,9 @@ EVAL_MICRO_BATCH_SIZE=6  # 16GB GPU 1.3B model
 EVAL_MICRO_BATCH_SIZE=12 # 32GB GPU 1.3B model
 ```
 
-3. If not using a Deepspeed path, disable it by removing:
+If you get OOM lower it further.
+
+3. If not using the Deepspeed path, disable it by removing:
 
 ```
     --deepspeed \
