@@ -42,7 +42,7 @@ from megatron.checkpointing import save_checkpoint
 from megatron.model.module import Float16Module
 from megatron.optimizer import get_megatron_optimizer
 from megatron.initialize import initialize_megatron
-from megatron.initialize import write_args_to_tensorboard
+from megatron.initialize import write_args_to_tensorboard, log_restart_to_tensorboard
 from megatron.learning_rates import AnnealingLR
 from megatron.model.distributed import DistributedDataParallel as LocalDDP
 from megatron.utils import check_adlr_autoresume_termination, get_parameters_in_billions
@@ -781,6 +781,7 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
 
     # Write args to tensorboard
     write_args_to_tensorboard()
+    log_restart_to_tensorboard()
 
     # Turn on training mode which enables dropout.
     for model_module in model:
