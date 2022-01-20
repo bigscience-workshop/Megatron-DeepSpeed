@@ -34,6 +34,7 @@ _GLOBAL_TENSORBOARD_WRITER = None
 _GLOBAL_CODECARBON_TRACKER = None
 _GLOBAL_ADLR_AUTORESUME = None
 _GLOBAL_TIMERS = None
+_GLOBAL_DEBUG_FUNCTION_TRACKER = None
 
 def get_args():
     """Return arguments."""
@@ -44,7 +45,6 @@ def get_args():
 def get_num_microbatches():
     return _GLOBAL_NUM_MICROBATCHES_CALCULATOR.get()
 
-
 def get_current_global_batch_size():
     return _GLOBAL_NUM_MICROBATCHES_CALCULATOR.get_current_global_batch_size()
 
@@ -53,6 +53,9 @@ def update_num_microbatches(consumed_samples, consistency_check=True):
     _GLOBAL_NUM_MICROBATCHES_CALCULATOR.update(consumed_samples,
                                                consistency_check)
 
+def get_debug_function_tracker():
+    _ensure_var_is_initialized(_GLOBAL_DEBUG_FUNCTION_TRACKER, 'debug function tracker')
+    return _GLOBAL_DEBUG_FUNCTION_TRACKER
 
 def get_tokenizer():
     """Return tokenizer."""
@@ -89,6 +92,7 @@ def set_global_variables(extra_args_provider=None, args_defaults={},
                        defaults=args_defaults,
                        ignore_unknown_args=ignore_unknown_args)
     _build_num_microbatches_calculator(args)
+    _build_debug_function_tracker(args)
     if args.vocab_file or args.tokenizer_name_or_path:
         _ = _build_tokenizer(args)
     _set_tensorboard_writer(args)
@@ -117,6 +121,12 @@ def _build_num_microbatches_calculator(args):
     _GLOBAL_NUM_MICROBATCHES_CALCULATOR = build_num_microbatches_calculator(
         args)
 
+def _build_debug_function_tracker(args):
+    global _GLOBAL_DEBUG_FUNCTION_TRACKER
+    _ensure_var_is_not_initialized(_GLOBAL_DEBUG_FUNCTION_TRACKER,
+                                   'function debug tracker')
+
+    _GLOBAL_DEBUG_FUNCTION_TRACKER = set()
 
 def _build_tokenizer(args):
     """Initialize tokenizer."""
