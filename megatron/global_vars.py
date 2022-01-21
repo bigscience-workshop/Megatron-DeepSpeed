@@ -147,6 +147,7 @@ def _set_tensorboard_writer(args):
             _GLOBAL_TENSORBOARD_WRITER = SummaryWriter(
                 log_dir=args.tensorboard_dir,
                 max_queue=args.tensorboard_queue_size)
+            # this is supposed to make the data load in TB faster
             _GLOBAL_TENSORBOARD_WRITER.add_scalar = functools.partial(
                 _GLOBAL_TENSORBOARD_WRITER.add_scalar, new_style=True
             )
