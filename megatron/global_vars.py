@@ -15,6 +15,7 @@
 
 """Megatron global variables."""
 
+import functools
 import os
 import sys
 import time
@@ -146,6 +147,9 @@ def _set_tensorboard_writer(args):
             _GLOBAL_TENSORBOARD_WRITER = SummaryWriter(
                 log_dir=args.tensorboard_dir,
                 max_queue=args.tensorboard_queue_size)
+            _GLOBAL_TENSORBOARD_WRITER.add_scalar = functools.partial(
+                _GLOBAL_TENSORBOARD_WRITER.add_scalar, new_style=True
+            )
         except ModuleNotFoundError:
             print('WARNING: TensorBoard writing requested but is not '
                   'available (are you using PyTorch 1.1.0 or later?), '
