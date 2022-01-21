@@ -36,7 +36,7 @@ and make sure that `export HF_DATASETS_OFFLINE=1`
 If there are things like custom tokenizers, pre-download those too, e.g.:
 
 ```
-python -c "frransformers import AutoTokenizer; AutoTokenizer.from_pretrained('bigscience/oscar_13_languages_alpha_weight')"
+python -c "from transformers import AutoTokenizer; AutoTokenizer.from_pretrained('bigscience/oscar_13_languages_alpha_weight')"
 ```
 and make sure that `export TRANSFORMERS_OFFLINE=1` is in the script.
 You know there is a custom tokenizer if the training script had something like:
