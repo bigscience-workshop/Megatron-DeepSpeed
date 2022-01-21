@@ -43,7 +43,7 @@ def git_ds_info():
         return
 
     from deepspeed.env_report import main as ds_report
-    ds_report()
+    ds_report(hide_operator_status=True, hide_errors_and_warnings=True)
 
     def command_exists(cmd):
         result = subprocess.Popen(f'type {cmd}', stdout=subprocess.PIPE, shell=True)
