@@ -32,6 +32,8 @@ PADDED_VOCAB_SIZE = 'padded_vocab_size'
 class DeepSpeedCheckpoint(object):
     def __init__(self, dir, tp_degree=None, pp_degree=None):
         self.dir = dir
+        self._validate_folder(dir)
+
         self.file_list = get_files(dir)
         self.zero_files = self._get_files_with_prefix(self.file_list,
                                                       ZERO_FILE_PREFIX)
@@ -39,6 +41,7 @@ class DeepSpeedCheckpoint(object):
                                                        LAYER_FILE_PREFIX)
         self.mp_rank_files = self._get_files_with_prefix(
             self.file_list, MP_RANK_FILE_PREFIX)
+
         self.layer_keys = self._get_layer_keys()
         self.layer_count = len(self.layer_keys)
         self.original_tp_degree = len(
@@ -275,4 +278,15 @@ class DeepSpeedCheckpoint(object):
         checkpoint_info[PADDED_VOCAB_SIZE] = target_args.padded_vocab_size
         unpadded_vocab_tensor = torch.narrow(padded_vocab_tensor, 0, 0, target_args.padded_vocab_size)
         return unpadded_vocab_tensor.clone()
+
+
+    def _validate_folder(self, dir):
+        assert os.path.exists(dir), f'{dir} path does not exist'
+        assert os.path.isdir(dir), f'{dir} is not a folder'
+
+        file_list = get_files(dir)
+
+        for file_prefix in [MP_RANK_FILE_PREFIX, LAYER_FILE_PREFIX, f'{LAYER_FILE_PREFIX}01']:
+            ckpt_files = self._get_files_with_prefix(file_list, file_prefix)
+            assert len(ckpt_files) > 0, f'{dir} seems a bogus DeepSpeed checkpoint folder: Cannot find {file_prefix}* files in there.'
 
