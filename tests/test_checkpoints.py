@@ -251,5 +251,5 @@ class MegDSTestCheckpoints(TestCasePlus):
 
         output_dir1 = self.get_auto_remove_tmp_dir() # "./xxx1", after=False)
         output_dir2 = self.get_auto_remove_tmp_dir() # "./xxx2", after=False)
-        with self.assertRaises(AssertionError) as context:
-            self.reshape_checkpoint(input_dir=output_dir1, output_dir=output_dir2, target_tp_size=1, target_pp_size=1)
+        with self.assertRaises(RuntimeError) as context:
+            self.reshape_checkpoint(input_dir=output_dir1+"/xyz", output_dir=output_dir2, target_tp_size=1, target_pp_size=1)
