@@ -194,7 +194,7 @@ class MegDSTestCheckpoints(TestCasePlus):
 
 
     @require_torch_multi_gpu
-    def test_checkpoint_reshaping(self):
+    def test_checkpoint_reshaping_tp2_pp1_dp1(self):
         # this test requires at least 2 gpus - will use only 2 gpus for now - XXX: extend to more gpus
 
         output_dir1 = self.get_auto_remove_tmp_dir("./xxx1", after=False)
@@ -208,3 +208,49 @@ class MegDSTestCheckpoints(TestCasePlus):
 
         # 3. check we can resume training from a reshaped checkpoint with TP=1 / PP=1
         self.resume_from_checkpoint(output_dir2, tp_size=1, pp_size=1, dp_size=1)
+
+
+    @require_torch_multi_gpu
+    def test_checkpoint_reshaping_tp2_pp2_dp1(self):
+        # this test requires at least 4 gpus - will use only 2 gpus for now - XXX: extend to more gpus
+
+        output_dir1 = self.get_auto_remove_tmp_dir("./xxx1", after=False)
+        output_dir2 = self.get_auto_remove_tmp_dir("./xxx2", after=False)
+
+        # 1. train with TP=2 / PP=2
+        self.train_checkpoint(output_dir1, tp_size=2, pp_size=2, dp_size=1)
+
+        # 2. convert checkpoint to TP=1 / PP=1
+        self.reshape_checkpoint(input_dir=output_dir1, output_dir=output_dir2, target_tp_size=1, target_pp_size=1)
+
+        # 3. check we can resume training from a reshaped checkpoint with TP=1 / PP=1
+        self.resume_from_checkpoint(output_dir2, tp_size=1, pp_size=1, dp_size=1)
+
+
+    @require_torch_multi_gpu
+    def test_checkpoint_reshaping_tp1_pp2_dp1(self):
+        # this test requires at least 2 gpus - will use only 2 gpus for now - XXX: extend to more gpus
+
+        output_dir1 = self.get_auto_remove_tmp_dir("./xxx1", after=False)
+        output_dir2 = self.get_auto_remove_tmp_dir("./xxx2", after=False)
+
+        # 1. train with TP=1 / PP=2
+        self.train_checkpoint(output_dir1, tp_size=1, pp_size=2, dp_size=1)
+
+        # 2. convert checkpoint to TP=1 / PP=1
+        with self.assertRaises(AssertionError) as context:
+            self.reshape_checkpoint(input_dir=output_dir1, output_dir=output_dir2, target_tp_size=1, target_pp_size=1)
+
+        # 3. check we can resume training from a reshaped checkpoint with TP=1 / PP=1
+        self.resume_from_checkpoint(output_dir2, tp_size=1, pp_size=1, dp_size=1)
+
+
+    @require_torch_multi_gpu
+    def test_checkpoint_reshaping_empty_dir(self):
+        # this test requires at least 2 gpus - will use only 2 gpus for now - XXX: extend to more gpus
+
+        output_dir1 = self.get_auto_remove_tmp_dir("./xxx1", after=False)
+        output_dir2 = self.get_auto_remove_tmp_dir("./xxx2", after=False)
+        with self.assertRaises(AssertionError) as context:
+            self.reshape_checkpoint(input_dir=output_dir1, output_dir=output_dir2, target_tp_size=1, target_pp_size=1)
+

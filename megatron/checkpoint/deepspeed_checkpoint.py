@@ -243,10 +243,12 @@ class DeepSpeedCheckpoint(object):
 
         return sorted(file_list)
 
+
     def validate_files(self):
         for file in self.file_list:
             if not os.path.isfile(file):
                 print(f'Error: {file} is not existent')
+
 
     def _get_layer_keys(self):
         key_set = set()
