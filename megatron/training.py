@@ -666,7 +666,7 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
         seq_len = args.curriculum_seqlen if args.curriculum_learning else args.seq_length
 
         # throughput
-        samples_per_sec = batch_size / (elapsed_time_per_iteration * 1e3)
+        samples_per_sec = batch_size / elapsed_time_per_iteration
         samples_per_sec_per_replica = samples_per_sec / args.data_parallel_size
         tokens_per_sec = samples_per_sec * seq_len
         tokens_per_sec_per_replica = tokens_per_sec / args.data_parallel_size
