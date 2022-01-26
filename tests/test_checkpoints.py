@@ -238,8 +238,7 @@ class MegDSTestCheckpoints(TestCasePlus):
         self.train_checkpoint(output_dir1, tp_size=1, pp_size=2, dp_size=1)
 
         # 2. convert checkpoint to TP=1 / PP=1
-        with self.assertRaises(AssertionError) as context:
-            self.reshape_checkpoint(input_dir=output_dir1, output_dir=output_dir2, target_tp_size=1, target_pp_size=1)
+        self.reshape_checkpoint(input_dir=output_dir1, output_dir=output_dir2, target_tp_size=1, target_pp_size=1)
 
         # 3. check we can resume training from a reshaped checkpoint with TP=1 / PP=1
         self.resume_from_checkpoint(output_dir2, tp_size=1, pp_size=1, dp_size=1)
