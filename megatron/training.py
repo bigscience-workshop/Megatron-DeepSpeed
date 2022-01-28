@@ -666,7 +666,7 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
         seq_len = args.curriculum_seqlen if args.curriculum_learning else args.seq_length
 
         # throughput
-        samples_per_sec = batch_size / (elapsed_time_per_iteration * 1e3)
+        samples_per_sec = batch_size / elapsed_time_per_iteration
         samples_per_sec_per_replica = samples_per_sec / args.data_parallel_size
         tokens_per_sec = samples_per_sec * seq_len
         tokens_per_sec_per_replica = tokens_per_sec / args.data_parallel_size
@@ -708,8 +708,8 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
             args.consumed_train_samples)
         log_string += ' consumed tokens: {:12d} |'.format(
             args.consumed_train_tokens)
-        log_string += ' elapsed time per iteration (ms): {:.1f} |'.format(
-            elapsed_time_per_iteration * 1000.0)
+        log_string += ' elapsed time per iteration (s): {:.2f} |'.format(
+            elapsed_time_per_iteration)
         log_string += ' learning rate: {:.3E} |'.format(learning_rate)
         log_string += ' global batch size: {:5d} |'.format(batch_size)
         for key in total_loss_dict:
