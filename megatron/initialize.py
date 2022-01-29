@@ -339,6 +339,19 @@ def write_args_to_tensorboard():
                             global_step=args.iteration)
 
 
+def log_restart_to_tensorboard():
+    """
+    Log new start and world size - the key is to denote a restart, and use world_size as another
+    useful info which can help to track changes in resource allocation.
+    """
+    args = get_args()
+    writer = get_tensorboard_writer()
+    if writer:
+        # emulate a blip to avoid flatline
+        writer.add_scalar('iteration-time/world_size', args.world_size, args.iteration)
+        writer.add_scalar('iteration-time/world_size', 0, args.iteration+1)
+
+
 def _initialize_mem_buffs():
     """Initialize manually allocated static memory."""
     args = get_args()
