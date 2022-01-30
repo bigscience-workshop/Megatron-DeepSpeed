@@ -18,6 +18,7 @@
 from abc import ABC
 from abc import abstractmethod
 from transformers import AutoTokenizer
+import sentencepiece as spm
 
 from .bert_tokenization import FullTokenizer as FullBertTokenizer
 from .gpt2_tokenization import GPT2Tokenizer
@@ -337,3 +338,37 @@ class _AutoTokenizer(AbstractTokenizer):
     @property
     def eod(self):
         return self.tokenizer.eos_token_id
+
+
+class _SentencePieceTokenizer(AbstractTokenizer):
+    """Interface for SentencePiece tokenizers"""
+
+    def __init__(self, tokenizer_path):
+        name = tokenizer_path[:-6] if tokenizer_path[-6:] == '.model' else tokenizer_path
+        super().__init__(name)
+        self.tokenizer = spm.SentencePieceProcessor()
+        self.tokenizer.load(tokenizer_path)
+        self.encoder = {self.tokenizer.id_to_piece(id): id for id in range(self.tokenizer.vocab_size())}
+        self.decoder = {v: k for k, v in self.encoder.items()}
+
+    @property
+    def vocab_size(self):
+        return self.tokenizer.vocab_size()
+
+    @property
+    def vocab(self):
+        return self.tokenizer.encoder
+
+    @property
+    def inv_vocab(self):
+        return self.tokenizer.decoder
+
+    def tokenize(self, text):
+        return self.tokenizer.encode(text)
+
+    def detokenize(self, token_ids):
+        return self.tokenizer.decode(token_ids)
+
+    @property
+    def eod(self):
+        return self.tokenizer.eos_id()
