@@ -364,7 +364,7 @@ class _SentencePieceTokenizer(AbstractTokenizer):
         return self.tokenizer.decoder
 
     def tokenize(self, text):
-        return self.tokenizer.encode(text)
+        return self.tokenizer.encode_as_ids(text)
 
     def detokenize(self, token_ids):
         return self.tokenizer.decode(token_ids)
