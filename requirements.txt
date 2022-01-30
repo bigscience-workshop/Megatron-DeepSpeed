@@ -8,6 +8,7 @@ six
 tensorboard
 torch>=1.7
 transformers
+sentencepiece
 DeepSpeed @ git+https://github.com/microsoft/DeepSpeed.git
 # versions from HF transformers
 black==21.4b0
