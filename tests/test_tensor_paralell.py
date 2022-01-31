@@ -109,6 +109,10 @@ class MyTestCase(TestCasePlus):
             MASTER_ADDR="localhost", MASTER_PORT="9994", RANK=str(tp_index), LOCAL_RANK=str(tp_index), WORLD_SIZE=str(tp_size)
         )
         logging.getLogger().critical("Process: starting")
+        
+        #Hack
+        import megatron.initialize as init
+        init.git_ds_info = lambda: None
 
         with patch('sys.argv', flatten_arguments(command_args)):
             with mockenv_context(**dist_env_1_gpu):
@@ -187,7 +191,7 @@ class MyTestCase(TestCasePlus):
 
     def test_cross(self):
         
-        mp.set_start_method('spawn')
+        mp.set_start_method('spawn', force=True)
         cp_dir = self.get_auto_remove_tmp_dir()
         
         command_args = self.get_default_args(tp_size = 1)
