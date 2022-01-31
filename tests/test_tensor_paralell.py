@@ -105,8 +105,8 @@ class MyTestCase(TestCasePlus):
 
     def infer_model(args):
         tp_index, tp_size, command_args, token_ids, save, load = args
-        dist_env_1_gpu = dict(
-            MASTER_ADDR="localhost", MASTER_PORT="9994", RANK=str(tp_index), LOCAL_RANK=str(tp_index), WORLD_SIZE=str(tp_size)
+        dist_env = dict(
+            MASTER_ADDR="localhost", MASTER_PORT="9991", RANK=str(tp_index), LOCAL_RANK=str(tp_index), WORLD_SIZE=str(tp_size)
         )
         logging.getLogger().critical("Process: starting")
         
@@ -115,7 +115,7 @@ class MyTestCase(TestCasePlus):
         init.git_ds_info = lambda: None
 
         with patch('sys.argv', flatten_arguments(command_args)):
-            with mockenv_context(**dist_env_1_gpu):
+            with mockenv_context(**dist_env):
                 
                 def create_model_inputs(tokens):
                     args = get_args()
