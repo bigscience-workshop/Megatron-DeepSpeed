@@ -6,11 +6,10 @@ import deepspeed
 import torch
 
 from megatron import initialize_megatron, get_args, get_tokenizer, global_vars
-from megatron.testing_utils import TestCasePlus, mockenv_context
+from megatron.testing_utils import TestCasePlus, mockenv_context, flatten_arguments
 from megatron.training import setup_model_and_optimizer
 from pretrain_gpt import model_provider as gpt_model_provider, get_batch_pipe as get_gpt_batch_pipe
 from pretrain_prefix_lm import model_provider as prefix_lm_model_provider, get_batch_pipe as get_prefix_lm_batch_pipe
-
 
 def get_default_args():
     """return a dictionary with key as argument name and value as additional arguments"""
@@ -52,15 +51,7 @@ def get_default_args():
     }
 
 
-def flatten_arguments(args):
-    """
-    Converts dictionary argument to a list.
 
-    Note: we add "IGNORED" at the beginning as this value is ignored by the argparser
-
-    Example: {"arg1": "value1", "arg2": "value2"} -> ["IGNORED", "arg1", "value1", "arg2", "value2"]
-    """
-    return ["IGNORED"] + [item for key_value in args.items() for item in key_value if item != ""]
 
 
 def equal_vectors(tensor1, tensor2, dim=-1):
