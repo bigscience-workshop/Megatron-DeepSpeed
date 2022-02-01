@@ -874,3 +874,16 @@ def execute_subprocess_async(cmd, env=None, stdin=None, timeout=180, quiet=False
         raise RuntimeError(f"'{cmd_str}' produced no output.")
 
     return result
+
+
+# --- Misc utils --- #
+
+def flatten_arguments(args):
+    """
+    Converts dictionary argument to a list.
+
+    Note: we add "IGNORED" at the beginning as this value is ignored by the argparser
+
+    Example: {"arg1": "value1", "arg2": "value2"} -> ["IGNORED", "arg1", "value1", "arg2", "value2"]
+    """
+    return ["IGNORED"] + [item for key_value in args.items() for item in key_value if item != ""]

@@ -1,5 +1,3 @@
-from gc import get_referents
-
 import unittest
 from random import randint
 from unittest.mock import patch
@@ -7,10 +5,11 @@ from unittest.mock import patch
 import deepspeed
 import torch
 import logging
+import numpy as np
 
 import pytest
 from megatron import initialize_megatron, get_args, get_tokenizer, global_vars
-from megatron.testing_utils import TestCasePlus, mockenv_context
+from megatron.testing_utils import TestCasePlus, mockenv_context, flatten_arguments, require_deepspeed, require_torch_multi_gpu
 from megatron.training import setup_model_and_optimizer
 from megatron.mpu.mappings import gather_from_tensor_model_parallel_region
 from pretrain_gpt import model_provider as gpt_model_provider, get_batch_pipe as get_gpt_batch_pipe
@@ -19,26 +18,12 @@ import multiprocessing as mp
 from multiprocessing import Pool
 from megatron.checkpointing import save_checkpoint
 
-from megatron.utils import get_ltor_masks_and_position_ids, unwrap_model
+from megatron.utils import get_ltor_masks_and_position_ids
 
-def flatten_arguments(args):
-    """
-    Converts dictionary argument to a list.
-
-    Note: we add "IGNORED" at the beginning as this value is ignored by the argparser
-
-    Example: {"arg1": "value1", "arg2": "value2"} -> ["IGNORED", "arg1", "value1", "arg2", "value2"]
-    """
-    return ["IGNORED"] + [item for key_value in args.items() for item in key_value if item != ""]
-
-
-def equal_vectors(tensor1, tensor2, dim=-1):
-    """View tensor1 and tensor2 as a list of vectors, and compute equality"""
-    return torch.linalg.norm(tensor1 - tensor2, dim=dim) == 0
-
-
-class MyTestCase(TestCasePlus):
-    def get_default_args(self, tp_size):
+@require_deepspeed
+@require_torch_multi_gpu
+class MegDSTestTP(TestCasePlus):
+    def get_default_args(self):
         """return a dictionary with key as argument name and value as additional arguments"""
         return {
             # GPT_ARGS
@@ -67,8 +52,6 @@ class MyTestCase(TestCasePlus):
             "--attention-dropout": "0",
             "--hidden-dropout": "0",
             
-            # ALIBI:
-            "--position-embedding-type":"alibi",
 
             # OUTPUT_ARGS
             "--log-interval": "10",
@@ -76,9 +59,6 @@ class MyTestCase(TestCasePlus):
             "--eval-interval": "100",
             "--eval-iters": "10",
             "--checkpoint-activations": "",
-            
-            # parallel args
-            "--tensor-model-parallel-size":str(tp_size),
             
             #ds args
             "--deepspeed": "",
@@ -98,7 +78,6 @@ class MyTestCase(TestCasePlus):
         global_vars._GLOBAL_TENSORBOARD_WRITER = None
         global_vars._GLOBAL_ADLR_AUTORESUME = None
         global_vars._GLOBAL_TIMERS = None
-
 
     def infer_model(args):
         tp_index, tp_size, command_args, token_ids, save, load = args
@@ -175,7 +154,6 @@ class MyTestCase(TestCasePlus):
                 input_token_ids_changed[:, changed_index] = \
                     (input_token_ids_changed[:,changed_index] + 1) % args.padded_vocab_size
 
-                #output = model(*input_batch)
                 output = model.eval_batch(iter([token_ids]), compute_loss = False, reduce_output = None)[0]
                 
                 output = gather_from_tensor_model_parallel_region(output)[..., :tokenizer.vocab_size]
@@ -186,30 +164,32 @@ class MyTestCase(TestCasePlus):
                 
                 return (output[0].detach().cpu().numpy(), token_ids.detach().cpu().numpy())
 
-    def test_cross(self):
-        
+    def test_alibi_tp(self):
         mp.set_start_method('spawn', force=True)
         cp_dir = self.get_auto_remove_tmp_dir()
         
-        command_args = self.get_default_args(tp_size = 1)
+        command_args = self.get_default_args()
+        command_args["--position-embedding-type"] = "alibi"
+        command_args["--tensor-model-parallel-size"] = "1"
+        
         pool = Pool(1)
-        result = pool.map(MyTestCase.infer_model, [((0, 1, command_args, None, cp_dir, None))])
+        result = pool.map(MegDSTestTP.infer_model, [((0, 1, command_args, None, cp_dir, None))])
         pool.close()
         pool.join()
         
         output, tokens = result[0]
-        logging.getLogger().critical("First done!")
+        logging.getLogger().info("First done!")
 
-        command_args = self.get_default_args(tp_size = 2)
+        command_args["--tensor-model-parallel-size"] = "2"
+
         pool = Pool(2)
-        result = pool.map(MyTestCase.infer_model, [((0, 2, command_args, tokens, None, cp_dir)), ((1, 2, command_args, tokens, None, cp_dir))])
+        result = pool.map(MegDSTestTP.infer_model, [((0, 2, command_args, tokens, None, cp_dir)), ((1, 2, command_args, tokens, None, cp_dir))])
         pool.close()
         pool.join()
         
         output2, tokens = result[0]
 
         logging.getLogger().critical(output-output2)
-        import numpy as np
         self.assertTrue(np.allclose(output,output2, atol=5e-3, rtol=0), "Different results when running with TP=1 and TP=2")
 
 if __name__ == '__main__':
