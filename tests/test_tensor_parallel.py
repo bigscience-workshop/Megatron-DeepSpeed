@@ -1,7 +1,4 @@
 from gc import get_referents
-import sys, os
-dir = os.path.abspath(os.path.join(os.path.dirname(__file__),os.path.pardir))
-sys.path.append(dir)
 
 import unittest
 from random import randint
@@ -80,7 +77,7 @@ class MyTestCase(TestCasePlus):
             "--eval-iters": "10",
             "--checkpoint-activations": "",
             
-            # paralell args
+            # parallel args
             "--tensor-model-parallel-size":str(tp_size),
             
             #ds args
