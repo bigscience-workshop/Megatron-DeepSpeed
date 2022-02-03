@@ -46,7 +46,7 @@ from megatron.initialize import write_args_to_tensorboard, log_restart_to_tensor
 from megatron.learning_rates import AnnealingLR
 from megatron.model.distributed import DistributedDataParallel as LocalDDP
 from megatron.utils import check_adlr_autoresume_termination, get_parameters_in_billions
-from megatron.utils import unwrap_model
+from megatron.utils import unwrap_model, found_kill_switch
 from megatron.data.data_samplers import build_pretraining_data_loader
 from megatron.utils import calc_params_l2_norm
 from megatron.schedules import forward_backward_no_pipelining
@@ -99,6 +99,11 @@ def pretrain(train_valid_test_dataset_provider,
     initialize_megatron(extra_args_provider=extra_args_provider,
                         args_defaults=args_defaults)
 
+    args = get_args()
+
+    if found_kill_switch():
+        sys.exit(f"Detected kill switch at {args.kill_switch_path}. Exiting")
+
     codecarbon_tracker_start()
 
     # Adjust the startup time so it reflects the largest value.
@@ -113,7 +118,6 @@ def pretrain(train_valid_test_dataset_provider,
         time.time() - _TRAIN_START_TIME))
     print_datetime('after megatron is initialized')
 
-    args = get_args()
     timers = get_timers()
 
     if args.deepspeed:
@@ -821,6 +825,10 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
                     pass
                 iteration_for_skipping += 1
             continue
+
+        if found_kill_switch():
+            save_checkpoint_and_time(iteration, model, optimizer, lr_scheduler)
+            sys.exit(f"Detected kill switch at {args.kill_switch_path}. Exiting")
 
         update_num_microbatches(args.consumed_train_samples)
         if args.deepspeed:
