@@ -24,6 +24,7 @@ from parameterized import parameterized
 
 from megatron.testing_utils import (
     CaptureStdout,
+    CaptureStd,
     TestCasePlus,
     execute_subprocess_async,
     get_gpu_count,
@@ -246,6 +247,40 @@ class MegDSTestTraining(TestCasePlus):
         ds_args.extend(new_ds_args)
 
         return args, ds_args, num_gpus
+
+    def test_kill_switch(self):
+
+        variation = "base"
+
+        src_dir = self.src_dir
+        output_dir = self.get_auto_remove_tmp_dir() # "./xxx", after=False)
+        kill_switch_path = os.path.join(output_dir, "kill-switch-xyz")
+        args, ds_args, num_gpus = self.get_variation_config(variation, output_dir)
+        args += f"--kill-switch-path {kill_switch_path}".split()
+
+        script = [f"{src_dir}/pretrain_gpt.py"]
+        launcher = get_launcher(num_gpus)
+
+        cmd = launcher + script + args + ds_args
+        # keep for quick debug
+        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
+
+        # 1. kill switch armed but not triggered
+        with CaptureStdout() as cs:
+            execute_subprocess_async(cmd, env=self.get_env())
+
+        # test deepspeed is running
+        self.assertIn("DeepSpeed info", cs.out)
+
+        # 2. trigger kill switch
+        fh = open(kill_switch_path, "w")
+        with CaptureStd() as cs:
+            with self.assertRaises(RuntimeError):
+                execute_subprocess_async(cmd, env=self.get_env())
+
+        self.assertIn(f"Detected kill switch at {kill_switch_path}", cs.err)
+        self.assertIn(f"Killing subprocess", cs.out)
+
 
 
     @parameterized.expand(["base", "cl", "bnb", "glu", "alibi"])
