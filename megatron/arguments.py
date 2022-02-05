@@ -397,6 +397,11 @@ def _add_network_size_args(parser):
                        help='GLU activations to use.'
                        )
 
+    group.add_argument('--kill-switch-path', type=str,
+                       help='path to look for a kill switch, which if found will automatically exit the program'
+                       )
+
+
     group.add_argument('--log-level', type=str, choices=list(log_levels.keys()),
                        help="Logger log level to use on the main process. Possible choices are the log levels as strings: 'debug', "
                        "'info', 'warning', 'error' and 'critical', plus a 'passive' level which doesn't set anything and lets the "
