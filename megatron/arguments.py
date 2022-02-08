@@ -563,6 +563,8 @@ def _add_training_args(parser):
                        'will be performed' )
     group.add_argument('--skip-train-iteration-range', type=str, nargs='+', default=None,
                        help='Iteration ranges to skip. The values are one or more dash-separated ranges. e.g., 101-200 251-300.')
+    group.add_argument('--abort-on-unmet-fused-kernel-constraints', action='store_true',
+                       help="If set to True, the program will abort if the constraints for loading a fused kernel aren't met")
 
     return parser
 
