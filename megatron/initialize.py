@@ -201,9 +201,11 @@ def _compile_dependencies():
             custom_kernel_constraint and
             args.masked_softmax_fusion):
         if args.rank == 0:
-            print('WARNING: constraints for invoking optimized'
-                  ' fused softmax kernel are not met. We default'
-                  ' back to unfused kernel invocations.', flush=True)
+            error = "constraints for invoking optimized fused softmax kernel are not met"
+            if args.abort_on_unmet_fused_kernel_constraints:
+                sys.exit(f"\n\nERROR: {error} and --abort-on-unmet-fused-kernel-constraints was passed. Aborting.\n\n")
+            else:
+                print(f'WARNING: {error}. We default back to unfused kernel invocations.', flush=True)
 
     # Always build on rank zero first.
     if torch.distributed.get_rank() == 0:
