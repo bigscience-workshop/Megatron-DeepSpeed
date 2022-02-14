@@ -605,15 +605,15 @@ class ParallelTransformerLayer(MegatronModule):
                 return get_slopes_power_of_2(closest_power_of_2) + get_slopes(2 * closest_power_of_2)[0::2][
                                                                    :n - closest_power_of_2]
 
-        slopes = torch.Tensor(get_slopes(num_attention_heads))
+        slopes = torch.tensor(get_slopes(num_attention_heads))
         alibi = slopes.unsqueeze(1).unsqueeze(1) * torch.arange(max_seq_len).unsqueeze(0).unsqueeze(0).expand(
             num_attention_heads, -1, -1)
-        
+
         #Select the part of the tensor that corresponds to our tensor parallel index.
         tp_world_size = mpu.get_tensor_model_parallel_world_size()
         tp_index = mpu.get_tensor_model_parallel_rank()
         alibi = alibi.reshape((tp_world_size, -1, *alibi.shape[1:]))[tp_index]
-        
+
         alibi = alibi.repeat(batch_size, 1, 1)
         return alibi
 
@@ -629,7 +629,7 @@ class ParallelTransformerLayerPipe(ParallelTransformerLayer):
        to the next stage in the pipeline.
 
        This version is useful if masks are dynamic.
-    
+
     2) forward(input, **kwargs) -> output
        When the mask is static over all samples, it is advantageous to
        cache the mask and avoid communicating it.
