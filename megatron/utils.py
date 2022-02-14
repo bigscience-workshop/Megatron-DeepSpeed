@@ -19,6 +19,7 @@ import os
 import sys
 import warnings
 from random import randint
+from typing import Callable
 
 import torch
 from torch import nn
@@ -392,3 +393,65 @@ def found_kill_switch():
         return True
     else:
         return False
+
+
+class AllocateOnGPU(object):
+    """
+    allocate a model directly on GPU.
+
+    Example:
+
+
+    with AllocateOnGPU(dtype=torch.float32, enabled=enabled):
+        model = MyModel(hidden_dim=4*1024, nlayers=32)
+
+    """
+
+    _orig_torch_empty = torch.empty
+    _orig_torch_zeros = torch.zeros
+    _orig_torch_ones = torch.ones
+    _orig_torch_full = torch.full
+
+    def __init__(self, dtype, enabled=True):
+        self.dtype = dtype
+        self.enabled = enabled
+
+    @staticmethod
+    def fp_tensor_constructor(fn: Callable, target_fp_dtype: torch.dtype) -> Callable:
+        def wrapped_fn(*args, **kwargs) -> torch.Tensor:
+            if kwargs.get("device", None) is None:
+                kwargs['device'] = torch.device('cuda:{}'.format(os.environ["LOCAL_RANK"]))
+            tensor: torch.Tensor = fn(*args, **kwargs)
+            if tensor.is_floating_point():
+                tensor = tensor.to(target_fp_dtype)
+            return tensor
+        return wrapped_fn
+
+    @staticmethod
+    def get_new_tensor_fn_for_dtype(fn: Callable, dtype: torch.dtype) -> Callable:
+            def new_tensor(cls, *args) -> torch.Tensor:
+                device = torch.device('cuda:{}'.format(os.environ["LOCAL_RANK"]))
+                tensor = fn(0, device=device).new_empty(*args)
+                if tensor.is_floating_point():
+                    tensor = tensor.to(dtype)
+                return tensor
+            return new_tensor
+
+    def __enter__(self):
+        if not self.enabled:
+            return
+        torch.Tensor.__old_new__ = torch.Tensor.__new__
+        torch.Tensor.__new__ = self.get_new_tensor_fn_for_dtype(self._orig_torch_empty, self.dtype)
+        torch.empty = self.fp_tensor_constructor(self._orig_torch_empty, self.dtype)
+        torch.zeros = self.fp_tensor_constructor(self._orig_torch_zeros, self.dtype)
+        torch.ones = self.fp_tensor_constructor(self._orig_torch_ones, self.dtype)
+        torch.full = self.fp_tensor_constructor(self._orig_torch_full, self.dtype)
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        if not self.enabled:
+            return
+        torch.Tensor.__new__ = torch.Tensor.__old_new__
+        torch.empty = self._orig_torch_empty
+        torch.zeros = self._orig_torch_zeros
+        torch.ones = self._orig_torch_ones
+        torch.full = self._orig_torch_full

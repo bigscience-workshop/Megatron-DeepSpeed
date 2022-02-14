@@ -26,7 +26,7 @@ from megatron.data.gpt_dataset import build_train_valid_test_datasets, build_dat
 from megatron.model import GPTModel, GPTModelPipe
 from megatron.training import pretrain
 from megatron.utils import get_ltor_masks_and_position_ids, get_prefix_indices
-from megatron.utils import average_losses_across_data_parallel_group
+from megatron.utils import average_losses_across_data_parallel_group, AllocateOnGPU
 
 import deepspeed
 from deepspeed.runtime.utils import see_memory_usage
@@ -41,11 +41,15 @@ def model_provider(pre_process=True, post_process=True):
 
     args = get_args()
 
-    with deepspeed.zero.Init(data_parallel_group=mpu.get_data_parallel_group(),
-                             remote_device=None if args.remote_device == 'none' else args.remote_device,
-                             config_dict_or_path=args.deepspeed_config,
-                             enabled=args.zero_stage == 3,
-                             mpu=mpu):
+    # this was a no-op anyways since we are using ZeRO 1
+    # with deepspeed.zero.Init(data_parallel_group=mpu.get_data_parallel_group(),
+    #                          remote_device=None if args.remote_device == 'none' else args.remote_device,
+    #                          config_dict_or_path=args.deepspeed_config,
+    #                          enabled=args.zero_stage == 3,
+    #                          mpu=mpu):
+
+    # XXX: make `enabled` configurable or always load on GPU?
+    with AllocateOnGPU(dtype=args.params_dtype, enabled=True):
         if args.deepspeed:
             # Precompute the attention mask and store it in args. This avoids having to
             # pipeline it as an activation during training. The mask is constant, and thus
