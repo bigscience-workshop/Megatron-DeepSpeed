@@ -483,6 +483,8 @@ def tp_staggered_action():
         # staggered load_checkpoint over TP ranks
 
         tp_size = args.tensor_model_parallel_size
+
+        # XXXX: move this check to arguments.py
         assert tp_size % stagger_size == 0, f"tp_size ({tp_size}) needs to be divisible by stagger_checkpoint_save_load_group_size ({stagger_size})."
 
         # split the TP ranks into groups, each group size of stagger_size

@@ -174,6 +174,7 @@ class MegDSTestTraining(TestCasePlus):
             # XXX: don't enable yet as it deadlocks on save_checkpoint
             #  --stagger_checkpoint_save_load_group_size 1
             new_args = f"""
+                --rampup-batch-size 2 2 {n_samples}
                 --train-samples {n_samples}
 
                 --lr-decay-samples 6
