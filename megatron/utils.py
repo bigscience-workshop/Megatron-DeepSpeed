@@ -462,12 +462,13 @@ from contextlib import contextmanager
 def tp_staggered_action():
     """
 
-    This context manager staggers the operation in manages across multiple ranks
+    This context manager staggers the operation it manages across multiple ranks
 
     So for example, if there is not enough CPU RAM to load all checkpoints on the node at once, we
-    can stagger those one by one or in groups to make things more efficient.
+    can stagger those one by one or in groups to make the processes consume less CPU memory
+    concurrently and thus not trigger cgroups's kill action.
 
-    The size of the group that is defined by args.stagger_checkpoint_save_load
+    The size of the group is defined by args.stagger_checkpoint_save_load
 
     """
 
@@ -485,7 +486,7 @@ def tp_staggered_action():
         assert tp_size % stagger_size == 0, f"tp_size ({tp_size}) needs to be divisible by stagger_checkpoint_save_load_group_size ({stagger_size})."
 
         # split the TP ranks into groups, each group size of stagger_size
-        # the load each group together and have the other groups wait
+        # then load each group together and have the other groups wait
         tp_rank = mpu.get_tensor_model_parallel_rank()
         ranks = list(range(tp_size))
         groups = [ranks[i:i + stagger_size] for i in range(0, tp_size, stagger_size)]
