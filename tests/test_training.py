@@ -294,7 +294,7 @@ class MegDSTestTraining(TestCasePlus):
 
 
 
-    @parameterized.expand(["base", "stagger_checkpoints" "cl", "bnb", "glu", "alibi"])
+    @parameterized.expand(["base", "stagger_checkpoints", "cl", "bnb", "glu", "alibi"])
     def test_training_all(self, variation):
 
         # optional runs
