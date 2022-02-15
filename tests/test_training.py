@@ -169,11 +169,14 @@ class MegDSTestTraining(TestCasePlus):
             """.split()
 
 
-        if variation == "stagger_checkpoints":
+        elif variation == "stagger_checkpoints":
 
             # XXX: don't enable yet as it deadlocks on save_checkpoint
             #  --stagger_checkpoint_save_load_group_size 1
             new_args = f"""
+                --train-samples {n_samples}
+
+                --lr-decay-samples 6
             """.split()
 
             new_ds_args = f"""
