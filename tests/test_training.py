@@ -169,6 +169,17 @@ class MegDSTestTraining(TestCasePlus):
             """.split()
 
 
+        if variation == "stagger_checkpoints":
+
+            # XXX: don't enable yet as it deadlocks on save_checkpoint
+            #  --stagger_checkpoint_save_load_group_size 1
+            new_args = f"""
+            """.split()
+
+            new_ds_args = f"""
+                --deepspeed_config {self.test_file_dir_str}/ds_config.json
+            """.split()
+
         elif variation == "bnb":
             # BitsAndBytes - 8-bit optimizer
 
@@ -283,7 +294,7 @@ class MegDSTestTraining(TestCasePlus):
 
 
 
-    @parameterized.expand(["base", "cl", "bnb", "glu", "alibi"])
+    @parameterized.expand(["base", "stagger_checkpoints" "cl", "bnb", "glu", "alibi"])
     def test_training_all(self, variation):
 
         # optional runs

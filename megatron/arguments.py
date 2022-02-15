@@ -565,6 +565,9 @@ def _add_training_args(parser):
                        help='Iteration ranges to skip. The values are one or more dash-separated ranges. e.g., 101-200 251-300.')
     group.add_argument('--abort-on-unmet-fused-kernel-constraints', action='store_true',
                        help="If set to True, the program will abort if the constraints for loading a fused kernel aren't met")
+    group.add_argument('--stagger_checkpoint_save_load_group_size', type=int, default=None,
+                       help="How many processes can load/save checkpoints at once, None means not to stagger and load all at once")
+
 
     return parser
 

@@ -455,3 +455,47 @@ class AllocateOnGPU(object):
         torch.zeros = self._orig_torch_zeros
         torch.ones = self._orig_torch_ones
         torch.full = self._orig_torch_full
+
+from contextlib import contextmanager
+
+@contextmanager
+def tp_staggered_action():
+    """
+
+    This context manager staggers the operation in manages across multiple ranks
+
+    So for example, if there is not enough CPU RAM to load all checkpoints on the node at once, we
+    can stagger those one by one or in groups to make things more efficient.
+
+    The size of the group that is defined by args.stagger_checkpoint_save_load
+
+    """
+
+    args = get_args()
+
+    stagger_size = args.stagger_checkpoint_save_load_group_size
+
+    if stagger_size is None:
+        yield
+
+    else:
+        # staggered load_checkpoint over TP ranks
+
+        tp_size = args.tensor_model_parallel_size
+        assert tp_size % stagger_size == 0, f"tp_size ({tp_size}) needs to be divisible by stagger_checkpoint_save_load_group_size ({stagger_size})."
+
+        # split the TP ranks into groups, each group size of stagger_size
+        # the load each group together and have the other groups wait
+        tp_rank = mpu.get_tensor_model_parallel_rank()
+        ranks = list(range(tp_size))
+        groups = [ranks[i:i + stagger_size] for i in range(0, tp_size, stagger_size)]
+
+        for group in groups:
+            if tp_rank in group:
+                print(f"XRank={tp_rank} is processing")
+                yield
+            else:
+                print(f"XRank={tp_rank} is waiting")
+            torch.distributed.barrier()
+            # deadlocking in save_checkpoint
+            #torch.distributed.barrier(group=mpu.get_tensor_model_parallel_group())

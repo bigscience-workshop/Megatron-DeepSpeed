@@ -55,6 +55,7 @@ from megatron.schedules import forward_backward_pipelining_with_interleaving
 from megatron.utils import report_memory, flops_calculator
 from megatron.global_vars import codecarbon_tracker_start, codecarbon_tracker_stop
 from megatron.data.dataset_utils import analyze_data_prefix
+from megatron.utils import tp_staggered_action
 
 import deepspeed
 
@@ -403,7 +404,8 @@ def setup_model_and_optimizer(model_provider_func):
         # max time.
         torch.distributed.barrier()
         timers('load-checkpoint').start()
-        args.iteration = load_checkpoint(model, optimizer, lr_scheduler)
+        with tp_staggered_action():
+            args.iteration = load_checkpoint(model, optimizer, lr_scheduler)
         torch.distributed.barrier()
         timers('load-checkpoint').stop()
         timers.log(['load-checkpoint'])
@@ -759,7 +761,8 @@ def save_checkpoint_and_time(iteration, model, optimizer, lr_scheduler):
     # all ranks report the max time.
     torch.distributed.barrier()
     timers('save-checkpoint').start()
-    save_checkpoint(iteration, model, optimizer, lr_scheduler)
+    with tp_staggered_action():
+        save_checkpoint(iteration, model, optimizer, lr_scheduler)
     torch.distributed.barrier()
     timers('save-checkpoint').stop()
     timers.log(['save-checkpoint'])
