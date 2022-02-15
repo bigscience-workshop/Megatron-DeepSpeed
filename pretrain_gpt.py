@@ -41,47 +41,48 @@ def model_provider(pre_process=True, post_process=True):
 
     args = get_args()
 
-    # this was a no-op anyways since we are using ZeRO 1
-    # with deepspeed.zero.Init(data_parallel_group=mpu.get_data_parallel_group(),
-    #                          remote_device=None if args.remote_device == 'none' else args.remote_device,
-    #                          config_dict_or_path=args.deepspeed_config,
-    #                          enabled=args.zero_stage == 3,
-    #                          mpu=mpu):
+    # while this is a no-op it still does something that is needed by eval tests which hang without it on tp>1
+    with deepspeed.zero.Init(data_parallel_group=mpu.get_data_parallel_group(),
+                             remote_device=None if args.remote_device == 'none' else args.remote_device,
+                             config_dict_or_path=args.deepspeed_config,
+                             enabled=args.zero_stage == 3,
+                             mpu=mpu):
 
-    # XXX: make `enabled` configurable or always load on GPU?
-    with AllocateOnGPU(dtype=args.params_dtype, enabled=True):
-        if args.deepspeed:
-            # Precompute the attention mask and store it in args. This avoids having to
-            # pipeline it as an activation during training. The mask is constant, and thus
-            # we can reuse it.
-            attention_mask = torch.tril(torch.ones(
-                (1, args.seq_length, args.seq_length), device=torch.cuda.current_device())).view(
-                    1, 1, args.seq_length, args.seq_length)
+        # XXX: make `enabled` configurable or always load on GPU?
+        with AllocateOnGPU(dtype=args.params_dtype, enabled=True):
+            if args.deepspeed:
+                # Precompute the attention mask and store it in args. This avoids having to
+                # pipeline it as an activation during training. The mask is constant, and thus
+                # we can reuse it.
+                attention_mask = torch.tril(torch.ones(
+                    (1, args.seq_length, args.seq_length), device=torch.cuda.current_device())).view(
+                        1, 1, args.seq_length, args.seq_length)
 
-            # Convert attention mask to binary:
-            attention_mask = (attention_mask < 0.5)
-            if args.fp16:
-                attention_mask = attention_mask.half()
-            elif args.bf16:
-                attention_mask = attention_mask.bfloat16()
+                # Convert attention mask to binary:
+                attention_mask = (attention_mask < 0.5)
+                if args.fp16:
+                    attention_mask = attention_mask.half()
+                elif args.bf16:
+                    attention_mask = attention_mask.bfloat16()
 
-            # must be bool or the training crashes expecting bool, but getting Half
-            args.attn_mask = attention_mask.to(torch.bool)
+                # must be bool or the training crashes expecting bool, but getting Half
+                args.attn_mask = attention_mask.to(torch.bool)
 
-            model = GPTModelPipe(
-                num_tokentypes=0,
-                parallel_output=True
-            )
-            # This is a hack to give us a reference to get_batch_pipe from within training.py
-            # We need to call model.set_batch_fn after deepspeed.initialize
-            model._megatron_batch_fn = get_batch_pipe
-        else:
-            model = GPTModel(
-                num_tokentypes=0,
-                parallel_output=True,
-                pre_process=pre_process,
-                post_process=post_process
-            )
+                model = GPTModelPipe(
+                    num_tokentypes=0,
+                    parallel_output=True
+                )
+                # This is a hack to give us a reference to get_batch_pipe from within training.py
+                # We need to call model.set_batch_fn after deepspeed.initialize
+                model._megatron_batch_fn = get_batch_pipe
+            else:
+                model = GPTModel(
+                    num_tokentypes=0,
+                    parallel_output=True,
+                    pre_process=pre_process,
+                    post_process=post_process
+                )
+
     see_memory_usage(f"After Building Model", force=True)
     return model
 
