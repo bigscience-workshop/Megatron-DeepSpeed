@@ -16,17 +16,17 @@ def get_default_args():
     return {
         # GPT_ARGS
         "--num-layers": "2",
-        "--hidden-size": "128",
-        "--num-attention-heads": "4",
-        "--seq-length": "256",
+        "--hidden-size": "64",
+        "--num-attention-heads": "2",
+        "--seq-length": "128",
         "--max-position-embeddings": "256",
-        "--micro-batch-size": "4",
+        "--micro-batch-size": "2",
         "--global-batch-size": "8",
         "--lr-decay-iters": "320000",
         "--lr-decay-style": "cosine",
         "--lr": "0.00015",
         "--min-lr": "1.0e-5",
-        "--train-iters": "5000",
+        "--train-iters": "20",
         "--tokenizer-type": "PretrainedFromHF",
         "--tokenizer-name-or-path": "gpt2",
         "--data-impl": "mmap",
@@ -42,8 +42,8 @@ def get_default_args():
 
         # OUTPUT_ARGS
         "--log-interval": "10",
-        "--save-interval": "500",
-        "--eval-interval": "100",
+        "--save-interval": "10",
+        "--eval-interval": "10",
         "--eval-iters": "10",
         "--checkpoint-activations": "",
 
@@ -184,7 +184,7 @@ class MyTestCase(TestCasePlus):
                         equal_vectors(output[0, changed_target_index:], output_changed_target[0, changed_target_index:])
                     )
                 )
-                # Unchanged changed rows should not change either
+                # Unchanged rows should not change either
                 self.assertTrue(
                     torch.all(
                         equal_vectors(output[1, :], output_changed_target[1, :])

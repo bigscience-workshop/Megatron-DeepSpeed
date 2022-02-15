@@ -28,17 +28,17 @@ class MegDSTestTP(TestCasePlus):
         return {
             # GPT_ARGS
             "--num-layers": "2",
-            "--hidden-size": "128",
-            "--num-attention-heads": "4",
-            "--seq-length": "256",
+            "--hidden-size": "64",
+            "--num-attention-heads": "2",
+            "--seq-length": "128",
             "--max-position-embeddings": "256",
-            "--micro-batch-size": "4",
+            "--micro-batch-size": "2",
             "--global-batch-size": "8",
             "--lr-decay-iters": "320000",
             "--lr-decay-style": "cosine",
             "--lr": "0.00015",
             "--min-lr": "1.0e-5",
-            "--train-iters": "5000",
+            "--train-iters": "10",
             "--tokenizer-type": "PretrainedFromHF",
             "--tokenizer-name-or-path": "gpt2",
             "--data-impl": "mmap",
@@ -51,15 +51,14 @@ class MegDSTestTP(TestCasePlus):
 
             "--attention-dropout": "0",
             "--hidden-dropout": "0",
-            
 
             # OUTPUT_ARGS
             "--log-interval": "10",
-            "--save-interval": "500",
-            "--eval-interval": "100",
+            "--save-interval": "10",
+            "--eval-interval": "10",
             "--eval-iters": "10",
             "--checkpoint-activations": "",
-            
+
             #ds args
             "--deepspeed": "",
             "--deepspeed_config":f"{self.test_file_dir_str}/ds_config.json",
@@ -67,7 +66,7 @@ class MegDSTestTP(TestCasePlus):
             "--deepspeed-activation-checkpointing": ""
             # DATA_ARGS
         }
-        
+
     def setUp(self) -> None:
         super().setUp()
 
@@ -85,14 +84,14 @@ class MegDSTestTP(TestCasePlus):
             MASTER_ADDR="localhost", MASTER_PORT="9991", RANK=str(tp_index), LOCAL_RANK=str(tp_index), WORLD_SIZE=str(tp_size)
         )
         logging.getLogger().critical("Process: starting")
-        
+
         #Hack
         import megatron.initialize as init
         init.git_ds_info = lambda: None
 
         with patch('sys.argv', flatten_arguments(command_args)):
             with mockenv_context(**dist_env):
-                
+
                 def create_model_inputs(tokens):
                     args = get_args()
 
@@ -131,7 +130,7 @@ class MegDSTestTP(TestCasePlus):
                     model._config.zero_enabled = False
                     _, _ = model.load_checkpoint(load, load_optimizer_states=False, load_lr_scheduler_states=False, load_module_only=True)
                     model._config.zero_enabled = zero_enabled
-                
+
                 if token_ids is None:
                     token_ids = torch.randint(args.padded_vocab_size, (args.micro_batch_size, args.seq_length))
 
@@ -140,8 +139,8 @@ class MegDSTestTP(TestCasePlus):
                     token_ids[token_ids == tokenizer.eod] %= args.padded_vocab_size
                 else:
                     token_ids = torch.tensor(token_ids)
-                
-                
+
+
                 model.micro_batches = 1
                 model.set_batch_fn(create_model_inputs)
                 # process batch
@@ -155,42 +154,44 @@ class MegDSTestTP(TestCasePlus):
                     (input_token_ids_changed[:,changed_index] + 1) % args.padded_vocab_size
 
                 output = model.eval_batch(iter([token_ids]), compute_loss = False, reduce_output = None)[0]
-                
+
                 output = gather_from_tensor_model_parallel_region(output)[..., :tokenizer.vocab_size]
 
                 if save != None:
                     args.save = save
                     save_checkpoint(0, [model], None, None)
-                
+
                 return (output[0].detach().cpu().numpy(), token_ids.detach().cpu().numpy())
 
     def test_alibi_tp(self):
         mp.set_start_method('spawn', force=True)
         cp_dir = self.get_auto_remove_tmp_dir()
-        
+
         command_args = self.get_default_args()
         command_args["--position-embedding-type"] = "alibi"
         command_args["--tensor-model-parallel-size"] = "1"
-        
+
         pool = Pool(1)
         result = pool.map(MegDSTestTP.infer_model, [((0, 1, command_args, None, cp_dir, None))])
         pool.close()
         pool.join()
-        
+
         output, tokens = result[0]
         logging.getLogger().info("First done!")
 
         command_args["--tensor-model-parallel-size"] = "2"
 
         pool = Pool(2)
-        result = pool.map(MegDSTestTP.infer_model, [((0, 2, command_args, tokens, None, cp_dir)), ((1, 2, command_args, tokens, None, cp_dir))])
+        result = pool.map(MegDSTestTP.infer_model, [((0, 2, command_args, tokens, None, cp_dir)),
+                                                    ((1, 2, command_args, tokens, None, cp_dir))])
         pool.close()
         pool.join()
-        
+
         output2, tokens = result[0]
 
-        logging.getLogger().critical(output-output2)
-        self.assertTrue(np.allclose(output,output2, atol=5e-3, rtol=0), "Different results when running with TP=1 and TP=2")
+        print(output-output2)
+        self.assertTrue(np.allclose(output, output2, atol=5e-3, rtol=0),
+                        "Different results when running with TP=1 and TP=2")
 
 if __name__ == '__main__':
     unittest.main()
