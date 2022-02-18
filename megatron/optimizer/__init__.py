@@ -52,8 +52,8 @@ def _get_params_for_weight_decay_optimization(modules):
     first_half = weight_decay_params['params'][:param_count // 2]
     second_half = weight_decay_params['params'][param_count // 2:]
 
-    first_half = {​"params": first_half}
-    second_half = {​"params": second_half}
+    first_half = {​'params': first_half}
+    second_half = {​'params': second_half}
 
     return first_half, second_half, no_weight_decay_params
 
