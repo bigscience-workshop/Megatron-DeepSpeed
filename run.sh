@@ -3,7 +3,8 @@
 
 DIR=`pwd`
 DATETIME=`date +'date_%y-%m-%d_time_%H-%M-%S'`
-mkdir -p $DIR/logs
+#mkdir -p $DIR/logs
+#mkdir -p /tmp/logs
 
 
 #DATASET_1="<PATH TO THE FIRST DATASET>"
@@ -19,7 +20,8 @@ MERGE_PATH=${BASE_DATA_PATH}/gpt2-merges.txt
 
 script_path=$(realpath $0)
 script_dir=$(dirname $script_path)
-CONFIG_JSON="$script_dir/ds_config.json"
+#CONFIG_JSON="$script_dir/ds_config.json"
+CONFIG_JSON="/tmp/ds_config.json"
 
 USE_DEEPSPEED=1
 ZERO_STAGE=0
@@ -35,16 +37,20 @@ ZERO_STAGE=0
 #WORKER_STR="-i worker-0"
 
 
-# 52B
-TP=4
-PP=16
-HIDDEN=8192
-LAYERS=64
+TP=1
+PP=2
+HIDDEN=1024
+LAYERS=24
 SEQ=1024
-GLOBAL_BATCH=1024
+GLOBAL_BATCH=2
 WORKER_STR=""
 
-MICRO_BATCH=4
+MICRO_BATCH=1
+
+DTYPE="bf16"
+
+LOG_DIR="/tmp/tensorboard/tp${TP}_pp${PP}_hd${HIDDEN}_nl${LAYERS}_gbsz${GLOBAL_BATCH}_mbsz${MICRO_BATCH}_z${ZERO_STAGE}_${DTYPE}_fix3"
+mkdir -p $LOG_DIR
 
 while [[ $# -gt 0 ]]
 do
@@ -89,15 +95,17 @@ options=" \
 	--data-path ${DATASET} \
 	--vocab-file ${VOCAB_PATH} \
 	--merge-file ${MERGE_PATH} \
-	--save-interval 1000 \
+	--save-interval 10000 \
         --split 98,2,0 \
         --clip-grad 1.0 \
 	--weight-decay 0.1 \
 	--adam-beta1 0.9 \
 	--adam-beta2 0.95 \
 	--init-method-std 0.006 \
-        --fp16 \
-	--checkpoint-activations
+        --${DTYPE} \
+	--checkpoint-activations \
+	--exit-interval 10000 \
+	--tensorboard-dir $LOG_DIR
         "
 
 
@@ -122,11 +130,12 @@ cat <<EOT > $CONFIG_JSON
     "stage": $ZERO_STAGE
   },
 
-  "gradient_clipping": 1.0,
-  "prescale_gradients": true,
+  "bf16": {
+    "enabled": true
+  },
 
   "fp16": {
-    "enabled": true,
+    "enabled": false,
     "loss_scale": 0,
     "loss_scale_window": 500,
     "hysteresis": 2,
@@ -138,6 +147,7 @@ cat <<EOT > $CONFIG_JSON
 }
 EOT
 
+WORKER_STR="-i worker-0:0,1"
 #run_cmd="deepspeed -i worker-0:0,1,2,3 ${DIR}/pretrain_gpt.py $@ ${options}"
 #run_cmd="deepspeed -i worker-0 ${DIR}/pretrain_gpt.py $@ ${options}"
 run_cmd="deepspeed $WORKER_STR ${DIR}/pretrain_gpt.py $@ ${options}"
