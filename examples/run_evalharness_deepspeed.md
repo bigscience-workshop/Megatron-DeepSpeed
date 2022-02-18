@@ -22,7 +22,7 @@ pip install git+https://github.com/EleutherAI/lm-evaluation-harness
 some symlinks due to lm-harness' issues with relative position of data
 ```
 mkdir data
-ln -s data tasks/eval_harness/data
+ln -s `pwd`/data tasks/eval_harness/data
 ```
 Also make sure `data` is not on one of the limited paritions like WORKSF.
 
