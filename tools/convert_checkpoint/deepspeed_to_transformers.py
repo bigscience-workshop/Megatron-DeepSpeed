@@ -11,7 +11,7 @@ root_repo_path = str(Path(__file__).resolve().parents[2])
 if root_repo_path not in sys.path:
     sys.path.insert(0, root_repo_path)
     
-from megatron.checkpoint.deepspeed_checkpoint import DeepSpeedCheckpoint
+from deepspeed.checkpoint import DeepSpeedCheckpoint
 from deepspeed_to_megatron import _create_rank_checkpoint, parse_arguments
 
 # the import was tested to work with this version

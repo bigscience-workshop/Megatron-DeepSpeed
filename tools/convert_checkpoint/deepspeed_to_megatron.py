@@ -13,7 +13,7 @@ if root_repo_path not in sys.path:
     sys.path.insert(0, root_repo_path)
 
 
-from megatron.checkpoint.deepspeed_checkpoint import ARGS_KEY, DeepSpeedCheckpoint
+from deepspeed.checkpoint import DeepSpeedCheckpoint
 
 MODEL_KEY = 'model'
 ARGS_KEY = 'args'

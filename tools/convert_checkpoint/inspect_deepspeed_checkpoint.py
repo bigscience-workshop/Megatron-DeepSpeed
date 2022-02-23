@@ -8,8 +8,7 @@ if root_repo_path not in sys.path:
     
 import argparse
 
-from megatron.checkpoint.deepspeed_checkpoint import DeepSpeedCheckpoint
-from megatron.checkpoint.reshape_meg_2d import reshape_meg_2d_parallel
+from deepspeed.checkpoint import DeepSpeedCheckpoint 
 
 
 def list_files(file_list, tag):
