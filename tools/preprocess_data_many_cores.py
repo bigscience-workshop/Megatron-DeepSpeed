@@ -49,7 +49,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
 
 from megatron.tokenizer import build_tokenizer
 from megatron.data import indexed_dataset
-from megatron.data.indexed_dataset import index_file_path, data_file_path
+from megatron.data.indexed_dataset import index_file_path, data_file_path, best_fitting_dtype
 
 
 # https://stackoverflow.com/questions/33139531/preserve-empty-lines-with-nltks-punkt-tokenizer
@@ -328,9 +328,10 @@ def main():
         output_filename = f"{args.output_prefix}_{key}_{level}"
         output_bin_files[key] = data_file_path(output_filename)
         output_idx_files[key] = index_file_path(output_filename)
+        best_dtype = best_fitting_dtype(args.vocab_size) if args.dataset_impl == "mmap" else None
         builders[key] = indexed_dataset.make_builder(output_bin_files[key],
                                                      impl=args.dataset_impl,
-                                                     vocab_size=tokenizer.vocab_size)
+                                                     dtype=best_dtype)
 
     for key in args.json_keys:
         for process_id in process_ids:
