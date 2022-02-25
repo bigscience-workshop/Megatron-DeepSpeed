@@ -369,7 +369,7 @@ def rank_files_write(args, dset, idx, encoder):
     try:
         # create data file for each rank
         if args.rank == 0:
-            msg(f"Vocab size: {args.vocab_size}")
+            msg(f"Vocab size: {args.padded_vocab_size}")
             msg(f"Output prefix: {args.output_prefix}")
         output_bin_files = {}
         output_idx_files = {}
@@ -378,7 +378,7 @@ def rank_files_write(args, dset, idx, encoder):
             filebase = get_filename(args, key, args.rank)
             output_bin_files[key] = data_file_path(filebase)
             output_idx_files[key] = index_file_path(filebase)
-            best_dtype = best_fitting_dtype(args.vocab_size) if args.dataset_impl == "mmap" else None
+            best_dtype = best_fitting_dtype(args.padded_vocab_size) if args.dataset_impl == "mmap" else None
             builders[key] = make_builder(output_bin_files[key],
                                          impl=args.dataset_impl,
                                          dtype=best_dtype)
@@ -515,7 +515,7 @@ def rank_files_merge_serial(args):
             filebase = get_filename(args, key)
             output_bin_files[key] = data_file_path(filebase)
             output_idx_files[key] = index_file_path(filebase)
-            best_dtype = best_fitting_dtype(args.vocab_size) if args.dataset_impl == "mmap" else None
+            best_dtype = best_fitting_dtype(args.padded_vocab_size) if args.dataset_impl == "mmap" else None
             builders[key] = make_builder(output_bin_files[key],
                                          impl=args.dataset_impl,
                                          dtype=best_dtype)
@@ -600,7 +600,6 @@ def main():
         nltk.download("punkt", quiet=True)
 
     encoder = Encoder(args)
-    args.vocab_size = encoder.tokenizer.vocab_size
 
     # wait for all ranks before stopping timer
     args.distctx.barrier()
