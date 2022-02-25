@@ -117,9 +117,10 @@ def process_samples(simple_queue, process_id, args, level, writer: Connection):
         output_filename = get_output_filename(args.output_prefix, key, level, process_id)
         output_bin_files[key] = data_file_path(output_filename)
         output_idx_files[key] = index_file_path(output_filename)
+        best_dtype = best_fitting_dtype(args.vocab_size) if args.dataset_impl == "mmap" else None
         builders[key] = indexed_dataset.make_builder(output_bin_files[key],
                                                      impl=args.dataset_impl,
-                                                     vocab_size=encoder.tokenizer.vocab_size)
+                                                     dtype=best_dtype)
 
     json_lines = simple_queue.get()
     while json_lines is not None:
