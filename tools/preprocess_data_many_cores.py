@@ -117,7 +117,7 @@ def process_samples(simple_queue, process_id, args, level, writer: Connection):
         output_filename = get_output_filename(args.output_prefix, key, level, process_id)
         output_bin_files[key] = data_file_path(output_filename)
         output_idx_files[key] = index_file_path(output_filename)
-        best_dtype = best_fitting_dtype(args.vocab_size) if args.dataset_impl == "mmap" else None
+        best_dtype = best_fitting_dtype(args.padded_vocab_size) if args.dataset_impl == "mmap" else None
         builders[key] = indexed_dataset.make_builder(output_bin_files[key],
                                                      impl=args.dataset_impl,
                                                      dtype=best_dtype)
@@ -329,7 +329,7 @@ def main():
         output_filename = f"{args.output_prefix}_{key}_{level}"
         output_bin_files[key] = data_file_path(output_filename)
         output_idx_files[key] = index_file_path(output_filename)
-        best_dtype = best_fitting_dtype(args.vocab_size) if args.dataset_impl == "mmap" else None
+        best_dtype = best_fitting_dtype(args.padded_vocab_size) if args.dataset_impl == "mmap" else None
         builders[key] = indexed_dataset.make_builder(output_bin_files[key],
                                                      impl=args.dataset_impl,
                                                      dtype=best_dtype)
