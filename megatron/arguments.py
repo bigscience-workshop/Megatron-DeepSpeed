@@ -862,7 +862,7 @@ def _add_data_args(parser):
                 values = lines[0][1:-1].split("\" \"")
                 weighted_split_paths_option = re.sub(r"-path$", "", self.dest.replace)
                 setattr(args, weighted_split_paths_option, values)
-                parse_data_paths(parser, args, values, option_string=weighted_split_paths_option)
+                parse_data_paths()(parser, args, values, option_string=weighted_split_paths_option)
 
 
     group.add_argument('--train-weighted-split-paths-path', type=str, action=parse_data_paths_path ,default=None)
