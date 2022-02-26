@@ -860,8 +860,9 @@ def _add_data_args(parser):
                 assert len(lines) == 1, f"Got multiple lines {len(lines)} instead of 1 expected"
                 assert lines[0][-1:] == "\"" and lines[0][0] == "\"", f"WTF {lines}"
                 values = lines[0][1:-1].split("\" \"")
-                setattr(args, re.sub(r"-path$", "", self.dest.replace), values)
-                parse_data_paths(parser, args, values)
+                weighted_split_paths_option = re.sub(r"-path$", "", self.dest.replace)
+                setattr(args, weighted_split_paths_option, values)
+                parse_data_paths(parser, args, values, option_string=weighted_split_paths_option)
 
 
     group.add_argument('--train-weighted-split-paths-path', type=str, action=parse_data_paths_path ,default=None)
