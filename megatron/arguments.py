@@ -95,6 +95,27 @@ def parse_args(extra_args_provider=None, defaults={},
                   args.tensor_model_parallel_size,
                   args.pipeline_model_parallel_size), flush=True)
 
+    if args.train_weighted_split_paths_path:
+        with open(args.train_weighted_split_paths_path, "r") as fi:
+            lines = fi.readlines()
+            assert len(lines) == 1
+            assert lines[0][-1] == "\n"
+            args.train_weighted_split_paths = lines[0][:-1]
+
+    if args.valid_weighted_split_paths_path:
+        with open(args.valid_weighted_split_paths_path, "r") as fi:
+            lines = fi.readlines()
+            assert len(lines) == 1
+            assert lines[0][-1] == "\n"
+            args.valid_weighted_split_paths = lines[0][:-1]
+
+    if args.test_weighted_split_paths_path:
+        with open(args.test_weighted_split_paths_path, "r") as fi:
+            lines = fi.readlines()
+            assert len(lines) == 1
+            assert lines[0][-1] == "\n"
+            args.test_weighted_split_paths = lines[0][:-1]
+
     # --data-path and --train-weighted-splits-paths
     message = "Data loading Mode 1: --data-path and --split "\
             "and Mode 2: --(train|valid|test)-weighted-split-paths"\
