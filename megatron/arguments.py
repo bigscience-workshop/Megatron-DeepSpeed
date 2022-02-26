@@ -95,27 +95,6 @@ def parse_args(extra_args_provider=None, defaults={},
                   args.tensor_model_parallel_size,
                   args.pipeline_model_parallel_size), flush=True)
 
-    if args.train_weighted_split_paths_path:
-        with open(args.train_weighted_split_paths_path, "r") as fi:
-            lines = fi.readlines()
-            assert len(lines) == 1
-            assert lines[0][-1] == "\n"
-            args.train_weighted_split_paths = lines[0][:-1]
-
-    if args.valid_weighted_split_paths_path:
-        with open(args.valid_weighted_split_paths_path, "r") as fi:
-            lines = fi.readlines()
-            assert len(lines) == 1
-            assert lines[0][-1] == "\n"
-            args.valid_weighted_split_paths = lines[0][:-1]
-
-    if args.test_weighted_split_paths_path:
-        with open(args.test_weighted_split_paths_path, "r") as fi:
-            lines = fi.readlines()
-            assert len(lines) == 1
-            assert lines[0][-1] == "\n"
-            args.test_weighted_split_paths = lines[0][:-1]
-
     # --data-path and --train-weighted-splits-paths
     message = "Data loading Mode 1: --data-path and --split "\
             "and Mode 2: --(train|valid|test)-weighted-split-paths"\
@@ -861,6 +840,33 @@ def _add_data_args(parser):
                     '"NAME_CDE: 0.6 0.6:0.8 C, 0.3 0:1 D, 0.1 0:1 E" '
                     'test will be run on each of those groups independently',
                     action=parse_data_paths)
+
+    class parse_data_paths_path(argparse.Action):
+        def __call__(self, parser, args, values, option_string=None):
+            assert len(values) == 1
+
+            # make sure string given in the correct format
+            err_message = 'Each data group should be input on the following format'
+            '"GIVEN_NAME WEIGHT1 START:END PATH1, WEIGHT2 START:END PATH2"'
+            'where START < END'
+
+            if option_string in ["--train-weighted-split-paths-path", "--valid-weighted-split-paths-path", "--test-weighted-split-paths-path"]:
+                filename = values[0]
+            else:
+                raise NotImplementedError()
+
+            with open(filename, "r") as fi:
+                lines = fi.readlines()
+                assert len(lines) == 1, f"Got multiple lines {len(lines)} instead of 1 expected"
+                assert lines[0][-1:] == "\"" and lines[0][0] == "\"", f"WTF {lines}"
+                values = lines[0][1:-1].split("\" \"")
+                setattr(args, re.sub(r"-path$", "", self.dest.replace), values)
+                parse_data_paths(parser, args, values)
+
+
+    group.add_argument('--train-weighted-split-paths-path', type=str, action=parse_data_paths_path ,default=None)
+    group.add_argument('--valid-weighted-split-paths-path', type=str, action=parse_data_paths_path, default=None)
+    group.add_argument('--test-weighted-split-paths-path', type=str, action=parse_data_paths_path, default=None)
 
     group.add_argument('--log-path', type=str, default=None,
                        help='Path to the save arguments file.')
