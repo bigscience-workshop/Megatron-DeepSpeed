@@ -843,12 +843,10 @@ def _add_data_args(parser):
 
     class parse_data_paths_path(argparse.Action):
         def __call__(self, parser, args, values, option_string=None):
-            if option_string in ["--train-weighted-split-paths-path", "--valid-weighted-split-paths-path", "--test-weighted-split-paths-path"]:
-                filename = values
-            else:
-                raise NotImplementedError()
+            expected_option_strings = ["--train-weighted-split-paths-path", "--valid-weighted-split-paths-path", "--test-weighted-split-paths-path"]
+            assert option_string in expected_option_strings, f"Expected {option_string} to be in {expected_option_strings}"
 
-            with open(filename, "r") as fi:
+            with open(values, "r") as fi:
                 lines = fi.readlines()
                 assert len(lines) == 1, f"Got multiple lines {len(lines)} instead of 1 expected"
                 assert lines[0][-2:] == "\"\n" and lines[0][0] == "\"", f"Invalid input format, got {lines}"
