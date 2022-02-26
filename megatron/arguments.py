@@ -843,15 +843,8 @@ def _add_data_args(parser):
 
     class parse_data_paths_path(argparse.Action):
         def __call__(self, parser, args, values, option_string=None):
-            assert len(values) == 1
-
-            # make sure string given in the correct format
-            err_message = 'Each data group should be input on the following format'
-            '"GIVEN_NAME WEIGHT1 START:END PATH1, WEIGHT2 START:END PATH2"'
-            'where START < END'
-
             if option_string in ["--train-weighted-split-paths-path", "--valid-weighted-split-paths-path", "--test-weighted-split-paths-path"]:
-                filename = values[0]
+                filename = values
             else:
                 raise NotImplementedError()
 
