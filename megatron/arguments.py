@@ -841,6 +841,26 @@ def _add_data_args(parser):
                     'test will be run on each of those groups independently',
                     action=parse_data_paths)
 
+    class parse_data_paths_path(argparse.Action):
+        def __call__(self, parser, args, values, option_string=None):
+            expected_option_strings = ["--train-weighted-split-paths-path", "--valid-weighted-split-paths-path", "--test-weighted-split-paths-path"]
+            assert option_string in expected_option_strings, f"Expected {option_string} to be in {expected_option_strings}"
+
+            with open(values, "r") as fi:
+                lines = fi.readlines()
+                assert len(lines) == 1, f"Got multiple lines {len(lines)} instead of 1 expected"
+                assert lines[0][-2:] == "\"\n" and lines[0][0] == "\"", f"Invalid input format, got {lines}"
+                values = lines[0][1:-2].split("\" \"")
+                weighted_split_paths_dest = re.sub(r"_path$", "", self.dest)
+                weighted_split_paths_option = re.sub(r"-path$", "", self.option_strings[0])
+                setattr(args, weighted_split_paths_dest, values)
+                parse_data_paths(option_strings=[weighted_split_paths_option], dest=weighted_split_paths_dest)(parser, args, values, option_string=weighted_split_paths_option)
+
+
+    group.add_argument('--train-weighted-split-paths-path', type=str, action=parse_data_paths_path ,default=None)
+    group.add_argument('--valid-weighted-split-paths-path', type=str, action=parse_data_paths_path, default=None)
+    group.add_argument('--test-weighted-split-paths-path', type=str, action=parse_data_paths_path, default=None)
+
     group.add_argument('--log-path', type=str, default=None,
                        help='Path to the save arguments file.')
     group.add_argument('--vocab-file', type=str, default=None,
