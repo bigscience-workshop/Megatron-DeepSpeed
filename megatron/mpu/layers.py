@@ -217,6 +217,9 @@ class VocabParallelEmbedding(torch.nn.Module):
 
 
     def forward(self, input_):
+        if torch.any(input >= self.num_embeddings):
+            raise ValueError("There is an input id in the input which is bigger than the higher possible input id")
+
         if self.tensor_model_parallel_size > 1:
             # Build the mask.
             input_mask = (input_ < self.vocab_start_index) | \
@@ -226,6 +229,10 @@ class VocabParallelEmbedding(torch.nn.Module):
             masked_input[input_mask] = 0
         else:
             masked_input = input_
+
+        if torch.any(masked_input >= (self.vocab_end_index - self.vocab_start_index)):
+            raise ValueError("There is a bug with the input ids used for the Embedding matrix")
+
         # Get the embeddings.
         output_parallel = F.embedding(masked_input, self.weight,
                                       self.padding_idx, self.max_norm,
