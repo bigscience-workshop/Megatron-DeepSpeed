@@ -208,23 +208,21 @@ class MegDSTestTP(TestCasePlus):
             [0, 1, 50430, 50431],
         ]
 
-        total = 2
-        command_args["--tensor-model-parallel-size"] = "2"
+        command_args["--tensor-model-parallel-size"] = "1"
         
         pool = Pool(1)
         # tp_index, tp_size, command_args, token_ids, save, load
-        result = pool.map(MegDSTestTP.infer_model, [((i, total, command_args, tokens, cp_dir, None)) for i in range(total)])
+        result = pool.map(MegDSTestTP.infer_model, [((0, 1, command_args, tokens, cp_dir, None))])
         pool.close()
         pool.join()
         
         output, tokens = result[0]
         logging.getLogger().info("First done!")
 
-        total = 4
-        command_args["--tensor-model-parallel-size"] = "4"
+        command_args["--tensor-model-parallel-size"] = "2"
 
         pool = Pool(2)
-        result = pool.map(MegDSTestTP.infer_model, [((i, total, command_args, tokens, None, cp_dir)) for i in range(total)])
+        result = pool.map(MegDSTestTP.infer_model, [((0, 2, command_args, tokens, None, cp_dir)), ((1, 2, command_args, tokens, None, cp_dir))])
         pool.close()
         pool.join()
         
