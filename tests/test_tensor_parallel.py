@@ -227,7 +227,6 @@ class MegDSTestTP(TestCasePlus):
 
 
     def test_embedding_matrix_tp_with_invalid_tokens_ids(self):
-        print("Start test")
         mp.set_start_method('spawn', force=True)
         
         command_args = self.get_default_args()
@@ -257,6 +256,24 @@ class MegDSTestTP(TestCasePlus):
         pool.join()
 
         self.assertEqual(str(exc_info.value),"There is an input id in the input that is greater than the highest possible input id.")
+
+
+    def test_tokenizer_vocab_size_multiple_of_tp_size(self):
+        mp.set_start_method('spawn', force=True)
+        
+        command_args = self.get_default_args()
+        command_args["--pad-vocab-size-to"] = "50433" # This is equal to 128 * 394 + 1 which is above the len of gp2 vocabulary
+        command_args["--seq-length"] = "4"
+        command_args["--micro-batch-size"] = "2"
+        command_args["--tensor-model-parallel-size"] = "2"
+
+        pool = Pool(2)
+        with pytest.raises(Exception) as exc_info: 
+            _ = pool.map(MegDSTestTP.infer_model, [((0, 2, command_args, None, None, None)), ((1, 2, command_args, None, None, None))])
+        pool.close()
+        pool.join()
+
+
 
 if __name__ == '__main__':
     unittest.main()
