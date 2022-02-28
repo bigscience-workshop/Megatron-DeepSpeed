@@ -139,8 +139,6 @@ class MegDSTestTP(TestCasePlus):
                 else:
                     token_ids = torch.tensor(token_ids)
                 
-                logging.getLogger().warning(f"We used as token ids: {token_ids}")
-                
                 model.micro_batches = 1
                 model.set_batch_fn(create_model_inputs)
                 # process batch
@@ -262,6 +260,7 @@ class MegDSTestTP(TestCasePlus):
         with pytest.raises(Exception) as exc_info: 
             result = pool.map(MegDSTestTP.infer_model, [((0, 2, command_args, tokens, None, None)), ((1, 2, command_args, tokens, None, None))])
 
+        print(exc_info.value)
         pool.close()
         pool.join()
 
