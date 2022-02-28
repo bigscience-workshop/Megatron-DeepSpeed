@@ -72,14 +72,15 @@ def _vocab_size_with_padding(orig_vocab_size, args):
 
     after = orig_vocab_size
     if args.pad_vocab_size_to is not None:
-        after = args.pad_vocab_size_to
-        if after < orig_vocab_size:
+        if args.pad_vocab_size_to  < orig_vocab_size:
             raise ValueError(
-                f"You asked to pad the vocabulary to {after} when the initial vocabulary size is "
-                f"{args.pad_vocab_size_to}. You can only pad to a higher value."
+                f"You asked to pad the vocabulary to {args.pad_vocab_size_to} when the initial vocabulary size is "
+                f"{orig_vocab_size}. You can only pad to a higher value."
             )
+        after = args.pad_vocab_size_to
     else:
         # Pad vocab size so it is divisible by model parallel size and still having GPU friendly size.
+        after = orig_vocab_size
         multiple = args.make_vocab_size_divisible_by * \
             args.tensor_model_parallel_size
         while (after % multiple) != 0:
