@@ -202,7 +202,7 @@ class MegDSTestTP(TestCasePlus):
         command_args["--pad-vocab-size-to"] = "5120" # This is equal to 128 * 40 which is above the len of gp2-tiny vocabulary
         command_args["--seq-length"] = "4"
         command_args["--micro-batch-size"] = "2"
-        tokens = [[50431, 0, 1, 50430],[0, 1, 50430, 50431]]
+        tokens = [[5119, 0, 1, 5100],[0, 1, 5111, 5101]]
 
         command_args["--tensor-model-parallel-size"] = "1"
         
@@ -235,7 +235,7 @@ class MegDSTestTP(TestCasePlus):
         command_args["--pad-vocab-size-to"] = "5120" # This is equal to 128 * 40 which is above the len of gp2-tiny vocabulary
         command_args["--seq-length"] = "4"
         command_args["--micro-batch-size"] = "2"
-        tokens = [[50432, 50433, 1, 50430],[0, 1, 50430, 50433]]
+        tokens = [[5120, 0, 1, 2],[0, 1, 3, 4]]
 
         command_args["--tensor-model-parallel-size"] = "1"
 
