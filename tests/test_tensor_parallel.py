@@ -217,7 +217,7 @@ class MegDSTestTP(TestCasePlus):
         pool.join()
         
         output, tokens = result[0]
-        logging.getLogger().info("First done!")
+        logging.getLogger().warning("First done!")
 
         command_args["--tensor-model-parallel-size"] = "2"
 
@@ -254,7 +254,7 @@ class MegDSTestTP(TestCasePlus):
         pool.join()
         
         output, tokens = result[0]
-        logging.getLogger().info("First done!")
+        logging.getLogger().warning("First done!")
 
         command_args["--tensor-model-parallel-size"] = "2"
 
