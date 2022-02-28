@@ -42,7 +42,7 @@ class MegDSTestTP(TestCasePlus):
             "--train-iters": "5000",
             "--tokenizer-type": "GPT2BPETokenizer",
             "--merge-file": f"{data_dir}/gpt2-tiny-merges.txt",
-            "--vocab": f"{data_dir}/gpt2-tiny-vocab.json",
+            "--vocab-file": f"{data_dir}/gpt2-tiny-vocab.json",
             "--data-impl": "mmap",
             "--split": "949,50,1",
             "--distributed-backend": "nccl",
