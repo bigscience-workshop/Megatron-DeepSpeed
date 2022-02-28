@@ -266,7 +266,7 @@ class MegDSTestTP(TestCasePlus):
 
         print("This is the result:")
         print("size: ", result[0][0].size)
-        print("shape: ", result[0][0].shape())
+        print("shape: ", result[0][0].shape)
         print("output: ", result[0][0])
 
 if __name__ == '__main__':
