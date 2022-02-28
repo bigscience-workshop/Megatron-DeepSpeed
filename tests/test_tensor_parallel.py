@@ -200,10 +200,7 @@ class MegDSTestTP(TestCasePlus):
         command_args["--pad-vocab-size-to"] = "50432" # This is equal to 128 * 394 which is above the len of gp2 vocabulary
         command_args["--seq-length"] = "4"
         command_args["--micro-batch-size"] = "2"
-        tokens = [
-            [50431, 0, 1, 50430],
-            [0, 1, 50430, 50431],
-        ]
+        tokens = [[50431, 0, 1, 50430],[0, 1, 50430, 50431]]
 
         command_args["--tensor-model-parallel-size"] = "1"
         
@@ -214,7 +211,7 @@ class MegDSTestTP(TestCasePlus):
         pool.join()
         
         output, _ = result[0]
-        print("First done!")
+        logging.getLogger().info("First done!")
 
         command_args["--tensor-model-parallel-size"] = "2"
 
@@ -237,10 +234,7 @@ class MegDSTestTP(TestCasePlus):
         command_args["--pad-vocab-size-to"] = "50432" # This is equal to 128 * 394 which is above the len of gp2 vocabulary
         command_args["--seq-length"] = "4"
         command_args["--micro-batch-size"] = "2"
-        tokens = [
-            [50432, 50433, 1, 50430],
-            [0, 1, 50430, 50433],
-        ]
+        tokens = [[50432, 50433, 1, 50430],[0, 1, 50430, 50433]]
 
         command_args["--tensor-model-parallel-size"] = "1"
 
@@ -252,7 +246,7 @@ class MegDSTestTP(TestCasePlus):
 
         self.assertEqual(str(exc_info.value),"There is an input id in the input that is greater than the highest possible input id.")
         
-        print("First done!")
+        logging.getLogger().info("First done!")
 
         command_args["--tensor-model-parallel-size"] = "2"
 
