@@ -234,7 +234,6 @@ class MegDSTestTP(TestCasePlus):
     def test_embedding_matrix_tp_with_invalid_tokens_ids(self):
         print("Start test")
         mp.set_start_method('spawn', force=True)
-        cp_dir = self.get_auto_remove_tmp_dir()
         
         command_args = self.get_default_args()
         command_args["--pad-vocab-size-to"] = "50432" # This is equal to 128 * 394 which is above the len of gp2 vocabulary
@@ -259,14 +258,12 @@ class MegDSTestTP(TestCasePlus):
         command_args["--tensor-model-parallel-size"] = "2"
 
         pool = Pool(2)
-        result = pool.map(MegDSTestTP.infer_model, [((0, 2, command_args, tokens, None, None)), ((1, 2, command_args, tokens, None, None))])
+
+        with pytest.raises(Exception) as exc_info: 
+            result = pool.map(MegDSTestTP.infer_model, [((0, 2, command_args, tokens, None, None)), ((1, 2, command_args, tokens, None, None))])
+
         pool.close()
         pool.join()
-
-        print("This is the result:")
-        print("size: ", result[0][0].size)
-        print("shape: ", result[0][0].shape)
-        print("output: ", result[0][0])
 
 if __name__ == '__main__':
     unittest.main()
