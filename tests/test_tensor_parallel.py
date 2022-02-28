@@ -273,7 +273,7 @@ class MegDSTestTP(TestCasePlus):
         pool.close()
         pool.join()
 
-        print(exc_info.value)
+        self.assertEqual(str(exc_info.value), "50433 is not divisible by 2")
 
 
 if __name__ == '__main__':
