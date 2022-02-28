@@ -141,7 +141,7 @@ class MegDSTestTP(TestCasePlus):
                 else:
                     token_ids = torch.tensor(token_ids)
                 
-                logging.getLogger().info(f"We used as token ids: {token_ids}")
+                logging.getLogger().warning(f"We used as token ids: {token_ids}")
                 
                 model.micro_batches = 1
                 model.set_batch_fn(create_model_inputs)
