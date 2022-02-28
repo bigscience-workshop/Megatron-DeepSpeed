@@ -233,6 +233,7 @@ class MegDSTestTP(TestCasePlus):
 
 
     def test_embedding_matrix_tp_with_invalid_tokens_ids(self):
+        print("Start test")
         mp.set_start_method('spawn', force=True)
         cp_dir = self.get_auto_remove_tmp_dir()
         
@@ -254,7 +255,7 @@ class MegDSTestTP(TestCasePlus):
         pool.join()
         
         output, tokens = result[0]
-        logging.getLogger().warning("First done!")
+        print("First done!")
 
         command_args["--tensor-model-parallel-size"] = "2"
 
