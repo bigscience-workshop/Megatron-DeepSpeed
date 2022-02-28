@@ -388,6 +388,10 @@ def setup_model_and_optimizer(model_provider_func):
             args=args,
             lr_scheduler=lr_scheduler
         )
+
+        assert model.fp16_enabled() == args.fp16, "megatron fp16 config does not match deepspeed"
+        assert model.bfloat16_enabled() == args.bf16, "megatron bf16 config does not match deepspeed"
+
         if isinstance(model, deepspeed.PipelineEngine):
             # hack to get batch_fn from pretrain_gpt.py
             model.set_batch_fn(model.module._megatron_batch_fn)
@@ -622,9 +626,10 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
                               args.consumed_train_samples)
             writer.add_scalar(f"lm-loss-training/{key}" + ' vs tokens', loss_dict[key],
                               args.consumed_train_tokens)
+
             writer.add_scalar(f"lm-loss-training/{key}" + ' vs gigaflos (without embeddings)', loss_dict[key],
                               args.gigaflos_no_embeds)
-        if args.log_loss_scale_to_tensorboard:
+        if args.log_loss_scale_to_tensorboard and args.fp16:
             writer.add_scalar('loss-scale/loss-scale', loss_scale, iteration)
             writer.add_scalar('loss-scale/loss-scale vs samples', loss_scale,
                               args.consumed_train_samples)
@@ -724,7 +729,8 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
                 if avg > 0.0:
                     log_string += ' {}: {:.6E} |'.format(key, avg)
                 total_loss_dict[key] = torch.cuda.FloatTensor([0.0])
-        log_string += ' loss scale: {:.1f} |'.format(loss_scale)
+        if args.fp16:
+            log_string += ' loss scale: {:.1f} |'.format(loss_scale)
         if grad_norm is not None:
             log_string += ' grad norm: {:.3f} |'.format(grad_norm)
         if num_zeros_in_grad is not None:
@@ -861,10 +867,12 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
         args.gigaflos_no_embeds += (6 * new_samples * args.seq_length * get_parameters_in_billions(model, exclude_embeddings=True))
 
         # Logging.
-        if args.deepspeed:
-            loss_scale = model[0].optimizer.cur_scale
-        else:
-            loss_scale = optimizer.get_loss_scale().item()
+        loss_scale = None
+        if args.fp16:
+            if args.deepspeed:
+                loss_scale = model[0].optimizer.cur_scale
+            else:
+                loss_scale = optimizer.get_loss_scale().item()
         params_norm = None
         if args.log_params_norm:
             params_norm = calc_params_l2_norm(model)
