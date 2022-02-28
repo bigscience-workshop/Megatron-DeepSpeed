@@ -192,5 +192,10 @@ class MegDSTestTP(TestCasePlus):
         logging.getLogger().critical(output-output2)
         self.assertTrue(np.allclose(output,output2, atol=5e-3, rtol=0), "Different results when running with TP=1 and TP=2")
 
+
+
+    def test_embedding_matrix_tp(self):
+        pass
+
 if __name__ == '__main__':
     unittest.main()
