@@ -141,6 +141,7 @@ class MegDSTestTP(TestCasePlus):
                 else:
                     token_ids = torch.tensor(token_ids)
                 
+                logging.getLogger().info(f"We used as token ids: {token_ids}")
                 
                 model.micro_batches = 1
                 model.set_batch_fn(create_model_inputs)
@@ -231,7 +232,14 @@ class MegDSTestTP(TestCasePlus):
         self.assertTrue(np.allclose(output,output2, atol=5e-3, rtol=0), "Different results when running with TP=1 and TP=2")
 
 
-        ### Test invalid token ids
+    def test_embedding_matrix_tp_with_invalid_tokens_ids(self):
+        mp.set_start_method('spawn', force=True)
+        cp_dir = self.get_auto_remove_tmp_dir()
+        
+        command_args = self.get_default_args()
+        command_args["--pad-vocab-size-to"] = "50432" # This is equal to 128 * 394 which is above the len of gp2 vocabulary
+        command_args["--seq-length"] = "4"
+        command_args["--micro-batch-size"] = "2"
         tokens = [
             [50432, 50433, 1, 50430],
             [0, 1, 50430, 50433],
