@@ -237,7 +237,7 @@ class MegDSTestTP(TestCasePlus):
         cp_dir = self.get_auto_remove_tmp_dir()
         
         command_args = self.get_default_args()
-        command_args["--pad-vocab-size-to"] = "50434" # This is equal to 128 * 394 which is above the len of gp2 vocabulary
+        command_args["--pad-vocab-size-to"] = "50432" # This is equal to 128 * 394 which is above the len of gp2 vocabulary
         command_args["--seq-length"] = "4"
         command_args["--micro-batch-size"] = "2"
         tokens = [
