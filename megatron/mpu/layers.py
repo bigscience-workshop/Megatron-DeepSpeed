@@ -231,6 +231,7 @@ class VocabParallelEmbedding(torch.nn.Module):
                                       self.padding_idx, self.max_norm,
                                       self.norm_type, self.scale_grad_by_freq,
                                       self.sparse)
+        print(output_parallel)
         # Mask the output embedding.
         if self.tensor_model_parallel_size > 1:
             output_parallel[input_mask, :] = 0.0
