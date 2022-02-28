@@ -25,6 +25,7 @@ from megatron.utils import get_ltor_masks_and_position_ids
 class MegDSTestTP(TestCasePlus):
     def get_default_args(self):
         """return a dictionary with key as argument name and value as additional arguments"""
+        data_dir = f"{self.data_dir}/gpt2"
         return {
             # GPT_ARGS
             "--num-layers": "2",
@@ -40,8 +41,8 @@ class MegDSTestTP(TestCasePlus):
             "--min-lr": "1.0e-5",
             "--train-iters": "5000",
             "--tokenizer-type": "GPT2BPETokenizer",
-            "--merge-file": "{data_dir}/gpt2-tiny-merges.txt",
-            "--vocab": "{data_dir}/gpt2-tiny-vocab.json",
+            "--merge-file": f"{data_dir}/gpt2-tiny-merges.txt",
+            "--vocab": f"{data_dir}/gpt2-tiny-vocab.json",
             "--data-impl": "mmap",
             "--split": "949,50,1",
             "--distributed-backend": "nccl",
