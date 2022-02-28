@@ -115,7 +115,7 @@ class GPTModel(MegatronModule):
 
                 # attention_mask has size [1, 1, seqlen, seqlen]
                 attention_mask = attention_mask[:, :, :curriculum_seqlen, :curriculum_seqlen].contiguous()
-                
+
         lm_output = self.language_model(
             input_ids,
             position_ids,
@@ -230,7 +230,7 @@ class GPTModelPipe(PipelineModule,MegatronModule):
                                         init_method=init_method,
                                         num_tokentypes=num_tokentypes,
                                         tied_weight_attr='word_embeddings_weight'))
-        
+
         if args.fp32_residual_connection:
             if hasattr(args, 'attn_mask'):
                 self.specs.append(lambda x: x.transpose(0, 1).contiguous().float())
@@ -253,8 +253,8 @@ class GPTModelPipe(PipelineModule,MegatronModule):
                     layer_number=layer_idx,
                     # TODO: Change naming of class from GPT to something that encapsulate prefix lm.
                     self_attn_mask_type=AttnMaskType.prefix if prefix_lm else AttnMaskType.causal))
-                
-        
+
+
         if not hasattr(args, 'attn_mask'):
             # We drop attention mask from the pipeline
             self.specs.append(lambda x: x[0])
@@ -295,14 +295,26 @@ class GPTModelPipe(PipelineModule,MegatronModule):
             interval = args.checkpoint_num_layers
         else:
             interval = 0
-        
+
         from deepspeed.runtime.pipe.topology import PipeModelDataParallelTopology
         topo = PipeModelDataParallelTopology(num_pp=mpu.get_pipeline_model_parallel_world_size(),
                                              num_mp=mpu.get_tensor_model_parallel_world_size(),
                                              num_dp=mpu.get_data_parallel_world_size())
 
+        # here one can extend the regex to include more layers to be counted towards partitioning,
+        # e.g. "type:transformer|embed" will add up all the transformer blocks and also the first
+        # and last embedding layers and then partition that transformers+2 layers - so to get a good
+        # balance you may want to use less transformer layers
+        #
+        # caveat emptor: the current implementation of PP fails unless each stage has at least one
+        # transformer layer
+        if args.pp_partition_method is not None:
+            partition_method = args.pp_partition_method
+        else:
+            partition_method = 'type:transformer'
+
         super().__init__(layers=self.specs,
                          loss_fn=get_cross_entropy(is_prefix=prefix_lm),
                          topology=topo,
                          activation_checkpoint_interval=interval,
-                         partition_method='type:transformer')
+                         partition_method=partition_method)
