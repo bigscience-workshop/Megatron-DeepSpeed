@@ -111,7 +111,7 @@ class MegDSTestTP(TestCasePlus):
                 initialize_megatron()
                 args = get_args()
 
-                # args.vocab_size = args.padded_vocab_size = 1024
+                args.vocab_size = args.padded_vocab_size = 1024
 
                 tokenizer = get_tokenizer()
 
