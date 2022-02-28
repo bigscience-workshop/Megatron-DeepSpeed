@@ -216,7 +216,7 @@ class MegDSTestTP(TestCasePlus):
         pool.close()
         pool.join()
         
-        output, tokens = result[0]
+        output, _ = result[0]
         print("First done!")
 
         command_args["--tensor-model-parallel-size"] = "2"
@@ -226,7 +226,7 @@ class MegDSTestTP(TestCasePlus):
         pool.close()
         pool.join()
         
-        output2, tokens = result[0]
+        output2, _ = result[0]
 
         logging.getLogger().critical(output-output2)
         self.assertTrue(np.allclose(output,output2, atol=5e-3, rtol=0), "Different results when running with TP=1 and TP=2")
@@ -246,21 +246,21 @@ class MegDSTestTP(TestCasePlus):
             [0, 1, 50430, 50433],
         ]
 
-        command_args["--tensor-model-parallel-size"] = "1"
+        # command_args["--tensor-model-parallel-size"] = "1"
         
-        pool = Pool(1)
-        # tp_index, tp_size, command_args, token_ids, save, load
-        result = pool.map(MegDSTestTP.infer_model, [((0, 1, command_args, tokens, cp_dir, None))])
-        pool.close()
-        pool.join()
+        # pool = Pool(1)
+        # # tp_index, tp_size, command_args, token_ids, save, load
+        # result = pool.map(MegDSTestTP.infer_model, [((0, 1, command_args, tokens, cp_dir, None))])
+        # pool.close()
+        # pool.join()
         
-        output, tokens = result[0]
+        # output, _ = result[0]
         print("First done!")
 
         command_args["--tensor-model-parallel-size"] = "2"
 
         pool = Pool(2)
-        result = pool.map(MegDSTestTP.infer_model, [((0, 2, command_args, tokens, None, cp_dir)), ((1, 2, command_args, tokens, None, cp_dir))])
+        result = pool.map(MegDSTestTP.infer_model, [((0, 2, command_args, tokens, None, None)), ((1, 2, command_args, tokens, None, None))])
         pool.close()
         pool.join()
 
