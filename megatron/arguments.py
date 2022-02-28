@@ -566,7 +566,7 @@ def _add_training_args(parser):
     group.add_argument('--abort-on-unmet-fused-kernel-constraints', action='store_true',
                        help="If set to True, the program will abort if the constraints for loading a fused kernel aren't met")
     group.add_argument('--pp-partition-method', type=str, default=None,
-                       help='Use to override the pipeline stages partition method. e.g., "type:transformer|embed"')
+                       help="Use to override the pipeline stages partitioning method. e.g., 'type:transformer|embedding'")
 
     return parser
 

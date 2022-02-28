@@ -302,7 +302,7 @@ class GPTModelPipe(PipelineModule,MegatronModule):
                                              num_dp=mpu.get_data_parallel_world_size())
 
         # here one can extend the regex to include more layers to be counted towards partitioning,
-        # e.g. "type:transformer|embed" will add up all the transformer blocks and also the first
+        # e.g. 'type:transformer|embedding' will add up all the transformer blocks and also the first
         # and last embedding layers and then partition that transformers+2 layers - so to get a good
         # balance you may want to use less transformer layers
         #
