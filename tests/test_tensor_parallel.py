@@ -39,8 +39,9 @@ class MegDSTestTP(TestCasePlus):
             "--lr": "0.00015",
             "--min-lr": "1.0e-5",
             "--train-iters": "5000",
-            "--tokenizer-type": "PretrainedFromHF",
-            "--tokenizer-name-or-path": "gpt2",
+            "--tokenizer-type": "GPT2BPETokenizer",
+            "--merge-file": "{data_dir}/gpt2-tiny-merges.txt",
+            "--vocab": "{data_dir}/gpt2-tiny-vocab.json",
             "--data-impl": "mmap",
             "--split": "949,50,1",
             "--distributed-backend": "nccl",
@@ -166,7 +167,7 @@ class MegDSTestTP(TestCasePlus):
         cp_dir = self.get_auto_remove_tmp_dir()
         
         command_args = self.get_default_args()
-        command_args["--pad-vocab-size-to"] = "50432" # This is equal to 128 * 394 which is above the len of gp2 vocabulary
+        command_args["--pad-vocab-size-to"] = "5120" # This is equal to 128 * 40 which is above the len of gp2-tiny vocabulary
         command_args["--position-embedding-type"] = "alibi"
         command_args["--tensor-model-parallel-size"] = "1"
         
@@ -197,7 +198,7 @@ class MegDSTestTP(TestCasePlus):
         cp_dir = self.get_auto_remove_tmp_dir()
         
         command_args = self.get_default_args()
-        command_args["--pad-vocab-size-to"] = "50432" # This is equal to 128 * 394 which is above the len of gp2 vocabulary
+        command_args["--pad-vocab-size-to"] = "5120" # This is equal to 128 * 40 which is above the len of gp2-tiny vocabulary
         command_args["--seq-length"] = "4"
         command_args["--micro-batch-size"] = "2"
         tokens = [[50431, 0, 1, 50430],[0, 1, 50430, 50431]]
@@ -230,7 +231,7 @@ class MegDSTestTP(TestCasePlus):
         mp.set_start_method('spawn', force=True)
         
         command_args = self.get_default_args()
-        command_args["--pad-vocab-size-to"] = "50432" # This is equal to 128 * 394 which is above the len of gp2 vocabulary
+        command_args["--pad-vocab-size-to"] = "5120" # This is equal to 128 * 40 which is above the len of gp2-tiny vocabulary
         command_args["--seq-length"] = "4"
         command_args["--micro-batch-size"] = "2"
         tokens = [[50432, 50433, 1, 50430],[0, 1, 50430, 50433]]
@@ -262,7 +263,7 @@ class MegDSTestTP(TestCasePlus):
         mp.set_start_method('spawn', force=True)
         
         command_args = self.get_default_args()
-        command_args["--pad-vocab-size-to"] = "50433" # This is equal to 128 * 394 + 1 which is above the len of gp2 vocabulary
+        command_args["--pad-vocab-size-to"] = "5121" # This is equal to 128 * 40 + 1 which is above the len of gp2-tiny vocabulary
         command_args["--micro-batch-size"] = "3"
 
         pool = Pool(2)
