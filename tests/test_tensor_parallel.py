@@ -157,7 +157,7 @@ class MegDSTestTP(TestCasePlus):
 
                 output = model.eval_batch(iter([token_ids]), compute_loss = False, reduce_output = None)[0]
                 
-                output = gather_from_tensor_model_parallel_region(output)[..., :tokenizer.vocab_size]
+                output = gather_from_tensor_model_parallel_region(output) #[..., :tokenizer.vocab_size]
 
                 if save != None:
                     args.save = save
