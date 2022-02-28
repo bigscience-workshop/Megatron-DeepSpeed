@@ -111,8 +111,6 @@ class MegDSTestTP(TestCasePlus):
                 initialize_megatron()
                 args = get_args()
 
-                # args.vocab_size = args.padded_vocab_size = 1024
-
                 tokenizer = get_tokenizer()
 
                 model, _, _ = setup_model_and_optimizer(gpt_model_provider)
@@ -157,7 +155,7 @@ class MegDSTestTP(TestCasePlus):
 
                 output = model.eval_batch(iter([token_ids]), compute_loss = False, reduce_output = None)[0]
                 
-                output = gather_from_tensor_model_parallel_region(output) #[..., :tokenizer.vocab_size]
+                output = gather_from_tensor_model_parallel_region(output)
 
                 if save != None:
                     args.save = save
