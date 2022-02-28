@@ -258,9 +258,9 @@ class MegDSTestTP(TestCasePlus):
         pool = Pool(2)
 
         with pytest.raises(Exception) as exc_info: 
-            result = pool.map(MegDSTestTP.infer_model, [((0, 2, command_args, tokens, None, None)), ((1, 2, command_args, tokens, None, None))])
+            _ = pool.map(MegDSTestTP.infer_model, [((0, 2, command_args, tokens, None, None)), ((1, 2, command_args, tokens, None, None))])
 
-        print(exc_info.value)
+        self.assertEqual(str(exc_info.value),"There is an input id in the input that is greater than the highest possible input id.")
         pool.close()
         pool.join()
 
