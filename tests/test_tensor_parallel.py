@@ -195,7 +195,65 @@ class MegDSTestTP(TestCasePlus):
 
 
     def test_embedding_matrix_tp(self):
-        pass
+        mp.set_start_method('spawn', force=True)
+        cp_dir = self.get_auto_remove_tmp_dir()
+        
+        command_args = self.get_default_args()
+        command_args["--pad-vocab-size-to"] = "50432" # This is equal to 128 * 394 which is above the len of gp2 vocabulary
+        command_args["--seq-length"] = "4"
+        command_args["--micro-batch-size"] = "2"
+        tokens = [
+            [50431, 0, 1, 50430],
+            [0, 1, 50430, 50431],
+        ]
+
+        command_args["--tensor-model-parallel-size"] = "1"
+        
+        pool = Pool(1)
+        # tp_index, tp_size, command_args, token_ids, save, load
+        result = pool.map(MegDSTestTP.infer_model, [((0, 1, command_args, tokens, cp_dir, None))])
+        pool.close()
+        pool.join()
+        
+        output, tokens = result[0]
+        logging.getLogger().info("First done!")
+
+        command_args["--tensor-model-parallel-size"] = "2"
+
+        pool = Pool(2)
+        result = pool.map(MegDSTestTP.infer_model, [((0, 2, command_args, tokens, None, cp_dir)), ((1, 2, command_args, tokens, None, cp_dir))])
+        pool.close()
+        pool.join()
+        
+        output2, tokens = result[0]
+
+        logging.getLogger().critical(output-output2)
+        self.assertTrue(np.allclose(output,output2, atol=5e-3, rtol=0), "Different results when running with TP=1 and TP=2")
+
+
+        ### Test invalid token ids
+        tokens = [
+            [50432, 50433, 1, 50430],
+            [0, 1, 50430, 50433],
+        ]
+
+        command_args["--tensor-model-parallel-size"] = "1"
+        
+        pool = Pool(1)
+        # tp_index, tp_size, command_args, token_ids, save, load
+        result = pool.map(MegDSTestTP.infer_model, [((0, 1, command_args, tokens, cp_dir, None))])
+        pool.close()
+        pool.join()
+        
+        output, tokens = result[0]
+        logging.getLogger().info("First done!")
+
+        command_args["--tensor-model-parallel-size"] = "2"
+
+        pool = Pool(2)
+        result = pool.map(MegDSTestTP.infer_model, [((0, 2, command_args, tokens, None, cp_dir)), ((1, 2, command_args, tokens, None, cp_dir))])
+        pool.close()
+        pool.join()
 
 if __name__ == '__main__':
     unittest.main()

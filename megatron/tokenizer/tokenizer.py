@@ -68,14 +68,22 @@ def build_tokenizer(args):
 
 
 def _vocab_size_with_padding(orig_vocab_size, args):
-    """Pad vocab size so it is divisible by model parallel size and
-    still having GPU friendly size."""
+    """Apply the requested rules to change the size of the vocabulary"""
 
     after = orig_vocab_size
-    multiple = args.make_vocab_size_divisible_by * \
-        args.tensor_model_parallel_size
-    while (after % multiple) != 0:
-        after += 1
+    if args.pad_vocab_size_to is not None:
+        after = args.pad_vocab_size_to
+        if after < orig_vocab_size:
+            raise ValueError(
+                f"You asked to pad the vocabulary to {after} when the initial vocabulary size is "
+                f"{args.pad_vocab_size_to}. You can only pad to a higher value."
+            )
+    else:
+        # Pad vocab size so it is divisible by model parallel size and still having GPU friendly size.
+        multiple = args.make_vocab_size_divisible_by * \
+            args.tensor_model_parallel_size
+        while (after % multiple) != 0:
+            after += 1
     if args.rank == 0:
         print(' > padded vocab (size: {}) with {} dummy tokens '
               '(new size: {})'.format(
