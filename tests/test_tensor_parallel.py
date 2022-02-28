@@ -170,6 +170,7 @@ class MegDSTestTP(TestCasePlus):
         cp_dir = self.get_auto_remove_tmp_dir()
         
         command_args = self.get_default_args()
+        command_args["--pad-vocab-size-to"] = "50432"
         command_args["--position-embedding-type"] = "alibi"
         command_args["--tensor-model-parallel-size"] = "1"
         
