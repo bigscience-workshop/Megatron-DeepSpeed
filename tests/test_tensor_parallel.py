@@ -242,27 +242,27 @@ class MegDSTestTP(TestCasePlus):
             [0, 1, 50430, 50433],
         ]
 
-        # command_args["--tensor-model-parallel-size"] = "1"
+        command_args["--tensor-model-parallel-size"] = "1"
+
+        pool = Pool(1)
+        with pytest.raises(Exception) as exc_info: 
+            _ = pool.map(MegDSTestTP.infer_model, [((0, 1, command_args, tokens, cp_dir, None))])
+        pool.close()
+        pool.join()
         
-        # pool = Pool(1)
-        # # tp_index, tp_size, command_args, token_ids, save, load
-        # result = pool.map(MegDSTestTP.infer_model, [((0, 1, command_args, tokens, cp_dir, None))])
-        # pool.close()
-        # pool.join()
+        self.assertEqual(str(exc_info.value),"There is an input id in the input that is greater than the highest possible input id.")
         
-        # output, _ = result[0]
         print("First done!")
 
         command_args["--tensor-model-parallel-size"] = "2"
 
         pool = Pool(2)
-
         with pytest.raises(Exception) as exc_info: 
             _ = pool.map(MegDSTestTP.infer_model, [((0, 2, command_args, tokens, None, None)), ((1, 2, command_args, tokens, None, None))])
-
-        self.assertEqual(str(exc_info.value),"There is an input id in the input that is greater than the highest possible input id.")
         pool.close()
         pool.join()
+
+        self.assertEqual(str(exc_info.value),"There is an input id in the input that is greater than the highest possible input id.")
 
 if __name__ == '__main__':
     unittest.main()
