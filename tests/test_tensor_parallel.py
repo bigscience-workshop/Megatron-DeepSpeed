@@ -245,7 +245,7 @@ class MegDSTestTP(TestCasePlus):
         pool.close()
         pool.join()
 
-        self.assertEqual(str(exc_info.value),"There is an input id in the input that is greater than the highest possible input id.")
+        self.assertIn("There is an input id in the input that is greater than the highest possible input id" , str(exc_info.value))
         
         logging.getLogger().info("First done!")
 
@@ -257,7 +257,7 @@ class MegDSTestTP(TestCasePlus):
         pool.close()
         pool.join()
 
-        self.assertEqual(str(exc_info.value),"There is an input id in the input that is greater than the highest possible input id.")
+        self.assertIn("There is an input id in the input that is greater than the highest possible input id", str(exc_info.value))
 
 
     def test_tokenizer_vocab_size_multiple_of_tp_size(self):
