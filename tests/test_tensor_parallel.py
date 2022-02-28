@@ -264,5 +264,8 @@ class MegDSTestTP(TestCasePlus):
         pool.close()
         pool.join()
 
+        print("This is the result:")
+        print(result[0][0].size())
+
 if __name__ == '__main__':
     unittest.main()
