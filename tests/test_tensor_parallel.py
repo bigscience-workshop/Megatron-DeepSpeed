@@ -263,7 +263,8 @@ class MegDSTestTP(TestCasePlus):
         
         command_args = self.get_default_args()
         command_args["--pad-vocab-size-to"] = "50433" # This is equal to 128 * 394 + 1 which is above the len of gp2 vocabulary
-        
+        command_args["--micro-batch-size"] = "3"
+
         pool = Pool(2)
         with pytest.raises(Exception) as exc_info: 
             _ = pool.map(MegDSTestTP.infer_model, [((0, 2, command_args, None, None, None)), ((1, 2, command_args, None, None, None))])
