@@ -217,7 +217,7 @@ class VocabParallelEmbedding(torch.nn.Module):
 
 
     def forward(self, input_):
-        if torch.any(input >= self.num_embeddings):
+        if torch.any(input_ >= self.num_embeddings):
             raise ValueError("There is an input id in the input which is bigger than the higher possible input id")
 
         if self.tensor_model_parallel_size > 1:
