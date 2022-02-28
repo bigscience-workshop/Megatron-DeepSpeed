@@ -273,6 +273,7 @@ class MegDSTestTP(TestCasePlus):
         pool.close()
         pool.join()
 
+        print(exc_info.value)
 
 
 if __name__ == '__main__':
