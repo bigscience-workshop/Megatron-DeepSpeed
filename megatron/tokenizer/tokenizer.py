@@ -69,8 +69,6 @@ def build_tokenizer(args):
 
 def _vocab_size_with_padding(orig_vocab_size, args):
     """Apply the requested rules to change the size of the vocabulary"""
-
-    after = orig_vocab_size
     if args.pad_vocab_size_to is not None:
         if args.pad_vocab_size_to  < orig_vocab_size:
             raise ValueError(
