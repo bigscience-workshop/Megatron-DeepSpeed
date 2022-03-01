@@ -167,6 +167,15 @@ def get_args():
                        help='Path to binary output file without suffix')
     group.add_argument('--dataset-impl', type=str, default='mmap',
                        choices=['lazy', 'cached', 'mmap'])
+    group.add_argument('--make-vocab-size-divisible-by', type=int, default=128,
+                       help='Pad the vocab size to be divisible by this value.'
+                            'This is added for computational efficieny reasons.')
+    group.add_argument('--pad-vocab-size-to', type=int, default=None,
+                       help='Pad the vocab size to be divisible by this value.'
+                            'Value of the size of the vocabulary of the tokenizer to reach. This value must be greater than'
+                            ' the initial size of the tokenizer. If this argument is used the value of '
+                            '`make-vocab-size-divisible-by` will be ignored.')
+
 
     group = parser.add_argument_group(title='runtime')
     group.add_argument('--torch-backend', type=str, default='gloo', choices=['gloo', 'mpi'],
@@ -198,7 +207,6 @@ def get_args():
     args.numranks = args.distctx.numranks
 
     # some default/dummy values for the tokenizer
-    args.make_vocab_size_divisible_by = 128
     args.tensor_model_parallel_size = 1
     args.vocab_extra_ids = 0
 
