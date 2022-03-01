@@ -228,7 +228,7 @@ class VocabParallelEmbedding(torch.nn.Module):
             masked_input = input_.clone() - self.vocab_start_index
             masked_input[input_mask] = 0
         else:
-            # input_ is indeed in the range [0:self.vocab_end_index - self.vocab_start_index] thanks to the first check
+            # input_ is garanted to be in the range [0:self.vocab_end_index - self.vocab_start_index] thanks to the first check
             masked_input = input_
 
         # Get the embeddings.
