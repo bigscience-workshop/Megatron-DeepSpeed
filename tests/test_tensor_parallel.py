@@ -276,6 +276,22 @@ class MegDSTestTP(TestCasePlus):
 
         self.assertEqual(str(exc_info.value), "5121 is not divisible by 2")
 
+    def test_tokenizer_raise_error_make_vocab_size_divisible_by(self):
+        mp.set_start_method('spawn', force=True)
+        
+        command_args = self.get_default_args()
+        command_args["--pad-vocab-size-to"] = "5121" # This is equal to 128 * 40 + 1 which is above the len of gp2-tiny vocabulary
+        command_args["--micro-batch-size"] = "4"
+        
+
+        pool = Pool(2)
+        with pytest.raises(Exception) as exc_info: 
+            _ = pool.map(MegDSTestTP.infer_model, [((0, 2, command_args, None, None, None)), ((1, 2, command_args, None, None, None))])
+        pool.close()
+        pool.join()
+
+        self.assertEqual(str(exc_info.value), "5121 is not divisible by 128")
+
 
 if __name__ == '__main__':
     unittest.main()
