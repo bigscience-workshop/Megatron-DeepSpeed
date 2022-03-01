@@ -32,6 +32,12 @@ import deepspeed
 from deepspeed.runtime.utils import see_memory_usage
 import os
 
+try:
+    from torch.distributed.elastic.multiprocessing.errors import record
+except ImportError:
+    # noop
+    def record(fn):
+        return fn
 
 def model_provider(pre_process=True, post_process=True):
     """Build the model."""
@@ -234,7 +240,10 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
     print_rank_0("> finished creating GPT datasets ...")
     return train_ds, valid_ds, test_ds
 
-
-if __name__ == "__main__":
+@record
+def main():
     pretrain(train_valid_test_datasets_provider, model_provider, forward_step,
              args_defaults={'tokenizer_type': 'GPT2BPETokenizer'})
+
+if __name__ == "__main__":
+    main()
