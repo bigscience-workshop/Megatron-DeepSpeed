@@ -267,6 +267,7 @@ class MegDSTestTP(TestCasePlus):
         command_args["--pad-vocab-size-to"] = "5121" # This is equal to 128 * 40 + 1 which is above the len of gp2-tiny vocabulary
         command_args["--micro-batch-size"] = "4"
         command_args["--tensor-model-parallel-size"] = "2"
+        command_args["--make-vocab-size-divisible-by"] = "1"
 
         pool = Pool(2)
         with pytest.raises(Exception) as exc_info: 
