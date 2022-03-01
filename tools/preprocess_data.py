@@ -119,6 +119,14 @@ def get_args():
                        help='Append an <eod> token to the end of a document.')
     group.add_argument("--tokenizer-name-or-path", type=str, default=None,
                        help="Name or path of the huggingface tokenizer.")
+    group.add_argument('--make-vocab-size-divisible-by', type=int, default=128,
+                       help='Pad the vocab size to be divisible by this value.'
+                            'This is added for computational efficieny reasons.')
+    group.add_argument('--pad-vocab-size-to', type=int, default=None,
+                       help='Pad the vocab size to be divisible by this value.'
+                            'Value of the size of the vocabulary of the tokenizer to reach. This value must be greater than'
+                            ' the initial size of the tokenizer. If this argument is used the value of '
+                            '`make-vocab-size-divisible-by` will be ignored.')
 
     group = parser.add_argument_group(title='output data')
     group.add_argument('--output-prefix', type=str, required=True,
@@ -140,7 +148,6 @@ def get_args():
 
     # some default/dummy values for the tokenizer
     args.rank = 0
-    args.make_vocab_size_divisible_by = 128
     args.tensor_model_parallel_size = 1
     args.vocab_extra_ids = 0
 

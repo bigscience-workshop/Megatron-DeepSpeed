@@ -25,6 +25,7 @@ from megatron.utils import get_ltor_masks_and_position_ids
 class MegDSTestTP(TestCasePlus):
     def get_default_args(self):
         """return a dictionary with key as argument name and value as additional arguments"""
+        data_dir = f"{self.data_dir}/gpt2"
         return {
             # GPT_ARGS
             "--num-layers": "2",
@@ -39,8 +40,9 @@ class MegDSTestTP(TestCasePlus):
             "--lr": "0.00015",
             "--min-lr": "1.0e-5",
             "--train-iters": "5000",
-            "--tokenizer-type": "PretrainedFromHF",
-            "--tokenizer-name-or-path": "gpt2",
+            "--tokenizer-type": "GPT2BPETokenizer",
+            "--merge-file": f"{data_dir}/gpt2-tiny-merges.txt",
+            "--vocab-file": f"{data_dir}/gpt2-tiny-vocab.json",
             "--data-impl": "mmap",
             "--split": "949,50,1",
             "--distributed-backend": "nccl",
@@ -111,8 +113,6 @@ class MegDSTestTP(TestCasePlus):
                 initialize_megatron()
                 args = get_args()
 
-                args.vocab_size = args.padded_vocab_size = 1024
-
                 tokenizer = get_tokenizer()
 
                 model, _, _ = setup_model_and_optimizer(gpt_model_provider)
@@ -141,7 +141,6 @@ class MegDSTestTP(TestCasePlus):
                 else:
                     token_ids = torch.tensor(token_ids)
                 
-                
                 model.micro_batches = 1
                 model.set_batch_fn(create_model_inputs)
                 # process batch
@@ -156,7 +155,7 @@ class MegDSTestTP(TestCasePlus):
 
                 output = model.eval_batch(iter([token_ids]), compute_loss = False, reduce_output = None)[0]
                 
-                output = gather_from_tensor_model_parallel_region(output)[..., :tokenizer.vocab_size]
+                output = gather_from_tensor_model_parallel_region(output)
 
                 if save != None:
                     args.save = save
@@ -169,6 +168,7 @@ class MegDSTestTP(TestCasePlus):
         cp_dir = self.get_auto_remove_tmp_dir()
         
         command_args = self.get_default_args()
+        command_args["--pad-vocab-size-to"] = "5120" # This is equal to 128 * 40 which is above the len of gp2-tiny vocabulary
         command_args["--position-embedding-type"] = "alibi"
         command_args["--tensor-model-parallel-size"] = "1"
         
@@ -191,6 +191,108 @@ class MegDSTestTP(TestCasePlus):
 
         logging.getLogger().critical(output-output2)
         self.assertTrue(np.allclose(output,output2, atol=5e-3, rtol=0), "Different results when running with TP=1 and TP=2")
+
+
+
+    def test_embedding_matrix_tp(self):
+        mp.set_start_method('spawn', force=True)
+        cp_dir = self.get_auto_remove_tmp_dir()
+        
+        command_args = self.get_default_args()
+        command_args["--pad-vocab-size-to"] = "5120" # This is equal to 128 * 40 which is above the len of gp2-tiny vocabulary
+        command_args["--seq-length"] = "4"
+        command_args["--micro-batch-size"] = "2"
+        tokens = [[5119, 0, 1, 5100],[0, 1, 5111, 5101]]
+
+        command_args["--tensor-model-parallel-size"] = "1"
+        
+        pool = Pool(1)
+        # tp_index, tp_size, command_args, token_ids, save, load
+        result = pool.map(MegDSTestTP.infer_model, [((0, 1, command_args, tokens, cp_dir, None))])
+        pool.close()
+        pool.join()
+        
+        output, _ = result[0]
+        logging.getLogger().info("First done!")
+
+        command_args["--tensor-model-parallel-size"] = "2"
+
+        pool = Pool(2)
+        result = pool.map(MegDSTestTP.infer_model, [((0, 2, command_args, tokens, None, cp_dir)), ((1, 2, command_args, tokens, None, cp_dir))])
+        pool.close()
+        pool.join()
+        
+        output2, _ = result[0]
+
+        logging.getLogger().critical(output-output2)
+        self.assertTrue(np.allclose(output,output2, atol=5e-3, rtol=0), "Different results when running with TP=1 and TP=2")
+
+
+    def test_embedding_matrix_tp_with_invalid_tokens_ids(self):
+        mp.set_start_method('spawn', force=True)
+        
+        command_args = self.get_default_args()
+        command_args["--pad-vocab-size-to"] = "5120" # This is equal to 128 * 40 which is above the len of gp2-tiny vocabulary
+        command_args["--seq-length"] = "4"
+        command_args["--micro-batch-size"] = "2"
+        tokens = [[5120, 0, 1, 2],[0, 1, 3, 4]]
+
+        command_args["--tensor-model-parallel-size"] = "1"
+
+        pool = Pool(1)
+        with pytest.raises(Exception) as exc_info: 
+            _ = pool.map(MegDSTestTP.infer_model, [((0, 1, command_args, tokens, None, None))])
+        pool.close()
+        pool.join()
+
+        self.assertIn("There is an input id in the input that is greater than the highest possible input id" , str(exc_info.value))
+        
+        logging.getLogger().info("First done!")
+
+        command_args["--tensor-model-parallel-size"] = "2"
+
+        pool = Pool(2)
+        with pytest.raises(Exception) as exc_info: 
+            _ = pool.map(MegDSTestTP.infer_model, [((0, 2, command_args, tokens, None, None)), ((1, 2, command_args, tokens, None, None))])
+        pool.close()
+        pool.join()
+
+        self.assertIn("There is an input id in the input that is greater than the highest possible input id", str(exc_info.value))
+
+
+    def test_tokenizer_vocab_size_multiple_of_tp_size(self):
+        mp.set_start_method('spawn', force=True)
+        
+        command_args = self.get_default_args()
+        command_args["--pad-vocab-size-to"] = "5121" # This is equal to 128 * 40 + 1 which is above the len of gp2-tiny vocabulary
+        command_args["--micro-batch-size"] = "4"
+        command_args["--tensor-model-parallel-size"] = "2"
+        command_args["--make-vocab-size-divisible-by"] = "1"
+
+        pool = Pool(2)
+        with pytest.raises(Exception) as exc_info: 
+            _ = pool.map(MegDSTestTP.infer_model, [((0, 2, command_args, None, None, None)), ((1, 2, command_args, None, None, None))])
+        pool.close()
+        pool.join()
+
+        self.assertEqual(str(exc_info.value), "5121 is not divisible by 2")
+
+    def test_tokenizer_raise_error_make_vocab_size_divisible_by(self):
+        mp.set_start_method('spawn', force=True)
+        
+        command_args = self.get_default_args()
+        command_args["--pad-vocab-size-to"] = "5121" # This is equal to 128 * 40 + 1 which is above the len of gp2-tiny vocabulary
+        command_args["--micro-batch-size"] = "4"
+        
+
+        pool = Pool(2)
+        with pytest.raises(Exception) as exc_info: 
+            _ = pool.map(MegDSTestTP.infer_model, [((0, 2, command_args, None, None, None)), ((1, 2, command_args, None, None, None))])
+        pool.close()
+        pool.join()
+
+        self.assertEqual(str(exc_info.value), "5121 is not divisible by 128")
+
 
 if __name__ == '__main__':
     unittest.main()
