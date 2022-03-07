@@ -188,7 +188,7 @@ class VocabParallelEmbedding(torch.nn.Module):
         # Allocate weights and initialize.
         args = get_args()
 
-        # only the first stage embedding runs this class' forward. te head's embedding does its own
+        # only the first stage embedding runs this class' forward. The head's embedding does its own
         # thing, so don't waste memory allocating LN weights.
         if mpu.is_pipeline_first_stage() and (args.use_bnb_optimizer or args.embed_layernorm):
             self.norm = torch.nn.LayerNorm(embedding_dim)
