@@ -165,6 +165,8 @@ def get_args():
     group = parser.add_argument_group(title='input data')
     group.add_argument('--input', type=str, required=True,
                        help='Path to input JSON or arrow file')
+    group.add_argument('--max-size', type=int, default=None,
+                       help='Max size of data to treat')
     group.add_argument('--content-keys', nargs='+', default=['text'],
                        help='space separate listed of keys to extract from data')
     group.add_argument('--split-sentences', action='store_true',
@@ -230,18 +232,21 @@ def fill_simple_queue_from_file(filename, simple_queue, chunk_size:int):
                 print(f"Finished reading input file", flush=True)
                 return
             simple_queue.put(acc)
+        return
 
-def fill_simple_queue_from_arrow(dirname, simple_queue, chunk_size:int):
+def fill_simple_queue_from_arrow(dirname, simple_queue, chunk_size:int, max_size: int = None):
     # TODO: Assess if instead we could feed pointers which process can then load.
     dataset = datasets.load_from_disk(dirname)
     print("Start filling queue", flush=True)
     start = 0
+    total_text_len = 0
     while True:
         acc = dataset[start:start + chunk_size]["text"]
+        total_text_len += sum([len(item) for item in acc])
         start += chunk_size
-        if len(acc) == 0:
+        if len(acc) == 0 or (max_size is not None and total_text_len > max_size):
             simple_queue.put(None)
-            print(f"Finished reading input file", flush=True)
+            print(f"Finished reading input file, total_text_len {total_text_len}, max_size {max_size}", flush=True)
             return
         simple_queue.put(acc)
 
@@ -319,7 +324,7 @@ def main():
         fill_thread = multiprocessing.Process(target=fill_simple_queue_from_file, args=(args.input, simple_queue, chunk_size))
     elif os.path.isdir(args.input):
         print("assuming arrow folder input for HF-datasets")
-        fill_thread = multiprocessing.Process(target=fill_simple_queue_from_arrow, args=(args.input, simple_queue, chunk_size))
+        fill_thread = multiprocessing.Process(target=fill_simple_queue_from_arrow, args=(args.input, simple_queue, chunk_size, args.max_size))
 
     fill_thread.start()
     log_thread.start()
