@@ -14,6 +14,7 @@
 # limitations under the License.
 
 from apex.optimizers import FusedAdam as Adam
+#from torch.optim import AdamW as Adam
 from apex.optimizers import FusedSGD as SGD
 
 from megatron import get_args

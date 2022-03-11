@@ -41,6 +41,7 @@ from megatron import get_args, mpu
 import deepspeed.runtime.activation_checkpointing.checkpointing as ds_checkpointing
 
 
+
 _MODEL_PARALLEL_ATTRIBUTE_DEFAULTS = {'tensor_model_parallel': False,
                                       'partition_dim': -1,
                                       'partition_stride': 1}
@@ -247,6 +248,11 @@ class VocabParallelEmbedding(torch.nn.Module):
 
         if hasattr(self, 'norm'):
             output = self.norm(output)
+
+        if 0:
+            from megatron.utils import dump_weights
+            args = get_args()
+            dump_weights("input-emb-forward-out", args.iteration, None, None, output)
 
         return output
 

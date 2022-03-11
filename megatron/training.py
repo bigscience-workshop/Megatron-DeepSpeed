@@ -58,6 +58,8 @@ from megatron.data.dataset_utils import analyze_data_prefix
 
 import deepspeed
 
+from megatron.utils import dump_weights
+
 
 def print_datetime(string):
     """Note that this call will sync across all ranks."""
@@ -407,10 +409,38 @@ def setup_model_and_optimizer(model_provider_func):
         # max time.
         torch.distributed.barrier()
         timers('load-checkpoint').start()
+
         args.iteration = load_checkpoint(model, optimizer, lr_scheduler)
+
+        tp_rank = mpu.get_tensor_model_parallel_rank()
+        pp_rank = mpu.get_pipeline_model_parallel_rank()
+        dp_rank = mpu.get_data_parallel_rank()
+
+        # incomplete code to try to fix the fp32 embeddings from bf16 weights
+        if 0:
+            if mpu.is_pipeline_first_stage() or mpu.is_pipeline_last_stage():
+                embed = model[0].module.tied_modules.embed.word_embeddings.weight
+                if hasattr(embed, "_hp_copy_offset"):
+                    offset = embed._hp_copy_offset
+                    numel = embed._hp_param.numel()
+                    embed_flat = embed.view(-1)
+                    print(pp_rank, offset, numel)
+                    x = embed_flat.narrow(0, offset, numel)
+                    print(f"{pp_rank}: SUCCESS")
+                    embed._hp_param.data.copy_(x)
+                else:
+                    print(f"{pp_rank}: No _hp_copy_offset")
+
+
+
         torch.distributed.barrier()
         timers('load-checkpoint').stop()
         timers.log(['load-checkpoint'])
+
+        dump_emb("on-load", args.iteration, model)
+        dump_weights("on-load", args.iteration, model, optimizer)
+
+
     else:
         args.iteration = 0
 
@@ -426,6 +456,19 @@ def setup_model_and_optimizer(model_provider_func):
         if args.fp16:
             optimizer.reload_model_params()
 
+    #optimizer.update_lp_params()
+
+    from pprint import pprint
+    #pprint("ON LOAD")
+    #print(optimizer)
+    # pprint(optimizer.optimizer.param_groups[0])
+    # pprint(optimizer.optimizer.param_groups[1])
+    # pprint(optimizer.optimizer.param_groups[2])
+
+    # for n, p in model[0].named_parameters():
+    #     print(n, p)
+    #     #die
+
     return model, optimizer, lr_scheduler
 
 
@@ -434,6 +477,12 @@ def train_step(forward_step_func, data_iterator,
     """Single training step."""
     args = get_args()
     timers = get_timers()
+
+    #from pprint import pprint
+    #pprint(optimizer.optimizer.param_groups[0])
+    # print(optimizer.optimizer.param_groups[0]['step'])
+    # print(optimizer.optimizer.param_groups[1]['step'])
+    # print(optimizer.optimizer.param_groups[2]['step'])
 
     if args.deepspeed:
         assert isinstance(model[0], deepspeed.PipelineEngine), model
@@ -758,6 +807,65 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
 
     return report_memory_flag
 
+import torch.distributed as dist
+import torch
+import os
+import socket
+import fcntl
+def printflock(*msgs):
+    """ print """
+    with open(__file__, "r") as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        try:
+            print(*msgs)
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)
+
+
+# compare before
+# perl -le 'print qx[diff -u debug-$_-pp0-tp0-dp0-global0-before-iteration.txt debug-$_-pp1-tp0-dp0-global1-before-iteration.txt] for 301..320'
+# compare after
+# perl -le 'print qx[diff -u debug-$_-pp0-tp0-dp0-global0-after-iteration.txt debug-$_-pp1-tp0-dp0-global1-after-iteration.txt] for 301..320'
+
+
+import torch
+
+def dump_emb(preamble, iteration, model):
+    return
+
+    # torch.set_printoptions(
+    #     threshold=10000000000, # print all data (without ... skipping) - can be huge!
+    #     sci_mode=False,      # print all data on the same scale of 1 (this disables scientific notation)
+    #     precision=6,         # print X decimal points for floats (default 4)
+    # )
+
+    # only care for first and last pp stages and dp0 tp0
+    if not (mpu.is_pipeline_first_stage() or mpu.is_pipeline_last_stage()):
+        return
+
+    #printflock(f"pp rank={pp_rank} {preamble} {model[0].module.tied_modules.embed.word_embeddings.weight}")
+
+    tp_rank = mpu.get_tensor_model_parallel_rank()
+    pp_rank = mpu.get_pipeline_model_parallel_rank()
+    dp_rank = mpu.get_data_parallel_rank()
+    #global_rank = torch.distributed.get_rank()
+
+    if not (tp_rank == 0 and dp_rank == 0):
+        return
+
+    # fn = f"debug-emb-bf16-{iteration}-pp{pp_rank}-tp{tp_rank}-dp{dp_rank}-{preamble}.zip"
+    # torch.save(model[0].module.tied_modules.embed.word_embeddings.weight, fn)
+
+    fn = f"debug-emb-bf16-{iteration}-pp{pp_rank}-tp{tp_rank}-dp{dp_rank}-{preamble}.txt"
+    #fn = f"debug-{iteration}-pp{pp_rank}-tp{tp_rank}-dp{dp_rank}-global{global_rank}-{preamble}.txt"
+    #print(fn)
+    with open(fn, "w") as fh:
+        fh.write(f"module.tied_modules.embed.word_embeddings.weight={model[0].module.tied_modules.embed.word_embeddings.weight.cpu()}\n")
+        # if pp_rank == 0:
+        #     fh.write(f"module.tied_modules.embed.word_embeddings.norm.weight={model[0].module.tied_modules.embed.word_embeddings.norm.weight.cpu()}\n")
+        #     fh.write(f"module.tied_modules.embed.word_embeddings.norm.bias={model[0].module.tied_modules.embed.word_embeddings.norm.bias.cpu()}\n")
+
+
 
 def save_checkpoint_and_time(iteration, model, optimizer, lr_scheduler):
     timers = get_timers()
@@ -766,6 +874,18 @@ def save_checkpoint_and_time(iteration, model, optimizer, lr_scheduler):
     torch.distributed.barrier()
     timers('save-checkpoint').start()
     save_checkpoint(iteration, model, optimizer, lr_scheduler)
+
+    dump_emb("on-save", iteration, model)
+    dump_weights("on-save", iteration, model, optimizer)
+
+
+#    from pprint import pprint
+#    pprint("ON SAVE")
+    # pprint(optimizer.optimizer.param_groups[0])
+    # pprint(optimizer.optimizer.param_groups[1])
+    # pprint(optimizer.optimizer.param_groups[2])
+#    print(optimizer)
+
     torch.distributed.barrier()
     timers('save-checkpoint').stop()
     timers.log(['save-checkpoint'])
@@ -848,12 +968,22 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
             args.pipeline_model_parallel_size >= 1:
             args.curriculum_seqlen = args.curriculum_scheduler.update_difficulty( \
                     args.iteration + 1)
+
+        dump_weights("before-iteration", iteration, model, optimizer)
+
+        dump_emb("before-iteration", iteration, model)
+
         loss_dict, skipped_iter, grad_norm, num_zeros_in_grad = \
             train_step(forward_step_func,
                        train_data_iterator,
                        model,
                        optimizer,
                        lr_scheduler)
+
+        dump_emb("after-iteration", iteration, model)
+
+        dump_weights("after-iteration", iteration, model, optimizer)
+
         iteration += 1
         args.iteration = iteration
         new_samples = mpu.get_data_parallel_world_size() * \
