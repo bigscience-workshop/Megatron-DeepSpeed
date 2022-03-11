@@ -248,7 +248,7 @@ def fill_simple_queue_from_arrow(dirname, simple_queue, chunk_size:int):
     start = 0
     while True:
         # row format
-        acc = [dataset[i] for i in range(start, start + chunk_size)]
+        acc = [dataset[i] for i in range(start, max(len(dataset), start + chunk_size))]
         start += chunk_size
         if len(acc) == 0:
             simple_queue.put(None)
