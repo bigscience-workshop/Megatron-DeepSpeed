@@ -35,6 +35,8 @@ import os
 import sys
 import threading
 import time
+
+import datasets
 import torch
 from multiprocessing.connection import Connection
 
@@ -71,7 +73,7 @@ class IdentitySplitter(object):
 
 class Encoder(object):
     def __init__(self, args):
-        self.json_keys = args.json_keys
+        self.content_keys = args.content_keys
         self.append_eod = args.append_eod
         # Use Encoder class as a container for global data
         self.tokenizer = build_tokenizer(args)
@@ -91,11 +93,14 @@ class Encoder(object):
         else:
             self.splitter = IdentitySplitter()
 
-    def encode(self, json_line):
-        data = json.loads(json_line)
+    def encode(self, data):
         ids = {}
-        for key in self.json_keys:
+        # TODO: a character is not a byte for non-ascii scripts. this was like this before, maybe fix at some point
+        #  (counting the actual bytes will slow down processing though)
+        bytes = 0
+        for key in self.content_keys:
             text = data[key]
+            bytes += len(text)
             doc_ids = []
             for sentence in self.splitter.tokenize(text):
                 sentence_ids = self.tokenizer.tokenize(sentence)
@@ -104,7 +109,7 @@ class Encoder(object):
             if len(doc_ids) > 0 and self.append_eod:
                 doc_ids[-1].append(self.tokenizer.eod)
             ids[key] = doc_ids
-        return ids, len(json_line)
+        return ids, bytes
 
 
 def process_samples(simple_queue, process_id, args, level, writer: Connection):
@@ -113,7 +118,7 @@ def process_samples(simple_queue, process_id, args, level, writer: Connection):
     output_bin_files = {}
     output_idx_files = {}
     builders = {}
-    for key in args.json_keys:
+    for key in args.content_keys:
         output_filename = get_output_filename(args.output_prefix, key, level, process_id)
         output_bin_files[key] = data_file_path(output_filename)
         output_idx_files[key] = index_file_path(output_filename)
@@ -122,11 +127,11 @@ def process_samples(simple_queue, process_id, args, level, writer: Connection):
                                                      impl=args.dataset_impl,
                                                      dtype=best_dtype)
 
-    json_lines = simple_queue.get()
-    while json_lines is not None:
-        process_json_lines(json_lines, encoder, builders, writer)
+    doc_lines = simple_queue.get()
+    while doc_lines is not None:
+        process_lines(doc_lines, encoder, builders, writer)
 
-        json_lines = simple_queue.get()
+        doc_lines = simple_queue.get()
 
     # In case finished, we still need to add None to signal to everyone else
     simple_queue.put(None)
@@ -134,21 +139,26 @@ def process_samples(simple_queue, process_id, args, level, writer: Connection):
     writer.send((None, process_id))
     writer.close()
 
-    for key in args.json_keys:
+    for key in args.content_keys:
         builders[key].finalize(output_idx_files[key])
 
     print(f"Worker {process_id} finished", flush=True)
 
 
-def process_json_lines(json_lines, encoder, builders, writer):
+def process_lines(lines, encoder, builders, writer):
     total_bytes_processed = 0
-    for json_line in json_lines:
-        if json_line.strip() == "":
-            continue
+    for line in lines:
 
-        doc, bytes_processed = encoder.encode(json_line)
+        if isinstance(line, str):
+            if line.strip() == "":
+                continue
+            data = json.loads(line)
+            doc, bytes_processed = encoder.encode(data)
+            total_bytes_processed += bytes_processed
 
-        total_bytes_processed += bytes_processed
+        elif isinstance(line, dict):
+            doc, bytes_processed = encoder.encode(line)
+            total_bytes_processed += bytes_processed
 
         for key, sentences in doc.items():
             if len(sentences) == 0:
@@ -157,16 +167,16 @@ def process_json_lines(json_lines, encoder, builders, writer):
                 builders[key].add_item(torch.IntTensor(sentence))
             builders[key].end_document()
 
-    writer.send((len(json_lines), total_bytes_processed))
+    writer.send((len(lines), total_bytes_processed))
 
 
 def get_args():
     parser = argparse.ArgumentParser()
     group = parser.add_argument_group(title='input data')
     group.add_argument('--input', type=str, required=True,
-                       help='Path to input JSON')
-    group.add_argument('--json-keys', nargs='+', default=['text'],
-                       help='space separate listed of keys to extract from json')
+                       help='Path to input JSON or arrow file')
+    group.add_argument('--content-keys', nargs='+', default=['text'],
+                       help='space separate listed of keys to extract from data')
     group.add_argument('--split-sentences', action='store_true',
                        help='Split documents into sentences.')
     group.add_argument('--keep-newlines', action='store_true',
@@ -219,7 +229,7 @@ def get_args():
 
     return args
 
-def fill_simple_queue(filename, simple_queue, chunk_size:int):
+def fill_simple_queue_from_file(filename, simple_queue, chunk_size:int):
     # TODO: Assess if instead we could feed pointers which process can then load.
     with open(filename, "r") as f:
         print("Start filling queue", flush=True)
@@ -230,6 +240,18 @@ def fill_simple_queue(filename, simple_queue, chunk_size:int):
                 print(f"Finished reading input file", flush=True)
                 return
             simple_queue.put(acc)
+
+def fill_simple_queue_from_arrow(dirname, simple_queue, chunk_size:int):
+    # TODO: Assess if instead we could feed pointers which process can then load.
+    dataset = datasets.load_from_disk(dirname)
+    print("Start filling queue", flush=True)
+    while True:
+        acc = tuple(itertools.islice(dataset, chunk_size))
+        if len(acc) == 0:
+            simple_queue.put(None)
+            print(f"Finished reading input file", flush=True)
+            return
+        simple_queue.put(acc)
 
 def log(readers, log_interval):
     print("Start Logging", flush=True)
@@ -300,7 +322,12 @@ def main():
     process_ids = list(range(len(writers)))
     processes = [multiprocessing.Process(target=process_samples, args=(simple_queue, process_id, args, level, writer)) for process_id, writer in zip(process_ids, writers)]
     log_thread = threading.Thread(target=log, args=(list(readers), args.log_interval))
-    fill_thread = multiprocessing.Process(target=fill_simple_queue, args=(args.input, simple_queue, chunk_size))
+    if os.path.isfile(args.input):
+        print("assuming `jsonl` input.")
+        fill_thread = multiprocessing.Process(target=fill_simple_queue_from_file, args=(args.input, simple_queue, chunk_size))
+    elif os.path.isdir(args.input):
+        print("assuming arrow folder input for HF-datasets")
+        fill_thread = multiprocessing.Process(target=fill_simple_queue_from_arrow, args=(args.input, simple_queue, chunk_size))
 
     fill_thread.start()
     log_thread.start()
@@ -332,7 +359,7 @@ def main():
     output_bin_files = {}
     output_idx_files = {}
     builders = {}
-    for key in args.json_keys:
+    for key in args.content_keys:
         output_filename = f"{args.output_prefix}_{key}_{level}"
         output_bin_files[key] = data_file_path(output_filename)
         output_idx_files[key] = index_file_path(output_filename)
@@ -341,7 +368,7 @@ def main():
                                                      impl=args.dataset_impl,
                                                      dtype=best_dtype)
 
-    for key in args.json_keys:
+    for key in args.content_keys:
         for process_id in process_ids:
             output_filename = get_output_filename(args.output_prefix, key, level, process_id)
             builders[key].merge_file_(output_filename)
@@ -349,7 +376,7 @@ def main():
 
     # Remove temporary files
     print("Removing shard files")
-    for key in args.json_keys:
+    for key in args.content_keys:
         for process_id in process_ids:
             output_filename = get_output_filename(args.output_prefix, key, level, process_id)
             os.remove(data_file_path(output_filename))
