@@ -245,8 +245,10 @@ def fill_simple_queue_from_arrow(dirname, simple_queue, chunk_size:int):
     # TODO: Assess if instead we could feed pointers which process can then load.
     dataset = datasets.load_from_disk(dirname)
     print("Start filling queue", flush=True)
+    start = 0
     while True:
-        acc = tuple(itertools.islice(dataset, chunk_size))
+        acc = tuple(itertools.islice(dataset, start, start + chunk_size))
+        start += chunk_size
         if len(acc) == 0:
             simple_queue.put(None)
             print(f"Finished reading input file", flush=True)
