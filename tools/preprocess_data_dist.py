@@ -167,6 +167,15 @@ def get_args():
                        help='Path to binary output file without suffix')
     group.add_argument('--dataset-impl', type=str, default='mmap',
                        choices=['lazy', 'cached', 'mmap'])
+    group.add_argument('--make-vocab-size-divisible-by', type=int, default=128,
+                       help='Pad the vocab size to be divisible by this value.'
+                            'This is added for computational efficieny reasons.')
+    group.add_argument('--pad-vocab-size-to', type=int, default=None,
+                       help='Pad the vocab size to be divisible by this value.'
+                            'Value of the size of the vocabulary of the tokenizer to reach. This value must be greater than'
+                            ' the initial size of the tokenizer. If this argument is used the value of '
+                            '`make-vocab-size-divisible-by` will be ignored.')
+
 
     group = parser.add_argument_group(title='runtime')
     group.add_argument('--torch-backend', type=str, default='gloo', choices=['gloo', 'mpi'],
@@ -198,7 +207,6 @@ def get_args():
     args.numranks = args.distctx.numranks
 
     # some default/dummy values for the tokenizer
-    args.make_vocab_size_divisible_by = 128
     args.tensor_model_parallel_size = 1
     args.vocab_extra_ids = 0
 
@@ -369,7 +377,7 @@ def rank_files_write(args, dset, idx, encoder):
     try:
         # create data file for each rank
         if args.rank == 0:
-            msg(f"Vocab size: {args.vocab_size}")
+            msg(f"Vocab size: {args.padded_vocab_size}")
             msg(f"Output prefix: {args.output_prefix}")
         output_bin_files = {}
         output_idx_files = {}
@@ -378,7 +386,7 @@ def rank_files_write(args, dset, idx, encoder):
             filebase = get_filename(args, key, args.rank)
             output_bin_files[key] = data_file_path(filebase)
             output_idx_files[key] = index_file_path(filebase)
-            best_dtype = best_fitting_dtype(args.vocab_size) if args.dataset_impl == "mmap" else None
+            best_dtype = best_fitting_dtype(args.padded_vocab_size) if args.dataset_impl == "mmap" else None
             builders[key] = make_builder(output_bin_files[key],
                                          impl=args.dataset_impl,
                                          dtype=best_dtype)
@@ -515,7 +523,7 @@ def rank_files_merge_serial(args):
             filebase = get_filename(args, key)
             output_bin_files[key] = data_file_path(filebase)
             output_idx_files[key] = index_file_path(filebase)
-            best_dtype = best_fitting_dtype(args.vocab_size) if args.dataset_impl == "mmap" else None
+            best_dtype = best_fitting_dtype(args.padded_vocab_size) if args.dataset_impl == "mmap" else None
             builders[key] = make_builder(output_bin_files[key],
                                          impl=args.dataset_impl,
                                          dtype=best_dtype)
@@ -600,7 +608,6 @@ def main():
         nltk.download("punkt", quiet=True)
 
     encoder = Encoder(args)
-    args.vocab_size = encoder.tokenizer.vocab_size
 
     # wait for all ranks before stopping timer
     args.distctx.barrier()

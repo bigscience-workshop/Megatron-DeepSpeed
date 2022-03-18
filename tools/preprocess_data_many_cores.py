@@ -49,7 +49,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
 
 from megatron.tokenizer import build_tokenizer
 from megatron.data import indexed_dataset
-from megatron.data.indexed_dataset import index_file_path, data_file_path
+from megatron.data.indexed_dataset import index_file_path, data_file_path, best_fitting_dtype
 
 
 # https://stackoverflow.com/questions/33139531/preserve-empty-lines-with-nltks-punkt-tokenizer
@@ -117,9 +117,10 @@ def process_samples(simple_queue, process_id, args, level, writer: Connection):
         output_filename = get_output_filename(args.output_prefix, key, level, process_id)
         output_bin_files[key] = data_file_path(output_filename)
         output_idx_files[key] = index_file_path(output_filename)
+        best_dtype = best_fitting_dtype(args.padded_vocab_size) if args.dataset_impl == "mmap" else None
         builders[key] = indexed_dataset.make_builder(output_bin_files[key],
                                                      impl=args.dataset_impl,
-                                                     vocab_size=encoder.tokenizer.vocab_size)
+                                                     dtype=best_dtype)
 
     json_lines = simple_queue.get()
     while json_lines is not None:
@@ -184,6 +185,14 @@ def get_args():
                        help='Append an <eod> token to the end of a document.')
     group.add_argument("--tokenizer-name-or-path", type=str, default=None, 
                        help="Name or path of the huggingface tokenizer.")
+    group.add_argument('--make-vocab-size-divisible-by', type=int, default=128,
+                       help='Pad the vocab size to be divisible by this value.'
+                            'This is added for computational efficieny reasons.')
+    group.add_argument('--pad-vocab-size-to', type=int, default=None,
+                       help='Pad the vocab size to be divisible by this value.'
+                            'Value of the size of the vocabulary of the tokenizer to reach. This value must be greater than'
+                            ' the initial size of the tokenizer. If this argument is used the value of '
+                            '`make-vocab-size-divisible-by` will be ignored.')
 
     group = parser.add_argument_group(title='output data')
     group.add_argument('--output-prefix', type=str, required=True,
@@ -205,7 +214,6 @@ def get_args():
 
     # some default/dummy values for the tokenizer
     args.rank = 0
-    args.make_vocab_size_divisible_by = 128
     args.tensor_model_parallel_size = 1
     args.vocab_extra_ids = 0
 
@@ -328,9 +336,10 @@ def main():
         output_filename = f"{args.output_prefix}_{key}_{level}"
         output_bin_files[key] = data_file_path(output_filename)
         output_idx_files[key] = index_file_path(output_filename)
+        best_dtype = best_fitting_dtype(args.padded_vocab_size) if args.dataset_impl == "mmap" else None
         builders[key] = indexed_dataset.make_builder(output_bin_files[key],
                                                      impl=args.dataset_impl,
-                                                     vocab_size=tokenizer.vocab_size)
+                                                     dtype=best_dtype)
 
     for key in args.json_keys:
         for process_id in process_ids:

@@ -369,6 +369,10 @@ def _add_network_size_args(parser):
     group.add_argument('--make-vocab-size-divisible-by', type=int, default=128,
                        help='Pad the vocab size to be divisible by this value.'
                        'This is added for computational efficieny reasons.')
+    group.add_argument('--pad-vocab-size-to', type=int, default=None,
+                       help='Pad the vocab size to this value.'
+                       'This value must be greater than the initial size of the tokenizer'
+                       ', needs to be divisible by TP size and `make-vocab-size-divisible-by`.')
     group.add_argument('--layernorm-epsilon', type=float, default=1e-5,
                        help='Layer norm epsilon.')
     group.add_argument('--apply-residual-connection-post-layernorm',
@@ -396,6 +400,11 @@ def _add_network_size_args(parser):
                        choices=megatron.model.glu_activations.GLU_ACTIVATIONS.keys(),
                        help='GLU activations to use.'
                        )
+
+    group.add_argument('--kill-switch-path', type=str,
+                       help='path to look for a kill switch, which if found will automatically exit the program'
+                       )
+
 
     group.add_argument('--log-level', type=str, choices=list(log_levels.keys()),
                        help="Logger log level to use on the main process. Possible choices are the log levels as strings: 'debug', "
@@ -560,6 +569,10 @@ def _add_training_args(parser):
                        help='Iteration ranges to skip. The values are one or more dash-separated ranges. e.g., 101-200 251-300.')
     group.add_argument('--inference', action='store_true',
                        help='Very basic inference mode: not allocating optim/lr - requires ZERO_STAGE=0')
+    group.add_argument('--abort-on-unmet-fused-kernel-constraints', action='store_true',
+                       help="If set to True, the program will abort if the constraints for loading a fused kernel aren't met")
+    group.add_argument('--pp-partition-method', type=str, default=None,
+                       help="Use to override the pipeline stages partitioning method. e.g., 'type:transformer|embedding'")
 
     return parser
 
@@ -835,6 +848,26 @@ def _add_data_args(parser):
                     '"NAME_CDE: 0.6 0.6:0.8 C, 0.3 0:1 D, 0.1 0:1 E" '
                     'test will be run on each of those groups independently',
                     action=parse_data_paths)
+
+    class parse_data_paths_path(argparse.Action):
+        def __call__(self, parser, args, values, option_string=None):
+            expected_option_strings = ["--train-weighted-split-paths-path", "--valid-weighted-split-paths-path", "--test-weighted-split-paths-path"]
+            assert option_string in expected_option_strings, f"Expected {option_string} to be in {expected_option_strings}"
+
+            with open(values, "r") as fi:
+                lines = fi.readlines()
+                assert len(lines) == 1, f"Got multiple lines {len(lines)} instead of 1 expected"
+                assert lines[0][-2:] == "\"\n" and lines[0][0] == "\"", f"Invalid input format, got {lines}"
+                values = lines[0][1:-2].split("\" \"")
+                weighted_split_paths_dest = re.sub(r"_path$", "", self.dest)
+                weighted_split_paths_option = re.sub(r"-path$", "", self.option_strings[0])
+                setattr(args, weighted_split_paths_dest, values)
+                parse_data_paths(option_strings=[weighted_split_paths_option], dest=weighted_split_paths_dest)(parser, args, values, option_string=weighted_split_paths_option)
+
+
+    group.add_argument('--train-weighted-split-paths-path', type=str, action=parse_data_paths_path ,default=None)
+    group.add_argument('--valid-weighted-split-paths-path', type=str, action=parse_data_paths_path, default=None)
+    group.add_argument('--test-weighted-split-paths-path', type=str, action=parse_data_paths_path, default=None)
 
     group.add_argument('--log-path', type=str, default=None,
                        help='Path to the save arguments file.')

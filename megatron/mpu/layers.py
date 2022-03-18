@@ -36,7 +36,8 @@ from .random import get_cuda_rng_tracker
 from .utils import divide
 from .utils import split_tensor_along_last_dim
 from .utils import VocabUtility
-from megatron import get_args
+from ..model.fused_layer_norm import MixedFusedLayerNorm as LayerNorm
+from megatron import get_args, mpu
 import deepspeed.runtime.activation_checkpointing.checkpointing as ds_checkpointing
 
 
@@ -188,8 +189,10 @@ class VocabParallelEmbedding(torch.nn.Module):
         # Allocate weights and initialize.
         args = get_args()
 
-        if args.use_bnb_optimizer or args.embed_layernorm:
-            self.norm = torch.nn.LayerNorm(embedding_dim)
+        # only the first stage embedding runs this class' forward. The head's embedding does its own
+        # thing, so don't waste memory allocating LN weights.
+        if mpu.is_pipeline_first_stage() and (args.use_bnb_optimizer or args.embed_layernorm):
+            self.norm = LayerNorm(embedding_dim)
 
         if args.use_bnb_optimizer:
             # for BNB we ignore the passed init_method and use torch.nn.init.xavier_uniform_
@@ -217,6 +220,9 @@ class VocabParallelEmbedding(torch.nn.Module):
 
 
     def forward(self, input_):
+        if torch.any(input_ >= self.num_embeddings):
+            raise ValueError(f"There is an input id in the input that is greater than the highest possible input id.\nInput: {input_}\nnum_embeddings: {self.num_embeddings}")
+
         if self.tensor_model_parallel_size > 1:
             # Build the mask.
             input_mask = (input_ < self.vocab_start_index) | \
@@ -225,7 +231,9 @@ class VocabParallelEmbedding(torch.nn.Module):
             masked_input = input_.clone() - self.vocab_start_index
             masked_input[input_mask] = 0
         else:
+            # input_ is garanted to be in the range [0:self.vocab_end_index - self.vocab_start_index] thanks to the first check
             masked_input = input_
+
         # Get the embeddings.
         output_parallel = F.embedding(masked_input, self.weight,
                                       self.padding_idx, self.max_norm,

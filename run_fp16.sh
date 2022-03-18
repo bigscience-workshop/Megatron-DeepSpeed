@@ -38,18 +38,21 @@ ZERO_STAGE=0
 
 
 TP=1
-PP=2
+PP=1
+DP=2
+WORLD_SIZE=$((TP*PP*DP))
 HIDDEN=1024
 LAYERS=24
 SEQ=1024
-GLOBAL_BATCH=2
+GLOBAL_BATCH=1
 WORKER_STR=""
 
 MICRO_BATCH=1
-
-DTYPE="bf16"
-
-LOG_DIR="/tmp/tensorboard/tp${TP}_pp${PP}_hd${HIDDEN}_nl${LAYERS}_gbsz${GLOBAL_BATCH}_mbsz${MICRO_BATCH}_z${ZERO_STAGE}_${DTYPE}_fix3"
+LR=6.0e-4
+MIN_LR=6.0e-5
+DTYPE="fp16"
+EXP_DIR=${HOME}/experiments/results/bf16
+LOG_DIR="${EXP_DIR}/tensorboard/tp${TP}_pp${PP}_dp${DP}_hd${HIDDEN}_nl${LAYERS}_gbsz${GLOBAL_BATCH}_mbsz${MICRO_BATCH}_z${ZERO_STAGE}_LR_${LR}_${MIN_LR}_${DTYPE}_fix3"
 mkdir -p $LOG_DIR
 
 while [[ $# -gt 0 ]]
@@ -86,12 +89,12 @@ options=" \
 	--micro-batch-size $MICRO_BATCH \
 	--global-batch-size $GLOBAL_BATCH \
 	--train-iters 1000 \
-        --lr 6.0e-5 \
-	--min-lr 6.0e-6 \
+        --lr $LR \
+	--min-lr $MIN_LR \
         --lr-decay-style cosine \
         --log-interval 1 \
         --eval-iters 40 \
-        --eval-interval 1000 \
+        --eval-interval 10 \
 	--data-path ${DATASET} \
 	--vocab-file ${VOCAB_PATH} \
 	--merge-file ${MERGE_PATH} \
@@ -131,26 +134,27 @@ cat <<EOT > $CONFIG_JSON
   },
 
   "bf16": {
-    "enabled": true
+    "enabled": false
   },
 
   "fp16": {
-    "enabled": false,
+    "enabled": true,
     "loss_scale": 0,
     "loss_scale_window": 500,
     "hysteresis": 2,
     "min_loss_scale": 1,
-    "initial_scale_power": 12
+    "initial_scale_power": 8
   },
 
   "wall_clock_breakdown" : true
 }
 EOT
 
-WORKER_STR="-i worker-0:0,1"
+WORKER_STR="--num_nodes 1 --num_gpus $WORLD_SIZE"
+#WORKER_STR="-i worker-0:0,1,2,3"
 #run_cmd="deepspeed -i worker-0:0,1,2,3 ${DIR}/pretrain_gpt.py $@ ${options}"
 #run_cmd="deepspeed -i worker-0 ${DIR}/pretrain_gpt.py $@ ${options}"
-run_cmd="deepspeed $WORKER_STR ${DIR}/pretrain_gpt.py $@ ${options}"
+run_cmd="deepspeed --master_port 29600 $WORKER_STR ${DIR}/pretrain_gpt.py $@ ${options}"
 
 
 echo ${run_cmd}

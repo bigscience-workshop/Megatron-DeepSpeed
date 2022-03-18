@@ -15,10 +15,12 @@
 
 """Megatron global variables."""
 
+import functools
 import os
 import sys
 import time
 
+from packaging import version
 from pathlib import Path
 
 import torch
@@ -146,6 +148,11 @@ def _set_tensorboard_writer(args):
             _GLOBAL_TENSORBOARD_WRITER = SummaryWriter(
                 log_dir=args.tensorboard_dir,
                 max_queue=args.tensorboard_queue_size)
+            # this is supposed to make the data load in TB faster
+            if version.parse(torch.__version__) >= version.parse("1.9"):
+                _GLOBAL_TENSORBOARD_WRITER.add_scalar = functools.partial(
+                    _GLOBAL_TENSORBOARD_WRITER.add_scalar, new_style=True
+                )
         except ModuleNotFoundError:
             print('WARNING: TensorBoard writing requested but is not '
                   'available (are you using PyTorch 1.1.0 or later?), '
