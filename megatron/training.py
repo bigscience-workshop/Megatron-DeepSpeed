@@ -102,7 +102,8 @@ def pretrain(train_valid_test_dataset_provider,
     args = get_args()
 
     if found_kill_switch():
-        sys.exit(f"Detected kill switch at {args.kill_switch_path}. Exiting")
+        print_datetime(f"Detected kill switch at {args.kill_switch_path}. Exiting")
+        sys.exit()
 
     codecarbon_tracker_start()
 
@@ -834,7 +835,8 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
 
         if found_kill_switch():
             save_checkpoint_and_time(iteration, model, optimizer, lr_scheduler)
-            sys.exit(f"Detected kill switch at {args.kill_switch_path}. Exiting")
+            print_datetime(f"Detected kill switch at {args.kill_switch_path}. Exiting")
+            sys.exit()
 
         update_num_microbatches(args.consumed_train_samples)
         if args.deepspeed:
