@@ -658,12 +658,15 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
             writer.add_scalar('curriculum_seqlen', args.curriculum_seqlen,
                               iteration)
 
-        if args.data_weights is not None:
-            for prefix, weight in zip(args.data_prefixes, args.data_weights):
-                name = prefix.split(",")[-1]
-                writer.add_scalar(f'samples-per-dataset/{name}', args.consumed_train_samples * weight, args.consumed_train_samples)
-                writer.add_scalar(f'steps-per-dataset/{name}', iteration * weight, iteration)
-                writer.add_scalar(f'tokens-per-dataset/{name}', args.consumed_train_tokens * weight, args.consumed_train_tokens)
+        # It's very questionable what this data contributes, other than huge unstripped file paths
+        # as keys and hundreds of TB boards that make the TB files very bloated. So disabling for now.
+        #
+        # if args.data_weights is not None:
+        #     for prefix, weight in zip(args.data_prefixes, args.data_weights):
+        #         name = prefix.split(",")[-1]
+        #         writer.add_scalar(f'samples-per-dataset/{name}', args.consumed_train_samples * weight, args.consumed_train_samples)
+        #         writer.add_scalar(f'steps-per-dataset/{name}', iteration * weight, iteration)
+        #         writer.add_scalar(f'tokens-per-dataset/{name}', args.consumed_train_tokens * weight, args.consumed_train_tokens)
 
         if args.log_timers_to_tensorboard:
             timers.write(timers_to_log, writer, iteration,
