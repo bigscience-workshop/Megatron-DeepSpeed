@@ -275,12 +275,12 @@ class MegDSTestTraining(TestCasePlus):
         # 2. trigger kill switch
         fh = open(kill_switch_path, "w")
         with CaptureStd() as cs:
-            with self.assertRaises(RuntimeError):
-                execute_subprocess_async(cmd, env=self.get_env())
+            execute_subprocess_async(cmd, env=self.get_env())
 
-        self.assertIn(f"Detected kill switch at {kill_switch_path}", cs.err)
-        self.assertIn(f"Killing subprocess", cs.out)
+        self.assertIn(f"Detected kill switch at {kill_switch_path}", cs.out)
 
+        # test deepspeed wasn't run
+        self.assertNotIn("DeepSpeed info", cs.out)
 
 
     @parameterized.expand(["base", "cl", "bnb", "glu", "alibi"])
