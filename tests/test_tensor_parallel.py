@@ -293,6 +293,5 @@ class MegDSTestTP(TestCasePlus):
 
         self.assertEqual(str(exc_info.value), "5121 is not divisible by 128")
 
-
 if __name__ == '__main__':
     unittest.main()

@@ -50,7 +50,7 @@ def get_3d_dimensions():
         dp_size = 2
         pp_size = 2
         tp_size = 2
-    if num_gpus >= 4:
+    elif num_gpus >= 4:
         dp_size = 1
         pp_size = 2
         tp_size = 2
@@ -592,3 +592,26 @@ class MegDSTestTraining(TestCasePlus):
         train_iterations = range(1,10)
         for i in train_iterations:
             self.assertTrue(f"iteration {i:8d}/" in cs.out)
+
+    def test_layer_norm_consistent(self):
+        # skip iterations setup
+        extra_args = f"""
+            --skip-train-iteration-range 2-2 4-7
+        """.split()
+
+        src_dir = self.src_dir
+        output_dir = self.get_auto_remove_tmp_dir()
+        args, ds_args, num_gpus = self.get_variation_config("base", output_dir, n_samples=200)
+        args.extend(extra_args)
+        script = [f"{src_dir}/pretrain_gpt.py"]
+        launcher = get_launcher(num_gpus)
+        cmd = launcher + script + args + ds_args
+        # keep for quick debug
+        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
+
+        with CaptureStdout() as cs:
+            execute_subprocess_async(cmd, env=self.get_env())
+
+        checkpoint_path = os.path.join(output_dir, "checkpoints")
+        print(os.listdir(checkpoint_path))
+        assert False
