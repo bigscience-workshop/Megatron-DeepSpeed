@@ -652,6 +652,7 @@ class MegDSTestTraining(TestCasePlus):
 
                 --lr-decay-samples 6
 
+                --position-embedding-type alibi
         """.split()
 
         ds_args = f"""
