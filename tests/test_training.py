@@ -694,7 +694,7 @@ class MegDSTestTraining(TestCasePlus):
                         torch.testing.assert_close(ref, weight, rtol=0.0, atol=0.0, check_device=False)
 
         keys_to_compare = ["word_embeddings.norm.weight"]
-        files_to_compare = [[f"layer_{layer_id:02d}-model_{tp:02d}-model_states.pt" for tp in range(num_gpus)] for layer_id in [0]]
+        files_to_compare = [[f"layer_{layer_id:02d}-model_{tp:02d}-model_states.pt" for tp in range(num_gpus)] for layer_id in [1]]
         for checkpoint in checkpoints:
             checkpoint_path = os.path.join(output_dir, "checkpoints", checkpoint)
             for key in keys_to_compare:
