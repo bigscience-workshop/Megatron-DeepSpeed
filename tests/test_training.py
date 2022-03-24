@@ -595,7 +595,8 @@ class MegDSTestTraining(TestCasePlus):
         for i in train_iterations:
             self.assertTrue(f"iteration {i:8d}/" in cs.out)
 
-    def test_layer_norm_consistent(self):
+    @parameterized.expand(["bf16", "fp16"])
+    def test_layer_norm_consistent(self, variation):
         src_dir = self.src_dir
         output_dir = self.get_auto_remove_tmp_dir()
         num_gpus = 2
@@ -641,7 +642,6 @@ class MegDSTestTraining(TestCasePlus):
                 --clip-grad 1.0
                 --weight-decay 1e-1
                 --embed-layernorm
-                --bf16
 
                 --log-level debug
                 --log-level-replica info
@@ -654,12 +654,21 @@ class MegDSTestTraining(TestCasePlus):
 
         ds_args = f"""
                 --deepspeed
-                --deepspeed_config {self.test_file_dir_str}/ds_config_bf16.json
-                --zero-stage 1
                 --deepspeed-activation-checkpointing
-                --deepspeed_config {self.test_file_dir_str}/ds_config_bf16.json
-
         """.split()
+
+        if variation == "bf16":
+            args.append("--bf16")
+            ds_args += [
+                "--zero-stage", "0"
+                "--deepspeed_config", f"{self.test_file_dir_str}/ds_config_bf16.json"
+            ]
+        elif variation == "fp16":
+            args.append("--fp16")
+            ds_args += [
+                "--zero-stage", "1"
+                "--deepspeed_config", f"{self.test_file_dir_str}/ds_config.json"
+            ]
 
         # args, ds_args, num_gpus = self.get_variation_config("base", output_dir, n_samples=200)
 
