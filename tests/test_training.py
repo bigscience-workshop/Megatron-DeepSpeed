@@ -676,17 +676,19 @@ class MegDSTestTraining(TestCasePlus):
             execute_subprocess_async(cmd, env=self.get_env())
 
         checkpoints = ["global_step10", "global_step20"]
+        keys_to_compare = ["input_layernorm.weight", "input_layernorm.bias", "post_attention_layernorm.weight", "post_attention_layernorm.bias"]
         files_to_compare = [[f"layer_{layer_id:02d}-model_{tp:02d}-model_states.pt" for tp in range(num_gpus)] for layer_id in [3,4]]
         for checkpoint in checkpoints:
             print(checkpoint)
             checkpoint_path = os.path.join(output_dir, "checkpoints", checkpoint)
             print(os.listdir(checkpoint_path))
-            key = "input_layernorm.weight"
-            for files in files_to_compare:
-                print(files)
-                weights = [torch.load(os.path.join(checkpoint_path, file))[key] for file in files]
-                ref = weights[0]
-                for weight in weights[1:]:
-                    torch.testing.assert_close(ref, weight, rtol=0.0, atol=0.0, check_device=False)
-                print(ref)
+            for key in keys_to_compare:
+                print(key)
+                for files in files_to_compare:
+                    print(files)
+                    weights = [torch.load(os.path.join(checkpoint_path, file))[key] for file in files]
+                    ref = weights[0]
+                    for weight in weights[1:]:
+                        torch.testing.assert_close(ref, weight, rtol=0.0, atol=0.0, check_device=False)
+                    print(key, ref)
         assert False
