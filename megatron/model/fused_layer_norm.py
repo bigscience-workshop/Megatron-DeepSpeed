@@ -84,9 +84,9 @@ class MixedFusedLayerNorm(torch.nn.Module):
 
 
   def forward(self, input):
-    weights = [torch.empty_like(self.weight) for tp in mpu.get_tensor_model_parallel_world_size()]
+    weights = [torch.empty_like(self.weight) for tp in range(mpu.get_tensor_model_parallel_world_size())]
     torch.distributed.all_gather(weights, self.weight, group=mpu.get_tensor_model_parallel_group())
-    biases = [torch.empty_like(self.bias) for tp in mpu.get_tensor_model_parallel_world_size()]
+    biases = [torch.empty_like(self.bias) for tp in range(mpu.get_tensor_model_parallel_world_size())]
     torch.distributed.all_gather(biases, self.bias, group=mpu.get_tensor_model_parallel_group())
     if any(torch.any(weight != self.weight) for weight in weights):
         if mpu.get_tensor_model_parallel_rank() == 0:
