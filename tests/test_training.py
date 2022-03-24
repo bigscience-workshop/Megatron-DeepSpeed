@@ -674,10 +674,17 @@ class MegDSTestTraining(TestCasePlus):
         with CaptureStdout() as cs:
             execute_subprocess_async(cmd, env=self.get_env())
 
-        checkpoint_path = os.path.join(output_dir, "checkpoints", "global_step10")
-        print(os.listdir(checkpoint_path))
-        key="input_layernorm.weight"
-        files_to_test=["layer_03-model_00-model_states.pt", "layer_03-model_01-model_states.pt"]
-        weights = [torch.load(os.path.join(checkpoint_path,file))[key] for file in files_to_test]
-        torch.testing.assert_close(weights[0], weights[1], rtol=0.0, atol=0.0, check_device=False)
+        checkpoints = ["global_step10", "global_step20"]
+        files_to_compare = [[f"layer_{layer_id:02d}-model_{tp:02d}-model_states.pt" for tp in range(num_gpus)] for layer_id in [3,4]]
+        for checkpoint in checkpoints:
+            print(checkpoint)
+            checkpoint_path = os.path.join(output_dir, "checkpoints", checkpoint)
+            print(os.listdir(checkpoint_path))
+            key = "input_layernorm.weight"
+            for files in files_to_compare:
+                print(files)
+                weights = [torch.load(os.path.join(checkpoint_path, file))[key] for file in files]
+                ref = weights[0]
+                for weight in weights[1:]:
+                    torch.testing.assert_close(ref, weight, rtol=0.0, atol=0.0, check_device=False)
         assert False
