@@ -20,6 +20,8 @@ import glob
 import re
 import unittest
 from pathlib import Path
+
+import torch
 from parameterized import parameterized
 
 from megatron.testing_utils import (
@@ -594,15 +596,9 @@ class MegDSTestTraining(TestCasePlus):
             self.assertTrue(f"iteration {i:8d}/" in cs.out)
 
     def test_layer_norm_consistent(self):
-        # skip iterations setup
-        extra_args = f"""
-            --skip-train-iteration-range 2-2 4-7
-        """.split()
-
         src_dir = self.src_dir
         output_dir = self.get_auto_remove_tmp_dir()
         args, ds_args, num_gpus = self.get_variation_config("base", output_dir, n_samples=200)
-        args.extend(extra_args)
         script = [f"{src_dir}/pretrain_gpt.py"]
         launcher = get_launcher(num_gpus)
         cmd = launcher + script + args + ds_args
@@ -612,6 +608,10 @@ class MegDSTestTraining(TestCasePlus):
         with CaptureStdout() as cs:
             execute_subprocess_async(cmd, env=self.get_env())
 
-        checkpoint_path = os.path.join(output_dir, "checkpoints")
+        checkpoint_path = os.path.join(output_dir, "checkpoints", "global_step_10")
         print(os.listdir(checkpoint_path))
+        key="input_layernorm.weight"
+        files_to_test=["layer_03-model_00-model_states.pt", "layer_03-model_01-model_states.pt"]
+        weights = [torch.load(os.path.join(checkpoint_path,file))[key] for file in files_to_test]
+        torch.testing.assert_close(weights[0], weights[1], rtol=0.0, atol=0.0, check_device=False)
         assert False
