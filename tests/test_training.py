@@ -33,7 +33,7 @@ from megatron.testing_utils import (
     require_bnb_non_decorator,
     require_deepspeed,
     require_torch_gpu,
-    set_seed
+    set_seed, torch_assert_equal
 )
 
 set_seed(42)
@@ -691,7 +691,7 @@ class MegDSTestTraining(TestCasePlus):
                     weights = [torch.load(os.path.join(checkpoint_path, file))[key] for file in files]
                     ref = weights[0]
                     for weight in weights[1:]:
-                        torch.testing.assert_close(ref, weight, rtol=0.0, atol=0.0, check_device=False)
+                        torch_assert_equal(ref, weight, rtol=0.0, atol=0.0, check_device=False)
 
         keys_to_compare = ["word_embeddings.norm.weight"]
         files_to_compare = [[f"layer_{layer_id:02d}-model_{tp:02d}-model_states.pt" for tp in range(num_gpus)] for layer_id in [1]]
@@ -702,4 +702,4 @@ class MegDSTestTraining(TestCasePlus):
                     weights = [torch.load(os.path.join(checkpoint_path, file))[key] for file in files]
                     ref = weights[0]
                     for weight in weights[1:]:
-                        torch.testing.assert_close(ref, weight, rtol=0.0, atol=0.0, check_device=False)
+                        torch_assert_equal(ref, weight, rtol=0.0, atol=0.0, check_device=False)
