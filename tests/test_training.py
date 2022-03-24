@@ -688,4 +688,5 @@ class MegDSTestTraining(TestCasePlus):
                 ref = weights[0]
                 for weight in weights[1:]:
                     torch.testing.assert_close(ref, weight, rtol=0.0, atol=0.0, check_device=False)
+                print(ref)
         assert False
