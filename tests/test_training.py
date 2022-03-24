@@ -682,6 +682,8 @@ class MegDSTestTraining(TestCasePlus):
             execute_subprocess_async(cmd, env=self.get_env())
 
         checkpoints = ["global_step10", "global_step20"]
+
+        # Check transformer layer norm
         keys_to_compare = ["input_layernorm.weight", "input_layernorm.bias", "post_attention_layernorm.weight", "post_attention_layernorm.bias"]
         files_to_compare = [[f"layer_{layer_id:02d}-model_{tp:02d}-model_states.pt" for tp in range(num_gpus)] for layer_id in [3,4]]
         for checkpoint in checkpoints:
@@ -693,6 +695,7 @@ class MegDSTestTraining(TestCasePlus):
                     for weight in weights[1:]:
                         torch_assert_equal(ref, weight, rtol=0.0, atol=0.0, check_device=False)
 
+        # Check embed layer norm
         keys_to_compare = ["word_embeddings.norm.weight"]
         files_to_compare = [[f"layer_{layer_id:02d}-model_{tp:02d}-model_states.pt" for tp in range(num_gpus)] for layer_id in [1]]
         for checkpoint in checkpoints:
