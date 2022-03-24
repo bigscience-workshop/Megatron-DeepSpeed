@@ -22,6 +22,7 @@ import torch
 from torch.nn.parameter import Parameter
 from torch.nn import init
 import importlib
+from megatron import mpu
 
 global fused_mix_prec_layer_norm_cuda
 fused_mix_prec_layer_norm_cuda = None
@@ -84,7 +85,12 @@ class MixedFusedLayerNorm(torch.nn.Module):
 
 
   def forward(self, input):
+    # TODO: temporary hack in order to synchronize all layer norms params despite them being
+    # unsynced at the moment due to a bug in deepspeed's bf16 optimizer
+    if 1:
+      tp_world_size = mpu.get_tensor_model_parallel_world_size()
+      weight = mpu.reduce_from_tensor_model_parallel_region(self.weight) / tp_world_size
+      bias = mpu.reduce_from_tensor_model_parallel_region(self.bias) / tp_world_size
 
     return FusedLayerNormAffineFunction.apply(
-      input, self.weight, self.bias, self.normalized_shape,self.eps)
-
+      input, weight, bias, self.normalized_shape,self.eps)
