@@ -641,7 +641,7 @@ class MegDSTestTraining(TestCasePlus):
                 --clip-grad 1.0
                 --weight-decay 1e-1
                 --embed-layernorm
-                --fp16
+                --bf16
 
                 --log-level debug
                 --log-level-replica info
@@ -654,10 +654,10 @@ class MegDSTestTraining(TestCasePlus):
 
         ds_args = f"""
                 --deepspeed
-                --deepspeed_config {self.test_file_dir_str}/ds_config.json
+                --deepspeed_config {self.test_file_dir_str}/ds_config_bf16.json
                 --zero-stage 1
                 --deepspeed-activation-checkpointing
-                --deepspeed_config {self.test_file_dir_str}/ds_config.json
+                --deepspeed_config {self.test_file_dir_str}/ds_config_bf16.json
 
         """.split()
 
