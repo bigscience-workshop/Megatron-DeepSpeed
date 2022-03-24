@@ -3,7 +3,7 @@
   "train_batch_size": 16,
   "gradient_clipping": 1.0,
   "zero_optimization": {
-    "stage": 1
+    "stage": 0
   },
   "bf16": {
     "enabled": true
