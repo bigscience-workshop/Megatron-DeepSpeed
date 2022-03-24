@@ -630,15 +630,14 @@ class MegDSTestTraining(TestCasePlus):
                 --num-attention-heads 2
                 --seq-length {seq_len}
                 --max-position-embeddings 1024
-                --micro-batch-size 1
+                --micro-batch-size 2
                 --global-batch-size 16
 
                 --optimizer adam
                 --adam-beta1 0.9
                 --adam-beta2 0.95
                 --adam-eps 1e-8
-                --lr 1e-4
-                --lr-warmup-samples 5
+                --lr 1e-1
                 --clip-grad 1.0
                 --weight-decay 1e-1
                 --embed-layernorm
@@ -649,8 +648,6 @@ class MegDSTestTraining(TestCasePlus):
 
                 --rampup-batch-size 2 2 200
                 --train-samples 200
-
-                --lr-decay-samples 6
 
                 --position-embedding-type alibi
         """.split()
