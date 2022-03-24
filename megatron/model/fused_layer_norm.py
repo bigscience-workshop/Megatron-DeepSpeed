@@ -19,7 +19,7 @@
 
 import numbers
 import torch
-from megatron import mpu
+from megatron import mpu, print_rank_0
 from torch.nn.parameter import Parameter
 from torch.nn import init
 import importlib
@@ -84,12 +84,17 @@ class MixedFusedLayerNorm(torch.nn.Module):
 
 
   def forward(self, input):
-    print(
-        mpu.get_tensor_model_parallel_group(),
-        mpu.get_tensor_model_parallel_rank(),
-        self.weight,
-        self.bias
-    )
+    weights = [torch.empty_like(self.weight) for tp in mpu.get_tensor_model_parallel_world_size()]
+    torch.distributed.all_gather(weights, self.weight, group=mpu.get_tensor_model_parallel_group())
+    biases = [torch.empty_like(self.bias) for tp in mpu.get_tensor_model_parallel_world_size()]
+    torch.distributed.all_gather(biases, self.bias, group=mpu.get_tensor_model_parallel_group())
+    if any(torch.any(weight != self.weight) for weight in weights):
+        print_rank_0("Weight sync failed")
+        print_rank_0(weights)
+    if any(torch.any(bias != self.bias) for bias in biases):
+        print_rank_0("Bias sync failed")
+        print_rank_0(biases)
+
     return FusedLayerNormAffineFunction.apply(
       input, self.weight, self.bias, self.normalized_shape,self.eps)
 
