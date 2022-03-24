@@ -685,15 +685,21 @@ class MegDSTestTraining(TestCasePlus):
         keys_to_compare = ["input_layernorm.weight", "input_layernorm.bias", "post_attention_layernorm.weight", "post_attention_layernorm.bias"]
         files_to_compare = [[f"layer_{layer_id:02d}-model_{tp:02d}-model_states.pt" for tp in range(num_gpus)] for layer_id in [3,4]]
         for checkpoint in checkpoints:
-            print(checkpoint)
             checkpoint_path = os.path.join(output_dir, "checkpoints", checkpoint)
-            print(os.listdir(checkpoint_path))
             for key in keys_to_compare:
-                print(key)
                 for files in files_to_compare:
-                    print(files)
                     weights = [torch.load(os.path.join(checkpoint_path, file))[key] for file in files]
                     ref = weights[0]
                     for weight in weights[1:]:
                         torch.testing.assert_close(ref, weight, rtol=0.0, atol=0.0, check_device=False)
-                    print(key, ref)
+
+        keys_to_compare = ["word_embeddings.norm.weight"]
+        files_to_compare = [[f"layer_{layer_id:02d}-model_{tp:02d}-model_states.pt" for tp in range(num_gpus)] for layer_id in [0]]
+        for checkpoint in checkpoints:
+            checkpoint_path = os.path.join(output_dir, "checkpoints", checkpoint)
+            for key in keys_to_compare:
+                for files in files_to_compare:
+                    weights = [torch.load(os.path.join(checkpoint_path, file))[key] for file in files]
+                    ref = weights[0]
+                    for weight in weights[1:]:
+                        torch.testing.assert_close(ref, weight, rtol=0.0, atol=0.0, check_device=False)
