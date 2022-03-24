@@ -84,19 +84,11 @@ class MixedFusedLayerNorm(torch.nn.Module):
 
 
   def forward(self, input):
-    weights = [torch.empty_like(self.weight) for tp in range(mpu.get_tensor_model_parallel_world_size())]
-    torch.distributed.all_gather(weights, self.weight, group=mpu.get_tensor_model_parallel_group())
-    biases = [torch.empty_like(self.bias) for tp in range(mpu.get_tensor_model_parallel_world_size())]
-    torch.distributed.all_gather(biases, self.bias, group=mpu.get_tensor_model_parallel_group())
-    if any(torch.any(weight != self.weight) for weight in weights):
-        if mpu.get_tensor_model_parallel_rank() == 0:
-            print("Weight sync failed")
-            print(weights)
-    if any(torch.any(bias != self.bias) for bias in biases):
-        if mpu.get_tensor_model_parallel_rank() == 0:
-            print("Bias sync failed")
-            print(biases)
+    tp_world_size = mpu.get_tensor_model_parallel_world_size()
+    # TODO: hack in order to synchronize all layer norms despite them being unsynched
+    weight = mpu.reduce_from_tensor_model_parallel_region(self.weight) / tp_world_size
+    bias = mpu.reduce_from_tensor_model_parallel_region(self.bias) / tp_world_size
 
     return FusedLayerNormAffineFunction.apply(
-      input, self.weight, self.bias, self.normalized_shape,self.eps)
+      input, weight, bias, self.normalized_shape,self.eps)
 
