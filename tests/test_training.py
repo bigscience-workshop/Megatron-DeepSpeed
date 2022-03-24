@@ -660,13 +660,13 @@ class MegDSTestTraining(TestCasePlus):
         if variation == "bf16":
             args.append("--bf16")
             ds_args += [
-                "--zero-stage", "0"
+                "--zero-stage", "0",
                 "--deepspeed_config", f"{self.test_file_dir_str}/ds_config_bf16.json"
             ]
         elif variation == "fp16":
             args.append("--fp16")
             ds_args += [
-                "--zero-stage", "1"
+                "--zero-stage", "1",
                 "--deepspeed_config", f"{self.test_file_dir_str}/ds_config.json"
             ]
 
