@@ -598,7 +598,71 @@ class MegDSTestTraining(TestCasePlus):
     def test_layer_norm_consistent(self):
         src_dir = self.src_dir
         output_dir = self.get_auto_remove_tmp_dir()
-        args, ds_args, num_gpus = self.get_variation_config("base", output_dir, n_samples=200)
+        num_gpus = 2
+        args = f"""
+                --tensor-model-parallel-size {2}
+                --pipeline-model-parallel-size {1}
+                --distributed-backend nccl
+
+                --log-interval 1
+                --save-interval 10
+                --eval-interval 10
+                --eval-iters 5
+                --checkpoint-activations
+                --partition-activations
+                --exit-interval {20}
+
+                --merge-file {data_dir}/gpt2-tiny-merges.txt
+                --vocab-file {data_dir}/gpt2-tiny-vocab.json
+                --save {output_dir}/checkpoints
+                --load {output_dir}/checkpoints
+                --data-path {data_dir}/meg-gpt2-openwebtext_text_document
+                --tensorboard-dir {output_dir}/tensorboard
+                --tensorboard-queue-size 5
+                --log-timers-to-tensorboard
+                --log-batch-size-to-tensorboard
+                --log-validation-ppl-to-tensorboard
+
+                --num-layers 2
+                --hidden-size 64
+                --num-attention-heads 2
+                --seq-length {seq_len}
+                --max-position-embeddings 1024
+                --micro-batch-size 1
+                --global-batch-size 16
+
+                --optimizer adam
+                --adam-beta1 0.9
+                --adam-beta2 0.95
+                --adam-eps 1e-8
+                --lr 1e-4
+                --lr-warmup-samples 5
+                --clip-grad 1.0
+                --weight-decay 1e-1
+                --embed-layernorm
+                --fp16
+
+                --log-level debug
+                --log-level-replica info
+
+                --rampup-batch-size 2 2 200
+                --train-samples 200
+
+                --lr-decay-samples 6
+
+        """.split()
+
+        ds_args = f"""
+                --deepspeed
+                --deepspeed_config {self.test_file_dir_str}/ds_config.json
+                --zero-stage 1
+                --deepspeed-activation-checkpointing
+                --deepspeed_config {self.test_file_dir_str}/ds_config.json
+
+        """.split()
+
+        # args, ds_args, num_gpus = self.get_variation_config("base", output_dir, n_samples=200)
+
         script = [f"{src_dir}/pretrain_gpt.py"]
         launcher = get_launcher(num_gpus)
         cmd = launcher + script + args + ds_args
