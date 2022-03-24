@@ -599,6 +599,7 @@ class MegDSTestTraining(TestCasePlus):
         src_dir = self.src_dir
         output_dir = self.get_auto_remove_tmp_dir()
         num_gpus = 2
+        seq_len = 128
         data_dir = f"{self.data_dir}/gpt2"
         args = f"""
                 --tensor-model-parallel-size {2}
