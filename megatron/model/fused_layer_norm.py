@@ -19,7 +19,7 @@
 
 import numbers
 import torch
-from megatron import mpu, print_rank_0
+from megatron import mpu
 from torch.nn.parameter import Parameter
 from torch.nn import init
 import importlib
