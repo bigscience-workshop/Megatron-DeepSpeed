@@ -608,7 +608,7 @@ class MegDSTestTraining(TestCasePlus):
         with CaptureStdout() as cs:
             execute_subprocess_async(cmd, env=self.get_env())
 
-        checkpoint_path = os.path.join(output_dir, "checkpoints", "global_step_10")
+        checkpoint_path = os.path.join(output_dir, "checkpoints", "global_step10")
         print(os.listdir(checkpoint_path))
         key="input_layernorm.weight"
         files_to_test=["layer_03-model_00-model_states.pt", "layer_03-model_01-model_states.pt"]
