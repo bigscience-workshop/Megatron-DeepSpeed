@@ -371,7 +371,7 @@ class MegDSTestTP(TestCasePlus):
 
         script = [f"{src_dir}/pretrain_gpt.py"]
         launcher = f"deepspeed --num_nodes 1 --num_gpus {num_gpus}".split()
-        cmd = launcher + script + " ".join([f"{key} {value}" for key, value in command_args.items()])
+        cmd = launcher + script + [f"{key} {value}" for key, value in command_args.items()]
         # keep for quick debug
         # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
 
