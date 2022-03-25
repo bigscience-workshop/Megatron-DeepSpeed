@@ -186,7 +186,9 @@ jobs:
           pip install pytest-timeout
 
       - name: Run tests
-        run: pytest --timeout=600 tests
+        # run: pytest --timeout=600 tests
+        # run just the test we want for now
+        run: pytest --timeout=600 tests/test_training.py::MegDSTestTraining::test_layer_norm_consistent_0_bf16
 
   stop-runner:
     name: Stop self-hosted EC2 runner
