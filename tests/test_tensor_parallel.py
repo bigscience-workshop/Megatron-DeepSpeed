@@ -433,7 +433,7 @@ class MegDSTestTP(TestCasePlus):
         command_args["--tensor-model-parallel-size"] = "1"
 
         pool = Pool(1)
-        result = pool.map(MegDSTestTP.infer_model, [((0, 1, command_args, None, output_dir, None))])
+        result = pool.map(MegDSTestTP.infer_model, [((0, 1, command_args, None, None, output_dir))])
         pool.close()
         pool.join()
 
