@@ -318,10 +318,7 @@ class MegDSTestTP(TestCasePlus):
 
                     --merge-file {data_dir}/gpt2-tiny-merges.txt
                     --vocab-file {data_dir}/gpt2-tiny-vocab.json
-                    --save {output_dir}/checkpoints
-                    --load {output_dir}/checkpoints
-                    --data-path {data_dir}/meg-gpt2-openwebtext_text_document
-                    --tensorboard-dir {output_dir}/tensorboard
+
                     --tensorboard-queue-size 5
                     --log-timers-to-tensorboard
                     --log-batch-size-to-tensorboard
@@ -357,6 +354,11 @@ class MegDSTestTP(TestCasePlus):
         command_args["--pad-vocab-size-to"] = "5120"  # This is equal to 128 * 40 which is above the len of gp2-tiny vocabulary
         command_args["--position-embedding-type"] = "alibi"
         command_args["--tensor-model-parallel-size"] = "2"
+        command_args["--save"] = f"{output_dir}/checkpoints"
+        command_args["--load"] = f"{output_dir}/checkpoints"
+        command_args["--data-path"] = f"{data_dir}/meg-gpt2-openwebtext_text_document"
+        command_args["--tensorboard-dir"] = f"{output_dir}/tensorboard"
+        command_args["--lr"] = "1e-1"
 
         if variation == "bf16":
             command_args["--bf16"] = ""
