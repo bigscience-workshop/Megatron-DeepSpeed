@@ -23,6 +23,7 @@ from megatron import mpu
 from torch.nn.parameter import Parameter
 from torch.nn import init
 import importlib
+from megatron import mpu
 
 global fused_mix_prec_layer_norm_cuda
 fused_mix_prec_layer_norm_cuda = None
