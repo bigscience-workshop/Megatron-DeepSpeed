@@ -61,9 +61,9 @@ class MegDSTestTP(TestCasePlus):
 
             # OUTPUT_ARGS
             "--log-interval": "10",
-            "--save-interval": "500",
-            "--eval-interval": "100",
-            "--eval-iters": "10",
+            "--save-interval": "10",
+            "--eval-interval": "10",
+            "--eval-iters": "5",
             "--checkpoint-activations": "",
             
             #ds args
@@ -357,6 +357,9 @@ class MegDSTestTP(TestCasePlus):
         command_args["--save"] = f"{output_dir}/checkpoints"
         command_args["--load"] = f"{output_dir}/checkpoints"
         command_args["--data-path"] = f"{data_dir}/meg-gpt2-openwebtext_text_document"
+        command_args["--train-samples"] = "200"
+        del command_args["--train-iters"]
+        del command_args["--lr-decay-iters"]
         command_args["--tensorboard-dir"] = f"{output_dir}/tensorboard"
         command_args["--lr"] = "1e-1"
 
