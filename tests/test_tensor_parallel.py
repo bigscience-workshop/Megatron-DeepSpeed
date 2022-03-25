@@ -1,3 +1,4 @@
+import os
 import unittest
 from random import randint
 from unittest.mock import patch
@@ -9,7 +10,8 @@ import numpy as np
 
 import pytest
 from megatron import initialize_megatron, get_args, get_tokenizer, global_vars
-from megatron.testing_utils import TestCasePlus, mockenv_context, flatten_arguments, require_deepspeed, require_torch_multi_gpu
+from megatron.testing_utils import TestCasePlus, mockenv_context, flatten_arguments, require_deepspeed, \
+    require_torch_multi_gpu, torch_assert_equal, CaptureStdout, execute_subprocess_async
 from megatron.training import setup_model_and_optimizer
 from megatron.mpu.mappings import gather_from_tensor_model_parallel_region
 from pretrain_gpt import model_provider as gpt_model_provider, get_batch_pipe as get_gpt_batch_pipe
@@ -64,7 +66,7 @@ class MegDSTestTP(TestCasePlus):
             
             #ds args
             "--deepspeed": "",
-            "--deepspeed_config":f"{self.test_file_dir_str}/ds_config.json",
+            "--deepspeed_config": f"{self.test_file_dir_str}/ds_config.json",
             "--zero-stage": "1",
             "--deepspeed-activation-checkpointing": ""
             # DATA_ARGS
@@ -292,6 +294,152 @@ class MegDSTestTP(TestCasePlus):
         pool.join()
 
         self.assertEqual(str(exc_info.value), "5121 is not divisible by 128")
+
+    @parameterized.expand(["bf16", "fp16"])
+    def test_layer_norm_consistent(self, variation):
+        src_dir = self.src_dir
+        output_dir = self.get_auto_remove_tmp_dir()
+        num_gpus = 2
+        seq_len = 128
+        data_dir = f"{self.data_dir}/gpt2"
+        default_args = f"""
+                    --pipeline-model-parallel-size 1
+                    --distributed-backend nccl
+
+                    --log-interval 1
+                    --save-interval 10
+                    --eval-interval 10
+                    --eval-iters 5
+                    --checkpoint-activations
+                    --partition-activations
+                    --exit-interval {20}
+
+                    --merge-file {data_dir}/gpt2-tiny-merges.txt
+                    --vocab-file {data_dir}/gpt2-tiny-vocab.json
+                    --save {output_dir}/checkpoints
+                    --load {output_dir}/checkpoints
+                    --data-path {data_dir}/meg-gpt2-openwebtext_text_document
+                    --tensorboard-dir {output_dir}/tensorboard
+                    --tensorboard-queue-size 5
+                    --log-timers-to-tensorboard
+                    --log-batch-size-to-tensorboard
+                    --log-validation-ppl-to-tensorboard
+
+                    --num-layers 2
+                    --hidden-size 64
+                    --num-attention-heads 2
+                    --seq-length {seq_len}
+                    --max-position-embeddings 1024
+                    --micro-batch-size 2
+                    --global-batch-size 16
+
+                    --optimizer adam
+                    --adam-beta1 0.9
+                    --adam-beta2 0.95
+                    --adam-eps 1e-8
+                    --lr 1e-1
+                    --clip-grad 1.0
+                    --weight-decay 1e-1
+                    --embed-layernorm
+
+                    --log-level debug
+                    --log-level-replica info
+
+                    --rampup-batch-size 2 2 200
+                    --train-samples 200
+
+                    --position-embedding-type alibi
+            """.split()
+
+        command_args = self.get_default_args()
+        command_args["--pad-vocab-size-to"] = "5120"  # This is equal to 128 * 40 which is above the len of gp2-tiny vocabulary
+        command_args["--position-embedding-type"] = "alibi"
+        command_args["--tensor-model-parallel-size"] = "2"
+
+        if variation == "bf16":
+            command_args["--bf16"] = ""
+            command_args["--deepspeed_config"] = f"{self.test_file_dir_str}/ds_config_bf16.json"
+            command_args["--zero-stage"] = "0"
+        elif variation == "fp16":
+            command_args["--fp16"] = ""
+            command_args["--deepspeed_config"] = f"{self.test_file_dir_str}/ds_config.json"
+            command_args["--zero-stage"] = "1"
+
+        # args, ds_args, num_gpus = self.get_variation_config("base", output_dir, n_samples=200)
+
+        script = [f"{src_dir}/pretrain_gpt.py"]
+        launcher = f"deepspeed --num_nodes 1 --num_gpus {num_gpus}".split()
+        cmd = launcher + script + " ".join([f"{key} {value}" for key, value in command_args.items()])
+        # keep for quick debug
+        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
+
+        with CaptureStdout() as cs:
+            execute_subprocess_async(cmd, env=self.get_env())
+
+        checkpoints = ["global_step10", "global_step20"]
+
+        # Check transformer layer norm
+        keys_to_compare = ["input_layernorm.weight", "input_layernorm.bias", "post_attention_layernorm.weight",
+                           "post_attention_layernorm.bias"]
+        files_to_compare = [[f"layer_{layer_id:02d}-model_{tp:02d}-model_states.pt" for tp in range(num_gpus)] for
+                            layer_id in [3, 4]]
+        for checkpoint in checkpoints:
+            checkpoint_path = os.path.join(output_dir, "checkpoints", checkpoint)
+            for key in keys_to_compare:
+                for files in files_to_compare:
+                    weights = [torch.load(os.path.join(checkpoint_path, file))[key] for file in files]
+                    ref = weights[0]
+                    for weight in weights[1:]:
+                        torch_assert_equal(ref, weight, check_device=False)
+
+        # Check embed layer norm
+        keys_to_compare = ["word_embeddings.norm.weight"]
+        files_to_compare = [[f"layer_{layer_id:02d}-model_{tp:02d}-model_states.pt" for tp in range(num_gpus)] for
+                            layer_id in [1]]
+        for checkpoint in checkpoints:
+            checkpoint_path = os.path.join(output_dir, "checkpoints", checkpoint)
+            for key in keys_to_compare:
+                for files in files_to_compare:
+                    weights = [torch.load(os.path.join(checkpoint_path, file))[key] for file in files]
+                    ref = weights[0]
+                    for weight in weights[1:]:
+                        torch_assert_equal(ref, weight, check_device=False)
+
+        # # 2. test training from checkpoint: resume
+        # # now do it again, this time resuming from the checkpoint
+        # with CaptureStdout() as cs:
+        #     execute_subprocess_async(cmd, env=self.get_env())
+        #
+        # # test checkpoint loading
+        # self.assertIn(f"successfully loaded checkpoint from {output_dir}/checkpoints", cs.out)
+        #
+        # # test reports
+        # self.assertIn("consumed samples", cs.out)
+
+        # 3. test that inference with changes TP works.
+        command_args["--tensor-model-parallel-size"] = "1"
+
+        pool = Pool(1)
+        result = pool.map(MegDSTestTP.infer_model, [((0, 1, command_args, None, output_dir, None))])
+        pool.close()
+        pool.join()
+
+        output, tokens = result[0]
+        logging.getLogger().info("First done!")
+
+        command_args["--tensor-model-parallel-size"] = "2"
+
+        pool = Pool(2)
+        result = pool.map(MegDSTestTP.infer_model,
+                          [((0, 2, command_args, tokens, None, output_dir)), ((1, 2, command_args, tokens, None, output_dir))])
+        pool.close()
+        pool.join()
+
+        output2, tokens = result[0]
+
+        logging.getLogger().critical(output - output2)
+        self.assertTrue(np.allclose(output, output2, atol=5e-3, rtol=0),
+                        "Different results when running with TP=1 and TP=2")
 
 if __name__ == '__main__':
     unittest.main()
