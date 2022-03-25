@@ -19,10 +19,11 @@
 
 import numbers
 import torch
-from megatron import mpu
+from megatron import mpu, get_args
 from torch.nn.parameter import Parameter
 from torch.nn import init
 import importlib
+from megatron import mpu
 
 global fused_mix_prec_layer_norm_cuda
 fused_mix_prec_layer_norm_cuda = None
@@ -63,6 +64,7 @@ class MixedFusedLayerNorm(torch.nn.Module):
 
   def __init__(self, normalized_shape, eps=1e-5):
         super(MixedFusedLayerNorm, self).__init__()
+        args = get_args()
 
         global fused_mix_prec_layer_norm_cuda
         fused_mix_prec_layer_norm_cuda = importlib.import_module(
@@ -75,6 +77,7 @@ class MixedFusedLayerNorm(torch.nn.Module):
         self.weight = Parameter(torch.Tensor(*normalized_shape))
         self.bias = Parameter(torch.Tensor(*normalized_shape))
         self.reset_parameters()
+        self.force_sync_layer_norm_parameters = args.force_sync_layer_norm_parameters
 
 
   def reset_parameters(self):
@@ -84,19 +87,17 @@ class MixedFusedLayerNorm(torch.nn.Module):
 
 
   def forward(self, input):
-    weights = [torch.empty_like(self.weight) for tp in range(mpu.get_tensor_model_parallel_world_size())]
-    torch.distributed.all_gather(weights, self.weight, group=mpu.get_tensor_model_parallel_group())
-    biases = [torch.empty_like(self.bias) for tp in range(mpu.get_tensor_model_parallel_world_size())]
-    torch.distributed.all_gather(biases, self.bias, group=mpu.get_tensor_model_parallel_group())
-    if any(torch.any(weight != self.weight) for weight in weights):
-        if mpu.get_tensor_model_parallel_rank() == 0:
-            print("Weight sync failed")
-            print(weights)
-    if any(torch.any(bias != self.bias) for bias in biases):
-        if mpu.get_tensor_model_parallel_rank() == 0:
-            print("Bias sync failed")
-            print(biases)
+    if self.force_sync_layer_norm_parameters:
+        tp_world_size = mpu.get_tensor_model_parallel_world_size()
+        # TODO: hack in order to synchronize all layer norms despite them being unsynched
+        weight = torch.clone(self.weight)
+        bias = torch.clone(self.bias)
+        weight = mpu.reduce_from_tensor_model_parallel_region(weight) / tp_world_size
+        bias = mpu.reduce_from_tensor_model_parallel_region(bias) / tp_world_size
+    else:
+        weight = self.weight
+        bias = self.bias
 
     return FusedLayerNormAffineFunction.apply(
-      input, self.weight, self.bias, self.normalized_shape,self.eps)
+      input, weight, bias, self.normalized_shape,self.eps)
 

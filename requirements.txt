@@ -6,9 +6,10 @@ pybind11
 regex
 six
 tensorboard
-torch>=1.7
+torch>=1.11
 transformers
-DeepSpeed @ git+https://github.com/microsoft/DeepSpeed.git
+# for now using this branch for bf16 work
+DeepSpeed @ git+https://github.com/microsoft/DeepSpeed.git@olruwase/bf16-updates
 # versions from HF transformers
 black==21.4b0
 isort>=5.5.4

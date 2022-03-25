@@ -1,3 +1,4 @@
+import os
 import unittest
 from random import randint
 from unittest.mock import patch
@@ -8,8 +9,11 @@ import logging
 import numpy as np
 
 import pytest
+from parameterized import parameterized
+
 from megatron import initialize_megatron, get_args, get_tokenizer, global_vars
-from megatron.testing_utils import TestCasePlus, mockenv_context, flatten_arguments, require_deepspeed, require_torch_multi_gpu
+from megatron.testing_utils import TestCasePlus, mockenv_context, flatten_arguments, require_deepspeed, \
+    require_torch_multi_gpu, torch_assert_equal, CaptureStdout, execute_subprocess_async
 from megatron.training import setup_model_and_optimizer
 from megatron.mpu.mappings import gather_from_tensor_model_parallel_region
 from pretrain_gpt import model_provider as gpt_model_provider, get_batch_pipe as get_gpt_batch_pipe
@@ -44,7 +48,6 @@ class MegDSTestTP(TestCasePlus):
             "--merge-file": f"{data_dir}/gpt2-tiny-merges.txt",
             "--vocab-file": f"{data_dir}/gpt2-tiny-vocab.json",
             "--data-impl": "mmap",
-            "--split": "949,50,1",
             "--distributed-backend": "nccl",
             "--weight-decay": "1e-2",
             "--clip-grad": "1.0",
@@ -57,14 +60,14 @@ class MegDSTestTP(TestCasePlus):
 
             # OUTPUT_ARGS
             "--log-interval": "10",
-            "--save-interval": "500",
-            "--eval-interval": "100",
-            "--eval-iters": "10",
+            "--save-interval": "10",
+            "--eval-interval": "10",
+            "--eval-iters": "5",
             "--checkpoint-activations": "",
             
             #ds args
             "--deepspeed": "",
-            "--deepspeed_config":f"{self.test_file_dir_str}/ds_config.json",
+            "--deepspeed_config": f"{self.test_file_dir_str}/ds_config.json",
             "--zero-stage": "1",
             "--deepspeed-activation-checkpointing": ""
             # DATA_ARGS
@@ -115,8 +118,6 @@ class MegDSTestTP(TestCasePlus):
 
                 tokenizer = get_tokenizer()
 
-                model, _, _ = setup_model_and_optimizer(gpt_model_provider)
-                model = model[0]
                 if load is not None:
                     # Hack (same as in eval_harness/evaluate.py)
                     # Loading pipelined models in deepspeed with different TP than it was originally trained on fails
@@ -127,6 +128,10 @@ class MegDSTestTP(TestCasePlus):
                     # Deepspeed does however manage to load the model if we just turn off this sanity check.
                     deepspeed.runtime.state_dict_factory.MegatronSDLoader.sanity_check = lambda self, ckpt_file_name: None
 
+                model, _, _ = setup_model_and_optimizer(gpt_model_provider)
+                model = model[0]
+
+                if load is not None:
                     zero_enabled = model._config.zero_enabled
                     model._config.zero_enabled = False
                     _, _ = model.load_checkpoint(load, load_optimizer_states=False, load_lr_scheduler_states=False, load_module_only=True)
@@ -190,7 +195,7 @@ class MegDSTestTP(TestCasePlus):
         output2, tokens = result[0]
 
         logging.getLogger().critical(output-output2)
-        self.assertTrue(np.allclose(output,output2, atol=5e-3, rtol=0), "Different results when running with TP=1 and TP=2")
+        self.assertTrue(np.allclose(output, output2, atol=5e-3, rtol=0), "Different results when running with TP=1 and TP=2")
 
 
 
@@ -292,6 +297,124 @@ class MegDSTestTP(TestCasePlus):
         pool.join()
 
         self.assertEqual(str(exc_info.value), "5121 is not divisible by 128")
+
+    @parameterized.expand(["bf16", "fp16"])
+    def test_layer_norm_consistent(self, variation):
+        src_dir = self.src_dir
+        output_dir = self.get_auto_remove_tmp_dir()
+        num_gpus = 2
+        seq_len = 128
+        data_dir = f"{self.data_dir}/gpt2"
+
+        command_args = self.get_default_args()
+        command_args["--pad-vocab-size-to"] = "5120"  # This is equal to 128 * 40 which is above the len of gp2-tiny vocabulary
+        command_args["--position-embedding-type"] = "alibi"
+        command_args["--embed-layernorm"] = ""
+        command_args["--tensor-model-parallel-size"] = "2"
+        command_args["--save"] = f"{output_dir}/checkpoints"
+        command_args["--load"] = f"{output_dir}/checkpoints"
+        command_args["--data-path"] = f"{data_dir}/meg-gpt2-openwebtext_text_document"
+        command_args["--train-samples"] = "200"
+        command_args["--rampup-batch-size"] = "4 4 200"
+        command_args["--seq-length"] = "128"
+        command_args["--exit-interval"] = "20"
+        del command_args["--train-iters"]
+        del command_args["--lr-decay-iters"]
+        command_args["--tensorboard-dir"] = f"{output_dir}/tensorboard"
+        command_args["--lr"] = "1e-1"
+
+        if variation == "bf16":
+            command_args["--bf16"] = ""
+            del command_args["--fp16"]
+            command_args["--deepspeed_config"] = f"{self.test_file_dir_str}/ds_config_bf16.json"
+            command_args["--zero-stage"] = "0"
+        elif variation == "fp16":
+            command_args["--fp16"] = ""
+            command_args["--deepspeed_config"] = f"{self.test_file_dir_str}/ds_config.json"
+            command_args["--zero-stage"] = "1"
+
+        # args, ds_args, num_gpus = self.get_variation_config("base", output_dir, n_samples=200)
+
+        script = [f"{src_dir}/pretrain_gpt.py"]
+        launcher = f"deepspeed --num_nodes 1 --num_gpus {num_gpus}".split()
+        cmd = launcher + script + [elt for elts in [f"{key} {value}".split() for key, value in command_args.items()] for elt in elts]
+        # keep for quick debug
+        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
+
+        with CaptureStdout() as cs:
+            execute_subprocess_async(cmd, env=self.get_env())
+
+        # # 1. test that the layer norm weights and biases are synchronized
+        # checkpoints = ["global_step10", "global_step20"]
+
+        # # Check transformer layer norm
+        # keys_to_compare = ["input_layernorm.weight", "input_layernorm.bias", "post_attention_layernorm.weight",
+        #                    "post_attention_layernorm.bias"]
+        # files_to_compare = [[f"layer_{layer_id:02d}-model_{tp:02d}-model_states.pt" for tp in range(num_gpus)] for
+        #                     layer_id in [3, 4]]
+        # for checkpoint in checkpoints:
+        #     checkpoint_path = os.path.join(output_dir, "checkpoints", checkpoint)
+        #     for key in keys_to_compare:
+        #         for files in files_to_compare:
+        #             weights = [torch.load(os.path.join(checkpoint_path, file))[key] for file in files]
+        #             ref = weights[0]
+        #             for weight in weights[1:]:
+        #                 torch_assert_equal(ref, weight, check_device=False)
+        #
+        # # Check embed layer norm
+        # keys_to_compare = ["word_embeddings.norm.weight"]
+        # files_to_compare = [[f"layer_{layer_id:02d}-model_{tp:02d}-model_states.pt" for tp in range(num_gpus)] for
+        #                     layer_id in [1]]
+        # for checkpoint in checkpoints:
+        #     checkpoint_path = os.path.join(output_dir, "checkpoints", checkpoint)
+        #     for key in keys_to_compare:
+        #         for files in files_to_compare:
+        #             weights = [torch.load(os.path.join(checkpoint_path, file))[key] for file in files]
+        #             ref = weights[0]
+        #             for weight in weights[1:]:
+        #                 torch_assert_equal(ref, weight, check_device=False)
+
+        # # 2. test training from checkpoint: resume
+        # # now do it again, this time resuming from the checkpoint
+        # with CaptureStdout() as cs:
+        #     execute_subprocess_async(cmd, env=self.get_env())
+        #
+        # # test checkpoint loading
+        # self.assertIn(f"successfully loaded checkpoint from {output_dir}/checkpoints", cs.out)
+        #
+        # # test reports
+        # self.assertIn("consumed samples", cs.out)
+
+        # 3. test that inference with changes TP works.
+        mp.set_start_method('spawn', force=True)
+        del command_args["--rampup-batch-size"]
+        command_args["--tensor-model-parallel-size"] = "1"
+        del command_args["--load"]
+        del command_args["--save"]
+        command_args["--force-sync-layer-norm-parameters"] = ""
+
+        checkpoints_path = os.path.join(output_dir, "checkpoints")
+        pool = Pool(1)
+        result = pool.map(MegDSTestTP.infer_model, [((0, 1, command_args, None, None, checkpoints_path))])
+        pool.close()
+        pool.join()
+
+        output, tokens = result[0]
+        logging.getLogger().info("First done!")
+
+        command_args["--tensor-model-parallel-size"] = "2"
+
+        pool = Pool(2)
+        result = pool.map(MegDSTestTP.infer_model,
+                          [((0, 2, command_args, tokens, None, checkpoints_path)), ((1, 2, command_args, tokens, None, checkpoints_path))])
+        pool.close()
+        pool.join()
+
+        output2, tokens = result[0]
+
+        logging.getLogger().critical(output - output2)
+        self.assertTrue(np.allclose(output, output2, atol=5e-3, rtol=0),
+                        "Different results when running with TP=1 and TP=2")
 
 if __name__ == '__main__':
     unittest.main()
