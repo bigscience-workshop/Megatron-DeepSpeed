@@ -305,51 +305,6 @@ class MegDSTestTP(TestCasePlus):
         num_gpus = 2
         seq_len = 128
         data_dir = f"{self.data_dir}/gpt2"
-        default_args = f"""
-                    --pipeline-model-parallel-size 1
-                    --distributed-backend nccl
-
-                    --log-interval 1
-                    --save-interval 10
-                    --eval-interval 10
-                    --eval-iters 5
-                    --checkpoint-activations
-                    --partition-activations
-                    --exit-interval {20}
-
-                    --merge-file {data_dir}/gpt2-tiny-merges.txt
-                    --vocab-file {data_dir}/gpt2-tiny-vocab.json
-
-                    --tensorboard-queue-size 5
-                    --log-timers-to-tensorboard
-                    --log-batch-size-to-tensorboard
-                    --log-validation-ppl-to-tensorboard
-
-                    --num-layers 2
-                    --hidden-size 64
-                    --num-attention-heads 2
-                    --seq-length {seq_len}
-                    --max-position-embeddings 1024
-                    --micro-batch-size 2
-                    --global-batch-size 16
-
-                    --optimizer adam
-                    --adam-beta1 0.9
-                    --adam-beta2 0.95
-                    --adam-eps 1e-8
-                    --lr 1e-1
-                    --clip-grad 1.0
-                    --weight-decay 1e-1
-                    --embed-layernorm
-
-                    --log-level debug
-                    --log-level-replica info
-
-                    --rampup-batch-size 2 2 200
-                    --train-samples 200
-
-                    --position-embedding-type alibi
-            """.split()
 
         command_args = self.get_default_args()
         command_args["--pad-vocab-size-to"] = "5120"  # This is equal to 128 * 40 which is above the len of gp2-tiny vocabulary
@@ -433,6 +388,8 @@ class MegDSTestTP(TestCasePlus):
         mp.set_start_method('spawn', force=True)
         del command_args["--rampup-batch-size"]
         command_args["--tensor-model-parallel-size"] = "1"
+        del command_args["--load"]
+        del command_args["--save"]
 
         pool = Pool(1)
         result = pool.map(MegDSTestTP.infer_model, [((0, 1, command_args, None, None, output_dir))])
