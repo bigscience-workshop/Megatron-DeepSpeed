@@ -706,3 +706,14 @@ class MegDSTestTraining(TestCasePlus):
                     ref = weights[0]
                     for weight in weights[1:]:
                         torch_assert_equal(ref, weight, check_device=False)
+
+        # 2. test training from checkpoint: resume
+        # now do it again, this time resuming from the checkpoint
+        with CaptureStdout() as cs:
+            execute_subprocess_async(cmd, env=self.get_env())
+
+        # test checkpoint loading
+        self.assertIn(f"successfully loaded checkpoint from {output_dir}/checkpoints", cs.out)
+
+        # test reports
+        self.assertIn("consumed samples", cs.out)
