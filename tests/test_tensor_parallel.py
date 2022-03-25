@@ -195,7 +195,7 @@ class MegDSTestTP(TestCasePlus):
         output2, tokens = result[0]
 
         logging.getLogger().critical(output-output2)
-        self.assertTrue(np.allclose(output,output2, atol=5e-3, rtol=0), "Different results when running with TP=1 and TP=2")
+        self.assertTrue(np.allclose(output, output2, atol=5e-3, rtol=0), "Different results when running with TP=1 and TP=2")
 
 
 
@@ -391,8 +391,9 @@ class MegDSTestTP(TestCasePlus):
         del command_args["--load"]
         del command_args["--save"]
 
+        checkpoints_path = os.path.join(output_dir, "checkpoints")
         pool = Pool(1)
-        result = pool.map(MegDSTestTP.infer_model, [((0, 1, command_args, None, None, output_dir))])
+        result = pool.map(MegDSTestTP.infer_model, [((0, 1, command_args, None, None, checkpoints_path))])
         pool.close()
         pool.join()
 
@@ -403,7 +404,7 @@ class MegDSTestTP(TestCasePlus):
 
         pool = Pool(2)
         result = pool.map(MegDSTestTP.infer_model,
-                          [((0, 2, command_args, tokens, None, output_dir)), ((1, 2, command_args, tokens, None, output_dir))])
+                          [((0, 2, command_args, tokens, None, checkpoints_path)), ((1, 2, command_args, tokens, None, checkpoints_path))])
         pool.close()
         pool.join()
 
