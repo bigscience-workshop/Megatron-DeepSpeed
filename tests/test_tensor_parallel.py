@@ -9,6 +9,8 @@ import logging
 import numpy as np
 
 import pytest
+from parameterized import parameterized
+
 from megatron import initialize_megatron, get_args, get_tokenizer, global_vars
 from megatron.testing_utils import TestCasePlus, mockenv_context, flatten_arguments, require_deepspeed, \
     require_torch_multi_gpu, torch_assert_equal, CaptureStdout, execute_subprocess_async
