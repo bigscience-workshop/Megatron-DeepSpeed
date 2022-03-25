@@ -358,6 +358,7 @@ class MegDSTestTP(TestCasePlus):
         command_args["--data-path"] = f"{data_dir}/meg-gpt2-openwebtext_text_document"
         command_args["--train-samples"] = "200"
         command_args["--seq-length"] = "128"
+        command_args["--exit-interval"] = "20"
         del command_args["--train-iters"]
         del command_args["--lr-decay-iters"]
         command_args["--tensorboard-dir"] = f"{output_dir}/tensorboard"
