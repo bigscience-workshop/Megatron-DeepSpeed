@@ -390,6 +390,7 @@ class MegDSTestTP(TestCasePlus):
         command_args["--tensor-model-parallel-size"] = "1"
         del command_args["--load"]
         del command_args["--save"]
+        command_args["--force-sync-layer-norm-parameters"] = ""
 
         checkpoints_path = os.path.join(output_dir, "checkpoints")
         pool = Pool(1)

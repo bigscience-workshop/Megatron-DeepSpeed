@@ -738,6 +738,7 @@ def _add_distributed_args(parser):
     group.add_argument('--use-cpu-initialization', action='store_true',
                        default=None, help='If set, affine parallel weights '
                        'initialization uses CPU' )
+    group.add_argument('--force-sync-layer-norm-parameters', action="store_true")
     return parser
 
 

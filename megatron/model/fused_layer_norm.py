@@ -19,7 +19,7 @@
 
 import numbers
 import torch
-from megatron import mpu
+from megatron import mpu, get_args
 from torch.nn.parameter import Parameter
 from torch.nn import init
 import importlib
@@ -64,6 +64,7 @@ class MixedFusedLayerNorm(torch.nn.Module):
 
   def __init__(self, normalized_shape, eps=1e-5):
         super(MixedFusedLayerNorm, self).__init__()
+        args = get_args()
 
         global fused_mix_prec_layer_norm_cuda
         fused_mix_prec_layer_norm_cuda = importlib.import_module(
@@ -76,6 +77,7 @@ class MixedFusedLayerNorm(torch.nn.Module):
         self.weight = Parameter(torch.Tensor(*normalized_shape))
         self.bias = Parameter(torch.Tensor(*normalized_shape))
         self.reset_parameters()
+        self.force_sync_layer_norm_parameters = args.force_sync_layer_norm_parameters
 
 
   def reset_parameters(self):
@@ -85,12 +87,16 @@ class MixedFusedLayerNorm(torch.nn.Module):
 
 
   def forward(self, input):
-    tp_world_size = mpu.get_tensor_model_parallel_world_size()
-    # TODO: hack in order to synchronize all layer norms despite them being unsynched
-    weight = torch.clone(self.weight)
-    bias = torch.clone(self.bias)
-    weight = mpu.reduce_from_tensor_model_parallel_region(weight) / tp_world_size
-    bias = mpu.reduce_from_tensor_model_parallel_region(bias) / tp_world_size
+    if self.force_sync_layer_norm_parameters:
+        tp_world_size = mpu.get_tensor_model_parallel_world_size()
+        # TODO: hack in order to synchronize all layer norms despite them being unsynched
+        weight = torch.clone(self.weight)
+        bias = torch.clone(self.bias)
+        weight = mpu.reduce_from_tensor_model_parallel_region(weight) / tp_world_size
+        bias = mpu.reduce_from_tensor_model_parallel_region(bias) / tp_world_size
+    else:
+        weight = self.weight
+        bias = self.bias
 
     return FusedLayerNormAffineFunction.apply(
       input, weight, bias, self.normalized_shape,self.eps)
