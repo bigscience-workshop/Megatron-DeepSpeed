@@ -118,8 +118,6 @@ class MegDSTestTP(TestCasePlus):
 
                 tokenizer = get_tokenizer()
 
-                model, _, _ = setup_model_and_optimizer(gpt_model_provider)
-                model = model[0]
                 if load is not None:
                     # Hack (same as in eval_harness/evaluate.py)
                     # Loading pipelined models in deepspeed with different TP than it was originally trained on fails
@@ -130,6 +128,10 @@ class MegDSTestTP(TestCasePlus):
                     # Deepspeed does however manage to load the model if we just turn off this sanity check.
                     deepspeed.runtime.state_dict_factory.MegatronSDLoader.sanity_check = lambda self, ckpt_file_name: None
 
+                model, _, _ = setup_model_and_optimizer(gpt_model_provider)
+                model = model[0]
+
+                if load is not None:
                     zero_enabled = model._config.zero_enabled
                     model._config.zero_enabled = False
                     _, _ = model.load_checkpoint(load, load_optimizer_states=False, load_lr_scheduler_states=False, load_module_only=True)
