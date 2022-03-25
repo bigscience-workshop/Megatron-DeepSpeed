@@ -89,8 +89,10 @@ class MixedFusedLayerNorm(torch.nn.Module):
     # unsynced at the moment due to a bug in deepspeed's bf16 optimizer
     if 1:
       tp_world_size = mpu.get_tensor_model_parallel_world_size()
-      weight = mpu.reduce_from_tensor_model_parallel_region(self.weight) / tp_world_size
-      bias = mpu.reduce_from_tensor_model_parallel_region(self.bias) / tp_world_size
+      weight = torch.clone(self.weight)
+      bias = torch.clone(self.bias)
+      weight = mpu.reduce_from_tensor_model_parallel_region(weight) / tp_world_size
+      bias = mpu.reduce_from_tensor_model_parallel_region(bias) / tp_world_size
 
     return FusedLayerNormAffineFunction.apply(
       input, weight, bias, self.normalized_shape,self.eps)
