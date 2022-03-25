@@ -693,7 +693,7 @@ class MegDSTestTraining(TestCasePlus):
                     weights = [torch.load(os.path.join(checkpoint_path, file))[key] for file in files]
                     ref = weights[0]
                     for weight in weights[1:]:
-                        torch_assert_equal(ref, weight, rtol=0.0, atol=0.0, check_device=False)
+                        torch_assert_equal(ref, weight, check_device=False)
 
         # Check embed layer norm
         keys_to_compare = ["word_embeddings.norm.weight"]
@@ -705,4 +705,4 @@ class MegDSTestTraining(TestCasePlus):
                     weights = [torch.load(os.path.join(checkpoint_path, file))[key] for file in files]
                     ref = weights[0]
                     for weight in weights[1:]:
-                        torch_assert_equal(ref, weight, rtol=0.0, atol=0.0, check_device=False)
+                        torch_assert_equal(ref, weight, check_device=False)
