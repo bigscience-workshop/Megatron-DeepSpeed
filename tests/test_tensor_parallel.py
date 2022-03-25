@@ -352,11 +352,13 @@ class MegDSTestTP(TestCasePlus):
         command_args = self.get_default_args()
         command_args["--pad-vocab-size-to"] = "5120"  # This is equal to 128 * 40 which is above the len of gp2-tiny vocabulary
         command_args["--position-embedding-type"] = "alibi"
+        command_args["--embed-layernorm"] = ""
         command_args["--tensor-model-parallel-size"] = "2"
         command_args["--save"] = f"{output_dir}/checkpoints"
         command_args["--load"] = f"{output_dir}/checkpoints"
         command_args["--data-path"] = f"{data_dir}/meg-gpt2-openwebtext_text_document"
         command_args["--train-samples"] = "200"
+        command_args["--rampup-batch-size"] = "4 4 200"
         command_args["--seq-length"] = "128"
         command_args["--exit-interval"] = "20"
         del command_args["--train-iters"]
@@ -426,6 +428,8 @@ class MegDSTestTP(TestCasePlus):
         # self.assertIn("consumed samples", cs.out)
 
         # 3. test that inference with changes TP works.
+        mp.set_start_method('spawn', force=True)
+        del command_args["--rampup-batch-size"]
         command_args["--tensor-model-parallel-size"] = "1"
 
         pool = Pool(1)
