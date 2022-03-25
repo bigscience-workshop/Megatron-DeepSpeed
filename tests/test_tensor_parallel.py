@@ -360,6 +360,7 @@ class MegDSTestTP(TestCasePlus):
 
         if variation == "bf16":
             command_args["--bf16"] = ""
+            del command_args["--fp16"]
             command_args["--deepspeed_config"] = f"{self.test_file_dir_str}/ds_config_bf16.json"
             command_args["--zero-stage"] = "0"
         elif variation == "fp16":
@@ -371,7 +372,7 @@ class MegDSTestTP(TestCasePlus):
 
         script = [f"{src_dir}/pretrain_gpt.py"]
         launcher = f"deepspeed --num_nodes 1 --num_gpus {num_gpus}".split()
-        cmd = launcher + script + [f"{key} {value}" for key, value in command_args.items()]
+        cmd = launcher + script + [elt for elts in [f"{key} {value}".split() for key, value in command_args.items()] for elt in elts]
         # keep for quick debug
         # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
 
