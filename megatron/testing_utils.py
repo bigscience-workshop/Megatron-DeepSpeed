@@ -232,9 +232,9 @@ def get_gpu_count():
         return 0
 
 def torch_assert_equal(actual, expected, **kwargs):
-    # assert_equal was added around pt-1.9, it does better checks - e.g will check dimensions match
-    if hasattr(torch.testing, "assert_equal"):
-        return torch.testing.assert_equal(actual, expected, **kwargs)
+    # assert_close was added around pt-1.9, it does better checks - e.g will check dimensions match
+    if hasattr(torch.testing, "assert_close"):
+        return torch.testing.assert_close(actual, expected, rtol=0.0, atol=0.0, **kwargs)
     else:
         return torch.allclose(actual, expected, rtol=0.0, atol=0.0)
 
