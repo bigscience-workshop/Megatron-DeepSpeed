@@ -412,8 +412,30 @@ def setup_model_and_optimizer(model_provider_func):
         torch.distributed.barrier()
         timers('load-checkpoint').stop()
         timers.log(['load-checkpoint'])
+        print_rank_0(f'module = {model[0]}')
+        for layer_id in ['3', '4']:
+            if hasattr(model[0].module._modules[layer_id], 'input_layernorm'):
+                weight = model[0].module._modules[layer_id].input_layernorm.weight
+                print(f'rank {torch.distributed.get_rank()} before reduce weight = {weight}') 
+                torch.distributed.all_reduce(weight, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
+                print(f'rank {torch.distributed.get_rank()} after reduce weight = {weight}') 
+
+                if weight._hp_mapping is not None:
+                    print(f'rank {torch.distributed.get_rank()} fixing hp for input_layernorm')
+                    #weight._hp_mapping.update_hp()
+                    hp = weight._hp_mapping.hp_fragment
+                    torch.distributed.all_reduce(hp, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
+                
+                    for key in ['exp_avg', 'exp_avg_sq']:
+                        optim_state = weight._hp_mapping.get_optim_state(key)
+                        print(f'rank {torch.distributed.get_rank()} before reduce optim state {key} = {optim_state}') 
+                        torch.distributed.all_reduce(optim_state, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
+                        print(f'rank {torch.distributed.get_rank()} after reduce optim state {key} = {optim_state}') 
+
     else:
         args.iteration = 0
+    
+    torch.distributed.barrier()
 
     # We only support local DDP with multiple micro-batches.
     if len(model) > 1 or mpu.get_pipeline_model_parallel_world_size() > 1:
