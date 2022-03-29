@@ -420,7 +420,7 @@ def sync_all_layer_norms(model):
         # 2. now the last layer norm that has no prefix
         # hack: (\d\d): MixedFusedLayerNorm() is hanging there w/o any prefix name, so need to match something like:
         # /^6.weight$/ or /^6.bias$/
-        if mpu.is_pipeline_last_stage() and re.match('^\d+\.(weight|bias)$', n):
+        if mpu.is_pipeline_last_stage() and re.match(r'^\d+\.(weight|bias)$', n):
             sync_layer_norm(n, p)
 
 
