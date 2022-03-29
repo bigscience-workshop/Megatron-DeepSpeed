@@ -384,18 +384,16 @@ class MegDSTestTP(TestCasePlus):
                     for weight in weights[1:]:
                         torch_assert_equal(ref, weight, check_device=False)
 
-        keys_to_compare = ["random_rng_state", "np_rng_state", "torch_rng_state", "cuda_rng_state", "rng_tracker_states"]
+        keys_to_compare = ["torch_rng_state"]
         files_to_compare = [[f"mp_rank_{tp:02d}_model_states.pt" for tp in range(num_gpus)]]
         for checkpoint in checkpoints:
             checkpoint_path = os.path.join(output_dir, "checkpoints", checkpoint)
             for key in keys_to_compare:
-                print(key)
                 for files in files_to_compare:
                     weights = [torch.load(os.path.join(checkpoint_path, file))[key] for file in files]
-                    print(weights)
-                        # ref = weights[0]
-                        # for weight in weights[1:]:
-                        #     assert ref == weight
+                    ref = weights[0]
+                    for weight in weights[1:]:
+                        assert ref == weight, f"key: {key} ref: {ref}, weight: {weight}"
 
         # # 2. test training from checkpoint: resume
         # # now do it again, this time resuming from the checkpoint
