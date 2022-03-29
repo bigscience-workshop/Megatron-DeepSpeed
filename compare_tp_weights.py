@@ -44,6 +44,8 @@
 # python -c 'import torch, sys; k=sys.argv[1]; a,b = map(torch.load, sys.argv[2:4]); print("Exact match" if torch.testing.assert_close(a[k], b[k], rtol=0.0, atol=0.0, check_device=False) is None else "Mismatch")' word_embeddings.norm.weight layer_01-model_01-model_states.pt layer_01-model_02-model_states.pt
 # python -c 'import torch, sys; k=sys.argv[1]; a,b = map(torch.load, sys.argv[2:4]); print("Exact match" if torch.testing.assert_close(a[k], b[k], rtol=0.0, atol=0.0, check_device=False) is None else "Mismatch")' word_embeddings.norm.weight layer_01-model_02-model_states.pt layer_01-model_03-model_states.pt
 
+# same on cpu
+python -c 'import torch, sys; k=sys.argv[1]; a=torch.load(sys.argv[2], map_location=torch.device("cpu"));b=torch.load(sys.argv[3], map_location=torch.device("cpu")); print("Exact match" if torch.testing.assert_close(a[k], b[k], rtol=0.0, atol=0.0, check_device=False) is None else "Mismatch")' word_embeddings.norm.weight layer_01-model_00-model_states.pt layer_01-model_01-model_states.pt
 
 # # 176B
 # cd /gpfsssd/scratch/rech/six/commun/checkpoints/tr11-176B-ml/checkpoints/main/global_step16400

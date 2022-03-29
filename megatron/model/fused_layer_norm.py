@@ -83,7 +83,7 @@ class MixedFusedLayerNorm(torch.nn.Module):
     init.zeros_(self.bias)
 
 
-  def forward(self, input):
+  def forward_old(self, input):
 #    weights = [torch.empty_like(self.weight) for tp in range(mpu.get_tensor_model_parallel_world_size())]
 #    torch.distributed.all_gather(weights, self.weight, group=mpu.get_tensor_model_parallel_group())
 #    biases = [torch.empty_like(self.bias) for tp in range(mpu.get_tensor_model_parallel_world_size())]
@@ -100,3 +100,11 @@ class MixedFusedLayerNorm(torch.nn.Module):
     return FusedLayerNormAffineFunction.apply(
       input, self.weight, self.bias, self.normalized_shape,self.eps)
 
+
+  def forward(self, input):
+
+    torch.distributed.all_reduce(self.weight, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
+    torch.distributed.all_reduce(self.bias, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
+
+    return FusedLayerNormAffineFunction.apply(
+      input, self.weight, self.bias, self.normalized_shape, self.eps)
