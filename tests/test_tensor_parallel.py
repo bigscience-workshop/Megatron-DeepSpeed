@@ -370,11 +370,27 @@ class MegDSTestTP(TestCasePlus):
         # Check embed layer norm
         keys_to_compare = [
             "word_embeddings.norm.weight",
-            "tokentype_embeddings.weight"
-            "position_embeddings.weight"
+            "word_embeddings.norm.bias"
         ]
         files_to_compare = [[f"layer_{layer_id:02d}-model_{tp:02d}-model_states.pt" for tp in range(num_gpus)] for
                             layer_id in [1]]
+        for checkpoint in checkpoints:
+            checkpoint_path = os.path.join(output_dir, "checkpoints", checkpoint)
+            for key in keys_to_compare:
+                for files in files_to_compare:
+                    weights = [torch.load(os.path.join(checkpoint_path, file))[key] for file in files]
+                    ref = weights[0]
+                    for weight in weights[1:]:
+                        torch_assert_equal(ref, weight, check_device=False)
+
+        # Final layer norm
+        keys_to_compare = [
+            "weight",
+            "bias"
+        ]
+        files_to_compare = [[f"layer_{layer_id:02d}-model_{tp:02d}-model_states.pt" for tp in range(num_gpus)]
+                            for
+                            layer_id in [6]]
         for checkpoint in checkpoints:
             checkpoint_path = os.path.join(output_dir, "checkpoints", checkpoint)
             for key in keys_to_compare:
