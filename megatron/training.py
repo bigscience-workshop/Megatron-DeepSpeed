@@ -367,6 +367,63 @@ def get_learning_rate_scheduler(optimizer):
     return lr_scheduler
 
 
+def sync_layer_norm(n, p):
+
+    rank = torch.distributed.get_rank()
+
+    print(f'rank {rank} processing {n}')
+
+    #return
+
+    # 1. bf16
+    #print(f'rank {rank} before reduce p = {p}')
+    torch.distributed.all_reduce(p, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
+    #print(f'rank {rank} after reduce p = {p}')
+
+    if p._hp_mapping is not None:
+        #print(f'rank {rank} fixing hp for input_layernorm')
+        #p._hp_mapping.update_hp()
+
+        # 2. fp32
+        hp = p._hp_mapping.hp_fragment
+        torch.distributed.all_reduce(hp, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
+
+        # 3. optim states
+        for key in ['exp_avg', 'exp_avg_sq']:
+            optim_state = p._hp_mapping.get_optim_state(key)
+            #print(f'rank {rank} before reduce optim state {key} = {optim_state}')
+            torch.distributed.all_reduce(optim_state, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
+            #print(f'rank {rank} after reduce optim state {key} = {optim_state}')
+
+
+def sync_all_layer_norms(model):
+    # syncs weight+bias for each of the following layer norms (via averaging across TP ranks)
+    # 1. word embedding front word_embeddings.norm
+    # 2. transformer block input_layernorm x 70
+    # 3. transformer block post_attention_layernorm x 70
+    # 4. word embedding head - I think it's just weight + bias w/o a proper name in the last layer file layer_0X-model_0X-model_states.pt, see: https://github.com/bigscience-workshop/Megatron-DeepSpeed/blob/affff3d2927864c6948075700c672971782441f4/megatron/model/gpt_model.py#L267
+
+    import re
+    layer_norms_params_end_with = [
+        "word_embeddings.norm.weight", "word_embeddings.norm.bias",
+        "input_layernorm.weight", "input_layernorm.bias",
+        "post_attention_layernorm.weight", "post_attention_layernorm.bias"]
+
+    for n,p in model.named_parameters():
+        #print(n)
+        # XXX: would be much simpler to re-do this logic to traverse children modules and act on isinstance of MixedFusedLayerNorm instead
+        # 1. first easy to identify layer norm params as they have a unique prefix each
+        for end in layer_norms_params_end_with:
+            if n.endswith(end):
+                sync_layer_norm(n, p)
+
+        # 2. now the last layer norm that has no prefix
+        # hack: (\d\d): MixedFusedLayerNorm() is hanging there w/o any prefix name, so need to match something like:
+        # /^6.weight$/ or /^6.bias$/
+        if mpu.is_pipeline_last_stage() and re.match('^\d+\.(weight|bias)$', n):
+            sync_layer_norm(n, p)
+
+
 def setup_model_and_optimizer(model_provider_func):
     """Setup model and optimizer."""
     args = get_args()
@@ -413,28 +470,13 @@ def setup_model_and_optimizer(model_provider_func):
         timers('load-checkpoint').stop()
         timers.log(['load-checkpoint'])
         print_rank_0(f'module = {model[0]}')
-        for layer_id in ['3', '4']:
-            if hasattr(model[0].module._modules[layer_id], 'input_layernorm'):
-                weight = model[0].module._modules[layer_id].input_layernorm.weight
-                print(f'rank {torch.distributed.get_rank()} before reduce weight = {weight}') 
-                torch.distributed.all_reduce(weight, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
-                print(f'rank {torch.distributed.get_rank()} after reduce weight = {weight}') 
 
-                if weight._hp_mapping is not None:
-                    print(f'rank {torch.distributed.get_rank()} fixing hp for input_layernorm')
-                    #weight._hp_mapping.update_hp()
-                    hp = weight._hp_mapping.hp_fragment
-                    torch.distributed.all_reduce(hp, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
-                
-                    for key in ['exp_avg', 'exp_avg_sq']:
-                        optim_state = weight._hp_mapping.get_optim_state(key)
-                        print(f'rank {torch.distributed.get_rank()} before reduce optim state {key} = {optim_state}') 
-                        torch.distributed.all_reduce(optim_state, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
-                        print(f'rank {torch.distributed.get_rank()} after reduce optim state {key} = {optim_state}') 
-
+        # turn on to enable layer norm syncing
+        if 1:
+            sync_all_layer_norms(model[0].module)
     else:
         args.iteration = 0
-    
+
     torch.distributed.barrier()
 
     # We only support local DDP with multiple micro-batches.
