@@ -407,7 +407,9 @@ def sync_all_layer_norms(model):
     layer_norms_params_end_with = [
         "word_embeddings.norm.weight", "word_embeddings.norm.bias",
         "input_layernorm.weight", "input_layernorm.bias",
-        "post_attention_layernorm.weight", "post_attention_layernorm.bias"]
+        "post_attention_layernorm.weight", "post_attention_layernorm.bias",
+        "self_attention.dense.bias", "mlp.dense_4h_to_h.bias",
+    ]
 
     for n,p in model.named_parameters():
         #print(n)
