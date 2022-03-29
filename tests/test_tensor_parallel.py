@@ -348,8 +348,14 @@ class MegDSTestTP(TestCasePlus):
         checkpoints = ["global_step10", "global_step20"]
 
         # Check transformer layer norm
-        keys_to_compare = ["input_layernorm.weight", "input_layernorm.bias", "post_attention_layernorm.weight",
-                           "post_attention_layernorm.bias"]
+        keys_to_compare = [
+            "input_layernorm.weight",
+            "input_layernorm.bias",
+            "post_attention_layernorm.weight",
+            "post_attention_layernorm.bias",
+            "self_attention.dense.bias",
+            "mlp.dense_4h_to_h.bias"
+        ]
         files_to_compare = [[f"layer_{layer_id:02d}-model_{tp:02d}-model_states.pt" for tp in range(num_gpus)] for
                             layer_id in [3, 4]]
         for checkpoint in checkpoints:
@@ -426,7 +432,7 @@ class MegDSTestTP(TestCasePlus):
         output2, tokens = result[0]
 
         logging.getLogger().critical(output - output2)
-        self.assertTrue(np.allclose(output, output2, atol=5e-3, rtol=0),
+        self.assertTrue(np.allclose(output, output2, atol=0, rtol=0),
                         "Different results when running with TP=1 and TP=2")
 
 if __name__ == '__main__':
