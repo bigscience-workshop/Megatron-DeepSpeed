@@ -375,6 +375,7 @@ class MegDSTestTP(TestCasePlus):
                         torch_assert_equal(ref, weight, check_device=False)
 
         keys_to_compare = ["random_rng_state", "np_rng_state", "torch_rng_state", "cuda_rng_state", "rng_tracker_states"]
+        files_to_compare = [[f"mp_rank_{tp:02d}_model_states.pt" for tp in range(num_gpus)]]
         for checkpoint in checkpoints:
             checkpoint_path = os.path.join(output_dir, "checkpoints", checkpoint)
             for key in keys_to_compare:
