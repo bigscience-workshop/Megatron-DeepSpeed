@@ -409,7 +409,7 @@ class MegDSTestTP(TestCasePlus):
                     weights = [torch.load(os.path.join(checkpoint_path, file))[key] for file in files]
                     ref = weights[0]
                     for weight in weights[1:]:
-                        assert ref == weight, f"key: {key} ref: {ref}, weight: {weight}"
+                        assert (ref == weight).all(), f"key: {key} ref: {ref}, weight: {weight}"
 
         # # 2. test training from checkpoint: resume
         # # now do it again, this time resuming from the checkpoint
