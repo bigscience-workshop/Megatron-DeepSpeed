@@ -375,10 +375,21 @@ def sync_layer_norm(n, p):
 
     #return
 
+    fp32_param = p.get_full_hp_param()
+    torch.set_printoptions(sci_mode=False, precision=6)    
+    print(f'rank {rank} bf16 = {p}')
+    print(f'rank {rank} fp32 = {fp32_param}')
+    torch.testing.assert_close(p, fp32_param, rtol=4e-3, atol=0, check_dtype=False)
+
+    for key in ['exp_avg', 'exp_avg_sq']:
+        full_optim_state = p.get_full_hp_param(optim_state_key=key)
+        print(f'rank {rank} full optim state {key} = {full_optim_state}')
+
     # 1. bf16
     #print(f'rank {rank} before reduce p = {p}')
     torch.distributed.all_reduce(p, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
     #print(f'rank {rank} after reduce p = {p}')
+
 
     if p._hp_mapping is not None:
         #print(f'rank {rank} fixing hp for input_layernorm')
@@ -390,10 +401,10 @@ def sync_layer_norm(n, p):
 
         # 3. optim states
         for key in ['exp_avg', 'exp_avg_sq']:
-            optim_state = p._hp_mapping.get_optim_state(key)
-            #print(f'rank {rank} before reduce optim state {key} = {optim_state}')
-            torch.distributed.all_reduce(optim_state, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
-            #print(f'rank {rank} after reduce optim state {key} = {optim_state}')
+            optim_state_fragment = p._hp_mapping.get_optim_state_fragment(key)
+            #print(f'rank {rank} before reduce optim state fragment {key} = {optim_state_fragment}')
+            torch.distributed.all_reduce(optim_state_fragment, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
+            #print(f'rank {rank} after reduce optim state fragment {key} = {optim_state_fragment}')
 
 
 def sync_all_layer_norms(model):
