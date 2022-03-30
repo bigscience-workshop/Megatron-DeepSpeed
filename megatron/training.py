@@ -375,15 +375,22 @@ def sync_layer_norm(n, p):
 
     #return
 
-    fp32_param = p.get_full_hp_param()
-    torch.set_printoptions(sci_mode=False, precision=6)    
-    print(f'rank {rank} bf16 = {p}')
-    print(f'rank {rank} fp32 = {fp32_param}')
-    torch.testing.assert_close(p, fp32_param, rtol=4e-3, atol=0, check_dtype=False)
+    # # Here is how you can access fp32 version of the bf16 param and fp32 optim states
+    # #
+    # # Note that there is an all_gather called on all dp ranks when `get_full_hp_param` is called -
+    # # so it's not free
+    # #
+    # # a. fp32 param
+    # fp32_param = p.get_full_hp_param()
+    # torch.set_printoptions(sci_mode=False, precision=6)
+    # print(f'rank {rank} bf16 = {p}')
+    # print(f'rank {rank} fp32 = {fp32_param}')
+    # torch.testing.assert_close(p, fp32_param, rtol=4e-3, atol=0, check_dtype=False)
 
-    for key in ['exp_avg', 'exp_avg_sq']:
-        full_optim_state = p.get_full_hp_param(optim_state_key=key)
-        print(f'rank {rank} full optim state {key} = {full_optim_state}')
+    # # b. fp32 optim states
+    # for key in ['exp_avg', 'exp_avg_sq']:
+    #     full_optim_state = p.get_full_hp_param(optim_state_key=key)
+    #     print(f'rank {rank} full optim state {key} = {full_optim_state}')
 
     # 1. bf16
     #print(f'rank {rank} before reduce p = {p}')
