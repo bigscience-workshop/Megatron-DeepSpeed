@@ -377,7 +377,7 @@ def sync_layer_norm(n, p):
 
     # # Here is how you can access fp32 version of the bf16 param and fp32 optim states
     # #
-    # # Note that there is an all_gather called on all dp ranks when `get_full_hp_param` is called -
+    # # Note that there is an all_reduce called on all dp ranks when `get_full_hp_param` is called -
     # # so it's not free
     # #
     # # a. fp32 param
