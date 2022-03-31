@@ -302,7 +302,9 @@ class MegDSTestTP(TestCasePlus):
     def test_layer_norm_consistent(self, variation):
         src_dir = self.src_dir
         output_dir = self.get_auto_remove_tmp_dir()
-        num_gpus = 2
+        tp_size = 2
+        pp_size = 1
+        num_gpus = tp_size * pp_size # dp = 1
         seq_len = 128
         data_dir = f"{self.data_dir}/gpt2"
 
@@ -310,13 +312,14 @@ class MegDSTestTP(TestCasePlus):
         command_args["--pad-vocab-size-to"] = "5120"  # This is equal to 128 * 40 which is above the len of gp2-tiny vocabulary
         command_args["--position-embedding-type"] = "alibi"
         command_args["--embed-layernorm"] = ""
-        command_args["--tensor-model-parallel-size"] = "2"
+        command_args["--tensor-model-parallel-size"] = f"{tp_size}"
+        command_args["--pipeline-model-parallel-size"] = f"{pp_size}"
         command_args["--save"] = f"{output_dir}/checkpoints"
         command_args["--load"] = f"{output_dir}/checkpoints"
         command_args["--data-path"] = f"{data_dir}/meg-gpt2-openwebtext_text_document"
         command_args["--train-samples"] = "200"
         command_args["--rampup-batch-size"] = "4 4 200"
-        command_args["--seq-length"] = "128"
+        command_args["--seq-length"] = f"{seq_len}"
         command_args["--exit-interval"] = "20"
         del command_args["--train-iters"]
         del command_args["--lr-decay-iters"]
@@ -356,7 +359,7 @@ class MegDSTestTP(TestCasePlus):
             "self_attention.dense.bias",
             "mlp.dense_4h_to_h.bias"
         ]
-        files_to_compare = [[f"layer_{layer_id:02d}-model_{tp:02d}-model_states.pt" for tp in range(num_gpus)] for
+        files_to_compare = [[f"layer_{layer_id:02d}-model_{tp:02d}-model_states.pt" for tp in range(tp_size)] for
                             layer_id in [3, 4]]
         for checkpoint in checkpoints:
             checkpoint_path = os.path.join(output_dir, "checkpoints", checkpoint)
@@ -372,7 +375,7 @@ class MegDSTestTP(TestCasePlus):
             "word_embeddings.norm.weight",
             "word_embeddings.norm.bias"
         ]
-        files_to_compare = [[f"layer_{layer_id:02d}-model_{tp:02d}-model_states.pt" for tp in range(num_gpus)] for
+        files_to_compare = [[f"layer_{layer_id:02d}-model_{tp:02d}-model_states.pt" for tp in range(tp_size)] for
                             layer_id in [1]]
         for checkpoint in checkpoints:
             checkpoint_path = os.path.join(output_dir, "checkpoints", checkpoint)
@@ -388,7 +391,7 @@ class MegDSTestTP(TestCasePlus):
             "weight",
             "bias"
         ]
-        files_to_compare = [[f"layer_{layer_id:02d}-model_{tp:02d}-model_states.pt" for tp in range(num_gpus)]
+        files_to_compare = [[f"layer_{layer_id:02d}-model_{tp:02d}-model_states.pt" for tp in range(tp_size)]
                             for
                             layer_id in [6]]
         for checkpoint in checkpoints:
@@ -401,7 +404,7 @@ class MegDSTestTP(TestCasePlus):
                         torch_assert_equal(ref, weight, check_device=False)
 
         keys_to_compare = ["torch_rng_state"]
-        files_to_compare = [[f"mp_rank_{tp:02d}_model_states.pt" for tp in range(num_gpus)]]
+        files_to_compare = [[f"mp_rank_{tp + pp*tp_size:02d}_model_states.pt" for tp in range(tp_size)] for pp in range(pp_size)]
         for checkpoint in checkpoints:
             checkpoint_path = os.path.join(output_dir, "checkpoints", checkpoint)
             for key in keys_to_compare:
@@ -411,16 +414,20 @@ class MegDSTestTP(TestCasePlus):
                     for weight in weights[1:]:
                         assert (ref == weight).all(), f"key: {key} ref: {ref}, weight: {weight}"
 
-        # # 2. test training from checkpoint: resume
-        # # now do it again, this time resuming from the checkpoint
-        # with CaptureStdout() as cs:
-        #     execute_subprocess_async(cmd, env=self.get_env())
-        #
-        # # test checkpoint loading
-        # self.assertIn(f"successfully loaded checkpoint from {output_dir}/checkpoints", cs.out)
-        #
-        # # test reports
-        # self.assertIn("consumed samples", cs.out)
+
+        # 2. test training from checkpoint: resume
+        command_args["--exit-interval"] = "30"
+        cmd = launcher + script + [elt for elts in [f"{key} {value}".split() for key, value in command_args.items()] for elt in elts]
+
+        # now do it again, this time resuming from the checkpoint
+        with CaptureStdout() as cs:
+            execute_subprocess_async(cmd, env=self.get_env())
+
+        # test checkpoint loading
+        self.assertIn(f"successfully loaded checkpoint from {output_dir}/checkpoints", cs.out)
+
+        # test reports
+        self.assertIn("consumed samples", cs.out)
 
         # 3. test that inference with changes TP works.
         mp.set_start_method('spawn', force=True)
