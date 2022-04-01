@@ -123,6 +123,14 @@ Just don't forget to turn the instance off when validated it to work.
 Finally, once created, the script needs to be updated to that new AMI id (key `ec2-image-id`) in `.github/workflows/main.py`
 
 
+## Stop instance alarm
+
+It looks like occasionally the instance doesn't stop and continues running.
+
+I added a stop alarm to automatically kill the instance after 1h if util < 10% following the exact instructions from:
+https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/UsingAlarmActions.html
+
+
 ## Guides
 
 Set up guide: https://github.com/machulav/ec2-github-runner
