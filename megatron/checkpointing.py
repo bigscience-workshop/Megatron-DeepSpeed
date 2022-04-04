@@ -169,6 +169,69 @@ def save_checkpoint(iteration, model, optimizer, lr_scheduler):
         # Trim off the filename and mp_rank_* directory.
         for _ in range(3):
             checkpoint_name = os.path.dirname(checkpoint_name)
+
+            # Debug
+            layer_norms_params_end_with = [
+                "word_embeddings.norm.weight", "word_embeddings.norm.bias",
+                "input_layernorm.weight", "input_layernorm.bias",
+                "post_attention_layernorm.weight", "post_attention_layernorm.bias",
+                "self_attention.dense.bias", "mlp.dense_4h_to_h.bias",
+            ]
+            for n,p in model[0].named_parameters():
+                # Here is how you can access fp32 version of the bf16 param and fp32 optim states
+                #
+                # Note that there is an all_reduce called on all dp ranks when `get_full_hp_param` is called -
+                # so it's not free
+                #
+                # a. fp32 param
+                for end in layer_norms_params_end_with:
+                    if n.endswith(end):
+                        fp32_param = p.get_full_hp_param()
+
+                        fp32_params_acculumator = [
+                            torch.zeros_like(fp32_param)
+                            for _ in range(mpu.get_tensor_model_parallel_world_size())
+                        ]
+                        torch.distributed.gather(
+                            fp32_param,
+                            fp32_params_acculumator,
+                            dst=0,
+                            group=mpu.get_tensor_model_parallel_group()
+                        )
+                        if mpu.get_tensor_model_parallel_rank() == 0:
+                            square = torch.tensor([
+                                [
+                                    torch.max(torch.abs(c1 - c2))
+                                    for c2 in fp32_params_acculumator
+                                ] for c1 in fp32_params_acculumator
+                            ])
+                            print(f"Parameter name = {n}")
+                            print(square)
+
+                        # b. fp32 optim states
+                        for key in ['exp_avg', 'exp_avg_sq']:
+                            full_optim_state = p.get_full_hp_param(optim_state_key=key)
+
+                            full_optim_state_acculumator = [
+                                torch.zeros_like(fp32_param)
+                                for _ in range(mpu.get_tensor_model_parallel_world_size())
+                            ]
+                            torch.distributed.gather(
+                                full_optim_state,
+                                full_optim_state_acculumator,
+                                dst=0,
+                                group=mpu.get_tensor_model_parallel_group()
+                            )
+                            if mpu.get_tensor_model_parallel_rank() == 0:
+                                square = torch.tensor([
+                                    [
+                                        torch.max(torch.abs(c1 - c2))
+                                        for c2 in full_optim_state_acculumator
+                                    ] for c1 in full_optim_state_acculumator
+                                ])
+                                print(f"Optimizer state: parameter name = {n}, key = {key}")
+                                print(square)
+
         model[0].save_checkpoint(checkpoint_name, client_state=state_dict)
 
     # Wait so everyone is done (necessary)
