@@ -444,14 +444,14 @@ def sync_all_layer_norms(model):
             sync_layer_norm(n, p)
 
 def sync_all_torch_random_state():
-    torch_rng_state = torch.get_rng_state()
+    torch_rng_state = torch.get_rng_state().cuda()
     # We use rank 1 as source of truth and sed the new
     torch.distributed.broadcast(
         torch_rng_state,
         src=mpu.get_tensor_model_parallel_src_rank() + 1,
         group=mpu.get_tensor_model_parallel_group()
     )
-    torch.set_rng_state(torch_rng_state)
+    torch.set_rng_state(torch_rng_state.cpu())
 
 
 def setup_model_and_optimizer(model_provider_func):
