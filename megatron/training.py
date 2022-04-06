@@ -443,6 +443,16 @@ def sync_all_layer_norms(model):
         if mpu.is_pipeline_last_stage() and re.match(r'^\d+\.(weight|bias)$', n):
             sync_layer_norm(n, p)
 
+def sync_all_torch_random_state():
+    torch_rng_state = torch.get_rng_state()
+    # We use rank 1 as source of truth and sed the new
+    torch.distributed.broadcast(
+        torch_rng_state,
+        src=mpu.get_tensor_model_parallel_src_rank() + 1,
+        group=mpu.get_tensor_model_parallel_group()
+    )
+    torch.set_rng_state(torch_rng_state)
+
 
 def setup_model_and_optimizer(model_provider_func):
     """Setup model and optimizer."""
@@ -494,6 +504,7 @@ def setup_model_and_optimizer(model_provider_func):
         # turn on to enable layer norm syncing
         if 1:
             sync_all_layer_norms(model[0].module)
+            sync_all_torch_random_state()
     else:
         args.iteration = 0
 
