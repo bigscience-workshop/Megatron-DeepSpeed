@@ -85,6 +85,16 @@ class MixedFusedLayerNorm(torch.nn.Module):
 
 
   def forward(self, input):
+
+    torch.distributed.all_reduce(self.weight, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
+    torch.distributed.all_reduce(self.bias, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
+
+    return FusedLayerNormAffineFunction.apply(
+      input, self.weight, self.bias, self.normalized_shape, self.eps)
+
+
+
+  def forward1(self, input):
     # TODO: temporary hack in order to synchronize all layer norms params despite them being
     # unsynced at the moment due to a bug in deepspeed's bf16 optimizer
     if 1:
