@@ -21,7 +21,7 @@ Please follow this exact order.
 conda install pytorch torchvision torchaudio cudatoolkit=11.3 -c pytorch
 ```
 
-2. Install system-wide `cuda` if you don't have it already. [NVIDIA instruction](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html). Of course ideally use [the premade packages for your distro](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html#package-manager-installation).
+2. Install system-wide `cuda` if you don't have it already. [NVIDIA instructions](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html). Of course ideally use [the premade packages for your distro](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html#package-manager-installation).
 Use the same major version as pytorch's cuda build. To check use:
 
 ```
@@ -106,7 +106,18 @@ Note that Megatron wants `data/meg-gpt2-oscar-en-10k_text_document` prefix later
 
 ## 3. Train
 
-Here is a tiny model training setup configured over 2 gpus to train on the data we prepared in step 2. Put it in a script or run it directly:
+Here is a tiny model training setup configured over 2 gpus to train on the data we prepared in step 2.
+
+Put it in a script or run it directly.
+
+If you have only 1 gpu, change these 2 lines below to:
+
+```
+N_GPUS=1
+TP_SIZE=1
+```
+
+The script:
 
 ```
 CHECKPOINT_PATH=checkpoints/gpt2
