@@ -1,4 +1,5 @@
 import os
+import stat
 import numpy as np
 
 import torch
@@ -142,7 +143,8 @@ class DistData(object):
         dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
 
     def open(self, filename, truncate=None):
-        """Create, truncate, and open a file shared by all ranks."""
+        """Create, truncate, and open a file for writing shared by all ranks."""
+        f = None
 
         # Don't truncate existing file until all ranks reach this point
         self.barrier()
@@ -162,6 +164,8 @@ class DistData(object):
 
             except Exception as e:
                 err = e
+                if f is not None:
+                    f.close()
 
         # Verify that rank 0 created the file
         self.allraise_if(err)
@@ -175,6 +179,40 @@ class DistData(object):
                 err = e
 
         # Verify that all ranks successfully opened the file
+        if not self.alltrue(err is None):
+            # Someone failed to open the file.
+            # If we succeeded, close our file.
+            if f is not None:
+                f.close()
+
+        # All raise an exception if anyone did
+        self.allraise_if(err)
+
+        return f
+
+    def openread(self, filename):
+        """Open a shared file for reading by all ranks."""
+        f = None
+
+        # Don't attempt to open until all ranks are ready.
+        self.barrier()
+
+        # Open the file for reading on all ranks.
+        # Catch exception if the rank fails.
+        err = None
+        try:
+            f = open(filename, 'rb')
+        except Exception as e:
+            err = e
+
+        # Verify that all ranks successfully opened the file
+        if not self.alltrue(err is None):
+            # Someone failed to open the file.
+            # If we succeeded, close our file.
+            if f is not None:
+                f.close()
+
+        # All raise an exception if anyone did
         self.allraise_if(err)
 
         return f
@@ -218,3 +256,51 @@ class DistData(object):
 
         # Verify that the rename succeeded
         self.allraise_if(err)
+
+    def exists(self, filename):
+        """Test whether file exists and broadcast result to all ranks."""
+        # We'll capture any exception in this variable
+        err = None
+
+        # Rank 0 executes the existence check
+        exists = False
+        if self.rank == 0:
+            try:
+                exists = os.path.exists(filename)
+            except Exception as e:
+                err = e
+
+        # Verify that the check succeeded
+        self.allraise_if(err)
+
+        # Get value from rank 0
+        exists = self.bcast(exists, root=0)
+        return exists
+
+    def stat(self, filename, field):
+        """Lookup field from stat on file and broadcast to all ranks."""
+        # We'll capture any exception in this variable
+        err = None
+
+        # Rank 0 does the actual stat call
+        val = None
+        if self.rank == 0:
+            try:
+                val = os.stat(filename)[field]
+            except Exception as e:
+                err = e
+
+        # Verify that the stat succeeded
+        self.allraise_if(err)
+
+        # Get value from rank 0
+        val = self.bcast(val, root=0)
+        return val
+
+    def filesize(self, filename):
+        """Lookup filesize and broadcast to all ranks."""
+        return self.stat(filename, stat.ST_SIZE)
+
+    def mtime(self, filename):
+        """Lookup file mtime and broadcast to all ranks."""
+        return self.stat(filename, stat.ST_MTIME)
