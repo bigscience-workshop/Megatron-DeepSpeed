@@ -19,6 +19,7 @@
 
 import numbers
 import torch
+from megatron import mpu
 from torch.nn.parameter import Parameter
 from torch.nn import init
 import importlib
@@ -31,7 +32,6 @@ class FusedLayerNormAffineFunction(torch.autograd.Function):
 
   @staticmethod
   def forward(ctx, input, weight, bias, normalized_shape, eps):
-
     ctx.normalized_shape = normalized_shape
     ctx.eps = eps
     input_ = input.contiguous()
@@ -84,6 +84,18 @@ class MixedFusedLayerNorm(torch.nn.Module):
 
 
   def forward(self, input):
+    weights = [torch.empty_like(self.weight) for tp in range(mpu.get_tensor_model_parallel_world_size())]
+    torch.distributed.all_gather(weights, self.weight, group=mpu.get_tensor_model_parallel_group())
+    biases = [torch.empty_like(self.bias) for tp in range(mpu.get_tensor_model_parallel_world_size())]
+    torch.distributed.all_gather(biases, self.bias, group=mpu.get_tensor_model_parallel_group())
+    if any(torch.any(weight != self.weight) for weight in weights):
+        if mpu.get_tensor_model_parallel_rank() == 0:
+            print("Weight sync failed")
+            print(weights)
+    if any(torch.any(bias != self.bias) for bias in biases):
+        if mpu.get_tensor_model_parallel_rank() == 0:
+            print("Bias sync failed")
+            print(biases)
 
     return FusedLayerNormAffineFunction.apply(
       input, self.weight, self.bias, self.normalized_shape,self.eps)
