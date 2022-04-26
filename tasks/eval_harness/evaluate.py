@@ -286,6 +286,9 @@ def load_ds_checkpoint_and_setup_megatron(extra_args_provider):
     megatron.arguments._print_args = lambda *_args, **kwarg: None
     args = _parse_args(extra_args_provider)
 
+    if not os.path.exists(args.load):
+        raise ValueError(f"checkpoint path {args.load} doesn't exit")
+
     ds_checkpoint = DeepSpeedCheckpoint(args.load,
                                         tp_degree=args.tensor_model_parallel_size,
                                         pp_degree=args.pipeline_model_parallel_size)
