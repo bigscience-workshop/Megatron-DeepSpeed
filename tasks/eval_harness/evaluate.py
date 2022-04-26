@@ -296,8 +296,26 @@ def load_ds_checkpoint_and_setup_megatron(extra_args_provider):
 
     cp_args = ds_checkpoint.get_args()
     # Merge the current args with the checkpoint args.
-    skip_keys = ['world_size', 'rank', 'local_rank', 'device_count', 'micro_batch_size', 'global_batch_size', 'batch_size', 'tensorboard_dir', 'deepspeed', 'deepspeed_config',
-                     'data_parallel_size', 'pipeline_model_parallel_size', 'tensor_model_parallel_size', 'load', 'rampup_batch_size', 'iteration', 'inference', 'abort_on_unmet_fused_kernel_constraints']
+    skip_keys = [
+        'abort_on_unmet_fused_kernel_constraints',
+        'batch_size',
+        'data_parallel_size',
+        'deepspeed',
+        'deepspeed_config',
+        'device_count',
+        'global_batch_size',
+        'inference',
+        'iteration',
+        'load',
+        'local_rank',
+        'micro_batch_size',
+        'pipeline_model_parallel_size',
+        'rampup_batch_size',
+        'rank',
+        'tensor_model_parallel_size',
+        'tensorboard_dir',
+        'world_size',
+    ]
 
     skip_if_specified = ['merge_file', 'vocab_file']
 
