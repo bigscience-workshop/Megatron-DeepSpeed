@@ -19,6 +19,7 @@
 
 import numbers
 import torch
+from torch import nn
 from torch.nn.parameter import Parameter
 from torch.nn import init
 import importlib
@@ -59,10 +60,10 @@ class FusedLayerNormAffineFunction(torch.autograd.Function):
 
 
 
-class MixedFusedLayerNorm(torch.nn.Module):
+class _MixedFusedLayerNorm(torch.nn.Module):
 
   def __init__(self, normalized_shape, eps=1e-5):
-        super(MixedFusedLayerNorm, self).__init__()
+        super(_MixedFusedLayerNorm, self).__init__()
 
         global fused_mix_prec_layer_norm_cuda
         fused_mix_prec_layer_norm_cuda = importlib.import_module(
@@ -88,3 +89,9 @@ class MixedFusedLayerNorm(torch.nn.Module):
     return FusedLayerNormAffineFunction.apply(
       input, self.weight, self.bias, self.normalized_shape,self.eps)
 
+TORCH_MAJOR, TORCH_MINOR = tuple(int(elt) for elt in torch.__version__.split("."))
+# Check that pytorch version is higher that 1.11
+if (TORCH_MAJOR == 1 and TORCH_MINOR >= 11) or TORCH_MAJOR > 2:
+    MixedFusedLayerNorm = nn.LayerNorm
+else:
+    MixedFusedLayerNorm = _MixedFusedLayerNorm
