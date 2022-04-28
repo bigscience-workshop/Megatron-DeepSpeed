@@ -89,7 +89,7 @@ class _MixedFusedLayerNorm(torch.nn.Module):
     return FusedLayerNormAffineFunction.apply(
       input, self.weight, self.bias, self.normalized_shape,self.eps)
 
-TORCH_MAJOR, TORCH_MINOR = tuple(int(elt) for elt in torch.__version__.split("."))
+TORCH_MAJOR, TORCH_MINOR = tuple(int(elt) for elt in torch.__version__.split(".")[:2])
 # Check that pytorch version is higher that 1.11
 if (TORCH_MAJOR == 1 and TORCH_MINOR >= 11) or TORCH_MAJOR > 2:
     MixedFusedLayerNorm = nn.LayerNorm
