@@ -287,7 +287,7 @@ struct SharedMemory <float>
 
 }
 
-template<typename T, typename U, typename V, typename W> __global__
+template<typename T, typename U, typename V> __global__
 void cuApplyLayerNorm(
   V* __restrict__ output_vals,
   U* __restrict__ mean,
@@ -296,8 +296,8 @@ void cuApplyLayerNorm(
   const int n1,
   const int n2,
   const U epsilon,
-  const W* __restrict__ gamma,
-  const W* __restrict__ beta
+  const V* __restrict__ gamma,
+  const V* __restrict__ beta
   ) 
 {
   // Assumptions:
@@ -653,7 +653,7 @@ void cuComputeGradInput(
 
 
 
-template<typename T, typename U, typename V, typename W>
+template<typename T, typename U, typename V> 
 void HostApplyLayerNorm(
     V* output,
     U* mean,
@@ -662,8 +662,8 @@ void HostApplyLayerNorm(
     int n1,
     int n2,
     double epsilon,
-    const W* gamma,
-    const W* beta
+    const V* gamma,
+    const V* beta
     )
 {
     auto stream = at::cuda::getCurrentCUDAStream().stream();
@@ -703,8 +703,6 @@ void cuda_layer_norm(
     double epsilon)
 {
     using namespace at;
-    gamma_float = gamma != NULL ? (*gamma).to(at::ScalarType::Float) : NULL;
-    beta_float = beta != NULL ? (*beta).to(at::ScalarType::Float) : NULL;
     DISPATCH_FLOAT_HALF_AND_BFLOAT_INOUT_TYPES(
         input->scalar_type(), output->scalar_type(), "cuda_layer_norm_kernel",
         HostApplyLayerNorm(
@@ -714,8 +712,8 @@ void cuda_layer_norm(
 	    input->DATA_PTR<scalar_t_in>(),
 	    n1,n2,
 	    epsilon,
-	    gamma_float != NULL ? gamma_float.data_ptr() : NULL,
-	    beta_float != NULL ? beta_float.data_ptr() : NULL);
+	    gamma != NULL ? gamma->DATA_PTR<scalar_t_out>() : NULL,
+	    beta != NULL ? beta->DATA_PTR<scalar_t_out>() : NULL);
       )
 }
 
