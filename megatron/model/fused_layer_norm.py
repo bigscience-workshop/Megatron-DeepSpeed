@@ -84,10 +84,10 @@ class MixedFusedLayerNorm(torch.nn.Module):
 
     TORCH_MAJOR, TORCH_MINOR = tuple(int(elt) for elt in torch.__version__.split(".")[:2])
     # Check that pytorch version is higher that 1.11
-    if ((TORCH_MAJOR == 1 and TORCH_MINOR >= 11) or TORCH_MAJOR > 1) and args.bf16 is False:
-        self.use_meg_ds_fused_layer_norm = False
-    else:
+    if args.bf16 or (TORCH_MAJOR == 1 and TORCH_MINOR < 11) or TORCH_MAJOR < 1:
         self.use_meg_ds_fused_layer_norm = True
+    else:
+        self.use_meg_ds_fused_layer_norm = False
 
 
   def reset_parameters(self):
