@@ -21,8 +21,11 @@ import numbers
 import torch
 from torch import nn
 from torch.nn.parameter import Parameter
+import torch.nn.functional as F
 from torch.nn import init
 import importlib
+
+from megatron import get_args
 
 global fused_mix_prec_layer_norm_cuda
 fused_mix_prec_layer_norm_cuda = None
@@ -60,22 +63,31 @@ class FusedLayerNormAffineFunction(torch.autograd.Function):
 
 
 
-class _MixedFusedLayerNorm(torch.nn.Module):
+class MixedFusedLayerNorm(torch.nn.Module):
 
   def __init__(self, normalized_shape, eps=1e-5):
-        super(_MixedFusedLayerNorm, self).__init__()
+    super(MixedFusedLayerNorm, self).__init__()
 
-        global fused_mix_prec_layer_norm_cuda
-        fused_mix_prec_layer_norm_cuda = importlib.import_module(
-          "fused_mix_prec_layer_norm_cuda")
+    global fused_mix_prec_layer_norm_cuda
+    fused_mix_prec_layer_norm_cuda = importlib.import_module(
+      "fused_mix_prec_layer_norm_cuda")
 
-        if isinstance(normalized_shape, numbers.Integral):
-            normalized_shape = (normalized_shape,)
-        self.normalized_shape = torch.Size(normalized_shape)
-        self.eps = eps
-        self.weight = Parameter(torch.Tensor(*normalized_shape))
-        self.bias = Parameter(torch.Tensor(*normalized_shape))
-        self.reset_parameters()
+    if isinstance(normalized_shape, numbers.Integral):
+        normalized_shape = (normalized_shape,)
+    self.normalized_shape = torch.Size(normalized_shape)
+    self.eps = eps
+    self.weight = Parameter(torch.Tensor(*normalized_shape))
+    self.bias = Parameter(torch.Tensor(*normalized_shape))
+    self.reset_parameters()
+
+    args = get_args()
+
+    TORCH_MAJOR, TORCH_MINOR = tuple(int(elt) for elt in torch.__version__.split(".")[:2])
+    # Check that pytorch version is higher that 1.11
+    if (TORCH_MAJOR == 1 and TORCH_MINOR >= 11) or TORCH_MAJOR > 2 and args.bf16 is False:
+        self.use_meg_ds_fused_layer_norm = False
+    else:
+        self.use_meg_ds_fused_layer_norm = True
 
 
   def reset_parameters(self):
@@ -85,13 +97,8 @@ class _MixedFusedLayerNorm(torch.nn.Module):
 
 
   def forward(self, input):
-
-    return FusedLayerNormAffineFunction.apply(
-      input, self.weight, self.bias, self.normalized_shape,self.eps)
-
-TORCH_MAJOR, TORCH_MINOR = tuple(int(elt) for elt in torch.__version__.split(".")[:2])
-# Check that pytorch version is higher that 1.11
-if (TORCH_MAJOR == 1 and TORCH_MINOR >= 11) or TORCH_MAJOR > 2:
-    MixedFusedLayerNorm = nn.LayerNorm
-else:
-    MixedFusedLayerNorm = _MixedFusedLayerNorm
+    if self.use_meg_ds_fused_layer_norm:
+        return FusedLayerNormAffineFunction.apply(
+            input, self.weight, self.bias, self.normalized_shape, self.eps)
+    else:
+        return F.layer_norm(input, self.normalized_shape, self.weight, self.bias)
