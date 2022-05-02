@@ -11,7 +11,7 @@ from megatron.model.fused_layer_norm import MixedFusedLayerNorm
 from packaging import version
 
 from megatron import initialize_megatron, get_args, get_tokenizer, global_vars
-from megatron.testing_utils import TestCasePlus, mockenv_context, flatten_arguments
+from megatron.testing_utils import TestCasePlus, mockenv_context, flatten_arguments, torch_assert_equal
 from megatron.training import setup_model_and_optimizer
 from pretrain_gpt import model_provider as gpt_model_provider, get_batch_pipe as get_gpt_batch_pipe
 from pretrain_prefix_lm import model_provider as prefix_lm_model_provider, get_batch_pipe as get_prefix_lm_batch_pipe
@@ -54,9 +54,6 @@ def get_default_args():
 
         # DATA_ARGS
     }
-
-
-
 
 
 def equal_vectors(tensor1, tensor2, dim=-1):
@@ -114,9 +111,7 @@ class MyTestCase(TestCasePlus):
                 output_changed = model(input_token_ids_changed, *input_batch[1:])
 
                 # All token in past should be unchanged
-                self.assertTrue(
-                    torch.all(equal_vectors(output[:, :changed_index], output_changed[:, :changed_index]))
-                )
+                torch_assert_equal(output[:, :changed_index], output_changed[:, :changed_index])
                 # All tokens in the future should have changed
                 self.assertFalse(
                     torch.any(equal_vectors(output[:, changed_index:], output_changed[:, changed_index:]))
@@ -178,11 +173,7 @@ class MyTestCase(TestCasePlus):
                 output_changed_target = model(token_ids_changed_target, *input_batch[1:])
 
                 # All token in past should be unchanged
-                self.assertTrue(
-                    torch.all(
-                        equal_vectors(output[0, :changed_target_index], output_changed_target[0, :changed_target_index])
-                    )
-                )
+                torch_assert_equal(output[0, :changed_target_index], output_changed_target[0, :changed_target_index])
                 # All tokens in the future should have changed
                 self.assertFalse(
                     torch.any(
@@ -190,11 +181,7 @@ class MyTestCase(TestCasePlus):
                     )
                 )
                 # Unchanged changed rows should not change either
-                self.assertTrue(
-                    torch.all(
-                        equal_vectors(output[1, :], output_changed_target[1, :])
-                    )
-                )
+                torch_assert_equal(output[1, :], output_changed_target[1, :])
 
                 ## --------------- CHANGE AN INPUT TOKEN ---------------------------
                 # Let's change the the last prefix token and make sure that the first token changed
@@ -217,11 +204,7 @@ class MyTestCase(TestCasePlus):
                     )
                 )
                 # Unchanged changed rows should not change either
-                self.assertTrue(
-                    torch.all(
-                        equal_vectors(output[1, :], output_changed_input[1, :])
-                    )
-                )
+                torch_assert_equal(output[1, :], output_changed_input[1, :])
 
     def test_prefix_lm_wo_reset_attention_mask(self):
         """
@@ -292,9 +275,11 @@ class MyTestCase(TestCasePlus):
 
         # Condition to use custom cuda kernel
         command_args["--bf16"] = ""
+        del command_args["--fp16"]
 
         with patch('sys.argv', flatten_arguments(command_args)):
             with mockenv_context(**self.dist_env_1_gpu):
+                initialize_megatron()
                 args = get_args()
 
                 dummy_input = torch.randn(args.micro_batch_size, args.seq_length, args.hidden_size, device="cuda")
@@ -307,8 +292,8 @@ class MyTestCase(TestCasePlus):
                 self.assertTrue(args.bf16, "Test has to be done in half precision.")
 
                 # We set the weight manually so we simulate state that's not the initialisation
-                weight = torch.randn(args.hidden_size, dtype="cuda")
-                bias = torch.randn(args.hidden_size, dtype="cuda")
+                weight = torch.randn(args.hidden_size, device="cuda")
+                bias = torch.randn(args.hidden_size, device="cuda")
                 mfln.weight = nn.Parameter(weight)
                 mfln.bias = nn.Parameter(bias)
 
@@ -316,11 +301,11 @@ class MyTestCase(TestCasePlus):
                 # We check that our layernorm matches pytorch 1.11 onwards
                 if version.parse(torch.__version__) >= version.parse("1.11.0"):
                     torch_layer_norm_output = F.layer_norm(dummy_input, normalized_shape, weight, bias, eps=epsilon)
-                    self.assertEqual(mfln_output, torch_layer_norm_output)
                 else:
                     # In this case we use can check that basically it corresponds to the fp32 version
                     torch_layer_norm_output = F.layer_norm(dummy_input, normalized_shape, weight.float(), bias.float(), eps=epsilon).to(torch.bfloat16)
-                    self.assertEqual(mfln_output, torch_layer_norm_output)
+
+                torch_assert_equal(mfln_output, torch_layer_norm_output)
 
 
 if __name__ == '__main__':
