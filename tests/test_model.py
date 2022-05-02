@@ -282,7 +282,7 @@ class MyTestCase(TestCasePlus):
                 initialize_megatron()
                 args = get_args()
 
-                dummy_input = torch.randn(args.micro_batch_size, args.seq_length, args.hidden_size, device="cuda")
+                dummy_input = torch.randn(args.micro_batch_size, args.seq_length, args.hidden_size, device="cuda", dtype=torch.bfloat16)
 
                 normalized_shape = (args.hidden_size,)
                 epsilon = 1e-5
@@ -292,8 +292,8 @@ class MyTestCase(TestCasePlus):
                 self.assertTrue(args.bf16, "Test has to be done in half precision.")
 
                 # We set the weight manually so we simulate state that's not the initialisation
-                weight = torch.randn(args.hidden_size, device="cuda")
-                bias = torch.randn(args.hidden_size, device="cuda")
+                weight = torch.randn(args.hidden_size, device="cuda", dtype=torch.bfloat16)
+                bias = torch.randn(args.hidden_size, device="cuda", dtype=torch.bfloat16)
                 mfln.weight = nn.Parameter(weight)
                 mfln.bias = nn.Parameter(bias)
 
