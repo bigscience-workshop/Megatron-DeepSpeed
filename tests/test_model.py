@@ -303,7 +303,7 @@ class MyTestCase(TestCasePlus):
                     torch_layer_norm_output = F.layer_norm(dummy_input, normalized_shape, weight, bias, eps=epsilon)
                 else:
                     # In this case we use can check that basically it corresponds to the fp32 version
-                    torch_layer_norm_output = F.layer_norm(dummy_input, normalized_shape, weight.float(), bias.float(), eps=epsilon).to(torch.bfloat16)
+                    torch_layer_norm_output = F.layer_norm(dummy_input.float(), normalized_shape, weight.float(), bias.float(), eps=epsilon).to(torch.bfloat16)
 
                 torch_assert_equal(mfln_output, torch_layer_norm_output)
 
