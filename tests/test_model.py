@@ -4,6 +4,11 @@ from unittest.mock import patch
 
 import deepspeed
 import torch
+from torch import nn
+import torch.nn.functional as F
+
+from megatron.model.fused_layer_norm import MixedFusedLayerNorm
+from packaging import version
 
 from megatron import initialize_megatron, get_args, get_tokenizer, global_vars
 from megatron.testing_utils import TestCasePlus, mockenv_context, flatten_arguments
@@ -281,6 +286,41 @@ class MyTestCase(TestCasePlus):
                 model(*input_batch)
 
                 #TODO: Check all invariants
+
+    def test_fused_layer_norm(self):
+        command_args = get_default_args()
+
+        # Condition to use custom cuda kernel
+        command_args["--bf16"] = ""
+
+        with patch('sys.argv', flatten_arguments(command_args)):
+            with mockenv_context(**self.dist_env_1_gpu):
+                args = get_args()
+
+                dummy_input = torch.randn(args.micro_batch_size, args.seq_length, args.hidden_size, device="cuda")
+
+                normalized_shape = (args.hidden_size,)
+                epsilon = 1e-5
+                mfln = MixedFusedLayerNorm(normalized_shape, eps=epsilon)
+
+                self.assertTrue(mfln.use_meg_ds_fused_layer_norm, "Expected model to use Megatron-DeepSpeed custom cuda kernel for LayerNorm.")
+                self.assertTrue(args.bf16, "Test has to be done in half precision.")
+
+                # We set the weight manually so we simulate state that's not the initialisation
+                weight = torch.randn(args.hidden_size, dtype="cuda")
+                bias = torch.randn(args.hidden_size, dtype="cuda")
+                mfln.weight = nn.Parameter(weight)
+                mfln.bias = nn.Parameter(bias)
+
+                mfln_output = mfln(dummy_input)
+                # We check that our layernorm matches pytorch 1.11 onwards
+                if version.parse(torch.__version__) >= version.parse("1.11.0"):
+                    torch_layer_norm_output = F.layer_norm(dummy_input, normalized_shape, weight, bias, eps=epsilon)
+                    self.assertEqual(mfln_output, torch_layer_norm_output)
+                else:
+                    # In this case we use can check that basically it corresponds to the fp32 version
+                    torch_layer_norm_output = F.layer_norm(dummy_input, normalized_shape, weight.float(), bias.float(), eps=epsilon).to(torch.bfloat16)
+                    self.assertEqual(mfln_output, torch_layer_norm_output)
 
 
 if __name__ == '__main__':
