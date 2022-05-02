@@ -18,6 +18,8 @@
    with some changes. """
 
 import numbers
+
+from packaging import version
 import torch
 from torch import nn
 from torch.nn.parameter import Parameter
@@ -82,12 +84,10 @@ class MixedFusedLayerNorm(torch.nn.Module):
 
     args = get_args()
 
-    TORCH_MAJOR, TORCH_MINOR = tuple(int(elt) for elt in torch.__version__.split(".")[:2])
-    # Check that pytorch version is higher that 1.11
-    if args.bf16 or (TORCH_MAJOR == 1 and TORCH_MINOR < 11) or TORCH_MAJOR < 1:
-        self.use_meg_ds_fused_layer_norm = True
-    else:
-        self.use_meg_ds_fused_layer_norm = False
+    self.use_meg_ds_fused_layer_norm = (
+      args.bf16 # Current Meg-DS cuda kernel has better throughput than torch.nn.LayerNorm
+      or version.parse(torch.__version__) > version.parse("1.11.0") # https://github.com/pytorch/pytorch/pull/66920
+    )
 
 
   def reset_parameters(self):
