@@ -86,7 +86,7 @@ class MixedFusedLayerNorm(torch.nn.Module):
 
     self.use_meg_ds_fused_layer_norm = (
       args.bf16 # Current Meg-DS cuda kernel has better throughput than torch.nn.LayerNorm
-      or version.parse(torch.__version__) > version.parse("1.11.0") # https://github.com/pytorch/pytorch/pull/66920
+      or version.parse(torch.__version__) >= version.parse("1.11.0") # https://github.com/pytorch/pytorch/pull/66920
     )
 
 
