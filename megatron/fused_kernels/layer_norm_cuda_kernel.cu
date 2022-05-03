@@ -317,7 +317,7 @@ void cuApplyLayerNorm(
     if (gamma != NULL && beta != NULL) {
       for (int i = thrx;  i < n2;  i+=numx) {
         U curr = static_cast<U>(lvals[i]);
-        ovals[i] = gamma[i] * static_cast<V>(c_invvar * (curr - mu)) + beta[i];
+        ovals[i] = (curr - mu) * c_invvar * static_cast<U>(gamma[i]) + static_cast<U>(beta[i]);
       }
     } else {
       for (int i = thrx;  i < n2;  i+=numx) {
