@@ -8,6 +8,10 @@ In addition various code bits and lots of docs are to be found at https://github
 
 Please note that the rest of this page has been trimmed to only include the info relevant to the BigScience project and also updated to usage with the integrated Deepspeed. You will find the original page with all the tables and training info on Bert and T5 [here](https://github.com/NVIDIA/Megatron-LM).
 
+# Get started fast
+
+Here is doc with just [instructions to going from 0 to training really fast](start_fast.md).
+
 # Setup
 
 1. Install `bigscience-workshop/Megatron-DeepSpeed`
@@ -33,14 +37,11 @@ pip install --global-option="--cpp_ext" --global-option="--cuda_ext" --no-cache 
 
 (on JZ it's done in a special way, see [here](https://github.com/bigscience-workshop/bigscience/tree/master/jz/envs#apex).)
 
-3. Install `deepspeed` / the `big-science` branch
-
-Then install the `big-science` branch of `deepspeed`:
+3. Install `deepspeed`
 
 ```
-git clone https://github.com/microsoft/deepspeed deepspeed-big-science
-cd deepspeed-big-science
-git checkout big-science
+git clone https://github.com/microsoft/deepspeed
+cd deepspeed
 rm -rf build
 TORCH_CUDA_ARCH_LIST="7.0" DS_BUILD_CPU_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 pip install -e . --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
 ```
