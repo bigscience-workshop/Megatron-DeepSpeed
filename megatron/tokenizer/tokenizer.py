@@ -318,7 +318,7 @@ class _GPT2BPETokenizer(AbstractTokenizer):
 
 
 class _AutoTokenizer(AbstractTokenizer):
-    """AutoTokenizer for Hf Pretrained model loading."""
+    """AutoTokenizer for HF Transformer Tokenizer."""
 
     def __init__(self, tokenizer_name_or_path):
         name = tokenizer_name_or_path

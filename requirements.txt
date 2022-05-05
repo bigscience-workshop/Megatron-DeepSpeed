@@ -6,6 +6,7 @@ pybind11
 regex
 six
 tensorboard
+parameterized
 torch>=1.7
 transformers
 DeepSpeed @ git+https://github.com/microsoft/DeepSpeed.git
