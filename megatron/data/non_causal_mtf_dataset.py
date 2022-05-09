@@ -21,7 +21,7 @@ import time
 import numpy as np
 import torch
 
-from megatron import mpu, print_rank_0
+from megatron import mpu, print_rank_0, get_tokenizer
 from megatron.data.blendable_dataset import BlendableDataset
 from megatron.data.dataset_utils import get_datasets_weights_and_num_samples
 from megatron.data.dataset_utils import get_train_valid_test_split_, get_split_by_range_
@@ -239,6 +239,10 @@ class NonCausalMTFDataset(torch.utils.data.Dataset):
 
         self.name = name
         self.indexed_dataset = indexed_dataset
+        self.seq_length = seq_length
+
+        # vocab
+        self.tokenizer = get_tokenizer()
 
         # Checks
         assert np.min(documents) >= 0
@@ -257,32 +261,27 @@ class NonCausalMTFDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         # Get the shuffled index.
         idx = self.shuffle_idx[idx]
-        # Start and end documents and offsets.
-        doc_index_f = self.sample_idx[idx][0]
-        doc_index_l = self.sample_idx[idx + 1][0]
-        offset_f = self.sample_idx[idx][1]
-        offset_l = self.sample_idx[idx + 1][1]
-        # If we are within the same document, just extract the chunk.
-        if doc_index_f == doc_index_l:
-            sample = self.indexed_dataset.get(self.doc_idx[doc_index_f],
-                                              offset=offset_f,
-                                              length=offset_l - offset_f + 1)
+        doc_idx = self.sample_idx[idx][0]
+
+        sample = self.indexed_dataset.get(
+            self.doc_idx[doc_idx]
+        )
+
+        eod_idx = np.where(sample == self.tokenizer.eod)[0]
+        if len(eod_idx) > 0:
+            prefix_len = eod_idx[0]
         else:
-            # Otherwise, get the rest of the initial document.
-            sample_list = [self.indexed_dataset.get(self.doc_idx[doc_index_f],
-                                                    offset=offset_f)]
-            # Loop over all in between documents and add the entire document.
-            for i in range(doc_index_f + 1, doc_index_l):
-                sample_list.append(self.indexed_dataset.get(self.doc_idx[i]))
-            # And finally add the relevant portion of last document.
-            sample_list.append(self.indexed_dataset.get(
-                self.doc_idx[doc_index_l],
-                length=offset_l + 1))
-            sample = np.concatenate(sample_list)
+            prefix_len = 0
+
+        sample = pad_and_convert_to_numpy(
+            sample,
+            self.tokenizer.pad,
+            self.seq_length
+            )
 
         return {
             'text': np.array(sample, dtype=np.int64),
-            'prefix_len': 0
+            'prefix_len': prefix_len
             }
 
 
@@ -525,3 +524,17 @@ def _build_shuffle_idx(num_samples, total_size, np_rng):
     np_rng.shuffle(shuffle_idx_last)
 
     return np.concatenate((shuffle_idx_first, shuffle_idx_last))
+
+def pad_and_convert_to_numpy(tokens, pad_id, max_seq_length):
+    """Pad sequences and convert them to numpy."""
+
+    # Some checks.
+    num_tokens = len(tokens)
+    padding_length = max_seq_length - num_tokens
+    assert padding_length >= 0
+
+    # Tokens and token types.
+    filler = np.array([pad_id] * padding_length)
+    tokens_np = np.concatenate((tokens, filler), dtype=np.int64)
+
+    return tokens_np
