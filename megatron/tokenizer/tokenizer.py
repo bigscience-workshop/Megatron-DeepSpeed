@@ -332,7 +332,7 @@ class _AutoTokenizer(AbstractTokenizer):
         self.decoder = {v: k for k, v in self.encoder.items()}
 
         if 'mask_token' not in self.tokenizer.special_tokens_map:
-            tokenizer.mask_token = "<mask>"
+            self.tokenizer.mask_token = "<mask>"
 
     @property
     def vocab_size(self):
