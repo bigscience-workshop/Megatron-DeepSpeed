@@ -237,6 +237,7 @@ class NonCausalMLMDataset(torch.utils.data.Dataset):
         num_samples,
         seq_length,
         seed,
+        masked_lm_prob=0.15,
         ):
 
         # Params to store.
