@@ -90,7 +90,7 @@ def get_batch(data_iterator):
     tokens = tokens_[:, :-1].contiguous()
 
     # Prefix
-    prefix_indices = data_b['prefix_len'].cpu().tolist() #.long()
+    prefix_indices = data_b['prefix_len'].cpu().tolist()
 
     # Get the masks and postition ids.
     attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
@@ -127,7 +127,7 @@ def get_batch_pipe(data):
     tokens = tokens_[:, :-1].contiguous()
 
     # Prefix
-    prefix_indices = data_b['prefix_len'].long()
+    prefix_indices = data_b['prefix_len'].cpu().tolist()
 
     # Get the masks and position ids.
     attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(

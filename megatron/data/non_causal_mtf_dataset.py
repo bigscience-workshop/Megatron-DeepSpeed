@@ -370,8 +370,7 @@ def _build_index_mappings(name, data_prefix, documents, sizes,
             assert sizes.dtype == np.int32
             sample_idx = helpers.build_sample_idx(sizes, doc_idx, seq_length,
                                                   num_epochs, tokens_per_epoch)
-            # sample_idx = _build_sample_idx(sizes, doc_idx, seq_length,
-            #                               num_epochs, tokens_per_epoch)
+
             np.save(sample_idx_filename, sample_idx, allow_pickle=True)
             print_rank_0(' > elasped time to build and save sample-idx mapping '
                          '(seconds): {:4f}'.format(time.time() - start_time))
@@ -453,55 +452,6 @@ def _build_doc_idx(documents, num_epochs, np_rng, separate_last_epoch):
     doc_idx_first = _build_doc_idx(documents, num_epochs-1, np_rng, False)
     doc_idx_last = _build_doc_idx(documents, 1, np_rng, False)
     return np.concatenate((doc_idx_first, doc_idx_last))
-
-
-def _build_sample_idx(sizes, doc_idx, seq_length,
-                      num_epochs, tokens_per_epoch):
-    """Sample index mapping is a 2D array with sizes
-    [number-of-samples + 1, 2] where [..., 0] contains
-    the index into `doc_idx` and [..., 1] is the
-    starting offset in that document."""
-
-    # Total number of samples. For -1 see comments in `_num_epochs`.
-    num_samples = (num_epochs * tokens_per_epoch - 1) // seq_length
-    sample_idx = np.zeros([num_samples + 1, 2], dtype=np.int32)
-
-    # Index into sample_idx.
-    sample_index = 0
-    # Index into doc_idx.
-    doc_idx_index = 0
-    # Begining offset for each document.
-    doc_offset = 0
-    # Start with first document and no offset.
-    sample_idx[sample_index][0] = doc_idx_index
-    sample_idx[sample_index][1] = doc_offset
-    sample_index += 1
-    while sample_index <= num_samples:
-        # Start with a fresh sequence.
-        remaining_seq_length = seq_length + 1
-        while remaining_seq_length != 0:
-            # Get the document length.
-            doc_id = doc_idx[doc_idx_index]
-            doc_length = sizes[doc_id] - doc_offset
-            # And add it to the current sequence.
-            remaining_seq_length -= doc_length
-            # If we have more than a full sequence, adjust offset and set
-            # remaining length to zero so we return from the while loop.
-            # Note that -1 here is for the same reason we have -1 in
-            # `_num_epochs` calculations.
-            if remaining_seq_length <= 0:
-                doc_offset += (remaining_seq_length + doc_length - 1)
-                remaining_seq_length = 0
-            else:
-                # Otherwise, start from the begining of the next document.
-                doc_idx_index += 1
-                doc_offset = 0
-        # Record the sequence.
-        sample_idx[sample_index][0] = doc_idx_index
-        sample_idx[sample_index][1] = doc_offset
-        sample_index += 1
-
-    return sample_idx
 
 
 def _build_shuffle_idx(num_samples, total_size, np_rng):

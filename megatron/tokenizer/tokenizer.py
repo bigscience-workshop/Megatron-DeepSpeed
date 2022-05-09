@@ -327,6 +327,9 @@ class _AutoTokenizer(AbstractTokenizer):
         self.encoder = self.tokenizer.get_vocab()
         self.decoder = {v: k for k, v in self.encoder.items()}
 
+        if 'mask_token' not in self.tokenizer.special_tokens_map:
+            tokenizer.mask_token = "<mask>"
+
     @property
     def vocab_size(self):
         return self.tokenizer.vocab_size
@@ -344,6 +347,22 @@ class _AutoTokenizer(AbstractTokenizer):
 
     def detokenize(self, token_ids):
         return self.tokenizer.decode(token_ids)
+
+    @property
+    def cls(self):
+        return self.cls_id
+
+    @property
+    def sep(self):
+        return self.sep_id
+
+    @property
+    def pad(self):
+        return self.pad_id
+
+    @property
+    def mask(self):
+        return self.mask_id
 
     @property
     def eod(self):
