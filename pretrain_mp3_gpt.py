@@ -82,7 +82,6 @@ def get_batch(data_iterator):
         data = next(data_iterator)
     else:
         data = None
-    print(data)
     data_b = mpu.broadcast_data(keys, data, datatype)
 
     # Unpack.
@@ -91,7 +90,7 @@ def get_batch(data_iterator):
     tokens = tokens_[:, :-1].contiguous()
 
     # Prefix
-    prefix_indices = data_b['prefix_len'].long()
+    prefix_indices = data_b['prefix_len'].cpu().tolist() #.long()
 
     # Get the masks and postition ids.
     attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
