@@ -259,8 +259,6 @@ class NonCausalMLMDataset(torch.utils.data.Dataset):
         self.pad_id = tokenizer.pad
         self.bos_id = tokenizer.bos_token_id
         self.eos_id = tokenizer.eos_token_id
-        self.sentinel_tokens = tokenizer.additional_special_tokens_ids
-        assert len(self.sentinel_tokens) > 0, "Provide the argument --vocab-extra-ids 100 to the script"
 
         # Checks
         assert np.min(documents) >= 0
@@ -313,7 +311,7 @@ class NonCausalMLMDataset(torch.utils.data.Dataset):
                                      self.mask_id, self.pad_id,
                                      self.masked_lm_prob, np_rng,
                                      self.bos_id, self.eos_id,
-                                     self.sentinel_tokens)
+                                     )
 
 
 def build_training_sample(sample,
