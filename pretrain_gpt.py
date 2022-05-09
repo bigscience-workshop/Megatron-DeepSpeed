@@ -207,7 +207,8 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
             train_valid_test_num_samples=train_val_test_num_samples,
             seq_length=args.seq_length,
             seed=args.seed,
-            skip_warmup=(not args.mmap_warmup))
+            skip_warmup=(not args.mmap_warmup),
+            shuffle=(not args.no_shuffle))
     # Option 2 of data loading using --(train|valid|test)-weighted-split-paths
     elif args.train_weighted_split_paths:
         assigned_train_valid_test = []
@@ -232,7 +233,8 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
                                         train_val_test_num_samples,
                                         args.seq_length, args.seed,
                                         (not args.mmap_warmup),
-                                        train_valid_test=s)
+                                        train_valid_test=s,
+                                        shuffle=(not args.no_shuffle))
                 eval(f"{s}_ds").append(d)
     else:
         raise NotImplementedError("No dataloading argument passed")

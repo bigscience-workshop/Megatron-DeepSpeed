@@ -30,15 +30,15 @@ from megatron.data.indexed_dataset import make_dataset as make_indexed_dataset
 
 def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
                                     train_valid_test_num_samples,
-                                    seq_length, seed, skip_warmup):
+                                    seq_length, seed, skip_warmup, shuffle=False):
     """Build train, valid, and test datasets."""
 
     # Single dataset.
     if len(data_prefix) == 1:
-        all_train_datasets, all_valid_datasets, all_test_datasets =  _build_train_valid_test_datasets(data_prefix[0],
+        all_train_datasets, all_valid_datasets, all_test_datasets = _build_train_valid_test_datasets(data_prefix[0],
                                                 data_impl, splits_string,
                                                 train_valid_test_num_samples,
-                                                seq_length, seed, skip_warmup)
+                                                seq_length, seed, skip_warmup, shuffle)
     # Blending dataset.
     else:
 
@@ -54,7 +54,7 @@ def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
             train_ds, valid_ds, test_ds = _build_train_valid_test_datasets(
                                             prefixes[i], data_impl, splits_string,
                                             datasets_train_valid_test_num_samples[i],
-                                            seq_length, seed, skip_warmup)
+                                            seq_length, seed, skip_warmup, shuffle)
             if train_ds:
                 train_datasets.append(train_ds)
             if valid_ds:
@@ -74,7 +74,7 @@ def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
 
 def build_dataset_group(dataset_group_name, paths, weights, splits, data_impl,
                         train_valid_test_num_samples,
-                        seq_length, seed, skip_warmup, train_valid_test):
+                        seq_length, seed, skip_warmup, train_valid_test, shuffle=True):
     '''
     Build a single dataset group corresponding to Option 2 of data loading see arguments.py
     a dataset group is passed on the following form
@@ -87,12 +87,12 @@ def build_dataset_group(dataset_group_name, paths, weights, splits, data_impl,
 
     # Single dataset.
     if len(paths) == 1:
-        dataset =  _build_single_datasets(paths[0],
-                                          splits[0],
-                                          data_impl,
-                                          train_valid_test_num_samples,
-                                          seq_length, seed, skip_warmup,
-                                          dataset_group_name, train_valid_test)
+        dataset = _build_single_datasets(paths[0],
+                                         splits[0],
+                                         data_impl,
+                                         train_valid_test_num_samples,
+                                         seq_length, seed, skip_warmup,
+                                         dataset_group_name, train_valid_test, shuffle)
         return dataset
     # Blending dataset.
     else:
@@ -116,7 +116,7 @@ def build_dataset_group(dataset_group_name, paths, weights, splits, data_impl,
                                         datasets_train_valid_test_num_samples[i],
                                         seq_length,
                                         seed, skip_warmup,
-                                        dataset_group_name, train_valid_test)
+                                        dataset_group_name, train_valid_test, shuffle)
 
             datasets.append(ds)
         all_datasets = BlendableDataset(datasets, weights)
@@ -124,7 +124,7 @@ def build_dataset_group(dataset_group_name, paths, weights, splits, data_impl,
         return all_datasets
 
 def _build_single_datasets(data_prefix, range_string, data_impl, train_valid_test_num_samples,
-                            seq_length, seed, skip_warmup, dataset_group_name, train_valid_test):
+                            seq_length, seed, skip_warmup, dataset_group_name, train_valid_test, shuffle=True):
     """Build a single dataset"""
 
     assert train_valid_test in ["train","valid","test"]
@@ -157,7 +157,7 @@ def _build_single_datasets(data_prefix, range_string, data_impl, train_valid_tes
             dataset = GPTDataset(name, data_prefix,
                                   documents, indexed_dataset,
                                   train_valid_test_num_samples[index],
-                                  seq_length, seed)
+                                  seq_length, seed, shuffle)
         return dataset
 
     dataset = build_dataset(dataset_group_name)
@@ -167,7 +167,7 @@ def _build_single_datasets(data_prefix, range_string, data_impl, train_valid_tes
 
 def _build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
                                      train_valid_test_num_samples,
-                                     seq_length, seed, skip_warmup):
+                                     seq_length, seed, skip_warmup, shuffle=True):
     """Build train, valid, and test datasets."""
 
 
@@ -199,7 +199,7 @@ def _build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
             dataset = GPTDataset(name, data_prefix,
                                   documents, indexed_dataset,
                                   train_valid_test_num_samples[index],
-                                  seq_length, seed)
+                                  seq_length, seed, shuffle=shuffle)
         return dataset
 
     train_dataset = build_dataset(0, 'train')
@@ -227,7 +227,7 @@ def get_indexed_dataset_(path, data_impl, skip_warmup):
 class GPTDataset(torch.utils.data.Dataset):
 
     def __init__(self, name, data_prefix, documents, indexed_dataset,
-                 num_samples, seq_length, seed):
+                 num_samples, seq_length, seed, shuffle=True):
 
         self.name = name
         self.indexed_dataset = indexed_dataset
@@ -239,7 +239,7 @@ class GPTDataset(torch.utils.data.Dataset):
         # Build index mappings.
         self.doc_idx, self.sample_idx, self.shuffle_idx = _build_index_mappings(
             self.name, data_prefix, documents, self.indexed_dataset.sizes,
-            num_samples, seq_length, seed)
+            num_samples, seq_length, seed, shuffle)
 
     def __len__(self):
         # -1 is due to data structure used to retieve the index:
@@ -276,7 +276,7 @@ class GPTDataset(torch.utils.data.Dataset):
 
 
 def _build_index_mappings(name, data_prefix, documents, sizes,
-                          num_samples, seq_length, seed, cutoff_last_epoch=0.95):
+                          num_samples, seq_length, seed, cutoff_last_epoch=0.95, shuffle=True):
     """Build doc-idx, sample-idx, and shuffle-idx.
     doc-idx: is an array (ordered) of documents to be used in training.
     sample-idx: is the start document index and document offset for each
@@ -374,7 +374,7 @@ def _build_index_mappings(name, data_prefix, documents, sizes,
             else:
                 num_samples_ = sample_idx.shape[0] - 1
             shuffle_idx = _build_shuffle_idx(num_samples_,
-                                             sample_idx.shape[0] - 1, np_rng)
+                                             sample_idx.shape[0] - 1, np_rng, shuffle)
             np.save(shuffle_idx_filename, shuffle_idx, allow_pickle=True)
             print_rank_0(' > elasped time to build and save shuffle-idx mapping'
                          ' (seconds): {:4f}'.format(time.time() - start_time))
@@ -494,7 +494,7 @@ def _build_sample_idx(sizes, doc_idx, seq_length,
     return sample_idx
 
 
-def _build_shuffle_idx(num_samples, total_size, np_rng):
+def _build_shuffle_idx(num_samples, total_size, np_rng, shuffle=True):
     """Build the range [0, size) and shuffle."""
     print(' > building shuffle index with split [0, {}) and [{}, {}) '
           '...'.format(num_samples, num_samples, total_size), flush=True)
@@ -505,12 +505,14 @@ def _build_shuffle_idx(num_samples, total_size, np_rng):
 
     shuffle_idx_first = np.arange(start=0, stop=num_samples,
                                   step=1, dtype=dtype_)
-    np_rng.shuffle(shuffle_idx_first)
+    if shuffle:
+        np_rng.shuffle(shuffle_idx_first)
     if num_samples == total_size:
         return shuffle_idx_first
 
     shuffle_idx_last = np.arange(start=num_samples, stop=total_size,
                                  step=1, dtype=dtype_)
-    np_rng.shuffle(shuffle_idx_last)
+    if shuffle:
+        np_rng.shuffle(shuffle_idx_last)
 
     return np.concatenate((shuffle_idx_first, shuffle_idx_last))
