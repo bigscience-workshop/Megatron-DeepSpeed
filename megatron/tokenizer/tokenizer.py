@@ -359,19 +359,19 @@ class _AutoTokenizer(AbstractTokenizer):
 
     @property
     def cls(self):
-        return self.cls_token_id
+        return self.tokenizer.cls_token_id
 
     @property
     def sep(self):
-        return self.sep_token_id
+        return self.tokenizer.sep_token_id
 
     @property
     def pad(self):
-        return self.pad_token_id
+        return self.tokenizer.pad_token_id
 
     @property
     def mask(self):
-        return self.mask_token_id
+        return self.tokenizer.mask_token_id
 
     @property
     def eod(self):
