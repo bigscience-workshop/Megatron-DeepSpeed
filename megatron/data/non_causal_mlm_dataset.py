@@ -156,7 +156,7 @@ def _build_single_datasets(data_prefix, range_string, data_impl, train_valid_tes
         if splits[1] > splits[0]:
             documents = np.arange(start=splits[0], stop=splits[1],
                                   step=1, dtype=np.int32)
-            dataset = NonCausalMTFDataset(name, data_prefix,
+            dataset = NonCausalMLMDataset(name, data_prefix,
                                   documents, indexed_dataset,
                                   train_valid_test_num_samples[index],
                                   seq_length, seed)
