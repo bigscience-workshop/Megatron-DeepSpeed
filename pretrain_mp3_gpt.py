@@ -22,7 +22,8 @@ from megatron import print_rank_0
 from megatron import get_timers
 from megatron import get_tokenizer
 from megatron import mpu
-from megatron.data.gpt_dataset import build_train_valid_test_datasets, build_dataset_group
+# from megatron.data.gpt_dataset import build_train_valid_test_datasets, build_dataset_group
+from megatron.data.non_causal_mtf_dataset import build_train_valid_test_datasets, build_dataset_group
 from megatron.model import GPTModel, GPTModelPipe
 from megatron.training import pretrain
 from megatron.utils import get_ltor_masks_and_position_ids, get_prefix_indices, reweight_loss_mask_
@@ -66,7 +67,7 @@ def model_provider(pre_process=True, post_process=True):
     see_memory_usage(f"After Building Model", force=True)
     return model
 
-_KEYS = ['text', 'prompt', 'answer']
+_KEYS = ['text', 'prefix_len']
 
 def get_batch(data_iterator):
     """Generate a batch"""
@@ -90,7 +91,10 @@ def get_batch(data_iterator):
     tokens = tokens_[:, :-1].contiguous()
 
     # Prefix
-    prefix_indices = [len(seq) for seq in data_b['prompt'].long()]
+    prefix_indices = data_b['prefix_len'].long()
+    print(prefix_indices)
+    import sys
+    sys.exit()
 
     # Get the masks and postition ids.
     attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
@@ -192,8 +196,6 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
             seed=args.seed,
             skip_warmup=(not args.mmap_warmup))
 
-        import sys
-        sys.exit()
     # Option 2 of data loading using --(train|valid|test)-weighted-split-paths
     elif args.train_weighted_split_paths:
         assigned_train_valid_test = []
