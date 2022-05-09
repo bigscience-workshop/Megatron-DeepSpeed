@@ -358,9 +358,9 @@ def build_training_sample(sample,
         )
 
     # Padding.
-    padded_tokens = pad_and_convert_to_numpy(tokens, max_seq_length)
-    padded_labels = pad_and_convert_to_numpy(labels, max_seq_length)
-    padded_masks = pad_and_convert_to_numpy(masks, max_seq_length)
+    padded_tokens = pad_and_convert_to_numpy(tokens, pad_id, max_seq_length)
+    padded_labels = pad_and_convert_to_numpy(labels, pad_id, max_seq_length)
+    padded_masks = pad_and_convert_to_numpy(masks, pad_id, max_seq_length)
 
     print(padded_tokens)
     print(padded_labels)
