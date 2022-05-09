@@ -1,9 +1,9 @@
-CHECKPOINT_PATH=checkpoints/gpt2
+CHECKPOINT_PATH=data/checkpoints/gpt2
 VOCAB_FILE=data/gpt2-vocab.json
 MERGE_FILE=data/gpt2-merges.txt
-DATA_PATH=data/meg-gpt2_oscar-combined_text_document
-TENSORBOARD_PATH=output_dir/tensorboard
-CODECARBON_PATH=output_dir/codecarbon
+DATA_PATH=data/t0-test
+TENSORBOARD_PATH=data/checkpoints/tensorboard
+CODECARBON_PATH=data/checkpoints/codecarbon
 
 MICRO_BATCH_SIZE=1
 GLOBAL_BATCH_SIZE=16
