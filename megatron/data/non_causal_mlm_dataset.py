@@ -304,7 +304,7 @@ class NonCausalMLMDataset(torch.utils.data.Dataset):
         # python randint is inclusive whereas the numpy one is exclusive.
         np_rng = np.random.RandomState(seed=(self.seed + idx))
         return build_training_sample(sample,
-                                     self.max_seq_length,  # needed for padding
+                                     self.seq_length,  # needed for padding
                                      self.vocab_id_list,
                                      self.vocab_id_to_token_dict,
                                      self.cls_id, self.sep_id,
