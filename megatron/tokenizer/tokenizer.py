@@ -382,6 +382,16 @@ class _AutoTokenizer(AbstractTokenizer):
         return self.tokenizer.mask_token_id
 
     @property
+    def bos_token_id(self):
+        """ Id of the beginning of sentence token in the vocabulary."""
+        return self.tokenizer.bos_token_id
+
+    @property
+    def eos_token_id(self):
+        """ Id of the end of sentence token in the vocabulary."""
+        return self.tokenizer.eos_token_id
+
+    @property
     def eod(self):
         return self.tokenizer.eos_token_id
 
