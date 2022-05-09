@@ -198,7 +198,7 @@ def _build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
         if splits[index + 1] > splits[index]:
             documents = np.arange(start=splits[index], stop=splits[index + 1],
                                   step=1, dtype=np.int32)
-            dataset = NonCausalMTFDataset(name, data_prefix,
+            dataset = NonCausalMLMDataset(name, data_prefix,
                                   documents, indexed_dataset,
                                   train_valid_test_num_samples[index],
                                   seq_length, seed)
