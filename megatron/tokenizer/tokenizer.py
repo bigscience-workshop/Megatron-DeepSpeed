@@ -336,11 +336,11 @@ class _AutoTokenizer(AbstractTokenizer):
 
     @property
     def vocab(self):
-        return self.tokenizer.encoder
+        return self.tokenizer.vocab
 
     @property
     def inv_vocab(self):
-        return self.tokenizer.decoder
+        return {v: k for k, v in self.tokenizer.vocab.items()}
 
     def tokenize(self, text):
         return self.tokenizer.encode(text)
