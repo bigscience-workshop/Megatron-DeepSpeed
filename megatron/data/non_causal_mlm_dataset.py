@@ -342,7 +342,8 @@ def build_training_sample(sample,
     """
 
     # flatten sentences into one list
-    tokens = [token for sentence in sample for token in sentence]
+    # tokens = [token for sentence in sample for token in sentence]
+    tokens = sample
 
     # Truncate to `target_sequence_length`.
     max_num_tokens = max_seq_length
