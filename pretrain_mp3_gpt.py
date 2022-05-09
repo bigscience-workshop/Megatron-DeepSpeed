@@ -22,7 +22,6 @@ from megatron import print_rank_0
 from megatron import get_timers
 from megatron import get_tokenizer
 from megatron import mpu
-# from megatron.data.gpt_dataset import build_train_valid_test_datasets, build_dataset_group
 from megatron.data.non_causal_mtf_dataset import build_train_valid_test_datasets, build_dataset_group
 from megatron.model import GPTModel, GPTModelPipe
 from megatron.training import pretrain
@@ -83,6 +82,7 @@ def get_batch(data_iterator):
         data = next(data_iterator)
     else:
         data = None
+    print(data)
     data_b = mpu.broadcast_data(keys, data, datatype)
 
     # Unpack.
@@ -92,9 +92,6 @@ def get_batch(data_iterator):
 
     # Prefix
     prefix_indices = data_b['prefix_len'].long()
-    print(prefix_indices)
-    import sys
-    sys.exit()
 
     # Get the masks and postition ids.
     attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
@@ -131,7 +128,7 @@ def get_batch_pipe(data):
     tokens = tokens_[:, :-1].contiguous()
 
     # Prefix
-    prefix_indices = [len(seq) for seq in data_b['prompt'].long()]
+    prefix_indices = data_b['prefix_len'].long()
 
     # Get the masks and position ids.
     attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
