@@ -2,6 +2,7 @@ from functools import reduce
 from logging import logMultiprocessing
 import os
 import sys
+import datetime
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
                                              os.path.pardir,os.path.pardir)))
 
@@ -373,10 +374,13 @@ def load_ds_checkpoint_and_setup_megatron(extra_args_provider):
     return model
 
 def tasks_args(parser):
+
+    results_path_default = f"results-{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}.json"
+
     """Provide extra arguments required for tasks."""
     group = parser.add_argument_group(title='Evaluation options')
     group.add_argument('--task_list', type=str, default = "all", help='Either "all" or comma separated list of tasks.')
-    group.add_argument('--results_path', type=str, default = "./results.json", help='Path to where the results will be stored.')
+    group.add_argument('--results_path', type=str, default = results_path_default, help='Path to where the results will be stored.')
     group.add_argument('--adaptive_seq_len',  default = False, action='store_true',
                        help='Should the sequence length be adapted to the batch during evaluation, if in fp16 the results will be slightly different due to numerical errors but greatly speed up evaluation.')
     group.add_argument('--eval_fp32',  default = False, action='store_true', help='Should the evaluation run in fp32')
