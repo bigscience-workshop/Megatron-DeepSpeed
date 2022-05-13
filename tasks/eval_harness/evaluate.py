@@ -384,6 +384,7 @@ def tasks_args(parser):
     group.add_argument('--adaptive_seq_len',  default = False, action='store_true',
                        help='Should the sequence length be adapted to the batch during evaluation, if in fp16 the results will be slightly different due to numerical errors but greatly speed up evaluation.')
     group.add_argument('--eval_fp32',  default = False, action='store_true', help='Should the evaluation run in fp32')
+    group.add_argument('--bootstrap_iters', type=int, default=100000, help='How many iterations to use for stderr estimation')
     return parser
 
 from megatron.global_vars import _parse_args
@@ -407,7 +408,7 @@ def main():
 
     tokenizer = get_tokenizer()
     adaptor = EvalHarnessAdaptor(model, tokenizer)
-    results = evaluator.evaluate(adaptor, task_dict, False, 0, None)
+    results = evaluator.evaluate(adaptor, task_dict, False, 0, None, bootstrap_iters=args.bootstrap_iters)
 
     if mpu.is_pipeline_last_stage() and mpu.get_tensor_model_parallel_rank() == 0:
         print(json.dumps(results, indent=2))
