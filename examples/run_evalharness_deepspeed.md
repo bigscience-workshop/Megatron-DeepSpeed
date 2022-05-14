@@ -90,6 +90,7 @@ If you didn't disable it and the program crashed on checkpoint loading unable to
 4. Additional flags
 
 - To reduce the amount of iterations for stderr estimation, use e.g. `--bootstrap_iters 2`. This saves 1-2 minutes per dataset.
+- To print intermediate results when running multiple tasks use `--intermed_results`.
 
 ## Eval
 
