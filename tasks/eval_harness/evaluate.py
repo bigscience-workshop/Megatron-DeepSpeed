@@ -47,7 +47,7 @@ class EvalHarnessAdaptor(GPT2LM):
 
         # For ds we split into mini batches and then micro batches to keep pipelining api happy.
         # With Megatron we just go to micro_batches directly
-        self._batch_size = args.micro_batch_size
+        self._batch_size = args.micro_batch_size * args.micro_bs_multiplier
 
         self.cache_hook = CacheHook(None)
         self.is_main = args.rank == 0
@@ -386,6 +386,7 @@ def tasks_args(parser):
     group.add_argument('--eval_fp32',  default = False, action='store_true', help='Should the evaluation run in fp32')
     group.add_argument('--intermed_results',  default = False, action='store_true', help='Whether to print & write intermediate results for each task')
     group.add_argument('--bootstrap_iters', type=int, default=100000, help='How many iterations to use for stderr estimation')
+    group.add_argument('--micro_bs_multiplier', type=int, default=1, help='Increase the global batch size to remove bubble when pipeline parallel')
     return parser
 
 from megatron.global_vars import _parse_args
