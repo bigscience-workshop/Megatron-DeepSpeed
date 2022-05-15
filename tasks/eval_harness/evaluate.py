@@ -398,6 +398,7 @@ def tasks_args(parser):
 from megatron.global_vars import _parse_args
 
 def main():
+    load_path = tasks_args.load
     model = load_ds_checkpoint_and_setup_megatron(extra_args_provider=tasks_args)
 
     args = get_args()
@@ -420,7 +421,7 @@ def main():
     if args.intermed_results:
         global_results = {"results": {}, "versions": {}}
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
-        iteration_id = args.load.split("/")[-1].replace("/", "")
+        iteration_id = load_path.split("/")[-1].replace("/", "")
         results_path = args.results_path.replace(".json", f"_lm-eval_{iteration_id}_{timestamp}.json")
         # Backup file in case of interruption during writing
         results_path_backup = args.results_path.replace(".json", f"_lm-eval_{iteration_id}_{timestamp}_backup.json")
