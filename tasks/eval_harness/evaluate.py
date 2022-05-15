@@ -412,22 +412,27 @@ def main():
     
     if args.intermed_results:
         global_results = {"results": {}, "versions": {}}
+        timestamp = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+        iteration_id = args.load.split("/")[-1].replace("/", "")
+        results_path = args.results_path.replace(".json", f"_lm-eval_{iteration_id}_{timestamp}.json")
+        # Backup file in case of interruption during writing
+        results_path_backup = args.results_path.replace(".json", f"_lm-eval_{iteration_id}_{timestamp}_backup.json")
         for task_name, task in task_dict.items():
             results = evaluator.evaluate(adaptor, {task_name: task}, False, 0, 10, bootstrap_iters=args.bootstrap_iters)
-            if mpu.is_pipeline_last_stage() and mpu.get_tensor_model_parallel_rank() == 0:
-                print(json.dumps(results, indent=2))
-                results_path = args.results_path.replace(".json", f"_{task_name}.json")
-                with open(f"{results_path}", 'w') as outfile:
-                    json.dump(results, outfile, indent = 4)
             global_results["results"] = {**global_results["results"], **results["results"]}
             global_results["versions"] = {**global_results["versions"], **results["versions"]}
+            if mpu.is_pipeline_last_stage() and mpu.get_tensor_model_parallel_rank() == 0:
+                print(json.dumps(results, indent=2))
+                with open(results_path, 'w') as outfile:
+                    json.dump(global_results, outfile, indent=4)
+                with open(results_path_backup, 'w') as outfile:
+                    json.dump(global_results, outfile, indent=4)
     else:
         global_results = evaluator.evaluate(adaptor, task_dict, False, 0, 10, bootstrap_iters=args.bootstrap_iters)
-
-    if mpu.is_pipeline_last_stage() and mpu.get_tensor_model_parallel_rank() == 0:
-        print(json.dumps(global_results, indent=2))
-        with open(args.results_path, 'w') as outfile:
-            json.dump(global_results, outfile, indent = 4)
+        if mpu.is_pipeline_last_stage() and mpu.get_tensor_model_parallel_rank() == 0:
+            print(json.dumps(global_results, indent=2))
+            with open(args.results_path, 'w') as outfile:
+                json.dump(global_results, outfile, indent=4)
 
 if __name__ == '__main__':
     main()
