@@ -207,6 +207,12 @@ class EvalHarnessAdaptor(GPT2LM):
             # dummy data iterator for pipelining.
             data_iterator = list((torch.stack(inp) for inp in utils.chunks(padded, args.micro_batch_size)))
             self.model.micro_batches = len(data_iterator)
+            
+            if self.adaptive_seq_len:
+                # Allow different shapes than the default seq_len to be communicated across pipes
+                # Without this Deepspeed will hang when trying to receive activations
+                self.model.reset_activation_shape()
+            
             output = self.model.eval_batch(iter(data_iterator), compute_loss = False, reduce_output = None)
 
 
@@ -419,7 +425,7 @@ def main():
         # Backup file in case of interruption during writing
         results_path_backup = args.results_path.replace(".json", f"_lm-eval_{iteration_id}_{timestamp}_backup.json")
         for task_name, task in task_dict.items():
-            results = evaluator.evaluate(adaptor, {task_name: task}, False, 0, 10, bootstrap_iters=args.bootstrap_iters)
+            results = evaluator.evaluate(adaptor, {task_name: task}, False, 0, None, bootstrap_iters=args.bootstrap_iters)
             global_results["results"] = {**global_results["results"], **results["results"]}
             global_results["versions"] = {**global_results["versions"], **results["versions"]}
             if mpu.is_pipeline_last_stage() and mpu.get_tensor_model_parallel_rank() == 0:
@@ -429,7 +435,7 @@ def main():
                 with open(results_path_backup, 'w') as outfile:
                     json.dump(global_results, outfile, indent=4)
     else:
-        global_results = evaluator.evaluate(adaptor, task_dict, False, 0, 10, bootstrap_iters=args.bootstrap_iters)
+        global_results = evaluator.evaluate(adaptor, task_dict, False, 0, None, bootstrap_iters=args.bootstrap_iters)
         if mpu.is_pipeline_last_stage() and mpu.get_tensor_model_parallel_rank() == 0:
             print(json.dumps(global_results, indent=2))
             with open(args.results_path, 'w') as outfile:
