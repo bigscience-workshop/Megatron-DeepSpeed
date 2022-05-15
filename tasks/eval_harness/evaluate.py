@@ -286,12 +286,9 @@ def override_args(args, override_args, skip_keys, skip_if_specified_keys):
 # Keeping the default-value of newer arguments.
 #
 # We then use the megatron deepspeed converter to load the deepspeed checkpoints as if they we're megatron checkpoints.
-def load_ds_checkpoint_and_setup_megatron(extra_args_provider):
-    # parse the megatorn args. But wait with initalizing megatron.
-    # avoid printing the arguments, since they will later be overridden.
+def load_ds_checkpoint_and_setup_megatron(args):
     _print_args = megatron.arguments._print_args
     megatron.arguments._print_args = lambda *_args, **kwarg: None
-    args = _parse_args(extra_args_provider)
 
     if not os.path.exists(args.load):
         raise ValueError(f"checkpoint path {args.load} doesn't exit")
@@ -398,8 +395,11 @@ def tasks_args(parser):
 from megatron.global_vars import _parse_args
 
 def main():
-    load_path = tasks_args.load
-    model = load_ds_checkpoint_and_setup_megatron(extra_args_provider=tasks_args)
+    # parse the megatron args. But wait with initalizing megatron.
+    # avoid printing the arguments, since they will later be overridden.
+    args = _parse_args(tasks_args)
+    load_path = args.load
+    model = load_ds_checkpoint_and_setup_megatron(args)
 
     args = get_args()
     if args.deepspeed and args.adaptive_seq_len:
