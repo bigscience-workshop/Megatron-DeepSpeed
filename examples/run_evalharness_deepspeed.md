@@ -92,7 +92,7 @@ If you didn't disable it and the program crashed on checkpoint loading unable to
 - To reduce the amount of iterations for stderr estimation, use e.g. `--bootstrap_iters 2`. This saves 1-2 minutes per dataset.
 - To print intermediate results when running multiple tasks use `--intermed_results`.
 - To reduce the bubble when setting PP use the flag `--micro_bs_multiplier`. Reducing `--micro-batch-size` may be needed when increasing the multiplier. 
-    - Running the 176B model with `--micro_bs_multiplier 8` & `--micro-batch-size 4` produced the fastest results for PiQA on 1 node in 2min18s.
+    - Running the 176B model with PP=8, `--micro_bs_multiplier 8` & `--micro-batch-size 4` produced the fastest results for PiQA on 1 node in 2min18s.
 
 ## Eval
 
