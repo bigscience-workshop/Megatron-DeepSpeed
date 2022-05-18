@@ -64,8 +64,8 @@ class MegDSTestCheckpoints(TestCasePlus):
 
         ds_args = f"""
                 --deepspeed
-                --deepspeed_config {self.test_file_dir_str}/ds_config.json
-                --zero-stage 1
+                --deepspeed_config {self.test_file_dir_str}/ds_config_bf16.json
+                --zero-stage 0
                 --deepspeed-activation-checkpointing
         """.split()
 
@@ -103,6 +103,9 @@ class MegDSTestCheckpoints(TestCasePlus):
                 --rampup-batch-size 2 2 {n_samples}
                 --train-samples {n_samples}
 
+                --embed-layernorm
+                --position-embedding-type alibi
+
                 --optimizer adam
                 --adam-beta1 0.9
                 --adam-beta2 0.95
@@ -112,7 +115,7 @@ class MegDSTestCheckpoints(TestCasePlus):
                 --lr-decay-samples 6
                 --clip-grad 1.0
                 --weight-decay 1e-1
-                --fp16
+                --bf16
 
                 --log-level debug
                 --log-level-replica info
