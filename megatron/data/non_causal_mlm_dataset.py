@@ -367,6 +367,8 @@ def build_training_sample(sample,
 
     print("tokens")
     print(tokens)
+    print("masks")
+    print(masks)
     print("labels")
     print(labels)
     print("masked_spans")
