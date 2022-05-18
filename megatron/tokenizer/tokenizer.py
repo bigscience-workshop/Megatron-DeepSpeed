@@ -332,16 +332,16 @@ class _AutoTokenizer(AbstractTokenizer):
         self.decoder = {v: k for k, v in self.encoder.items()}
 
         if 'mask_token' not in self.tokenizer.special_tokens_map:
+            self.tokenizer.add_tokens("<mask>")
             self.tokenizer.mask_token = "<mask>"
-            # self.tokenizer.mask_token_id = self.tokenizer.vocab_size-1
 
         if 'cls_token' not in self.tokenizer.special_tokens_map:
-            self.tokenizer.cls_token = "<cls>"
-            # self.tokenizer.cls_token_id = self.tokenizer.vocab_size-2
+            self.tokenizer.add_tokens("<cls>")
+            self.tokenizer.mask_token = "<cls>"
 
         if 'sep_token' not in self.tokenizer.special_tokens_map:
-            self.tokenizer.sep_token = "<sep>"
-            # self.tokenizer.sep_token_id = self.tokenizer.vocab_size-3
+            self.tokenizer.add_tokens("<sep>")
+            self.tokenizer.mask_token = "<sep>"
 
     @property
     def vocab_size(self):
