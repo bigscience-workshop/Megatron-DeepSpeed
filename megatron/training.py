@@ -1132,7 +1132,9 @@ def build_train_valid_test_data_iterators(
 
         # We collapse None and empty list as both should mean we don't run validation
         # args.consumed_valid_samples accumulates the sum of valid steps for every dataset, which are all equal
-        valid_dataloaders = [build_pretraining_data_loader(d, args.consumed_valid_samples // len(valid_ds))
+        # XXX: we get a deadlock in the dataloader on eval, possibly this bug in pytorch https://github.com/pytorch/pytorch/pull/25158
+        # using num_workers=0 to work around it - the training can't use that since it impacts throughput by a few percent
+        valid_dataloaders = [build_pretraining_data_loader(d, args.consumed_valid_samples // len(valid_ds), num_workers=0)
                             for d in valid_ds] \
                             if valid_ds is not None else []
         # We collapse None and empty list as both should mean we don't run test
