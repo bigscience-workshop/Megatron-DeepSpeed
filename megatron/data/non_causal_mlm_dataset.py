@@ -369,6 +369,8 @@ def build_training_sample(sample,
     print(tokens)
     print("labels")
     print(labels)
+    print("masked_spans")
+    print(masked_spans)
     import sys
     sys.exit()
 
