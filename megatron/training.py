@@ -42,11 +42,11 @@ from megatron.checkpointing import save_checkpoint
 from megatron.model.module import Float16Module
 from megatron.optimizer import get_megatron_optimizer
 from megatron.initialize import initialize_megatron
-from megatron.initialize import write_args_to_tensorboard
+from megatron.initialize import write_args_to_tensorboard, log_restart_to_tensorboard
 from megatron.learning_rates import AnnealingLR
 from megatron.model.distributed import DistributedDataParallel as LocalDDP
 from megatron.utils import check_adlr_autoresume_termination, get_parameters_in_billions
-from megatron.utils import unwrap_model
+from megatron.utils import unwrap_model, found_kill_switch
 from megatron.data.data_samplers import build_pretraining_data_loader
 from megatron.utils import calc_params_l2_norm
 from megatron.schedules import forward_backward_no_pipelining
@@ -99,6 +99,12 @@ def pretrain(train_valid_test_dataset_provider,
     initialize_megatron(extra_args_provider=extra_args_provider,
                         args_defaults=args_defaults)
 
+    args = get_args()
+
+    if found_kill_switch():
+        print_datetime(f"Detected kill switch at {args.kill_switch_path}. Exiting")
+        sys.exit()
+
     codecarbon_tracker_start()
 
     # Adjust the startup time so it reflects the largest value.
@@ -113,7 +119,6 @@ def pretrain(train_valid_test_dataset_provider,
         time.time() - _TRAIN_START_TIME))
     print_datetime('after megatron is initialized')
 
-    args = get_args()
     timers = get_timers()
 
     if args.deepspeed:
@@ -384,6 +389,10 @@ def setup_model_and_optimizer(model_provider_func):
             args=args,
             lr_scheduler=lr_scheduler
         )
+
+        assert model.fp16_enabled() == args.fp16, "megatron fp16 config does not match deepspeed"
+        assert model.bfloat16_enabled() == args.bf16, "megatron bf16 config does not match deepspeed"
+
         if isinstance(model, deepspeed.PipelineEngine):
             # hack to get batch_fn from pretrain_gpt.py
             model.set_batch_fn(model.module._megatron_batch_fn)
@@ -618,9 +627,10 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
                               args.consumed_train_samples)
             writer.add_scalar(f"lm-loss-training/{key}" + ' vs tokens', loss_dict[key],
                               args.consumed_train_tokens)
+
             writer.add_scalar(f"lm-loss-training/{key}" + ' vs gigaflos (without embeddings)', loss_dict[key],
                               args.gigaflos_no_embeds)
-        if args.log_loss_scale_to_tensorboard:
+        if args.log_loss_scale_to_tensorboard and args.fp16:
             writer.add_scalar('loss-scale/loss-scale', loss_scale, iteration)
             writer.add_scalar('loss-scale/loss-scale vs samples', loss_scale,
                               args.consumed_train_samples)
@@ -648,12 +658,15 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
             writer.add_scalar('curriculum_seqlen', args.curriculum_seqlen,
                               iteration)
 
-        if args.data_weights is not None:
-            for prefix, weight in zip(args.data_prefixes, args.data_weights):
-                name = prefix.split(",")[-1]
-                writer.add_scalar(f'samples-per-dataset/{name}', args.consumed_train_samples * weight, args.consumed_train_samples)
-                writer.add_scalar(f'steps-per-dataset/{name}', iteration * weight, iteration)
-                writer.add_scalar(f'tokens-per-dataset/{name}', args.consumed_train_tokens * weight, args.consumed_train_tokens)
+        # It's very questionable what this data contributes, other than huge unstripped file paths
+        # as keys and hundreds of TB boards that make the TB files very bloated. So disabling for now.
+        #
+        # if args.data_weights is not None:
+        #     for prefix, weight in zip(args.data_prefixes, args.data_weights):
+        #         name = prefix.split(",")[-1]
+        #         writer.add_scalar(f'samples-per-dataset/{name}', args.consumed_train_samples * weight, args.consumed_train_samples)
+        #         writer.add_scalar(f'steps-per-dataset/{name}', iteration * weight, iteration)
+        #         writer.add_scalar(f'tokens-per-dataset/{name}', args.consumed_train_tokens * weight, args.consumed_train_tokens)
 
         if args.log_timers_to_tensorboard:
             timers.write(timers_to_log, writer, iteration,
@@ -664,23 +677,23 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
         elapsed_time_per_iteration = elapsed_time / total_iterations
 
         seq_len = args.curriculum_seqlen if args.curriculum_learning else args.seq_length
+        hidden_size = args.hidden_size
+        num_layers = args.num_layers
+        vocab_size = args.padded_vocab_size
 
-        # throughput
-        samples_per_sec = batch_size / (elapsed_time_per_iteration * 1e3)
+        # Compute throughput.
+        samples_per_sec = batch_size / elapsed_time_per_iteration
         samples_per_sec_per_replica = samples_per_sec / args.data_parallel_size
         tokens_per_sec = samples_per_sec * seq_len
         tokens_per_sec_per_replica = tokens_per_sec / args.data_parallel_size
 
-        # general TFLOPs formula
-        # model_size_in_B * 4 * 2 * seqlen * global_batch_size / (time_in_sec_per_interation * total_gpus * 1e3)
-        #
+        # General TFLOPs formula (borrowed from Equation 3 in Section 5.1 of
+        # https://arxiv.org/pdf/2104.04473.pdf).
         # The factor of 4 is when used with activation check-pointing,
         # otherwise it will be 3, but for 200B model, activation check-pointing will always be on.
-        #
-        # here:
-        # model_size_in_B * 4 * 2 * seqlen * batch_size / (time_in_msec_per_interation * total_gpus * 1e3)
         checkpoint_activations_factor = 4 if args.checkpoint_activations else 3
-        tflops = args.parameters_in_billions_no_embedding * checkpoint_activations_factor * 2 * seq_len * batch_size / (elapsed_time_per_iteration * args.world_size * 1e3)
+        flops_per_iteration = (24 * checkpoint_activations_factor * batch_size * seq_len * num_layers * (hidden_size**2)) * (1. + (seq_len / (6. * hidden_size)) + (vocab_size / (16. * num_layers * hidden_size)))
+        tflops = flops_per_iteration / (elapsed_time_per_iteration * args.world_size * (10**12))
 
         # only the last rank process has a non-None _GLOBAL_TENSORBOARD_WRITER
         if writer and is_last_rank():
@@ -708,8 +721,8 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
             args.consumed_train_samples)
         log_string += ' consumed tokens: {:12d} |'.format(
             args.consumed_train_tokens)
-        log_string += ' elapsed time per iteration (ms): {:.1f} |'.format(
-            elapsed_time_per_iteration * 1000.0)
+        log_string += ' elapsed time per iteration (s): {:.2f} |'.format(
+            elapsed_time_per_iteration)
         log_string += ' learning rate: {:.3E} |'.format(learning_rate)
         log_string += ' global batch size: {:5d} |'.format(batch_size)
         for key in total_loss_dict:
@@ -720,7 +733,8 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
                 if avg > 0.0:
                     log_string += ' {}: {:.6E} |'.format(key, avg)
                 total_loss_dict[key] = torch.cuda.FloatTensor([0.0])
-        log_string += ' loss scale: {:.1f} |'.format(loss_scale)
+        if args.fp16:
+            log_string += ' loss scale: {:.1f} |'.format(loss_scale)
         if grad_norm is not None:
             log_string += ' grad norm: {:.3f} |'.format(grad_norm)
         if num_zeros_in_grad is not None:
@@ -781,6 +795,7 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
 
     # Write args to tensorboard
     write_args_to_tensorboard()
+    log_restart_to_tensorboard()
 
     # Turn on training mode which enables dropout.
     for model_module in model:
@@ -821,6 +836,11 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
                 iteration_for_skipping += 1
             continue
 
+        if found_kill_switch():
+            save_checkpoint_and_time(iteration, model, optimizer, lr_scheduler)
+            print_datetime(f"Detected kill switch at {args.kill_switch_path}. Exiting")
+            sys.exit()
+
         update_num_microbatches(args.consumed_train_samples)
         if args.deepspeed:
             # inform deepspeed of any batch size changes
@@ -852,10 +872,12 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
         args.gigaflos_no_embeds += (6 * new_samples * args.seq_length * get_parameters_in_billions(model, exclude_embeddings=True))
 
         # Logging.
-        if args.deepspeed:
-            loss_scale = model[0].optimizer.cur_scale
-        else:
-            loss_scale = optimizer.get_loss_scale().item()
+        loss_scale = None
+        if args.fp16:
+            if args.deepspeed:
+                loss_scale = model[0].optimizer.cur_scale
+            else:
+                loss_scale = optimizer.get_loss_scale().item()
         params_norm = None
         if args.log_params_norm:
             params_norm = calc_params_l2_norm(model)

@@ -201,9 +201,11 @@ def _compile_dependencies():
             custom_kernel_constraint and
             args.masked_softmax_fusion):
         if args.rank == 0:
-            print('WARNING: constraints for invoking optimized'
-                  ' fused softmax kernel are not met. We default'
-                  ' back to unfused kernel invocations.', flush=True)
+            error = "constraints for invoking optimized fused softmax kernel are not met"
+            if args.abort_on_unmet_fused_kernel_constraints:
+                sys.exit(f"\n\nERROR: {error} and --abort-on-unmet-fused-kernel-constraints was passed. Aborting.\n\n")
+            else:
+                print(f'WARNING: {error}. We default back to unfused kernel invocations.', flush=True)
 
     # Always build on rank zero first.
     if torch.distributed.get_rank() == 0:
@@ -337,6 +339,19 @@ def write_args_to_tensorboard():
         for arg in vars(args):
             writer.add_text(arg, str(getattr(args, arg)),
                             global_step=args.iteration)
+
+
+def log_restart_to_tensorboard():
+    """
+    Log new start and world size - the key is to denote a restart, and use world_size as another
+    useful info which can help to track changes in resource allocation.
+    """
+    args = get_args()
+    writer = get_tensorboard_writer()
+    if writer:
+        # emulate a blip to avoid flatline
+        writer.add_scalar('iteration-time/world_size', args.world_size, args.iteration)
+        writer.add_scalar('iteration-time/world_size', 0, args.iteration+1)
 
 
 def _initialize_mem_buffs():

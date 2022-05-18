@@ -232,9 +232,9 @@ def get_gpu_count():
         return 0
 
 def torch_assert_equal(actual, expected, **kwargs):
-    # assert_equal was added around pt-1.9, it does better checks - e.g will check dimensions match
-    if hasattr(torch.testing, "assert_equal"):
-        return torch.testing.assert_equal(actual, expected, **kwargs)
+    # assert_close was added around pt-1.9, it does better checks - e.g will check dimensions match
+    if hasattr(torch.testing, "assert_close"):
+        return torch.testing.assert_close(actual, expected, rtol=0.0, atol=0.0, **kwargs)
     else:
         return torch.allclose(actual, expected, rtol=0.0, atol=0.0)
 
@@ -874,3 +874,16 @@ def execute_subprocess_async(cmd, env=None, stdin=None, timeout=180, quiet=False
         raise RuntimeError(f"'{cmd_str}' produced no output.")
 
     return result
+
+
+# --- Misc utils --- #
+
+def flatten_arguments(args):
+    """
+    Converts dictionary argument to a list.
+
+    Note: we add "IGNORED" at the beginning as this value is ignored by the argparser
+
+    Example: {"arg1": "value1", "arg2": "value2"} -> ["IGNORED", "arg1", "value1", "arg2", "value2"]
+    """
+    return ["IGNORED"] + [item for key_value in args.items() for item in key_value if item != ""]

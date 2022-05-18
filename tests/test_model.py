@@ -4,13 +4,17 @@ from unittest.mock import patch
 
 import deepspeed
 import torch
+from torch import nn
+import torch.nn.functional as F
+
+from megatron.model.fused_layer_norm import MixedFusedLayerNorm
+from packaging import version
 
 from megatron import initialize_megatron, get_args, get_tokenizer, global_vars
-from megatron.testing_utils import TestCasePlus, mockenv_context
+from megatron.testing_utils import TestCasePlus, mockenv_context, flatten_arguments, torch_assert_equal
 from megatron.training import setup_model_and_optimizer
 from pretrain_gpt import model_provider as gpt_model_provider, get_batch_pipe as get_gpt_batch_pipe
 from pretrain_prefix_lm import model_provider as prefix_lm_model_provider, get_batch_pipe as get_prefix_lm_batch_pipe
-
 
 def get_default_args():
     """return a dictionary with key as argument name and value as additional arguments"""
@@ -50,17 +54,6 @@ def get_default_args():
 
         # DATA_ARGS
     }
-
-
-def flatten_arguments(args):
-    """
-    Converts dictionary argument to a list.
-
-    Note: we add "IGNORED" at the beginning as this value is ignored by the argparser
-
-    Example: {"arg1": "value1", "arg2": "value2"} -> ["IGNORED", "arg1", "value1", "arg2", "value2"]
-    """
-    return ["IGNORED"] + [item for key_value in args.items() for item in key_value if item != ""]
 
 
 def equal_vectors(tensor1, tensor2, dim=-1):
@@ -118,9 +111,7 @@ class MyTestCase(TestCasePlus):
                 output_changed = model(input_token_ids_changed, *input_batch[1:])
 
                 # All token in past should be unchanged
-                self.assertTrue(
-                    torch.all(equal_vectors(output[:, :changed_index], output_changed[:, :changed_index]))
-                )
+                torch_assert_equal(output[:, :changed_index], output_changed[:, :changed_index])
                 # All tokens in the future should have changed
                 self.assertFalse(
                     torch.any(equal_vectors(output[:, changed_index:], output_changed[:, changed_index:]))
@@ -182,11 +173,7 @@ class MyTestCase(TestCasePlus):
                 output_changed_target = model(token_ids_changed_target, *input_batch[1:])
 
                 # All token in past should be unchanged
-                self.assertTrue(
-                    torch.all(
-                        equal_vectors(output[0, :changed_target_index], output_changed_target[0, :changed_target_index])
-                    )
-                )
+                torch_assert_equal(output[0, :changed_target_index], output_changed_target[0, :changed_target_index])
                 # All tokens in the future should have changed
                 self.assertFalse(
                     torch.any(
@@ -194,11 +181,7 @@ class MyTestCase(TestCasePlus):
                     )
                 )
                 # Unchanged changed rows should not change either
-                self.assertTrue(
-                    torch.all(
-                        equal_vectors(output[1, :], output_changed_target[1, :])
-                    )
-                )
+                torch_assert_equal(output[1, :], output_changed_target[1, :])
 
                 ## --------------- CHANGE AN INPUT TOKEN ---------------------------
                 # Let's change the the last prefix token and make sure that the first token changed
@@ -221,11 +204,7 @@ class MyTestCase(TestCasePlus):
                     )
                 )
                 # Unchanged changed rows should not change either
-                self.assertTrue(
-                    torch.all(
-                        equal_vectors(output[1, :], output_changed_input[1, :])
-                    )
-                )
+                torch_assert_equal(output[1, :], output_changed_input[1, :])
 
     def test_prefix_lm_wo_reset_attention_mask(self):
         """
@@ -290,6 +269,43 @@ class MyTestCase(TestCasePlus):
                 model(*input_batch)
 
                 #TODO: Check all invariants
+
+    def test_fused_layer_norm(self):
+        command_args = get_default_args()
+
+        # Condition to use custom cuda kernel
+        command_args["--bf16"] = ""
+        del command_args["--fp16"]
+
+        with patch('sys.argv', flatten_arguments(command_args)):
+            with mockenv_context(**self.dist_env_1_gpu):
+                initialize_megatron()
+                args = get_args()
+
+                dummy_input = torch.randn(args.micro_batch_size, args.seq_length, args.hidden_size, device="cuda", dtype=torch.bfloat16)
+
+                normalized_shape = (args.hidden_size,)
+                epsilon = 1e-5
+                mfln = MixedFusedLayerNorm(normalized_shape, eps=epsilon)
+
+                self.assertTrue(mfln.use_meg_ds_fused_layer_norm, "Expected model to use Megatron-DeepSpeed custom cuda kernel for LayerNorm.")
+                self.assertTrue(args.bf16, "Test has to be done in half precision.")
+
+                # We set the weight manually so we simulate state that's not the initialisation
+                weight = torch.randn(args.hidden_size, device="cuda", dtype=torch.bfloat16)
+                bias = torch.randn(args.hidden_size, device="cuda", dtype=torch.bfloat16)
+                mfln.weight = nn.Parameter(weight)
+                mfln.bias = nn.Parameter(bias)
+
+                mfln_output = mfln(dummy_input)
+                # We check that our layernorm matches pytorch 1.11 onwards
+                if version.parse(torch.__version__) >= version.parse("1.11.0"):
+                    torch_layer_norm_output = F.layer_norm(dummy_input, normalized_shape, weight, bias, eps=epsilon)
+                else:
+                    # In this case we use can check that basically it corresponds to the fp32 version
+                    torch_layer_norm_output = F.layer_norm(dummy_input.float(), normalized_shape, weight.float(), bias.float(), eps=epsilon).to(torch.bfloat16)
+
+                torch_assert_equal(mfln_output, torch_layer_norm_output)
 
 
 if __name__ == '__main__':

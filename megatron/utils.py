@@ -15,6 +15,7 @@
 
 """General utilities."""
 
+import os
 import sys
 import warnings
 from random import randint
@@ -383,3 +384,11 @@ def reweight_loss_mask_(loss_mask: torch.Tensor, tokens: torch.Tensor):
     weight_loss = torch.arange(seq_length, 0, -1, dtype=torch.float, device=loss_mask.device) / (seq_length + 1) * 2
     # in-place operation
     loss_mask *= weight_loss[None, :]
+
+
+def found_kill_switch():
+    args = get_args()
+    if args.kill_switch_path is not None and os.path.exists(args.kill_switch_path):
+        return True
+    else:
+        return False
