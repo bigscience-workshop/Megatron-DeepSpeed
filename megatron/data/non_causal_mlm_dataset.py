@@ -365,7 +365,9 @@ def build_training_sample(sample,
     # print(padded_tokens)
     # print(padded_labels)
 
+    print("tokens")
     print(tokens)
+    print("labels")
     print(labels)
     import sys
     sys.exit()
