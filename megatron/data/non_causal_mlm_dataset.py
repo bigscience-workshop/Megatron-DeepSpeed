@@ -354,16 +354,19 @@ def build_training_sample(sample,
     max_predictions_per_seq = masked_lm_prob * max_num_tokens
     (tokens, masks, labels, _, masked_spans) = create_masked_lm_predictions(
         tokens, vocab_id_list, vocab_id_to_token_dict, masked_lm_prob,
-        cls_id, sep_id, mask_id, max_predictions_per_seq, np_rng
-        )
+        cls_id, sep_id, mask_id, max_predictions_per_seq, np_rng,
+        max_ngrams=10, geometric_dist=True, masking_style="t5")
+
 
     # Padding.
-    padded_tokens = pad_and_convert_to_numpy(tokens, pad_id, max_seq_length)
-    padded_labels = pad_and_convert_to_numpy(labels, pad_id, max_seq_length)
-    padded_masks = pad_and_convert_to_numpy(masks, pad_id, max_seq_length)
+    # padded_tokens = pad_and_convert_to_numpy(tokens, pad_id, max_seq_length)
+    # padded_labels = pad_and_convert_to_numpy(labels, pad_id, max_seq_length)
+    # padded_masks = pad_and_convert_to_numpy(masks, pad_id, max_seq_length)
+    # print(padded_tokens)
+    # print(padded_labels)
 
-    print(padded_tokens)
-    print(padded_labels)
+    print(tokens)
+    print(labels)
     import sys
     sys.exit()
 
