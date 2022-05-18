@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""GPT style dataset."""
+"""GPT Non-Causal Multitask Finetune style dataset."""
 
 import os
 import time
@@ -237,9 +237,12 @@ class NonCausalMTFDataset(torch.utils.data.Dataset):
         seed
         ):
 
+        # Params to store.
         self.name = name
-        self.indexed_dataset = indexed_dataset
         self.seq_length = seq_length
+
+        # Dataset.
+        self.indexed_dataset = indexed_dataset
 
         # vocab
         self.tokenizer = get_tokenizer()
