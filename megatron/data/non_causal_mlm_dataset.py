@@ -365,6 +365,8 @@ def build_training_sample(sample,
     # print(padded_tokens)
     # print(padded_labels)
 
+    print("sample")
+    print(sample)
     print("tokens")
     print(tokens)
     print("masks")
