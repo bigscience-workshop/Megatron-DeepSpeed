@@ -110,7 +110,7 @@ def save_params_universal(dir, param_shapes):
         param_base_path = os.path.join(dir, name)
         os.makedirs(param_base_path, exist_ok=True)
         print(f"{name}: {shape} => {param_base_path}")
-        for state in ("fp32", "momentum", "variance"):
+        for state in ("fp32", "exp_avg", "exp_avg_sq"):
             path = os.path.join(param_base_path, state)
             param = torch.Tensor(shape)
             _save_checkpoint(path, param)
