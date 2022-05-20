@@ -111,7 +111,7 @@ def save_params_universal(dir, param_shapes):
         os.makedirs(param_base_path, exist_ok=True)
         print(f"{name}: {shape} => {param_base_path}")
         for state in ("fp32", "exp_avg", "exp_avg_sq"):
-            path = os.path.join(param_base_path, state)
+            path = os.path.join(param_base_path, f"{state}.pt")
             param = torch.Tensor(shape)
             _save_checkpoint(path, param)
 
@@ -137,7 +137,7 @@ def main():
     param_shapes = sd["param_shapes"]
     # fix back to normal dict
     param_shapes = dict((k,v) for d in param_shapes for k,v in d.items() )
-    pprint(param_shapes)
+    #pprint(param_shapes)
 
     save_params_universal(args.output_folder, param_shapes)
 
