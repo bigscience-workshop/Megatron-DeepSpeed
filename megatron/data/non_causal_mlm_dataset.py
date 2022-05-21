@@ -391,6 +391,10 @@ def build_training_sample(sample,
     # Add the remaining tokens to the t5 input
     t5_input.extend(tokens[start_index:])
 
+    print("t5_input")
+    print(t5_input)
+    print("t5_decoder_out")
+    print(t5_decoder_out)
 
     # print("sample")
     # print(sample)
