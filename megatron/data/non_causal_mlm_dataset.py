@@ -392,20 +392,20 @@ def build_training_sample(sample,
     t5_input.extend(tokens[start_index:])
 
 
-    print("sample")
-    print(sample)
-    print("tokens")
-    print(tokens)
-    print("masks")
-    print(masks)
-    print("labels")
-    print(labels)
+    # print("sample")
+    # print(sample)
+    # print("tokens")
+    # print(tokens)
+    # print("masks")
+    # print(masks)
+    # print("labels")
+    # print(labels)
     print("masked_spans")
     print(masked_spans)
-    for idx, spans in enumerate(masked_spans):
-        spans.index
-        sentinel_tokens
-        labels = spans.labels
+    # for idx, spans in enumerate(masked_spans):
+    #     spans.index
+    #     sentinel_tokens
+    #     labels = spans.labels
     import sys
     sys.exit()
 
