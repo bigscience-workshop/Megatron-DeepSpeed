@@ -259,7 +259,7 @@ class NonCausalMLMDataset(torch.utils.data.Dataset):
         self.pad_id = tokenizer.pad
         self.bos_id = tokenizer.bos_token_id
         self.eos_id = tokenizer.eos_token_id
-
+        self.sentinel_tokens = tokenizer.additional_special_tokens_ids
         # Checks
         assert np.min(documents) >= 0
         assert np.max(documents) < indexed_dataset.sizes.shape[0]
@@ -311,6 +311,7 @@ class NonCausalMLMDataset(torch.utils.data.Dataset):
                                      self.mask_id, self.pad_id,
                                      self.masked_lm_prob, np_rng,
                                      self.bos_id, self.eos_id,
+                                     self.sentinel_tokens
                                      )
 
 
@@ -357,13 +358,39 @@ def build_training_sample(sample,
         cls_id, sep_id, mask_id, max_predictions_per_seq, np_rng,
         max_ngrams=10, geometric_dist=True, masking_style="t5")
 
-
     # Padding.
     # padded_tokens = pad_and_convert_to_numpy(tokens, pad_id, max_seq_length)
     # padded_labels = pad_and_convert_to_numpy(labels, pad_id, max_seq_length)
     # padded_masks = pad_and_convert_to_numpy(masks, pad_id, max_seq_length)
     # print(padded_tokens)
     # print(padded_labels)
+
+    sentinel_tokens = collections.deque(sentinel_tokens)
+    t5_input = []
+    (t5_decoder_in, t5_decoder_out) = ([bos_id], [])
+    (start_index, end_index) = (0, None)
+    for span in masked_spans:
+        flag = sentinel_tokens.popleft()
+
+        # Append the same tokens in decoder input and output
+        t5_decoder_in.append(flag)
+        t5_decoder_in.extend(span.label)
+        t5_decoder_out.append(flag)
+        t5_decoder_out.extend(span.label)
+
+        end_index = span.index[0]
+        t5_input.extend(tokens[start_index: end_index])
+        t5_input.append(flag)
+
+        # the next start index is the token after the last span token
+        start_index = span.index[-1] + 1
+
+    # Add <eos> token to the t5_decoder_out
+    t5_decoder_out.append(eos_id)
+
+    # Add the remaining tokens to the t5 input
+    t5_input.extend(tokens[start_index:])
+
 
     print("sample")
     print(sample)
@@ -375,6 +402,10 @@ def build_training_sample(sample,
     print(labels)
     print("masked_spans")
     print(masked_spans)
+    for idx, spans in enumerate(masked_spans):
+        spans.index
+        sentinel_tokens
+        labels = spans.labels
     import sys
     sys.exit()
 
