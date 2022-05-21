@@ -365,31 +365,31 @@ def build_training_sample(sample,
     # print(padded_tokens)
     # print(padded_labels)
 
-    sentinel_tokens = collections.deque(sentinel_tokens)
-    t5_input = []
-    (t5_decoder_in, t5_decoder_out) = ([bos_id], [])
-    (start_index, end_index) = (0, None)
-    for span in masked_spans:
-        flag = sentinel_tokens.popleft()
+    # sentinel_tokens = collections.deque(sentinel_tokens)
+    # t5_input = []
+    # (t5_decoder_in, t5_decoder_out) = ([bos_id], [])
+    # (start_index, end_index) = (0, None)
+    # for span in masked_spans:
+    #     flag = sentinel_tokens.popleft()
 
-        # Append the same tokens in decoder input and output
-        t5_decoder_in.append(flag)
-        t5_decoder_in.extend(span.label)
-        t5_decoder_out.append(flag)
-        t5_decoder_out.extend(span.label)
+    #     # Append the same tokens in decoder input and output
+    #     t5_decoder_in.append(flag)
+    #     t5_decoder_in.extend(span.label)
+    #     t5_decoder_out.append(flag)
+    #     t5_decoder_out.extend(span.label)
 
-        end_index = span.index[0]
-        t5_input.extend(tokens[start_index: end_index])
-        t5_input.append(flag)
+    #     end_index = span.index[0]
+    #     t5_input.extend(tokens[start_index: end_index])
+    #     t5_input.append(flag)
 
-        # the next start index is the token after the last span token
-        start_index = span.index[-1] + 1
+    #     # the next start index is the token after the last span token
+    #     start_index = span.index[-1] + 1
 
-    # Add <eos> token to the t5_decoder_out
-    t5_decoder_out.append(eos_id)
+    # # Add <eos> token to the t5_decoder_out
+    # t5_decoder_out.append(eos_id)
 
-    # Add the remaining tokens to the t5 input
-    t5_input.extend(tokens[start_index:])
+    # # Add the remaining tokens to the t5 input
+    # t5_input.extend(tokens[start_index:])
 
 
     print("sample")
