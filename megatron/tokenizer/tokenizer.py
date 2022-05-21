@@ -401,9 +401,9 @@ class _AutoTokenizer(AbstractTokenizer):
         return self.tokenizer.mask_token_id
 
     @property
-    def additional_special_tokens(self):
+    def additional_special_tokens_ids(self):
         """ All the additional special tokens you may want to use (list of strings)."""
-        return self.tokenizer.additional_special_tokens
+        return self.tokenizer.additional_special_tokens_ids
 
     @property
     def bos_token_id(self):
@@ -414,11 +414,3 @@ class _AutoTokenizer(AbstractTokenizer):
     def eos_token_id(self):
         """ Id of the end of sentence token in the vocabulary."""
         return self.tokenizer.eos_token_id
-
-    @property
-    def eod(self):
-        return self.tokenizer.eos_token_id
-
-    @property
-    def pad(self):
-        return self.tokenizer.pad_token_id
