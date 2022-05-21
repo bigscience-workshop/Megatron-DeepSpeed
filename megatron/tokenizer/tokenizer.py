@@ -343,6 +343,33 @@ class _AutoTokenizer(AbstractTokenizer):
             self.tokenizer.add_tokens("<sep>")
             self.tokenizer.mask_token = "<sep>"
 
+        self.tokenizer.add_special_tokens({
+            'additional_special_tokens': [
+                '<extra_id_00>',
+                '<extra_id_01>',
+                '<extra_id_02>',
+                '<extra_id_03>',
+                '<extra_id_04>',
+                '<extra_id_05>',
+                '<extra_id_06>',
+                '<extra_id_07>',
+                '<extra_id_08>',
+                '<extra_id_09>',
+                '<extra_id_10>',
+                '<extra_id_11>',
+                '<extra_id_12>',
+                '<extra_id_13>',
+                '<extra_id_14>',
+                '<extra_id_15>',
+                '<extra_id_16>',
+                '<extra_id_17>',
+                '<extra_id_18>',
+                '<extra_id_19>',
+                '<extra_id_20>',
+            ]
+        })
+
+
     @property
     def vocab_size(self):
         return len(self.tokenizer) # vocab_size doesn't contain additional tokens
@@ -380,6 +407,11 @@ class _AutoTokenizer(AbstractTokenizer):
     @property
     def mask(self):
         return self.tokenizer.mask_token_id
+
+    @property
+    def additional_special_tokens(self):
+        """ All the additional special tokens you may want to use (list of strings)."""
+        return self.tokenizer.additional_special_tokens
 
     @property
     def bos_token_id(self):
