@@ -251,32 +251,6 @@ class NonCausalMLMDataset(torch.utils.data.Dataset):
 
         # Vocab stuff.
         tokenizer = get_tokenizer()
-        tokenizer.add_special_tokens({
-            'additional_special_tokens': [
-                '<extra_id_00>',
-                '<extra_id_01>',
-                '<extra_id_02>',
-                '<extra_id_03>',
-                '<extra_id_04>',
-                '<extra_id_05>',
-                '<extra_id_06>',
-                '<extra_id_07>',
-                '<extra_id_08>',
-                '<extra_id_09>',
-                '<extra_id_10>',
-                '<extra_id_11>',
-                '<extra_id_12>',
-                '<extra_id_13>',
-                '<extra_id_14>',
-                '<extra_id_15>',
-                '<extra_id_16>',
-                '<extra_id_17>',
-                '<extra_id_18>',
-                '<extra_id_19>',
-                '<extra_id_20>',
-            ]
-        })
-
         self.vocab_id_list = list(tokenizer.inv_vocab.keys())
         self.vocab_id_to_token_dict = tokenizer.inv_vocab
         self.cls_id = tokenizer.cls
