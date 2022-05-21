@@ -409,9 +409,9 @@ class _AutoTokenizer(AbstractTokenizer):
         return self.tokenizer.mask_token_id
 
     @property
-    def additional_special_tokens(self):
+    def additional_special_tokens_ids(self):
         """ All the additional special tokens you may want to use (list of strings)."""
-        return self.tokenizer.additional_special_tokens
+        return self.tokenizer.additional_special_tokens_ids
 
     @property
     def bos_token_id(self):

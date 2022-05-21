@@ -259,7 +259,7 @@ class NonCausalMLMDataset(torch.utils.data.Dataset):
         self.pad_id = tokenizer.pad
         self.bos_id = tokenizer.bos_token_id
         self.eos_id = tokenizer.eos_token_id
-        self.sentinel_tokens = tokenizer.additional_special_tokens
+        self.sentinel_tokens = tokenizer.additional_special_tokens_ids
         # Checks
         assert np.min(documents) >= 0
         assert np.max(documents) < indexed_dataset.sizes.shape[0]
@@ -366,7 +366,7 @@ def build_training_sample(sample,
     # print(padded_labels)
 
     sentinel_tokens = collections.deque(sentinel_tokens)
-    t5_input = []
+    input_tokens_ids = []
     (t5_decoder_in, t5_decoder_out) = ([bos_id], [])
     (start_index, end_index) = (0, None)
     for span in masked_spans:
@@ -379,8 +379,8 @@ def build_training_sample(sample,
         t5_decoder_out.extend(span.label)
 
         end_index = span.index[0]
-        t5_input.extend(tokens[start_index: end_index])
-        t5_input.append(flag)
+        input_tokens_ids.extend(tokens[start_index: end_index])
+        input_tokens_ids.append(flag)
 
         # the next start index is the token after the last span token
         start_index = span.index[-1] + 1
@@ -389,12 +389,14 @@ def build_training_sample(sample,
     t5_decoder_out.append(eos_id)
 
     # Add the remaining tokens to the t5 input
-    t5_input.extend(tokens[start_index:])
+    input_tokens_ids.extend(tokens[start_index:])
 
-    print("t5_input")
-    print(t5_input)
+    print("input_tokens_ids")
+    print(input_tokens_ids)
     print("t5_decoder_out")
     print(t5_decoder_out)
+    print("t5_decoder_in")
+    print(t5_decoder_in)
 
     # print("sample")
     # print(sample)
@@ -404,8 +406,8 @@ def build_training_sample(sample,
     # print(masks)
     # print("labels")
     # print(labels)
-    print("masked_spans")
-    print(masked_spans)
+    # print("masked_spans")
+    # print(masked_spans)
     # for idx, spans in enumerate(masked_spans):
     #     spans.index
     #     sentinel_tokens
@@ -415,8 +417,6 @@ def build_training_sample(sample,
 
     train_sample = {
         'text': padded_tokens,
-        'labels': padded_labels,
-        'mask': padded_masks,
         'prefix_len': 0
     }
     return train_sample
