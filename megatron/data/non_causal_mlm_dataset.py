@@ -251,6 +251,32 @@ class NonCausalMLMDataset(torch.utils.data.Dataset):
 
         # Vocab stuff.
         tokenizer = get_tokenizer()
+        tokenizer.add_special_tokens({
+            'additional_special_tokens': [
+                '<extra_id_00>',
+                '<extra_id_01>',
+                '<extra_id_02>',
+                '<extra_id_03>',
+                '<extra_id_04>',
+                '<extra_id_05>',
+                '<extra_id_06>',
+                '<extra_id_07>',
+                '<extra_id_08>',
+                '<extra_id_09>',
+                '<extra_id_10>',
+                '<extra_id_11>',
+                '<extra_id_12>',
+                '<extra_id_13>',
+                '<extra_id_14>',
+                '<extra_id_15>',
+                '<extra_id_16>',
+                '<extra_id_17>',
+                '<extra_id_18>',
+                '<extra_id_19>',
+                '<extra_id_20>',
+            ]
+        })
+
         self.vocab_id_list = list(tokenizer.inv_vocab.keys())
         self.vocab_id_to_token_dict = tokenizer.inv_vocab
         self.cls_id = tokenizer.cls
@@ -365,31 +391,31 @@ def build_training_sample(sample,
     # print(padded_tokens)
     # print(padded_labels)
 
-    # sentinel_tokens = collections.deque(sentinel_tokens)
-    # t5_input = []
-    # (t5_decoder_in, t5_decoder_out) = ([bos_id], [])
-    # (start_index, end_index) = (0, None)
-    # for span in masked_spans:
-    #     flag = sentinel_tokens.popleft()
+    sentinel_tokens = collections.deque(sentinel_tokens)
+    t5_input = []
+    (t5_decoder_in, t5_decoder_out) = ([bos_id], [])
+    (start_index, end_index) = (0, None)
+    for span in masked_spans:
+        flag = sentinel_tokens.popleft()
 
-    #     # Append the same tokens in decoder input and output
-    #     t5_decoder_in.append(flag)
-    #     t5_decoder_in.extend(span.label)
-    #     t5_decoder_out.append(flag)
-    #     t5_decoder_out.extend(span.label)
+        # Append the same tokens in decoder input and output
+        t5_decoder_in.append(flag)
+        t5_decoder_in.extend(span.label)
+        t5_decoder_out.append(flag)
+        t5_decoder_out.extend(span.label)
 
-    #     end_index = span.index[0]
-    #     t5_input.extend(tokens[start_index: end_index])
-    #     t5_input.append(flag)
+        end_index = span.index[0]
+        t5_input.extend(tokens[start_index: end_index])
+        t5_input.append(flag)
 
-    #     # the next start index is the token after the last span token
-    #     start_index = span.index[-1] + 1
+        # the next start index is the token after the last span token
+        start_index = span.index[-1] + 1
 
-    # # Add <eos> token to the t5_decoder_out
-    # t5_decoder_out.append(eos_id)
+    # Add <eos> token to the t5_decoder_out
+    t5_decoder_out.append(eos_id)
 
-    # # Add the remaining tokens to the t5 input
-    # t5_input.extend(tokens[start_index:])
+    # Add the remaining tokens to the t5 input
+    t5_input.extend(tokens[start_index:])
 
 
     print("sample")
