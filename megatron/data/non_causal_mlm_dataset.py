@@ -364,6 +364,8 @@ def build_training_sample(sample,
     # padded_masks = pad_and_convert_to_numpy(masks, pad_id, max_seq_length)
     # print(padded_tokens)
     # print(padded_labels)
+    print("sentinel_tokens")
+    print(sentinel_tokens)
 
     sentinel_tokens = collections.deque(sentinel_tokens)
     input_tokens_ids = []
