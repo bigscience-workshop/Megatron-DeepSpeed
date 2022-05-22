@@ -367,10 +367,6 @@ def build_training_sample(sample,
     # padded_masks = pad_and_convert_to_numpy(masks, pad_id, max_seq_length)
     # print(padded_tokens)
     # print(padded_labels)
-    print("sentinel_tokens")
-    print(sentinel_tokens)
-    import sys
-    sys.exit()
 
     sentinel_tokens = collections.deque(sentinel_tokens)
     input_tokens_ids = []
@@ -398,11 +394,11 @@ def build_training_sample(sample,
 
     text_tokens_ids = input_tokens_ids + output_tokens_ids
     print("text_tokens_ids")
-    print(text_tokens_ids)
+    print(len(text_tokens_ids))
     print("input_tokens_ids")
-    print(input_tokens_ids)
+    print(len(input_tokens_ids))
     print("output_tokens_ids")
-    print(output_tokens_ids)
+    print(len(output_tokens_ids))
 
     import sys
     sys.exit()
