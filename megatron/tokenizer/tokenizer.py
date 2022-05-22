@@ -327,17 +327,17 @@ class _AutoTokenizer(AbstractTokenizer):
         self.encoder = self.tokenizer.get_vocab()
         self.decoder = {v: k for k, v in self.encoder.items()}
 
-        if 'mask_token' not in self.tokenizer.special_tokens_map:
-            self.tokenizer.add_tokens("<mask>")
-            self.tokenizer.mask_token = "<mask>"
+        # if 'mask_token' not in self.tokenizer.special_tokens_map:
+        #     self.tokenizer.add_tokens("<mask>")
+        #     self.tokenizer.mask_token = "<mask>"
 
-        if 'cls_token' not in self.tokenizer.special_tokens_map:
-            self.tokenizer.add_tokens("<cls>")
-            self.tokenizer.mask_token = "<cls>"
+        # if 'cls_token' not in self.tokenizer.special_tokens_map:
+        #     self.tokenizer.add_tokens("<cls>")
+        #     self.tokenizer.mask_token = "<cls>"
 
-        if 'sep_token' not in self.tokenizer.special_tokens_map:
-            self.tokenizer.add_tokens("<sep>")
-            self.tokenizer.mask_token = "<sep>"
+        # if 'sep_token' not in self.tokenizer.special_tokens_map:
+        #     self.tokenizer.add_tokens("<sep>")
+        #     self.tokenizer.mask_token = "<sep>"
 
         self.tokenizer.add_special_tokens({
             'additional_special_tokens': [
