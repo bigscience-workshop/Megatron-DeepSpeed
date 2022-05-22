@@ -260,6 +260,9 @@ class NonCausalMLMDataset(torch.utils.data.Dataset):
         self.bos_id = tokenizer.bos_token_id
         self.eos_id = tokenizer.eos_token_id
         self.sentinel_tokens = tokenizer.additional_special_tokens_ids
+
+        print("self.sentinel_tokens")
+        print(self.sentinel_tokens)
         # Checks
         assert np.min(documents) >= 0
         assert np.max(documents) < indexed_dataset.sizes.shape[0]
@@ -366,6 +369,8 @@ def build_training_sample(sample,
     # print(padded_labels)
     print("sentinel_tokens")
     print(sentinel_tokens)
+    import sys
+    sys.exit()
 
     sentinel_tokens = collections.deque(sentinel_tokens)
     input_tokens_ids = []
