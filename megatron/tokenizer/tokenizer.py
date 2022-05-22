@@ -365,7 +365,7 @@ class _AutoTokenizer(AbstractTokenizer):
             ]
         })
 
-        print(self.tokenizer.special_tokens_map)
+        print(self.tokenizer.additional_special_tokens_ids)
         import sys
         sys.exit()
 
