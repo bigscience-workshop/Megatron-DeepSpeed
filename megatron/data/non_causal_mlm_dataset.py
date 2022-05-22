@@ -367,16 +367,13 @@ def build_training_sample(sample,
 
     sentinel_tokens = collections.deque(sentinel_tokens)
     input_tokens_ids = []
-    (t5_decoder_in, t5_decoder_out) = ([bos_id], [])
+    output_tokens_ids = [] #[bos_id]
     (start_index, end_index) = (0, None)
     for span in masked_spans:
         flag = sentinel_tokens.popleft()
 
-        # Append the same tokens in decoder input and output
-        t5_decoder_in.append(flag)
-        t5_decoder_in.extend(span.label)
-        t5_decoder_out.append(flag)
-        t5_decoder_out.extend(span.label)
+        output_tokens_ids.append(flag)
+        output_tokens_ids.extend(span.label)
 
         end_index = span.index[0]
         input_tokens_ids.extend(tokens[start_index: end_index])
@@ -385,41 +382,28 @@ def build_training_sample(sample,
         # the next start index is the token after the last span token
         start_index = span.index[-1] + 1
 
-    # Add <eos> token to the t5_decoder_out
-    t5_decoder_out.append(eos_id)
 
-    # Add the remaining tokens to the t5 input
+    # Add the remaining tokens to input_tokens_ids
     input_tokens_ids.extend(tokens[start_index:])
+    # Add <eos> token to the output_tokens_ids
+    output_tokens_ids.append(eos_id)
+    prefix_len = len(input_tokens_ids)
 
+    text_tokens_ids = input_tokens_ids + output_tokens_ids
+    print("text_tokens_ids")
+    print(text_tokens_ids)
     print("input_tokens_ids")
     print(input_tokens_ids)
-    print("t5_decoder_out")
-    print(t5_decoder_out)
-    print("t5_decoder_in")
-    print(t5_decoder_in)
+    print("output_tokens_ids")
+    print(output_tokens_ids)
 
-    # print("sample")
-    # print(sample)
-    # print("tokens")
-    # print(tokens)
-    # print("masks")
-    # print(masks)
-    # print("labels")
-    # print(labels)
-    # print("masked_spans")
-    # print(masked_spans)
-    # for idx, spans in enumerate(masked_spans):
-    #     spans.index
-    #     sentinel_tokens
-    #     labels = spans.labels
     import sys
     sys.exit()
 
-    train_sample = {
-        'text': padded_tokens,
-        'prefix_len': 0
+    return {
+        'text': input_tokens_ids,
+        'prefix_len': prefix_len
     }
-    return train_sample
 
 
 def _build_index_mappings(name, data_prefix, documents, sizes,
