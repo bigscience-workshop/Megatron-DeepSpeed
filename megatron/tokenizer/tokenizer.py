@@ -365,11 +365,6 @@ class _AutoTokenizer(AbstractTokenizer):
             ]
         })
 
-        print(self.tokenizer.additional_special_tokens_ids)
-        import sys
-        sys.exit()
-
-
     @property
     def vocab_size(self):
         return self.tokenizer.vocab_size
