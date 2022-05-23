@@ -385,13 +385,19 @@ def build_training_sample(sample,
     output_tokens_ids.append(eos_id)
     prefix_len = len(input_tokens_ids)
 
-    text_tokens_ids = input_tokens_ids + output_tokens_ids
+    text_tokens_ids = input_tokens_ids.extend(output_tokens_ids)
     print("text_tokens_ids")
     print(len(text_tokens_ids))
     print("input_tokens_ids")
     print(len(input_tokens_ids))
     print("output_tokens_ids")
     print(len(output_tokens_ids))
+
+    # input_tokens_ids = pad_and_convert_to_numpy(
+    #     input_tokens_ids,
+    #     self.tokenizer.pad,
+    #     self.seq_length
+    #     )
 
     import sys
     sys.exit()
