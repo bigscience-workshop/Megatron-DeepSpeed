@@ -360,7 +360,6 @@ class _AutoTokenizer(AbstractTokenizer):
             ]
         })
 
-
     @property
     def vocab_size(self):
         return len(self.tokenizer) # vocab_size doesn't contain additional tokens
