@@ -1,14 +1,15 @@
 #!/usr/bin/env python
 
-import argparse
-import os
-import torch
 from collections import OrderedDict
-import sys
+from copy import deepcopy
 from pathlib import Path
 from pprint import pprint
-from copy import deepcopy
+import argparse
 import glob
+import logging
+import os
+import sys
+import torch
 
 # insert megatron's root dir into sys.path
 root_repo_path = str(Path(__file__).resolve().parents[2])
@@ -149,10 +150,6 @@ def extract_zero_fragments(dir, param_shapes, ds_checkpoint, dp_index, pp_index,
             for state_key in flat_state.keys():
                 dump_param_fragment(dir, state_key, flat_state[state_key], k, v.start, v.numel)
 
-        # XXX: add validation based on param_shapes
-
-
-        #pprint(f"{param_group_id} {exp_avg.numel()=} {exp_avg_sq.numel()=} {fp32.numel()=} ")
 
 
 
@@ -174,7 +171,6 @@ def dump_param_fragment(dir, state_name, state_flat_tensor, param_name, offset, 
     t = state_flat_tensor.narrow(0, offset, numel)
     _save_checkpoint(path, t)
 
-    # XXX: reshape to shape
 
 
 def merge_zero_fragments(dir, param_shapes):
@@ -196,8 +192,8 @@ def merge_zero_fragments(dir, param_shapes):
 
 
             # XXX: tmp hack - need to deal with tied vars here
-            if "word_embeddings" in name and len(paths)>1:
-                paths = [paths[0]]
+            if "word_embeddings.weight" in name and len(paths)>1:
+                paths = paths[:1]
 
 
             print(paths)
@@ -215,6 +211,9 @@ def merge_zero_fragments(dir, param_shapes):
             for p in orig_paths:
                 os.unlink(p)
 
+            # XXX: probably not needed since torch.reshape would have failed if the inputs size was wrong
+            if param.shape != shape:
+                logging.error(f"✘ {name}: expected {shape} but got {param.shape}")
 
 
 def main():
