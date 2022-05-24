@@ -384,9 +384,9 @@ def build_training_sample(sample,
     prefix_len = len(input_tokens_ids)
 
     print("input_tokens_ids")
-    print(len(input_tokens_ids))
+    print(input_tokens_ids)
     print("output_tokens_ids")
-    print(len(output_tokens_ids))
+    print(output_tokens_ids)
     text_tokens_ids = input_tokens_ids.extend(output_tokens_ids)
     print("text_tokens_ids")
     print(text_tokens_ids)
