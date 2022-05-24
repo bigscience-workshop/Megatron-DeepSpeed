@@ -15,8 +15,8 @@ deepspeed --num_gpus 2 pretrain_mp3_gpt.py \
        --num-attention-heads 4 \
        --micro-batch-size 4 \
        --global-batch-size 16 \
-       --seq-length 512 \
-       --max-position-embeddings 512 \
+       --seq-length 626 \
+       --max-position-embeddings 1024 \
        --train-iters 10000 \
        --lr-decay-iters 5000 \
        --save $CHECKPOINT_PATH \

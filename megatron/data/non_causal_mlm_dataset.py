@@ -399,6 +399,7 @@ def build_training_sample(sample,
     #     )
 
     # Padding.
+    print(max_seq_length)
     padded_tokens = pad_and_convert_to_numpy(text_tokens_ids, pad_id, max_seq_length)
     import sys
     sys.exit()
