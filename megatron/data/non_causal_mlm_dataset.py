@@ -383,7 +383,7 @@ def build_training_sample(sample,
     output_tokens_ids.append(eos_id)
     prefix_len = len(input_tokens_ids)
 
-    text_tokens_ids = input_tokens_ids+output_tokens_ids
+    text_tokens_ids = np.array(input_tokens_ids+output_tokens_ids)
     # print("input_tokens_ids")
     # print(input_tokens_ids)
     # print("output_tokens_ids")
@@ -399,7 +399,7 @@ def build_training_sample(sample,
     #     )
 
     # Padding.
-    padded_tokens = pad_and_convert_to_numpy(tokens, pad_id, max_seq_length)
+    padded_tokens = pad_and_convert_to_numpy(text_tokens_ids, pad_id, max_seq_length)
     import sys
     sys.exit()
 
