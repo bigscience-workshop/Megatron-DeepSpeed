@@ -348,7 +348,7 @@ def build_training_sample(sample,
     tokens = sample
 
     # Truncate to `target_sequence_length`.
-    max_num_tokens = max_seq_length
+    max_num_tokens = 512 #max_seq_length
     truncated = len(tokens) > max_num_tokens
     tokens = tokens[:max_num_tokens]
 
