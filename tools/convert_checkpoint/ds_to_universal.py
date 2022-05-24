@@ -7,6 +7,8 @@ from collections import OrderedDict
 import sys
 from pathlib import Path
 from pprint import pprint
+from copy import deepcopy
+import glob
 
 # insert megatron's root dir into sys.path
 root_repo_path = str(Path(__file__).resolve().parents[2])
@@ -104,7 +106,7 @@ def _create_latest_file(base_folder, iteration):
     with open(file_path, 'w') as f:
         f.write(str(iteration))
 
-
+# XXX: this is a temp hack that creates fake params but with the right shapes
 def save_params_universal(dir, param_shapes):
     for name, shape in param_shapes.items():
         param_base_path = os.path.join(dir, name)
@@ -116,6 +118,105 @@ def save_params_universal(dir, param_shapes):
             _save_checkpoint(path, param)
 
 
+def extract_zero_fragments(dir, param_shapes, ds_checkpoint, dp_index, pp_index, tp_index):
+    sd = ds_checkpoint.get_zero_checkpoint_state(
+        pp_index=pp_index,
+        tp_index=tp_index,
+        dp_index=dp_index)
+
+    pprint(f"Processing {dp_index=} {pp_index=}, {tp_index=}")
+
+    optim_sd = sd["optimizer_state_dict"]
+    param_slice_mappings = optim_sd["param_slice_mappings"]
+
+    # dict
+    state_groups = optim_sd["base_optimizer_state"]["state"]
+    # list
+    fp32_groups = optim_sd["single_partition_of_fp32_groups"]
+    param_groups_cnt = len(state_groups)
+
+    for param_group_id in range(param_groups_cnt):
+
+        flat_state = dict(
+            exp_avg=state_groups[param_group_id]["exp_avg"],
+            exp_avg_sq=state_groups[param_group_id]["exp_avg_sq"],
+            fp32=fp32_groups[param_group_id],
+        )
+
+        for k,v in param_slice_mappings[param_group_id].items():
+            print(f"{param_group_id} {k} => {v.start}:{v.numel}")
+
+            for state_key in flat_state.keys():
+                dump_param_fragment(dir, state_key, flat_state[state_key], k, v.start, v.numel)
+
+        # XXX: add validation based on param_shapes
+
+
+        #pprint(f"{param_group_id} {exp_avg.numel()=} {exp_avg_sq.numel()=} {fp32.numel()=} ")
+
+
+
+cnt = 0
+def dump_param_fragment(dir, state_name, state_flat_tensor, param_name, offset, numel):
+
+    global cnt # temp hack
+
+    param_base_path = os.path.join(dir, param_name)
+    os.makedirs(param_base_path, exist_ok=True)
+
+    cnt += 1
+    counter = f"{cnt:0>10d}"
+
+    path = os.path.join(param_base_path, f"{state_name}.{counter}")
+
+    print(f"{param_name}: {offset}: {numel} => {path}")
+
+    t = state_flat_tensor.narrow(0, offset, numel)
+    _save_checkpoint(path, t)
+
+    # XXX: reshape to shape
+
+
+def merge_zero_fragments(dir, param_shapes):
+
+    for name, shape in param_shapes.items():
+        param_base_path = os.path.join(dir, name)
+        print(f"\n{name}: {shape} => {param_base_path}")
+
+        # XXX: shouldn't be in the states
+        if "position_embeddings" in name:
+            continue
+
+
+        for state in ("fp32", "exp_avg", "exp_avg_sq"):
+            final_path = os.path.join(param_base_path, f"{state}.pt")
+            prefix_path = os.path.join(param_base_path, f"{state}")
+            paths = sorted(list(glob.glob(f"{prefix_path}.0*")))
+            orig_paths = deepcopy(paths)
+
+
+            # XXX: tmp hack - need to deal with tied vars here
+            if "word_embeddings" in name and len(paths)>1:
+                paths = [paths[0]]
+
+
+            print(paths)
+
+            fragments = [torch.load(p) for p in paths]
+
+            print(f"Expected shape: {shape}")
+            print(f"Fragment sizes:", list(frag.shape for frag in fragments))
+
+            # merge
+            param = torch.cat(fragments, dim=0)
+            param = param.reshape(shape)
+            print(f"Final shape: {param.shape}")
+            _save_checkpoint(final_path, param)
+            for p in orig_paths:
+                os.unlink(p)
+
+
+
 def main():
     print(f'Convert DeepSpeed Checkpoint to Universal Checkpoint')
 
@@ -124,27 +225,30 @@ def main():
         f'Converting DeepSpeed checkpoint in {args.input_folder} to Universal checkpoint in {args.output_folder}'
     )
 
-    ds_checkpoint = DeepSpeedCheckpoint(args.input_folder, args.target_tp,
-                                        args.target_pp)
+    ds_checkpoint = DeepSpeedCheckpoint(args.input_folder)#, 1, 2) # args.target_tp, args.target_pp)
     iteration = ds_checkpoint.get_iteration()
     _create_latest_file(args.output_folder, iteration)
     checkpoint_paths = _create_checkpoint_paths(args.output_folder, iteration,
                                                 ds_checkpoint.tp_degree,
                                                 ds_checkpoint.pp_degree)
 
-    sd = torch.load(ds_checkpoint.mp_rank_files[0], map_location=torch.device('cpu'))
+    mp_sd = torch.load(ds_checkpoint.mp_rank_files[0], map_location=torch.device('cpu'))
 
-    param_shapes = sd["param_shapes"]
-    # fix back to normal dict
+    param_shapes = mp_sd["param_shapes"]
+    # fix back to normal flat dict
     param_shapes = dict((k,v) for d in param_shapes for k,v in d.items() )
-    #pprint(param_shapes)
 
-    save_params_universal(args.output_folder, param_shapes)
+    # make fake params
+    # save_params_universal(args.output_folder, param_shapes)
 
-    # for i in range(0, ds_checkpoint.tp_degree):
-    #     for j in range(0, ds_checkpoint.pp_degree):
-    #         sd = _create_rank_checkpoint(ds_checkpoint, i, j, args.for_release)
-    #         _save_checkpoint(checkpoint_paths[i][j], sd)
+    for i in range(ds_checkpoint.dp_degree):
+        for j in range(ds_checkpoint.pp_degree):
+            for k in range(ds_checkpoint.tp_degree):
+                print(f"{i=}, {j=}, {k=}")
+                extract_zero_fragments(args.output_folder, param_shapes, ds_checkpoint, i, j, k)
+
+    merge_zero_fragments(args.output_folder, param_shapes)
+
 
 
 if __name__ == "__main__":
