@@ -383,13 +383,13 @@ def build_training_sample(sample,
     output_tokens_ids.append(eos_id)
     prefix_len = len(input_tokens_ids)
 
-    print("input_tokens_ids")
-    print(input_tokens_ids)
-    print("output_tokens_ids")
-    print(output_tokens_ids)
     text_tokens_ids = input_tokens_ids+output_tokens_ids
+    # print("input_tokens_ids")
+    # print(input_tokens_ids)
+    # print("output_tokens_ids")
+    # print(output_tokens_ids)
     print("text_tokens_ids")
-    print(text_tokens_ids)
+    # print(text_tokens_ids)
     print(len(text_tokens_ids))
 
     # input_tokens_ids = pad_and_convert_to_numpy(
@@ -398,10 +398,10 @@ def build_training_sample(sample,
     #     self.seq_length
     #     )
 
+    # Padding.
+    padded_tokens = pad_and_convert_to_numpy(tokens, pad_id, max_seq_length)
     import sys
     sys.exit()
-    # Padding.
-    # padded_tokens = pad_and_convert_to_numpy(tokens, pad_id, max_seq_length)
 
     return {
         'text': input_tokens_ids,
