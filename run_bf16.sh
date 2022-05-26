@@ -12,10 +12,10 @@ DATETIME=`date +'date_%y-%m-%d_time_%H-%M-%S'`
 #DATASET_3="<PATH TO THE THIRD DATASET>"
 #DATASET="0.2 ${DATASET_1} 0.3 ${DATASET_2} 0.5 ${DATASET_3}"
 
-BASE_DATA_PATH=/data/Megatron-LM/data
-DATASET=${BASE_DATA_PATH}/indexed_datasets/megatron
-VOCAB_PATH=${BASE_DATA_PATH}/gpt2-vocab.json
-MERGE_PATH=${BASE_DATA_PATH}/gpt2-merges.txt
+BASE_DATA_PATH=tests/data/gpt2
+DATASET=${BASE_DATA_PATH}/meg-gpt2-openwebtext_text_document
+VOCAB_PATH=${BASE_DATA_PATH}/gpt2-tiny-vocab.json
+MERGE_PATH=${BASE_DATA_PATH}/gpt2-tiny-merges.txt
 
 
 script_path=$(realpath $0)
@@ -26,28 +26,29 @@ CONFIG_JSON="/tmp/ds_config.json"
 USE_DEEPSPEED=1
 ZERO_STAGE=0
 
-
-# Debug
 #TP=4
 #PP=4
-#LAYERS=8
-#HIDDEN=512
-#SEQ=1024
-#GLOBAL_BATCH=128
-#WORKER_STR="-i worker-0"
 
+# Debug
+DEBUG_MODE=1 
+if [[ $DEBUG_MODE == 1 ]]; then
+        LAYERS=4
+        HIDDEN=512
+        SEQ=512
+else
+        HIDDEN=1024
+        LAYERS=24
+        SEQ=1024
+fi  
 
-TP=1
-PP=1
+TP=2
+PP=2
 DP=2
 WORLD_SIZE=$((TP*PP*DP))
-HIDDEN=1024
-LAYERS=24
-SEQ=1024
-GLOBAL_BATCH=1
-WORKER_STR=""
+GLOBAL_BATCH=2
 
 MICRO_BATCH=1
+CHECKPOINT_PATH=checkpoints/gpt2/tp${TP}_pp${PP}_dp${DP} 
 
 LR=6.0e-4
 MIN_LR=6.0e-5
@@ -108,7 +109,10 @@ options=" \
 	--init-method-std 0.006 \
         --${DTYPE} \
 	--checkpoint-activations \
-	--exit-interval 10000 \
+	--exit-interval 3 \
+        --save ${CHECKPOINT_PATH} \
+        --position-embedding-type alibi \
+        --embed-layernorm \
 	--tensorboard-dir $LOG_DIR
         "
 

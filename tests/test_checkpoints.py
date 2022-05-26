@@ -200,8 +200,8 @@ class MegDSTestCheckpoints(TestCasePlus):
     def test_checkpoint_reshaping_tp2_pp1_dp1(self):
         # this test requires at least 2 gpus - will use only 2 gpus for now - XXX: extend to more gpus
 
-        output_dir1 = self.get_auto_remove_tmp_dir() # "./xxx1", after=False)
-        output_dir2 = self.get_auto_remove_tmp_dir() # "./xxx2", after=False)
+        output_dir1 = self.get_auto_remove_tmp_dir("./xxx1", after=False)
+        output_dir2 = self.get_auto_remove_tmp_dir("./xxx2", after=False)
 
         # 1. train with TP=2 / PP=1
         self.train_checkpoint(output_dir1, tp_size=2, pp_size=1, dp_size=1)

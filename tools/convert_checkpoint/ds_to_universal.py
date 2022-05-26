@@ -2,12 +2,14 @@
 
 from collections import OrderedDict
 from copy import deepcopy
+from email.policy import default
 from pathlib import Path
 from pprint import pprint
 import argparse
 import glob
 import logging
 import os
+import shutil
 import sys
 import torch
 
@@ -108,8 +110,8 @@ def _create_latest_file(base_folder, iteration):
         f.write(str(iteration))
 
 # XXX: this is a temp hack that creates fake params but with the right shapes
-def save_params_universal(dir, param_shapes):
-    for name, shape in param_shapes.items():
+def save_params_universal(dir, slice_shapes):
+    for name, shape in slice_shapes.items():
         param_base_path = os.path.join(dir, name)
         os.makedirs(param_base_path, exist_ok=True)
         print(f"{name}: {shape} => {param_base_path}")
@@ -119,7 +121,7 @@ def save_params_universal(dir, param_shapes):
             _save_checkpoint(path, param)
 
 
-def extract_zero_fragments(dir, param_shapes, ds_checkpoint, dp_index, pp_index, tp_index):
+def extract_zero_shards(dir, slice_shapes, ds_checkpoint, pp_index, tp_index, dp_index):
     sd = ds_checkpoint.get_zero_checkpoint_state(
         pp_index=pp_index,
         tp_index=tp_index,
@@ -144,21 +146,24 @@ def extract_zero_fragments(dir, param_shapes, ds_checkpoint, dp_index, pp_index,
             fp32=fp32_groups[param_group_id],
         )
 
-        for k,v in param_slice_mappings[param_group_id].items():
-            print(f"{param_group_id} {k} => {v.start}:{v.numel}")
+        for name,fragment_mapping in param_slice_mappings[param_group_id].items():
+            if "word_embeddings.weight" in name and pp_index > 0:
+                # Skip tied weights that are replicated in first and last pp stages 
+                continue 
 
+            print(f"{param_group_id} {name} => {fragment_mapping.start}:{fragment_mapping.numel}")
             for state_key in flat_state.keys():
-                dump_param_fragment(dir, state_key, flat_state[state_key], k, v.start, v.numel)
+                dump_param_fragment(dir, tp_index, state_key, flat_state[state_key], name, fragment_mapping.start, fragment_mapping.numel)
 
 
 
 
 cnt = 0
-def dump_param_fragment(dir, state_name, state_flat_tensor, param_name, offset, numel):
+def dump_param_fragment(dir, tp_index, state_name, state_flat_tensor, param_name, offset, numel):
 
     global cnt # temp hack
 
-    param_base_path = os.path.join(dir, param_name)
+    param_base_path = os.path.join(dir, param_name, str(tp_index))
     os.makedirs(param_base_path, exist_ok=True)
 
     cnt += 1
@@ -172,44 +177,90 @@ def dump_param_fragment(dir, state_name, state_flat_tensor, param_name, offset, 
     _save_checkpoint(path, t)
 
 
+def _cleanup_zero_shard_files(param_base_path, state, tp_degree):
+    for tp_index in range(tp_degree):
+        prefix_path = os.path.join(param_base_path, str(tp_index), f"{state}")
+        for p in sorted(list(glob.glob(f"{prefix_path}.0*"))):
+            os.unlink(p)
 
-def merge_zero_fragments(dir, param_shapes):
 
-    for name, shape in param_shapes.items():
+def _merge_zero_shards(param_base_path, state, tp_degree, slice_shape):
+    slices = []
+    for tp_index in range(tp_degree):
+        prefix_path = os.path.join(param_base_path, str(tp_index), f"{state}")
+        paths = sorted(list(glob.glob(f"{prefix_path}.0*")))
+        print(paths)
+        shards = [torch.load(p) for p in paths]
+        slices.append(torch.cat(shards, dim=0).reshape(slice_shape))
+
+    return slices 
+
+
+WEIGHTS_TO_AVERAGE_PATTERNS = [
+    r"tied_modules.embed.word_embeddings.norm.weight",
+    r"tied_modules.embed.word_embeddings.norm.bias",
+    r"\d+.input_layernorm.weight",
+    r"\d+.input_layernorm.bias",
+    r"\d+.post_attention_layernorm.weight",
+    r"\d+.post_attention_layernorm.bias",
+    r"\d+.self_attention.dense.bias",
+    r"\d+.mlp.dense_4h_to_h.bias",
+    r"\d+.weight",
+    r"\d+.bias",
+]
+
+WEIGHTS_WITH_ROW_PARALLELISM_CONTAIN = [
+    "dense_4h_to_h",
+    "self_attention.dense.weight",
+]
+
+def merge_tp_slices(dir, slice_dir, slice_shapes, tp_degree):
+
+    for name, shape in slice_shapes.items():
+        slice_base_path = os.path.join(slice_dir, name)
         param_base_path = os.path.join(dir, name)
-        print(f"\n{name}: {shape} => {param_base_path}")
+        print(f"\n{name}: {shape} => {slice_base_path} ----->  {param_base_path}")
 
         # XXX: shouldn't be in the states
         if "position_embeddings" in name:
             continue
 
-
         for state in ("fp32", "exp_avg", "exp_avg_sq"):
+            slices = _merge_zero_shards(slice_base_path, state, tp_degree, shape)
             final_path = os.path.join(param_base_path, f"{state}.pt")
-            prefix_path = os.path.join(param_base_path, f"{state}")
-            paths = sorted(list(glob.glob(f"{prefix_path}.0*")))
-            orig_paths = deepcopy(paths)
+           
+            
+#        for state in ("fp32", "exp_avg", "exp_avg_sq"):
+#            final_path = os.path.join(param_base_path, f"{state}.pt")
+#            prefix_path = os.path.join(param_base_path, f"{state}")
+#            paths = sorted(list(glob.glob(f"{prefix_path}.0*")))
+#            orig_paths = deepcopy(paths)
 
 
             # XXX: tmp hack - need to deal with tied vars here
-            if "word_embeddings.weight" in name and len(paths)>1:
-                paths = paths[:1]
+#            if "word_embeddings.weight" in name and len(paths)>1:
+#                paths = paths[:1]
 
 
-            print(paths)
+#            print(paths)
 
-            fragments = [torch.load(p) for p in paths]
+#            shards = [torch.load(p) for p in paths]
 
             print(f"Expected shape: {shape}")
-            print(f"Fragment sizes:", list(frag.shape for frag in fragments))
+            print(f"Fragment sizes:", list(frag.shape for frag in slices))
 
             # merge
-            param = torch.cat(fragments, dim=0)
-            param = param.reshape(shape)
+            # XXX - Add merging strategy
+            import re 
+
+            if any(re.match(pattern, name) for pattern in WEIGHTS_TO_AVERAGE_PATTERNS):
+                param = sum(slices) / len(slices)
+            else:
+                cat_dim = 1 if any(text in name for text in WEIGHTS_WITH_ROW_PARALLELISM_CONTAIN) else 0                
+                param = torch.cat(slices, dim=cat_dim) 
+
             print(f"Final shape: {param.shape}")
             _save_checkpoint(final_path, param)
-            for p in orig_paths:
-                os.unlink(p)
 
             # XXX: probably not needed since torch.reshape would have failed if the inputs size was wrong
             if param.shape != shape:
@@ -225,29 +276,33 @@ def main():
     )
 
     ds_checkpoint = DeepSpeedCheckpoint(args.input_folder)#, 1, 2) # args.target_tp, args.target_pp)
+
     iteration = ds_checkpoint.get_iteration()
     _create_latest_file(args.output_folder, iteration)
     checkpoint_paths = _create_checkpoint_paths(args.output_folder, iteration,
                                                 ds_checkpoint.tp_degree,
                                                 ds_checkpoint.pp_degree)
 
-    mp_sd = torch.load(ds_checkpoint.mp_rank_files[0], map_location=torch.device('cpu'))
+    slice_shapes = []
+    for mp_rank_file in ds_checkpoint.mp_rank_files:
+        mp_sd = torch.load(mp_rank_file, map_location=torch.device('cpu'))
+        slice_shapes += mp_sd["param_shapes"]
 
-    param_shapes = mp_sd["param_shapes"]
-    # fix back to normal flat dict
-    param_shapes = dict((k,v) for d in param_shapes for k,v in d.items() )
+    # fix back to normal flat dict, merge duplicates for tp>1
+    slice_shapes = dict((k,v) for d in slice_shapes for k,v in d.items() )
 
     # make fake params
-    # save_params_universal(args.output_folder, param_shapes)
-
-    for i in range(ds_checkpoint.dp_degree):
-        for j in range(ds_checkpoint.pp_degree):
-            for k in range(ds_checkpoint.tp_degree):
+    # save_params_universal(args.output_folder, slice_shapes)
+    temp_dir = os.path.join(args.output_folder, 'tmp')
+    for i in range(ds_checkpoint.pp_degree):
+        for j in range(ds_checkpoint.tp_degree):
+            for k in range(ds_checkpoint.dp_degree):
                 print(f"{i=}, {j=}, {k=}")
-                extract_zero_fragments(args.output_folder, param_shapes, ds_checkpoint, i, j, k)
+                extract_zero_shards(temp_dir, slice_shapes, ds_checkpoint, i, j, k)
 
-    merge_zero_fragments(args.output_folder, param_shapes)
-
+    merge_tp_slices(args.output_folder, temp_dir, slice_shapes, ds_checkpoint.tp_degree)
+    
+    shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 if __name__ == "__main__":
