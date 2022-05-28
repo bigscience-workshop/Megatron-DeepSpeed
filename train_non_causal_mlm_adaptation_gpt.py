@@ -22,7 +22,7 @@ from megatron import print_rank_0
 from megatron import get_timers
 from megatron import get_tokenizer
 from megatron import mpu
-# from megatron.data.non_causal_mtf_dataset import build_train_valid_test_datasets, build_dataset_group
+
 from megatron.data.non_causal_mlm_dataset import build_train_valid_test_datasets, build_dataset_group
 from megatron.model import GPTModel, GPTModelPipe
 from megatron.training import pretrain
@@ -184,14 +184,26 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
     # Option 1 of data loading using --data-path
 
     if args.data_path:
+        # train_ds, valid_ds, test_ds = build_train_valid_test_datasets(
+        #     data_prefix=args.data_path,
+        #     data_impl=args.data_impl,
+        #     splits_string=args.split,
+        #     train_valid_test_num_samples=train_val_test_num_samples,
+        #     seq_length=args.seq_length,
+        #     seed=args.seed,
+        #     skip_warmup=(not args.mmap_warmup))
         train_ds, valid_ds, test_ds = build_train_valid_test_datasets(
             data_prefix=args.data_path,
             data_impl=args.data_impl,
             splits_string=args.split,
             train_valid_test_num_samples=train_val_test_num_samples,
-            seq_length=args.seq_length,
+            max_seq_length=512,#args.encoder_seq_length,
+            max_seq_length_dec=114,#args.decoder_seq_length,
+            masked_lm_prob=args.mask_prob,
+            short_seq_prob=args.short_seq_prob,
             seed=args.seed,
-            skip_warmup=(not args.mmap_warmup))
+            skip_warmup=(not args.mmap_warmup),
+            dataset_type='t5')
 
     # Option 2 of data loading using --(train|valid|test)-weighted-split-paths
     elif args.train_weighted_split_paths:
