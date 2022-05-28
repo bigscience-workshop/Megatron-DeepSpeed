@@ -39,4 +39,5 @@ deepspeed --num_gpus 8 train_non_causal_mlm_adaptation_gpt.py \
        --eval-interval 1000 \
        --eval-iters 10 \
        --fp16 \
+       --loss-on-targets-only \
        --tensorboard-dir LOG
