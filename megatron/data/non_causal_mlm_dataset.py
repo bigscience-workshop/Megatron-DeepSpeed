@@ -249,6 +249,17 @@ class NonCausalMLMDataset(torch.utils.data.Dataset):
         # Dataset.
         self.indexed_dataset = indexed_dataset
 
+        # Build the samples mapping.
+        self.samples_mapping = get_samples_mapping(self.indexed_dataset,
+                                                   data_prefix,
+                                                   num_epochs,
+                                                   max_num_samples,
+                                                   self.max_seq_length - 2, # account for added tokens
+                                                   short_seq_prob,
+                                                   self.seed,
+                                                   self.name,
+                                                   False)
+
         # Vocab stuff.
         tokenizer = get_tokenizer()
         self.vocab_id_list = list(tokenizer.inv_vocab.keys())
@@ -261,45 +272,51 @@ class NonCausalMLMDataset(torch.utils.data.Dataset):
         self.eos_id = tokenizer.eos_token_id
         self.sentinel_tokens = tokenizer.additional_special_tokens_ids
 
-        # Checks
-        assert np.min(documents) >= 0
-        assert np.max(documents) < indexed_dataset.sizes.shape[0]
+        # # Checks
+        # assert np.min(documents) >= 0
+        # assert np.max(documents) < indexed_dataset.sizes.shape[0]
 
-        # Build index mappings.
-        self.doc_idx, self.sample_idx, self.shuffle_idx = _build_index_mappings(
-            self.name, data_prefix, documents, self.indexed_dataset.sizes,
-            num_samples, seq_length, seed)
+        # # Build index mappings.
+        # self.doc_idx, self.sample_idx, self.shuffle_idx = _build_index_mappings(
+        #     self.name, data_prefix, documents, self.indexed_dataset.sizes,
+        #     num_samples, seq_length, seed)
 
     def __len__(self):
         # -1 is due to data structure used to retieve the index:
         #    sample i --> [sample_idx[i], sample_idx[i+1])
-        return self.sample_idx.shape[0] - 1
+        # return self.sample_idx.shape[0] - 1
+        return self.samples_mapping.shape[0]
 
     def __getitem__(self, idx):
 
-        idx = self.shuffle_idx[idx]
-        # Start and end documents and offsets.
-        doc_index_f = self.sample_idx[idx][0]
-        doc_index_l = self.sample_idx[idx + 1][0]
-        offset_f = self.sample_idx[idx][1]
-        offset_l = self.sample_idx[idx + 1][1]
-        # If we are within the same document, just extract the chunk.
-        if doc_index_f == doc_index_l:
-            sample = self.indexed_dataset.get(self.doc_idx[doc_index_f],
-                                              offset=offset_f,
-                                              length=offset_l - offset_f + 1)
-        else:
-            # Otherwise, get the rest of the initial document.
-            sample_list = [self.indexed_dataset.get(self.doc_idx[doc_index_f],
-                                                    offset=offset_f)]
-            # Loop over all in between documents and add the entire document.
-            for i in range(doc_index_f + 1, doc_index_l):
-                sample_list.append(self.indexed_dataset.get(self.doc_idx[i]))
-            # And finally add the relevant portion of last document.
-            sample_list.append(self.indexed_dataset.get(
-                self.doc_idx[doc_index_l],
-                length=offset_l + 1))
-            sample = np.concatenate(sample_list)
+        # idx = self.shuffle_idx[idx]
+        # # Start and end documents and offsets.
+        # doc_index_f = self.sample_idx[idx][0]
+        # doc_index_l = self.sample_idx[idx + 1][0]
+        # offset_f = self.sample_idx[idx][1]
+        # offset_l = self.sample_idx[idx + 1][1]
+        # # If we are within the same document, just extract the chunk.
+        # if doc_index_f == doc_index_l:
+        #     sample = self.indexed_dataset.get(self.doc_idx[doc_index_f],
+        #                                       offset=offset_f,
+        #                                       length=offset_l - offset_f + 1)
+        # else:
+        #     # Otherwise, get the rest of the initial document.
+        #     sample_list = [self.indexed_dataset.get(self.doc_idx[doc_index_f],
+        #                                             offset=offset_f)]
+        #     # Loop over all in between documents and add the entire document.
+        #     for i in range(doc_index_f + 1, doc_index_l):
+        #         sample_list.append(self.indexed_dataset.get(self.doc_idx[i]))
+        #     # And finally add the relevant portion of last document.
+        #     sample_list.append(self.indexed_dataset.get(
+        #         self.doc_idx[doc_index_l],
+        #         length=offset_l + 1))
+        #     sample = np.concatenate(sample_list)
+
+        start_index, end_index, seq_length = self.samples_mapping[idx]
+        sample = []
+        for index in range(start_index, end_index):
+            sample.append(self.indexed_dataset[index])
 
         # Note that this rng state should be numpy and not python since
         # python randint is inclusive whereas the numpy one is exclusive.
