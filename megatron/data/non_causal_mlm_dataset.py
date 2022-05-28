@@ -277,18 +277,18 @@ def build_training_sample(sample, target_seq_length,
                                    max_seq_length_dec, masked_spans,
                                    bos_id, eos_id, sentinel_tokens)
 
-    #text_tokens_ids = np.array(input_tokens_ids+output_tokens_ids)
+    # text_tokens_ids = np.array(input_tokens_ids+output_tokens_ids)
 
-    text_tokens_ids = input_tokens_ids + output_tokens_ids
+    # text_tokens_ids = input_tokens_ids + output_tokens_ids
     print("input_tokens_ids")
     print(len(input_tokens_ids))
     print(input_tokens_ids)
     print("output_tokens_ids")
     print(len(output_tokens_ids))
     print(output_tokens_ids)
-    print("text_tokens_ids")
-    # print(text_tokens_ids)
-    print(len(text_tokens_ids))
+    # print("text_tokens_ids")
+    # # print(text_tokens_ids)
+    # print(len(text_tokens_ids))
 
     # input_tokens_ids = pad_and_convert_to_numpy(
     #     input_tokens_ids,
