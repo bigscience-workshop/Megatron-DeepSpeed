@@ -36,6 +36,9 @@ def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
                                     skip_warmup, binary_head=False,
                                     max_seq_length_dec=None,
                                     dataset_type='standard_bert'):
+    print(len(data_prefix))
+    import sys
+    sys.exit()
     if len(data_prefix) == 1:
         return _build_train_valid_test_datasets(data_prefix[0],
                                                 data_impl, splits_string,
@@ -99,7 +102,7 @@ def _build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
                                            data_impl,
                                            skip_warmup)
 
-    total_num_of_documents = indexed_dataset.sizes.shape[0]# - 1
+    total_num_of_documents = indexed_dataset.sizes.shape[0] - 1
     splits = get_train_valid_test_split_(splits_string, total_num_of_documents)
     # Print stats about the splits.
     print_rank_0(' > dataset split:')
