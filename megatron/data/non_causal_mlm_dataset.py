@@ -294,51 +294,17 @@ def build_training_sample(sample, target_seq_length,
     output_tokens_ids.append(eos_id)
     prefix_len = len(input_tokens_ids)
 
-    # # Padding.
-    # input_tokens_ids, _, output_tokens_ids, enc_mask, \
-    # dec_mask, enc_dec_mask, loss_mask \
-    #     = pad_and_convert_to_numpy(tokens, masked_positions,
-    #                                masked_labels, pad_id, max_seq_length,
-    #                                max_seq_length_dec, masked_spans,
-    #                                bos_id, eos_id, sentinel_tokens)
-
-    # text_tokens_ids = np.array(input_tokens_ids+output_tokens_ids)
-
     text_tokens_ids = pad_and_convert_to_numpy(
         input_tokens_ids+output_tokens_ids,
         pad_id,
         max_seq_length+max_seq_length_dec
         )
 
-    print("input_tokens_ids")
-    print(len(input_tokens_ids))
-    print(input_tokens_ids)
-    print("output_tokens_ids")
-    print(len(output_tokens_ids))
-    print(output_tokens_ids)
-    print("text_tokens_ids")
-    print(text_tokens_ids)
-    print(len(text_tokens_ids))
-    import sys
-    sys.exit()
-
     return {
         'text': text_tokens_ids,
         'prefix_len': prefix_len
     }
 
-
-    # train_sample = {
-    #     'text_enc': tokens_enc,
-    #     'text_dec': tokens_dec_in,
-    #     'labels': labels,
-    #     'loss_mask': loss_mask,
-    #     'truncated': int(truncated),
-    #     'enc_mask': enc_mask,
-    #     'dec_mask': dec_mask,
-    #     'enc_dec_mask': enc_dec_mask,
-    # }
-    # return train_sample
 
 def pad_and_convert_to_numpy(tokens, pad_id, max_seq_length):
     """Pad sequences and convert them to numpy."""
@@ -353,114 +319,3 @@ def pad_and_convert_to_numpy(tokens, pad_id, max_seq_length):
     tokens_np = np.concatenate((tokens, filler), dtype=np.int64)
 
     return tokens_np
-# def pad_and_convert_to_numpy(tokens, masked_positions,
-#                              masked_labels, pad_id,
-#                              max_seq_length, max_seq_length_dec,
-#                              masked_spans=None, bos_id=None,
-#                              eos_id=None, sentinel_tokens=None):
-#     """Pad sequences and convert them to numpy."""
-
-#     sentinel_tokens = collections.deque(sentinel_tokens)
-#     t5_input = []
-#     (t5_decoder_in, t5_decoder_out) = ([bos_id], [])
-#     (start_index, end_index) = (0, None)
-#     for span in masked_spans:
-#         flag = sentinel_tokens.popleft()
-
-#         # Append the same tokens in decoder input and output
-#         t5_decoder_in.append(flag)
-#         t5_decoder_in.extend(span.label)
-#         t5_decoder_out.append(flag)
-#         t5_decoder_out.extend(span.label)
-
-#         end_index = span.index[0]
-#         t5_input.extend(tokens[start_index: end_index])
-#         t5_input.append(flag)
-
-#         # the next start index is the token after the last span token
-#         start_index = span.index[-1] + 1
-
-#     # Add <eos> token to the t5_decoder_out
-#     t5_decoder_out.append(eos_id)
-
-#     # Add the remaining tokens to the t5 input
-#     t5_input.extend(tokens[start_index:])
-
-#     # assert (len(t5_input) - len(masked_spans)) + \
-#     #        (len(t5_decoder_in) - (len(masked_spans) + 1)) == len(tokens)
-
-#     # Some checks.
-
-#     # Encoder-side padding mask.
-#     num_tokens = len(t5_input)
-#     padding_length = max_seq_length - num_tokens
-#     assert padding_length >= 0
-#     assert len(masked_positions) == len(masked_labels)
-
-#     # Tokens..
-#     filler = [pad_id] * padding_length
-#     tokens_enc = np.array(t5_input + filler, dtype=np.int64)
-
-#     # Decoder-side padding mask.
-#     num_tokens_dec = len(t5_decoder_in)
-#     padding_length_dec = max_seq_length_dec - num_tokens_dec
-#     assert padding_length_dec >= 0
-#     filler_dec = [pad_id] * padding_length_dec
-#     tokens_dec_in = np.array(t5_decoder_in + filler_dec, dtype=np.int64)
-
-#     # Create attention masks
-#     enc_mask = make_attention_mask(tokens_enc, tokens_enc)
-#     enc_dec_mask = make_attention_mask(tokens_dec_in, tokens_enc)
-#     dec_mask = make_attention_mask(tokens_dec_in, tokens_dec_in)
-#     dec_mask = dec_mask * make_history_mask(tokens_dec_in)
-
-#     # Labels mask.
-#     labels = t5_decoder_out + ([-1] * padding_length_dec)
-#     labels = np.array(labels, dtype=np.int64)
-
-#     # Loss mask
-#     loss_mask = ([1] * num_tokens_dec) + ([0] * padding_length_dec)
-#     loss_mask = np.array(loss_mask, dtype=np.int64)
-
-#     return tokens_enc, tokens_dec_in, labels, enc_mask, \
-#            dec_mask, enc_dec_mask, loss_mask
-
-
-def make_attention_mask(source_block, target_block):
-    """
-    Returns a 2-dimensional (2-D) attention mask
-    :param source_block: 1-D array
-    :param target_block: 1-D array
-    """
-    mask = (target_block[None, :] >= 1) * (source_block[:, None] >= 1)
-    mask = mask.astype(np.int64)
-    # (source_length, target_length)
-    return mask
-
-
-def make_attention_mask_3d(source_block, target_block):
-    """
-    Returns a 3-dimensional (3-D) attention mask
-    :param source_block: 1-D array
-    :param target_block: 1-D array
-    """
-    mask = (target_block[:, None, :] >= 1) * (source_block[:, :, None] >= 1)
-    # (batch, source_length, target_length)
-    # mask = mask.astype(np.int64)
-    return mask
-
-
-def make_history_mask(block):
-    length = block.shape[0]
-    arange = np.arange(length)
-    history_mask = (arange[None, ] <= arange[:, None])
-    history_mask = history_mask.astype(np.int64)
-    return history_mask
-
-
-def make_history_mask_3d(block):
-    batch, length = block.shape
-    arange = torch.arange(length, device=block.device)
-    history_mask = (arange[None, ] <= arange[:, None])[None, ]
-    history_mask = history_mask.expand(batch, length, length)
-    return history_mask
