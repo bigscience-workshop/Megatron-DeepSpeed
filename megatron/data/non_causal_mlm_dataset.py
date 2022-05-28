@@ -47,38 +47,39 @@ def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
                                                 max_seq_length_dec,
                                                 dataset_type=dataset_type)
     # Blending dataset.
-    # Parse the values.
-    output = get_datasets_weights_and_num_samples(data_prefix,
-                                                  train_valid_test_num_samples)
-    prefixes, weights, datasets_train_valid_test_num_samples = output
+    else:
+        # Parse the values.
+        output = get_datasets_weights_and_num_samples(data_prefix,
+                                                      train_valid_test_num_samples)
+        prefixes, weights, datasets_train_valid_test_num_samples = output
 
-    # Build individual datasets.
-    train_datasets = []
-    valid_datasets = []
-    test_datasets = []
-    for i in range(len(prefixes)):
-        train_ds, valid_ds, test_ds = _build_train_valid_test_datasets(
-            prefixes[i], data_impl, splits_string,
-            datasets_train_valid_test_num_samples[i],
-            max_seq_length, masked_lm_prob, short_seq_prob,
-            seed, skip_warmup, binary_head, dataset_type=dataset_type)
-        if train_ds:
-            train_datasets.append(train_ds)
-        if valid_ds:
-            valid_datasets.append(valid_ds)
-        if test_ds:
-            test_datasets.append(test_ds)
+        # Build individual datasets.
+        train_datasets = []
+        valid_datasets = []
+        test_datasets = []
+        for i in range(len(prefixes)):
+            train_ds, valid_ds, test_ds = _build_train_valid_test_datasets(
+                prefixes[i], data_impl, splits_string,
+                datasets_train_valid_test_num_samples[i],
+                max_seq_length, masked_lm_prob, short_seq_prob,
+                seed, skip_warmup, binary_head, dataset_type=dataset_type)
+            if train_ds:
+                train_datasets.append(train_ds)
+            if valid_ds:
+                valid_datasets.append(valid_ds)
+            if test_ds:
+                test_datasets.append(test_ds)
 
-        # Blend.
-    blending_train_dataset = None
-    if train_datasets:
-        blending_train_dataset = BlendableDataset(train_datasets, weights)
-    blending_valid_dataset = None
-    if valid_datasets:
-        blending_valid_dataset = BlendableDataset(valid_datasets, weights)
-    blending_test_dataset = None
-    if test_datasets:
-        blending_test_dataset = BlendableDataset(test_datasets, weights)
+            # Blend.
+        blending_train_dataset = None
+        if train_datasets:
+            blending_train_dataset = BlendableDataset(train_datasets, weights)
+        blending_valid_dataset = None
+        if valid_datasets:
+            blending_valid_dataset = BlendableDataset(valid_datasets, weights)
+        blending_test_dataset = None
+        if test_datasets:
+            blending_test_dataset = BlendableDataset(test_datasets, weights)
 
     return (blending_train_dataset, blending_valid_dataset,
             blending_test_dataset)
