@@ -205,34 +205,34 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
             skip_warmup=(not args.mmap_warmup),
             dataset_type='t5')
 
-    # Option 2 of data loading using --(train|valid|test)-weighted-split-paths
-    elif args.train_weighted_split_paths:
-        assigned_train_valid_test = []
-        if args.train_weighted_split_paths is not None:
-            train_ds = []
-            assigned_train_valid_test.append("train")
-        if args.valid_weighted_split_paths is not None:
-            valid_ds = []
-            assigned_train_valid_test.append("valid")
-        if args.test_weighted_split_paths is not None:
-            test_ds = []
-            assigned_train_valid_test.append("test")
+    # # Option 2 of data loading using --(train|valid|test)-weighted-split-paths
+    # elif args.train_weighted_split_paths:
+    #     assigned_train_valid_test = []
+    #     if args.train_weighted_split_paths is not None:
+    #         train_ds = []
+    #         assigned_train_valid_test.append("train")
+    #     if args.valid_weighted_split_paths is not None:
+    #         valid_ds = []
+    #         assigned_train_valid_test.append("valid")
+    #     if args.test_weighted_split_paths is not None:
+    #         test_ds = []
+    #         assigned_train_valid_test.append("test")
 
-        for s in assigned_train_valid_test:
-            data_groups = zip(eval(f"args.{s}_weighted_split_paths"),
-                                eval(f"args.{s}_weighted_split_weights"),
-                                eval(f"args.{s}_weighted_split_splits"),
-                                eval(f"args.{s}_weighted_split_names"))
-            for paths, weights, splits, name in data_groups:
-                d = build_dataset_group(name, paths, weights, splits,
-                                        args.data_impl,
-                                        train_val_test_num_samples,
-                                        args.seq_length, args.seed,
-                                        (not args.mmap_warmup),
-                                        train_valid_test=s)
-                eval(f"{s}_ds").append(d)
-    else:
-        raise NotImplementedError("No dataloading argument passed")
+    #     for s in assigned_train_valid_test:
+    #         data_groups = zip(eval(f"args.{s}_weighted_split_paths"),
+    #                             eval(f"args.{s}_weighted_split_weights"),
+    #                             eval(f"args.{s}_weighted_split_splits"),
+    #                             eval(f"args.{s}_weighted_split_names"))
+    #         for paths, weights, splits, name in data_groups:
+    #             d = build_dataset_group(name, paths, weights, splits,
+    #                                     args.data_impl,
+    #                                     train_val_test_num_samples,
+    #                                     args.seq_length, args.seed,
+    #                                     (not args.mmap_warmup),
+    #                                     train_valid_test=s)
+    #             eval(f"{s}_ds").append(d)
+    # else:
+    #     raise NotImplementedError("No dataloading argument passed")
 
     print_rank_0("> finished creating GPT datasets ...")
     return train_ds, valid_ds, test_ds
