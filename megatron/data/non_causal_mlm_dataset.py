@@ -252,10 +252,10 @@ class NonCausalMLMDataset(torch.utils.data.Dataset):
         # Build the samples mapping.
         self.samples_mapping = get_samples_mapping(self.indexed_dataset,
                                                    data_prefix,
-                                                   num_epochs,
-                                                   max_num_samples,
+                                                   False, #num_epochs,
+                                                   num_samples, #max_num_samples,
                                                    self.max_seq_length - 2, # account for added tokens
-                                                   short_seq_prob,
+                                                   0.1, #short_seq_prob,
                                                    self.seed,
                                                    self.name,
                                                    False)
