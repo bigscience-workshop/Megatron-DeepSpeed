@@ -367,6 +367,32 @@ def get_learning_rate_scheduler(optimizer):
     return lr_scheduler
 
 
+def sync_hp_to_lp(optimizer):
+
+    optimizer.update_lp_params()
+
+    # for n,p in model.named_parameters():
+    #     print(n)
+
+    #     if p._hp_mapping is not None:
+    #         #print(f'rank {rank} fixing hp for input_layernorm')
+    #         #p._hp_mapping.update_hp()
+
+    #         hp = p._hp_mapping.hp_fragment
+
+
+
+    #         torch.distributed.all_reduce(hp, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
+
+    #         # 3. optim states
+    #         for key in ['exp_avg', 'exp_avg_sq']:
+    #             optim_state_fragment = p._hp_mapping.get_optim_state_fragment(key)
+    #             #print(f'rank {rank} before reduce optim state fragment {key} = {optim_state_fragment}')
+    #             torch.distributed.all_reduce(optim_state_fragment, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
+    #             #print(f'rank {rank} after reduce optim state fragment {key} = {optim_state_fragment}')
+
+
+
 def setup_model_and_optimizer(model_provider_func):
     """Setup model and optimizer."""
     args = get_args()
@@ -382,12 +408,21 @@ def setup_model_and_optimizer(model_provider_func):
 
     if args.deepspeed:
         print_rank_0("DeepSpeed is enabled.")
-        pp = mpu.get_pipeline_model_parallel_world_size()
+        #pp = mpu.get_pipeline_model_parallel_world_size()
+
+        import json
+        import io
+        with io.open(args.deepspeed_config, "r", encoding="utf-8") as f:
+            config = json.load(f)
+        if args.universal_checkpoint:
+            config["checkpoint"] = {"load_universal": True}
+
         model, optimizer, _, lr_scheduler = deepspeed.initialize(
             model=model[0],
             optimizer=optimizer,
+            lr_scheduler=lr_scheduler,
+            config=config,
             args=args,
-            lr_scheduler=lr_scheduler
         )
 
         assert model.fp16_enabled() == args.fp16, "megatron fp16 config does not match deepspeed"
@@ -412,6 +447,13 @@ def setup_model_and_optimizer(model_provider_func):
         torch.distributed.barrier()
         timers('load-checkpoint').stop()
         timers.log(['load-checkpoint'])
+
+
+        # hp -> lp
+        if args.deepspeed and args.universal_checkpoint:
+            sync_hp_to_lp(optimizer)
+
+
     else:
         args.iteration = 0
 

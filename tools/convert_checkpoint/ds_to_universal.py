@@ -12,6 +12,7 @@ import os
 import shutil
 import sys
 import torch
+import re
 
 # insert megatron's root dir into sys.path
 root_repo_path = str(Path(__file__).resolve().parents[2])
@@ -148,8 +149,8 @@ def extract_zero_shards(dir, slice_shapes, ds_checkpoint, pp_index, tp_index, dp
 
         for name,fragment_mapping in param_slice_mappings[param_group_id].items():
             if "word_embeddings.weight" in name and pp_index > 0:
-                # Skip tied weights that are replicated in first and last pp stages 
-                continue 
+                # Skip tied weights that are replicated in first and last pp stages
+                continue
 
             print(f"{param_group_id} {name} => {fragment_mapping.start}:{fragment_mapping.numel}")
             for state_key in flat_state.keys():
@@ -191,9 +192,16 @@ def _merge_zero_shards(param_base_path, state, tp_degree, slice_shape):
         paths = sorted(list(glob.glob(f"{prefix_path}.0*")))
         print(paths)
         shards = [torch.load(p) for p in paths]
-        slices.append(torch.cat(shards, dim=0).reshape(slice_shape))
+        slice = torch.cat(shards, dim=0).reshape(slice_shape)
+        slices.append(slice)
 
-    return slices 
+    return slices
+
+
+ORIGINAL_VOCAB_SIZE = 'original_vocab_size'
+def _strip_vocab_padding(ds_checkpoint, padded_vocab_tensor):
+    checkpoint_info = ds_checkpoint.get_checkpoint_info()
+    return padded_vocab_tensor.narrow(0, 0, checkpoint_info[ORIGINAL_VOCAB_SIZE])
 
 
 WEIGHTS_TO_AVERAGE_PATTERNS = [
@@ -210,11 +218,16 @@ WEIGHTS_TO_AVERAGE_PATTERNS = [
 ]
 
 WEIGHTS_WITH_ROW_PARALLELISM_CONTAIN = [
-    "dense_4h_to_h",
+    "dense_4h_to_h.weight",
     "self_attention.dense.weight",
 ]
 
-def merge_tp_slices(dir, slice_dir, slice_shapes, tp_degree):
+
+
+
+def merge_tp_slices(ds_checkpoint, dir, slice_dir, slice_shapes, tp_degree):
+
+
 
     for name, shape in slice_shapes.items():
         slice_base_path = os.path.join(slice_dir, name)
@@ -228,43 +241,25 @@ def merge_tp_slices(dir, slice_dir, slice_shapes, tp_degree):
         for state in ("fp32", "exp_avg", "exp_avg_sq"):
             slices = _merge_zero_shards(slice_base_path, state, tp_degree, shape)
             final_path = os.path.join(param_base_path, f"{state}.pt")
-           
-            
-#        for state in ("fp32", "exp_avg", "exp_avg_sq"):
-#            final_path = os.path.join(param_base_path, f"{state}.pt")
-#            prefix_path = os.path.join(param_base_path, f"{state}")
-#            paths = sorted(list(glob.glob(f"{prefix_path}.0*")))
-#            orig_paths = deepcopy(paths)
-
-
-            # XXX: tmp hack - need to deal with tied vars here
-#            if "word_embeddings.weight" in name and len(paths)>1:
-#                paths = paths[:1]
-
-
-#            print(paths)
-
-#            shards = [torch.load(p) for p in paths]
 
             print(f"Expected shape: {shape}")
             print(f"Fragment sizes:", list(frag.shape for frag in slices))
 
-            # merge
-            # XXX - Add merging strategy
-            import re 
-
             if any(re.match(pattern, name) for pattern in WEIGHTS_TO_AVERAGE_PATTERNS):
                 param = sum(slices) / len(slices)
             else:
-                cat_dim = 1 if any(text in name for text in WEIGHTS_WITH_ROW_PARALLELISM_CONTAIN) else 0                
-                param = torch.cat(slices, dim=cat_dim) 
+                cat_dim = 1 if any(text in name for text in WEIGHTS_WITH_ROW_PARALLELISM_CONTAIN) else 0
+                print(f"CAT DIM: {cat_dim}")
+                param = torch.cat(slices, dim=cat_dim)
+
+            if "word_embeddings.weight" in name:
+                print(f"Before {param.shape=}")
+                # strip padding
+                param = _strip_vocab_padding(ds_checkpoint, param)
+                print(f"After {param.shape=}")
 
             print(f"Final shape: {param.shape}")
             _save_checkpoint(final_path, param)
-
-            # XXX: probably not needed since torch.reshape would have failed if the inputs size was wrong
-            if param.shape != shape:
-                logging.error(f"✘ {name}: expected {shape} but got {param.shape}")
 
 
 def main():
@@ -300,8 +295,8 @@ def main():
                 print(f"{i=}, {j=}, {k=}")
                 extract_zero_shards(temp_dir, slice_shapes, ds_checkpoint, i, j, k)
 
-    merge_tp_slices(args.output_folder, temp_dir, slice_shapes, ds_checkpoint.tp_degree)
-    
+    merge_tp_slices(ds_checkpoint, args.output_folder, temp_dir, slice_shapes, ds_checkpoint.tp_degree)
+
     shutil.rmtree(temp_dir, ignore_errors=True)
 
 

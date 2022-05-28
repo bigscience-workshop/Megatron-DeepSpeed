@@ -5,7 +5,7 @@ import os
 import torch
 
 from pathlib import Path
- 
+
 # insert megatron's root dir into sys.path
 root_repo_path = str(Path(__file__).resolve().parents[2])
 if root_repo_path not in sys.path:
@@ -13,14 +13,14 @@ if root_repo_path not in sys.path:
 
 from megatron.tokenizer.tokenizer import _vocab_size_with_padding
 from deepspeed.checkpoint.deepspeed_checkpoint import (
-    ARGS_KEY, 
+    ARGS_KEY,
     CHECKPOINT_INFO_KEY,
 )
 
 from deepspeed.checkpoint import (
-    DeepSpeedCheckpoint, 
-    get_model_ckpt_name_for_rank, 
-    get_zero_ckpt_name_for_rank, 
+    DeepSpeedCheckpoint,
+    get_model_ckpt_name_for_rank,
+    get_zero_ckpt_name_for_rank,
     get_layer_ckpt_name_for_rank
 )
 
@@ -70,8 +70,8 @@ def _create_transformer_layer_checkpoint(ds_checkpoint, base_folder, tp_index, p
     assert len(sd_list) == len(layer_id_list)
     for sd, layer_id in zip(sd_list, layer_id_list):
         ckpt_path = get_layer_ckpt_name_for_rank(
-            base_folder=base_folder, 
-            layer_id=layer_id, 
+            base_folder=base_folder,
+            layer_id=layer_id,
             tp_rank=tp_index)
         _save_checkpoint(ckpt_path, sd)
 
@@ -93,8 +93,8 @@ def _create_embedding_layer_checkpoint(ds_checkpoint, base_folder, tp_index):
         sd[WORD_EMBEDDINGS_KEY] = _strip_vocab_padding(ds_checkpoint, sd[WORD_EMBEDDINGS_KEY])
     layer_id = ds_checkpoint.get_embedding_layer_id()
     ckpt_path = get_layer_ckpt_name_for_rank(
-        base_folder=base_folder, 
-        tp_rank=tp_index, 
+        base_folder=base_folder,
+        tp_rank=tp_index,
         layer_id=layer_id)
     _save_checkpoint(ckpt_path, sd)
 
@@ -103,8 +103,8 @@ def _create_final_norm_layer_checkpoint(ds_checkpoint, base_folder, tp_index):
     sd = ds_checkpoint.get_final_norm_state(tp_index)
     layer_id = ds_checkpoint.get_final_norm_layer_id()
     ckpt_path = get_layer_ckpt_name_for_rank(
-        base_folder=base_folder, 
-        tp_rank=tp_index, 
+        base_folder=base_folder,
+        tp_rank=tp_index,
         layer_id=layer_id)
     _save_checkpoint(ckpt_path, sd)
 
@@ -132,7 +132,7 @@ def _create_zero_checkpoint(ds_checkpoint, base_folder, dp_index, pp_index, tp_i
         tp_index=tp_index,
         dp_index=dp_index)
 
-    ckpt_path = get_zero_ckpt_name_for_rank(base_folder=base_folder, 
+    ckpt_path = get_zero_ckpt_name_for_rank(base_folder=base_folder,
                                             dp_rank=dp_index,
                                             mp_rank=_2d_rank)
     _save_checkpoint(ckpt_path, sd)
@@ -154,7 +154,7 @@ def main():
     )
 
     ds_checkpoint = DeepSpeedCheckpoint(
-        args.input_folder, 
+        args.input_folder,
         args.target_tp,
         args.target_pp,
         args.target_dp)
@@ -172,7 +172,7 @@ def main():
         for j in range(ds_checkpoint.pp_degree):
             _create_transformer_layer_checkpoint(ds_checkpoint, base_folder, i, j)
             _create_2d_parallel_checkpoint(ds_checkpoint, base_folder, i, j)
-    
+
     for i in range(ds_checkpoint.dp_degree):
         for j in range(ds_checkpoint.pp_degree):
             for k in range(ds_checkpoint.tp_degree):

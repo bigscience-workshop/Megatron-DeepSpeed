@@ -16,6 +16,7 @@ import io
 import os
 from pathlib import Path
 
+from parameterized import parameterized
 from megatron.testing_utils import (
     CaptureStdout,
     TestCasePlus,
@@ -29,6 +30,37 @@ from megatron.testing_utils import (
 
 set_seed(42)
 
+
+def parameterized_custom_name_func(func, param_num, param):
+    # customize the test name generator function as we want both params to appear in the sub-test
+    # name, as by default it shows only the first param
+    param_based_name = parameterized.to_safe_name("_to_".join(str(x) for x in param.args))
+    return f"{func.__name__}_{param_based_name}"
+
+params = [
+    ["1_1_1", "1_1_1"],
+    ["2_1_1", "1_1_1"],
+    ["1_2_1", "1_1_1"],
+    ["1_1_2", "1_1_1"],
+
+    ["2_1_1", "2_1_1"],
+    ["1_1_1", "2_1_1"],
+    ["1_1_1", "1_2_1"],
+    ["1_1_1", "1_1_2"],
+
+    ["1_1_2", "1_1_2"],
+    ["1_1_2", "2_1_1"],
+    ["1_1_2", "1_2_1"],
+
+    ["1_2_1", "1_2_1"],
+    ["1_2_1", "2_1_1"],
+    ["1_2_1", "1_1_2"],
+
+    ["2_1_1", "2_1_1"],
+    ["2_1_1", "1_2_1"],
+    ["2_1_1", "1_1_2"],
+
+]
 
 def get_launcher(num_gpus):
     # 1. explicitly set --num_nodes=1 just in case these tests end up run on a multi-node setup
@@ -60,6 +92,11 @@ class MegDSTestCheckpoints(TestCasePlus):
         exit_interval = 20 # some samples in the first half and then some more in the 2nd half after resume
         seq_len = 128
 
+        # XXX: for now while testing shapes make it really short and fast
+        exit_interval = 1
+        seq_len = 8
+
+
         # common/shared configs
 
         ds_args = f"""
@@ -75,9 +112,9 @@ class MegDSTestCheckpoints(TestCasePlus):
                 --distributed-backend nccl
 
                 --log-interval 1
-                --save-interval 20
+                --save-interval 1
                 --eval-interval 10
-                --eval-iters 5
+                --eval-iters 1
                 --checkpoint-activations
                 --partition-activations
                 --exit-interval {exit_interval}
@@ -94,10 +131,10 @@ class MegDSTestCheckpoints(TestCasePlus):
                 --log-validation-ppl-to-tensorboard
 
                 --num-layers 2
-                --hidden-size 64
+                --hidden-size 8
                 --num-attention-heads 2
                 --seq-length {seq_len}
-                --max-position-embeddings 1024
+                --max-position-embeddings 8
                 --micro-batch-size 1
                 --global-batch-size 16
                 --rampup-batch-size 2 2 {n_samples}
@@ -139,7 +176,7 @@ class MegDSTestCheckpoints(TestCasePlus):
         launcher = get_launcher(num_gpus)
         cmd = launcher + script + args + ds_args
         # keep for quick debug
-        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
+        #print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
 
         # 1. test training from scratch (no checkpoint)
         with CaptureStdout() as cs:
@@ -157,6 +194,19 @@ class MegDSTestCheckpoints(TestCasePlus):
         # test checkpoint saving
         self.assertIn("successfully saved checkpoint at iteration", cs.out)
 
+    def convert_checkpoint_to_universal(self, output_dir, step):
+        cmd = f"""
+            python tools/convert_checkpoint/ds_to_universal.py
+            --input_folder  {output_dir}/checkpoints/global_step{step}
+            --output_folder {output_dir}/checkpoints/global_step{step}_universal
+        """.split()
+        # keep for quick debug
+        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
+
+        with CaptureStdout() as cs:
+            execute_subprocess_async(cmd, env=self.get_env())
+
+        self.assertIn("Convert DeepSpeed Checkpoint to Universal Checkpoint", cs.out)
 
     def resume_from_checkpoint(self, output_dir, tp_size=1, pp_size=1, dp_size=1):
         src_dir = self.src_dir
@@ -180,37 +230,49 @@ class MegDSTestCheckpoints(TestCasePlus):
         # test checkpoint saving
         self.assertIn("successfully saved checkpoint at iteration", cs.out)
 
+    def resume_from_universal_checkpoint(self, output_dir, tp_size=1, pp_size=1, dp_size=1):
+        src_dir = self.src_dir
+        script = [f"{src_dir}/pretrain_gpt.py"]
 
-    def reshape_checkpoint(self, input_dir, output_dir, target_tp_size, target_pp_size):
-        cmd = f"""
-            python tools/convert_checkpoint/deepspeed_to_deepspeed.py
-            --input_folder   {input_dir}/checkpoints/global_step20
-            --output_folder {output_dir}/checkpoints
-            --target_tp {target_tp_size} --target_pp {target_pp_size}
-        """.split()
+        args, ds_args, num_gpus = self.get_config(output_dir, tp_size, pp_size, dp_size)
+        launcher = get_launcher(num_gpus)
+        cmd = launcher + script + args + ds_args + ["--universal-checkpoint"]
+        # keep for quick debug
+        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
 
         with CaptureStdout() as cs:
             execute_subprocess_async(cmd, env=self.get_env())
 
-        self.assertIn("Convert DeepSpeed Checkpoint to DeepSpeed Checkpoint", cs.out)
+        # test checkpoint loading
+        self.assertIn(f"successfully loaded checkpoint from {output_dir}/checkpoints", cs.out)
 
+        # test reports
+        self.assertIn("consumed samples", cs.out)
+
+        # test checkpoint saving
+        self.assertIn("successfully saved checkpoint at iteration", cs.out)
 
 
     @require_torch_multi_gpu
-    def test_checkpoint_reshaping_tp2_pp1_dp1(self):
+    @parameterized.expand(params, name_func=parameterized_custom_name_func)
+    def test_checkpoint_reshaping_2gpus(self, src, dst):
         # this test requires at least 2 gpus - will use only 2 gpus for now - XXX: extend to more gpus
 
-        output_dir1 = self.get_auto_remove_tmp_dir("./xxx1", after=False)
-        output_dir2 = self.get_auto_remove_tmp_dir("./xxx2", after=False)
+        src = list(map(int, src.split('_')))
+        dst = list(map(int, dst.split('_')))
+        #print(src, dst)
+        #die
+
+        output_dir = self.get_auto_remove_tmp_dir("./xxx1", after=False)
 
         # 1. train with TP=2 / PP=1
-        self.train_checkpoint(output_dir1, tp_size=2, pp_size=1, dp_size=1)
+        self.train_checkpoint(output_dir, tp_size=src[0], pp_size=src[1], dp_size=src[2])
 
         # 2. convert checkpoint to TP=1 / PP=1
-        self.reshape_checkpoint(input_dir=output_dir1, output_dir=output_dir2, target_tp_size=1, target_pp_size=1)
+        self.convert_checkpoint_to_universal(output_dir=output_dir, step=1)
 
         # 3. check we can resume training from a reshaped checkpoint with TP=1 / PP=1
-        self.resume_from_checkpoint(output_dir2, tp_size=1, pp_size=1, dp_size=1)
+        self.resume_from_universal_checkpoint(output_dir, tp_size=dst[0], pp_size=dst[1], dp_size=dst[2])
 
 
     @require_torch_multi_gpu
@@ -224,7 +286,7 @@ class MegDSTestCheckpoints(TestCasePlus):
         self.train_checkpoint(output_dir1, tp_size=2, pp_size=2, dp_size=1)
 
         # 2. convert checkpoint to TP=1 / PP=1
-        self.reshape_checkpoint(input_dir=output_dir1, output_dir=output_dir2, target_tp_size=1, target_pp_size=1)
+        self.convert_checkpoint_to_universal(input_dir=output_dir1, output_dir=output_dir2, target_tp_size=1, target_pp_size=1)
 
         # 3. check we can resume training from a reshaped checkpoint with TP=1 / PP=1
         self.resume_from_checkpoint(output_dir2, tp_size=1, pp_size=1, dp_size=1)
@@ -241,7 +303,7 @@ class MegDSTestCheckpoints(TestCasePlus):
         self.train_checkpoint(output_dir1, tp_size=1, pp_size=2, dp_size=1)
 
         # 2. convert checkpoint to TP=1 / PP=1
-        self.reshape_checkpoint(input_dir=output_dir1, output_dir=output_dir2, target_tp_size=1, target_pp_size=1)
+        self.convert_checkpoint_to_universal(input_dir=output_dir1, output_dir=output_dir2, target_tp_size=1, target_pp_size=1)
 
         # 3. check we can resume training from a reshaped checkpoint with TP=1 / PP=1
         self.resume_from_checkpoint(output_dir2, tp_size=1, pp_size=1, dp_size=1)
@@ -254,4 +316,4 @@ class MegDSTestCheckpoints(TestCasePlus):
         output_dir1 = self.get_auto_remove_tmp_dir() # "./xxx1", after=False)
         output_dir2 = self.get_auto_remove_tmp_dir() # "./xxx2", after=False)
         with self.assertRaises(RuntimeError) as context:
-            self.reshape_checkpoint(input_dir=output_dir1+"/xyz", output_dir=output_dir2, target_tp_size=1, target_pp_size=1)
+            self.convert_checkpoint_to_universal(input_dir=output_dir1+"/xyz", output_dir=output_dir2, target_tp_size=1, target_pp_size=1)
