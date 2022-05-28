@@ -366,6 +366,21 @@ class _AutoTokenizer(AbstractTokenizer):
                 AddedToken('<extra_id_22>', lstrip=False, rstrip=False, normalization=False),
                 AddedToken('<extra_id_23>', lstrip=False, rstrip=False, normalization=False),
                 AddedToken('<extra_id_24>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_25>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_26>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_27>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_28>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_29>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_30>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_31>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_32>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_33>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_34>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_35>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_36>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_37>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_38>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_39>', lstrip=False, rstrip=False, normalization=False),
             ]
         })
 
