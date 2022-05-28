@@ -352,8 +352,6 @@ def build_training_sample(sample,
     truncated = len(tokens) > max_num_tokens
     tokens = tokens[:max_num_tokens]
 
-    print(sentinel_tokens)
-
     # Masking.
     max_predictions_per_seq = masked_lm_prob * max_num_tokens
     (tokens, masks, labels, _, masked_spans) = create_masked_lm_predictions(

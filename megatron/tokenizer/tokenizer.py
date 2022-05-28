@@ -362,6 +362,10 @@ class _AutoTokenizer(AbstractTokenizer):
                 AddedToken('<extra_id_18>', lstrip=False, rstrip=False, normalization=False),
                 AddedToken('<extra_id_19>', lstrip=False, rstrip=False, normalization=False),
                 AddedToken('<extra_id_20>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_21>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_22>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_23>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_24>', lstrip=False, rstrip=False, normalization=False),
             ]
         })
 
