@@ -269,13 +269,37 @@ def build_training_sample(sample, target_seq_length,
         cls_id, sep_id, mask_id, max_predictions_per_seq, np_rng,
         max_ngrams=10, geometric_dist=True, masking_style="t5")
 
-    # Padding.
-    input_tokens_ids, output_tokens_ids, labels, enc_mask, \
-    dec_mask, enc_dec_mask, loss_mask \
-        = pad_and_convert_to_numpy(tokens, masked_positions,
-                                   masked_labels, pad_id, max_seq_length,
-                                   max_seq_length_dec, masked_spans,
-                                   bos_id, eos_id, sentinel_tokens)
+    sentinel_tokens = collections.deque(sentinel_tokens)
+    input_tokens_ids = []
+    output_tokens_ids = [] #[bos_id]
+    (start_index, end_index) = (0, None)
+    for span in masked_spans:
+        flag = sentinel_tokens.popleft()
+
+        output_tokens_ids.append(flag)
+        output_tokens_ids.extend(span.label)
+
+        end_index = span.index[0]
+        input_tokens_ids.extend(tokens[start_index: end_index])
+        input_tokens_ids.append(flag)
+
+        # the next start index is the token after the last span token
+        start_index = span.index[-1] + 1
+
+
+    # Add the remaining tokens to input_tokens_ids
+    input_tokens_ids.extend(tokens[start_index:])
+    # Add <eos> token to the output_tokens_ids
+    output_tokens_ids.append(eos_id)
+    prefix_len = len(input_tokens_ids)
+
+    # # Padding.
+    # input_tokens_ids, _, output_tokens_ids, enc_mask, \
+    # dec_mask, enc_dec_mask, loss_mask \
+    #     = pad_and_convert_to_numpy(tokens, masked_positions,
+    #                                masked_labels, pad_id, max_seq_length,
+    #                                max_seq_length_dec, masked_spans,
+    #                                bos_id, eos_id, sentinel_tokens)
 
     # text_tokens_ids = np.array(input_tokens_ids+output_tokens_ids)
 
