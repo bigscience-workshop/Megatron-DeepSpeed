@@ -36,9 +36,6 @@ def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
                                     skip_warmup, binary_head=False,
                                     max_seq_length_dec=None,
                                     dataset_type='standard_bert'):
-    print(len(data_prefix))
-    import sys
-    sys.exit()
     if len(data_prefix) == 1:
         return _build_train_valid_test_datasets(data_prefix[0],
                                                 data_impl, splits_string,
@@ -148,6 +145,11 @@ def _build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
                     short_seq_prob=short_seq_prob,
                     **kwargs
             )
+            indexed_dataset.set_doc_idx(doc_idx_ptr)
+            # Checks.
+            assert indexed_dataset.doc_idx[0] == 0
+            assert indexed_dataset.doc_idx.shape[0] == \
+                (total_num_of_documents + 1)
         return dataset
 
     train_dataset = build_dataset(0, 'train')
