@@ -348,10 +348,13 @@ def build_training_sample(sample,
     tokens = sample
 
     # Truncate to `target_sequence_length`.
-    max_num_tokens = 512 #max_seq_length
+    max_num_tokens = max_seq_length
     truncated = len(tokens) > max_num_tokens
     tokens = tokens[:max_num_tokens]
 
+    print(sentinel_tokens)
+    import sys
+    sys.exit()
     # Masking.
     max_predictions_per_seq = masked_lm_prob * max_num_tokens
     (tokens, masks, labels, _, masked_spans) = create_masked_lm_predictions(
@@ -379,6 +382,7 @@ def build_training_sample(sample,
 
     # Add the remaining tokens to input_tokens_ids
     input_tokens_ids.extend(tokens[start_index:])
+    input_tokens_ids.append(eos_id)
     # Add <eos> token to the output_tokens_ids
     output_tokens_ids.append(eos_id)
     prefix_len = len(input_tokens_ids)
