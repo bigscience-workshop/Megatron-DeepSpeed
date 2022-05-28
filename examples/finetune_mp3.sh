@@ -14,7 +14,7 @@ deepspeed --num_gpus 8 pretrain_mp3_gpt.py \
        --hidden-size 128 \
        --num-attention-heads 4 \
        --micro-batch-size 4 \
-       --global-batch-size 16 \
+       --global-batch-size 1024 \
        --seq-length 626 \
        --max-position-embeddings 1024 \
        --train-iters 10000 \
@@ -39,4 +39,4 @@ deepspeed --num_gpus 8 pretrain_mp3_gpt.py \
        --eval-interval 1000 \
        --eval-iters 10 \
        --fp16 \
-       --tensorboard-dir GPT2
+       --tensorboard-dir LOG
