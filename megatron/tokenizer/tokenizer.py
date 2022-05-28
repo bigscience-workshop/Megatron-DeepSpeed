@@ -17,7 +17,7 @@
 
 from abc import ABC
 from abc import abstractmethod
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AddedToken
 
 from .bert_tokenization import FullTokenizer as FullBertTokenizer
 from .gpt2_tokenization import GPT2Tokenizer
@@ -345,27 +345,27 @@ class _AutoTokenizer(AbstractTokenizer):
 
         self.tokenizer.add_special_tokens({
             'additional_special_tokens': [
-                '<extra_id_00>',
-                '<extra_id_01>',
-                '<extra_id_02>',
-                '<extra_id_03>',
-                '<extra_id_04>',
-                '<extra_id_05>',
-                '<extra_id_06>',
-                '<extra_id_07>',
-                '<extra_id_08>',
-                '<extra_id_09>',
-                '<extra_id_10>',
-                '<extra_id_11>',
-                '<extra_id_12>',
-                '<extra_id_13>',
-                '<extra_id_14>',
-                '<extra_id_15>',
-                '<extra_id_16>',
-                '<extra_id_17>',
-                '<extra_id_18>',
-                '<extra_id_19>',
-                '<extra_id_20>',
+                AddedToken('<extra_id_00>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_01>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_02>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_03>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_04>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_05>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_06>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_07>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_08>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_09>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_10>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_11>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_12>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_13>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_14>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_15>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_16>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_17>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_18>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_19>', lstrip=False, rstrip=False, normalization=False),
+                AddedToken('<extra_id_20>', lstrip=False, rstrip=False, normalization=False),
             ]
         })
 
