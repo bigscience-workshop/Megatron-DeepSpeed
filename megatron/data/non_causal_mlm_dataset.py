@@ -398,7 +398,6 @@ def build_training_sample(sample,
 
     # Add the remaining tokens to input_tokens_ids
     input_tokens_ids.extend(tokens[start_index:])
-    input_tokens_ids.append(eos_id)
     # Add <eos> token to the output_tokens_ids
     output_tokens_ids.append(eos_id)
     prefix_len = len(input_tokens_ids)
