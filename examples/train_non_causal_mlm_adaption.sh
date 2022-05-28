@@ -9,7 +9,7 @@ DATA_PATH=data/mc4-id_text_document
 CHECKPOINT_PATH=data
 
 
-deepspeed --num_gpus 8 train_non_causal_mlm_adaption_gpt.py \
+deepspeed --num_gpus 8 train_non_causal_mlm_adaptation_gpt.py \
        --num-layers 2 \
        --hidden-size 128 \
        --num-attention-heads 4 \
