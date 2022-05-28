@@ -254,7 +254,7 @@ class NonCausalMLMDataset(torch.utils.data.Dataset):
                                                    data_prefix,
                                                    False, #num_epochs,
                                                    num_samples, #max_num_samples,
-                                                   self.max_seq_length - 2, # account for added tokens
+                                                   self.seq_length-2, #self.max_seq_length - 2, # account for added tokens
                                                    0.1, #short_seq_prob,
                                                    self.seed,
                                                    self.name,
