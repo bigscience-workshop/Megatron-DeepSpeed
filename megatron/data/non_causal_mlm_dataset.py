@@ -317,7 +317,7 @@ class NonCausalMLMDataset(torch.utils.data.Dataset):
         sample = []
         for index in range(start_index, end_index):
             sample.append(self.indexed_dataset[index])
-        # sample = np.concatenate(sample_list)
+        sample = np.concatenate(sample)
         print(sample)
 
         # Note that this rng state should be numpy and not python since
