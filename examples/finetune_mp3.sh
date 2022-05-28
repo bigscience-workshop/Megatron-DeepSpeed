@@ -5,11 +5,11 @@
 RANK=0
 WORLD_SIZE=1
 
-DATA_PATH=data/t0-test_text_document
+DATA_PATH=data/mc4-id_text_document
 CHECKPOINT_PATH=data
 
 
-deepspeed --num_gpus 2 pretrain_mp3_gpt.py \
+deepspeed --num_gpus 8 pretrain_mp3_gpt.py \
        --num-layers 2 \
        --hidden-size 128 \
        --num-attention-heads 4 \
@@ -23,7 +23,7 @@ deepspeed --num_gpus 2 pretrain_mp3_gpt.py \
        --load $CHECKPOINT_PATH \
        --data-path $DATA_PATH \
        --tokenizer-type PretrainedFromHF \
-       --tokenizer-name-or-path bigscience-catalogue-data-dev/byte-level-bpe-tokenizer-no-norm-250k-whitespace-and-eos-regex-alpha-v3-dedup-lines-articles \
+       --tokenizer-name-or-path bigscience/tokenizer \
        --data-impl mmap \
        --split 949,50,1 \
        --distributed-backend nccl \
