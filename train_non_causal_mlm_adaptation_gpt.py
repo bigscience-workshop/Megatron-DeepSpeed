@@ -104,15 +104,16 @@ def get_batch(data_iterator):
         loss_on_targets_only=args.loss_on_targets_only
     )
 
-    print("attention_mask")
-    print(attention_mask)
-    print("loss_mask")
-    print(loss_mask)
-    print("position_ids")
-    print(position_ids)
+    import numpy as np
+    with open('attention_mask.npy', 'wb') as f:
+        np.save(f, attention_mask.cpu().numpy())
+    with open('loss_mask.npy', 'wb') as f:
+        np.save(f, loss_mask.cpu().numpy())
+    with open('position_ids.npy', 'wb') as f:
+        np.save(f, position_ids.cpu().numpy())
     import sys
     sys.exit()
-    
+
     # weight loss_mask
     if args.reweight_loss_based_on_position_frequency:
         reweight_loss_mask_(loss_mask, tokens)
