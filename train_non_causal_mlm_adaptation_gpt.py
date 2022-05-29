@@ -104,6 +104,15 @@ def get_batch(data_iterator):
         loss_on_targets_only=args.loss_on_targets_only
     )
 
+    print("attention_mask")
+    print(attention_mask)
+    print("loss_mask")
+    print(loss_mask)
+    print("position_ids")
+    print(position_ids)
+    import sys
+    sys.exit()
+    
     # weight loss_mask
     if args.reweight_loss_based_on_position_frequency:
         reweight_loss_mask_(loss_mask, tokens)
