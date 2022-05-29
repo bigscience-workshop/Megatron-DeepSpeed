@@ -117,12 +117,12 @@ DEEPSPEED_ARGS=" \
     --deepspeed-activation-checkpointing \
     "
 
-export LAUNCHER="python -u -m torch.distributed.launch \
-    --nproc_per_node $GPUS_PER_NODE \
-    "
-    # --nnodes $NNODES \
-    # --master_addr $MASTER_ADDR \
-    # --master_port $MASTER_PORT \
+# export LAUNCHER="python -u -m torch.distributed.launch \
+#     --nproc_per_node $GPUS_PER_NODE \
+#     "
+#     # --nnodes $NNODES \
+#     # --master_addr $MASTER_ADDR \
+#     # --master_port $MASTER_PORT \
 
 export CMD=" \
     `pwd`/pretrain_gpt.py \
@@ -150,4 +150,9 @@ echo $CMD
 mkdir -p $REPO_PATH
 mkdir -p $LOGS_PATH
 # to debug - add echo (it exits and prints what it would have launched)
-srun '$LAUNCHER --node_rank $SLURM_PROCID $CMD' 2>&1 | tee -a $LOGS_PATH/main_log.txt
+
+python -u -m torch.distributed.launch \
+    --nproc_per_node $GPUS_PER_NODE \
+    $CMD
+
+# srun '$LAUNCHER --node_rank $SLURM_PROCID $CMD' 2>&1 | tee -a $LOGS_PATH/main_log.txt
