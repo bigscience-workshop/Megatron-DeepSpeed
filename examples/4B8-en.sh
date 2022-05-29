@@ -27,10 +27,7 @@ NHEADS=64
 FFN_HIDDEN_SIZE=10240
 SEQ_LEN=626
 
-if   [[ ${ROUND} == 1 ]]; then  EXIT_INTERVAL=100    SAVE_INTERVAL=10
-elif [[ ${ROUND} == 2 ]]; then  SAVE_INTERVAL=1500
-else echo "invalid ROUND: $ROUND"
-fi
+SAVE_INTERVAL=1500
 
 OPTIMIZER_ARGS=" \
     --optimizer adam \
