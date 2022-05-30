@@ -37,8 +37,6 @@ OPTIMIZER_ARGS=" \
     --lr 2e-4 \
     --min-lr 1e-5 \
     --lr-decay-style cosine \
-    --lr-decay-samples 146_484_375 \
-    --lr-warmup-samples 183_105 \
     --clip-grad 1.0 \
     --weight-decay 1e-1 \
     "
@@ -57,7 +55,7 @@ GPT_ARGS=" \
     --micro-batch-size $MICRO_BATCH_SIZE \
     --global-batch-size $GLOBAL_BATCH_SIZE \
     --rampup-batch-size 32 32 2_000_000 \
-    --train-samples $TRAIN_ITER \
+    --train-iters $TRAIN_ITER \
     --tokenizer-type PretrainedFromHF \
     --tokenizer-name-or-path bigscience/tokenizer \
     --loss-scale 12 \
@@ -71,8 +69,8 @@ GPT_ARGS=" \
 OUTPUT_ARGS=" \
     --log-interval 200 \
     --save-interval $SAVE_INTERVAL \
-    --eval-interval 1000 \
-    --eval-iters 100 \
+    --eval-interval 0 \
+    --eval-iters 0 \
     --tensorboard-dir $TENSORBOARD_PATH \
     --tensorboard-queue-size 5 \
     --log-timers-to-tensorboard \
