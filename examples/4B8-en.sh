@@ -54,7 +54,6 @@ GPT_ARGS=" \
     --max-position-embeddings $SEQ_LEN \
     --micro-batch-size $MICRO_BATCH_SIZE \
     --global-batch-size $GLOBAL_BATCH_SIZE \
-    --rampup-batch-size 32 32 2_000_000 \
     --train-iters $TRAIN_ITER \
     --tokenizer-type PretrainedFromHF \
     --tokenizer-name-or-path bigscience/tokenizer \
