@@ -1,14 +1,13 @@
 #!/bin/bash
 
-EXPERIMENT_NAME=4B8-en
+EXPERIMENT_NAME=4B8-en-ND-MLM
 REPO_PATH=experiments/$EXPERIMENT_NAME
 CHECKPOINT_PATH=$REPO_PATH/checkpoints
 TENSORBOARD_PATH=$REPO_PATH/tensorboard
 CODECARBON_PATH=$REPO_PATH/codecarbon
 LOGS_PATH=$REPO_PATH/logs
 
-DATA_PATH=data/mc4-id_text_document
-
+DATA_PATH=data/meg-gpt2-oscar-en-10k_text_document
 
 # XXX: edit me
 GPUS_PER_NODE=8
@@ -19,13 +18,15 @@ DP_SIZE=$((NNODES*GPUS_PER_NODE/(PP_SIZE*TP_SIZE))) # will get derived automatic
 
 MICRO_BATCH_SIZE=1
 GLOBAL_BATCH_SIZE=2048
-TRAIN_ITER=131_072
+TRAIN_ITER=39_718
+INPUT_LEN=512
+TARGET_LEN=114
 
 NLAYERS=24
 NHIDDEN=4096
 NHEADS=64
 FFN_HIDDEN_SIZE=10240
-SEQ_LEN=626
+MAX_POSITION_EMBEDDING=1280
 
 SAVE_INTERVAL=1500
 
@@ -50,13 +51,14 @@ GPT_ARGS=" \
     --hidden-size $NHIDDEN \
     --num-attention-heads $NHEADS \
     --ffn-hidden-size $FFN_HIDDEN_SIZE \
-    --seq-length $SEQ_LEN \
-    --max-position-embeddings $SEQ_LEN \
+    --max-position-embeddings $MAX_POSITION_EMBEDDING \
+    --encoder-seq-length $INPUT_LEN \
+    --decoder-seq-length $TARGET_LEN \
     --micro-batch-size $MICRO_BATCH_SIZE \
     --global-batch-size $GLOBAL_BATCH_SIZE \
     --train-iters $TRAIN_ITER \
     --tokenizer-type PretrainedFromHF \
-    --tokenizer-name-or-path bigscience/tokenizer \
+    --tokenizer-name-or-path t5-base \
     --loss-scale 12 \
     --clip-grad 1.0 \
     --fp16 \
@@ -68,8 +70,8 @@ GPT_ARGS=" \
 OUTPUT_ARGS=" \
     --log-interval 200 \
     --save-interval $SAVE_INTERVAL \
-    --eval-interval 0 \
-    --eval-iters 0 \
+    --eval-interval $TRAIN_ITER \
+    --eval-iters 1 \
     --tensorboard-dir $TENSORBOARD_PATH \
     --tensorboard-queue-size 5 \
     --log-timers-to-tensorboard \
@@ -79,7 +81,7 @@ OUTPUT_ARGS=" \
 
 ZERO_STAGE=1
 
-config_json="./ds_config.$SLURM_JOBID.json"
+config_json="./ds_config.json"
 
 # Deepspeed figures out GAS dynamically from dynamic GBS via set_train_batch_size()
 cat <<EOT > $config_json
@@ -119,7 +121,7 @@ DEEPSPEED_ARGS=" \
 #     # --master_port $MASTER_PORT \
 
 export CMD=" \
-    `pwd`/pretrain_gpt.py \
+    `pwd`/train_ND_MLM_gpt.py \
     --tensor-model-parallel-size $TP_SIZE \
     --pipeline-model-parallel-size $PP_SIZE \
     $GPT_ARGS \
