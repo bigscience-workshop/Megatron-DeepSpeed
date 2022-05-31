@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Pretrain GPT"""
+"""Non-Causal Decoder GPT MLM Adaptation"""
 
 import torch
 from functools import partial
@@ -52,6 +52,14 @@ def model_provider(pre_process=True, post_process=True):
                 parallel_output=True,
                 prefix_lm=True
             )
+            # loaded_dir, state_dict = model[0].load_checkpoint(
+            #     args.finetune, load_optimizer_states=False)
+            # if loaded_dir is None:
+            #     print_rank_0('WARNING: could not find the metadata file {} '.format(
+            #         load_dir))
+            #     print_rank_0('    will not load any checkpoints and will start from '
+            #                 'random')
+            
             # This is a hack to give us a reference to get_batch_pipe from within training.py
             # We need to call model.set_batch_fn after deepspeed.initialize
             model._megatron_batch_fn = get_batch_pipe
@@ -194,21 +202,13 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
     # Option 1 of data loading using --data-path
 
     if args.data_path:
-        # train_ds, valid_ds, test_ds = build_train_valid_test_datasets(
-        #     data_prefix=args.data_path,
-        #     data_impl=args.data_impl,
-        #     splits_string=args.split,
-        #     train_valid_test_num_samples=train_val_test_num_samples,
-        #     seq_length=args.seq_length,
-        #     seed=args.seed,
-        #     skip_warmup=(not args.mmap_warmup))
         train_ds, valid_ds, test_ds = build_train_valid_test_datasets(
             data_prefix=args.data_path,
             data_impl=args.data_impl,
             splits_string=args.split,
             train_valid_test_num_samples=train_val_test_num_samples,
-            max_seq_length=512,#args.encoder_seq_length,
-            max_seq_length_dec=114,#args.decoder_seq_length,
+            max_seq_length=args.encoder_seq_length,
+            max_seq_length_dec=args.decoder_seq_length,
             masked_lm_prob=args.mask_prob,
             short_seq_prob=args.short_seq_prob,
             seed=args.seed,
