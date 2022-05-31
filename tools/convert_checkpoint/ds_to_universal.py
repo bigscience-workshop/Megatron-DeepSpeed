@@ -226,9 +226,6 @@ WEIGHTS_WITH_ROW_PARALLELISM_CONTAIN = [
 
 
 def merge_tp_slices(ds_checkpoint, dir, slice_dir, slice_shapes, tp_degree):
-
-
-
     for name, shape in slice_shapes.items():
         slice_base_path = os.path.join(slice_dir, name)
         param_base_path = os.path.join(dir, name)
@@ -244,22 +241,25 @@ def merge_tp_slices(ds_checkpoint, dir, slice_dir, slice_shapes, tp_degree):
 
             print(f"Expected shape: {shape}")
             print(f"Fragment sizes:", list(frag.shape for frag in slices))
-
+            ckpt_dict = {}
             if any(re.match(pattern, name) for pattern in WEIGHTS_TO_AVERAGE_PATTERNS):
                 param = sum(slices) / len(slices)
             else:
                 cat_dim = 1 if any(text in name for text in WEIGHTS_WITH_ROW_PARALLELISM_CONTAIN) else 0
                 print(f"CAT DIM: {cat_dim}")
                 param = torch.cat(slices, dim=cat_dim)
+                ckpt_dict['cat_dim'] = cat_dim
 
             if "word_embeddings.weight" in name:
                 print(f"Before {param.shape=}")
                 # strip padding
                 param = _strip_vocab_padding(ds_checkpoint, param)
+                ckpt_dict['tensor_to_pad'] = True
                 print(f"After {param.shape=}")
 
             print(f"Final shape: {param.shape}")
-            _save_checkpoint(final_path, param)
+            ckpt_dict['param'] = param
+            _save_checkpoint(final_path, ckpt_dict)
 
 
 def main():
