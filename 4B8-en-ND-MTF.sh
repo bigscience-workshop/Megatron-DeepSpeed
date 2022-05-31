@@ -51,14 +51,15 @@ GPT_ARGS=" \
     --hidden-size $NHIDDEN \
     --num-attention-heads $NHEADS \
     --ffn-hidden-size $FFN_HIDDEN_SIZE \
-    --max-position-embeddings $MAX_POSITION_EMBEDDING \
+    --max-position-embeddings $SEQ_LEN \
+    --position-embedding-type alibi \
     --encoder-seq-length $INPUT_LEN \
     --decoder-seq-length $TARGET_LEN \
     --micro-batch-size $MICRO_BATCH_SIZE \
     --global-batch-size $GLOBAL_BATCH_SIZE \
     --train-iters $TRAIN_ITER \
     --tokenizer-type PretrainedFromHF \
-    --tokenizer-name-or-path t5-base \
+    --tokenizer-name-or-path bigscience/tokenizer \
     --loss-scale 12 \
     --clip-grad 1.0 \
     --fp16 \

@@ -46,8 +46,6 @@ EXIT_OPTS=" \
     --exit-duration-in-mins 1190 \
     "
 
-
-
 GPT_ARGS=" \
     --num-layers $NLAYERS \
     --hidden-size $NHIDDEN \
