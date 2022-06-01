@@ -243,7 +243,7 @@ class MegDSTestCheckpoints(TestCasePlus):
         launcher = get_launcher(num_gpus)
         cmd = launcher + script + args + ds_args + ["--universal-checkpoint"]
         # keep for quick debug
-        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
+        #print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
 
         with CaptureStdout() as cs:
             execute_subprocess_async(cmd, env=self.get_env())

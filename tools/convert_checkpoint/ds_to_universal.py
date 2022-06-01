@@ -295,9 +295,18 @@ def main():
                 print(f"{i=}, {j=}, {k=}")
                 extract_zero_shards(temp_dir, slice_shapes, ds_checkpoint, i, j, k)
 
-    merge_tp_slices(ds_checkpoint, args.output_folder, temp_dir, slice_shapes, ds_checkpoint.tp_degree)
-
+    merge_tp_slices(ds_checkpoint, os.path.join(args.output_folder, "zero"), temp_dir, slice_shapes, ds_checkpoint.tp_degree)        
     shutil.rmtree(temp_dir, ignore_errors=True)
+    
+    # Copy mp* files into output folder 
+    for f in glob.glob(os.path.join(args.input_folder, 'mp*')):
+        shutil.copy2(f, args.output_folder) 
+
+    # Update latest to output folder 
+    checkpoint_root_folder, step_folder = os.path.split(args.output_folder)
+    latest_file = os.path.join(checkpoint_root_folder, 'latest_universal')
+    with open(latest_file, "w") as f:
+        f.write(step_folder)
 
 
 if __name__ == "__main__":
