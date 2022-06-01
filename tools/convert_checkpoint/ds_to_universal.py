@@ -154,13 +154,13 @@ def extract_zero_shards(dir, slice_shapes, ds_checkpoint, pp_index, tp_index, dp
 
             print(f"{param_group_id} {name} => {fragment_mapping.start}:{fragment_mapping.numel}")
             for state_key in flat_state.keys():
-                dump_param_fragment(dir, tp_index, state_key, flat_state[state_key], name, fragment_mapping.start, fragment_mapping.numel)
+                dump_param_fragment(dir, tp_index, dp_index, state_key, flat_state[state_key], name, fragment_mapping.start, fragment_mapping.numel)
 
 
 
 
 cnt = 0
-def dump_param_fragment(dir, tp_index, state_name, state_flat_tensor, param_name, offset, numel):
+def dump_param_fragment(dir, tp_index, dp_index, state_name, state_flat_tensor, param_name, offset, numel):
 
     global cnt # temp hack
 
@@ -168,7 +168,7 @@ def dump_param_fragment(dir, tp_index, state_name, state_flat_tensor, param_name
     os.makedirs(param_base_path, exist_ok=True)
 
     cnt += 1
-    counter = f"{cnt:0>10d}"
+    counter = f"{dp_index:0>2d}"
 
     path = os.path.join(param_base_path, f"{state_name}.{counter}")
 
@@ -176,13 +176,6 @@ def dump_param_fragment(dir, tp_index, state_name, state_flat_tensor, param_name
 
     t = state_flat_tensor.narrow(0, offset, numel)
     _save_checkpoint(path, t)
-
-
-def _cleanup_zero_shard_files(param_base_path, state, tp_degree):
-    for tp_index in range(tp_degree):
-        prefix_path = os.path.join(param_base_path, str(tp_index), f"{state}")
-        for p in sorted(list(glob.glob(f"{prefix_path}.0*"))):
-            os.unlink(p)
 
 
 def _merge_zero_shards(param_base_path, state, tp_degree, slice_shape):

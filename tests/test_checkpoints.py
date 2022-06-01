@@ -39,6 +39,7 @@ def parameterized_custom_name_func(func, param_num, param):
     return f"{func.__name__}_{param_based_name}"
 
 params = [
+    # TP_PP_DP
     ["1_1_1", "1_1_1"],
     ["2_1_1", "1_1_1"],
     ["1_2_1", "1_1_1"],
@@ -64,6 +65,8 @@ params = [
     ["2_2_2", "1_1_1"],
     ["2_2_2", "2_2_2"],
     ["1_1_1", "2_2_2"],
+
+    ["1_1_8", "2_2_2"],
 
 ]
 
@@ -142,7 +145,6 @@ class MegDSTestCheckpoints(TestCasePlus):
                 --max-position-embeddings 8
                 --micro-batch-size 1
                 --global-batch-size 16
-                --rampup-batch-size 2 2 {n_samples}
                 --train-samples {n_samples}
 
                 --embed-layernorm
@@ -162,6 +164,7 @@ class MegDSTestCheckpoints(TestCasePlus):
                 --log-level debug
                 --log-level-replica info
         """.split()
+
 
         # XXX: fails to handle:
         #--embed-layernorm
