@@ -22,7 +22,7 @@ GLOBAL_BATCH_SIZE=2048
 TRAIN_ITER=39_718
 INPUT_LEN=512
 TARGET_LEN=114
-SEQ_LEN=$((INPUT_LEN+TARGET_LEN))
+SEQ_LEN=$INPUT_LEN #$((INPUT_LEN+TARGET_LEN))
 
 NLAYERS=24
 NHIDDEN=4096
@@ -55,6 +55,7 @@ GPT_ARGS=" \
     --ffn-hidden-size $FFN_HIDDEN_SIZE \
     --max-position-embeddings $SEQ_LEN \
     --position-embedding-type alibi \
+    --seq-length $SEQ_LEN \
     --micro-batch-size $MICRO_BATCH_SIZE \
     --global-batch-size $GLOBAL_BATCH_SIZE \
     --train-iters $TRAIN_ITER \
