@@ -329,7 +329,7 @@ class _AutoTokenizer(AbstractTokenizer):
 
     @property
     def vocab_size(self):
-        return self.tokenizer.vocab_size
+        return self.tokenizer.__len__() #self.tokenizer.vocab_size
 
     @property
     def vocab(self):
