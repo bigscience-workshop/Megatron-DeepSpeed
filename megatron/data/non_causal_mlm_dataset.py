@@ -319,6 +319,9 @@ def build_training_sample(sample, target_seq_length,
     print("output_tokens_ids")
     print(output_tokens_ids)
 
+    import sys
+    sys.exit()
+
     text_tokens_ids = pad_and_convert_to_numpy(
         input_tokens_ids+output_tokens_ids,
         pad_id,
