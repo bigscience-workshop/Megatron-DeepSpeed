@@ -14,3 +14,12 @@ tokenizer.add_special_tokens({
     })
 
 tokenizer.save_pretrained('bigscience-tokenizer-padded')
+
+# python tools/preprocess_data.py \
+#     --input data/oscar-en-10k.jsonl \
+#     --output-prefix data/meg-gpt2-oscar-en-10k \
+#     --dataset-impl mmap \
+#     --tokenizer-type PretrainedFromHF \
+#     --tokenizer-name-or-path bigscience-tokenizer-padded \
+#     --append-eod \
+#     --workers 4
