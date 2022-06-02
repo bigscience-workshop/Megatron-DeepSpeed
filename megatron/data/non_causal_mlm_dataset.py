@@ -341,9 +341,6 @@ def build_training_sample(sample, target_seq_length,
     #     )
 
     text_tokens_ids = np.concatenate((input_tokens_ids, output_tokens_ids))
-    print("text_tokens_ids")
-    print(len(text_tokens_ids))
-    print(text_tokens_ids)
 
     prefix_len = len(input_tokens_ids)
 
