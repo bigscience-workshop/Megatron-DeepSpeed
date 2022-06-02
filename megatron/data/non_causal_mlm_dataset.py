@@ -303,13 +303,6 @@ def build_training_sample(sample, target_seq_length,
     input_tokens_ids = filter_input_ids(tokens, input_ids_sentinel, eos_id)[0]
     output_tokens_ids = filter_input_ids(tokens, labels_sentinel, eos_id)[0]
 
-    print("input_tokens_ids")
-    print(len(input_tokens_ids))
-    print(input_tokens_ids)
-    print("output_tokens_ids")
-    print(len(output_tokens_ids))
-    print(output_tokens_ids)
-
     # # Masking.
     # max_predictions_per_seq = masked_lm_prob * max_num_tokens
     # (tokens, masked_positions, masked_labels, _, masked_spans) = create_masked_lm_predictions(
@@ -348,6 +341,9 @@ def build_training_sample(sample, target_seq_length,
     #     )
 
     text_tokens_ids = np.concatenate((input_tokens_ids, output_tokens_ids))
+    print("text_tokens_ids")
+    print(len(text_tokens_ids))
+    print(text_tokens_ids)
 
     prefix_len = len(input_tokens_ids)
 
