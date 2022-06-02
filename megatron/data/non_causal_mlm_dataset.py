@@ -278,6 +278,7 @@ def build_training_sample(sample, target_seq_length,
     input_ids_sentinel = create_sentinel_ids(mask_indices.astype(np.int8), vocab_len=len(vocab_id_list))
     labels_sentinel = create_sentinel_ids(labels_mask.astype(np.int8), vocab_len=len(vocab_id_list))
 
+    tokens = np.asarray(tokens)
     input_tokens_ids = filter_input_ids(tokens, input_ids_sentinel, eos_id)
     output_tokens_ids = filter_input_ids(tokens, labels_sentinel, eos_id)
 
