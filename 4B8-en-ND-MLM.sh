@@ -56,7 +56,6 @@ GPT_ARGS=" \
     --max-position-embeddings $SEQ_LEN \
     --position-embedding-type alibi \
     --seq-length $SEQ_LEN \
-    --encoder-seq-length $INPUT_LEN \
     --decoder-seq-length $TARGET_LEN \
     --micro-batch-size $MICRO_BATCH_SIZE \
     --global-batch-size $GLOBAL_BATCH_SIZE \
