@@ -17,6 +17,7 @@
 
 import os
 import time
+import random
 import collections
 
 import numpy as np
