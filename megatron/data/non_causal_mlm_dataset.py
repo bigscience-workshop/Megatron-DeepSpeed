@@ -278,7 +278,19 @@ def build_training_sample(sample, target_seq_length,
     input_ids_sentinel = create_sentinel_ids(mask_indices.astype(np.int8), vocab_len=len(vocab_id_list))
     labels_sentinel = create_sentinel_ids(labels_mask.astype(np.int8), vocab_len=len(vocab_id_list))
 
-    tokens = np.asarray(tokens)
+
+    if len(tokens) < expanded_inputs_length:
+        tokens = pad_and_convert_to_numpy(
+            tokens,
+            pad_id,
+            expanded_inputs_length
+            )
+
+    tokens = np.asarray([tokens])
+    print("input_ids_sentinel.shape")
+    print(input_ids_sentinel.shape)
+    print("tokens.shape")
+    print(tokens.shape)
     input_tokens_ids = filter_input_ids(tokens, input_ids_sentinel, eos_id)
     output_tokens_ids = filter_input_ids(tokens, labels_sentinel, eos_id)
 
@@ -313,6 +325,12 @@ def build_training_sample(sample, target_seq_length,
     # # Add <eos> token to the output_tokens_ids
     # output_tokens_ids.append(eos_id)
     
+    # text_tokens_ids = pad_and_convert_to_numpy(
+    #     input_tokens_ids+output_tokens_ids,
+    #     pad_id,
+    #     max_seq_length+max_seq_length_dec
+    #     )
+
     prefix_len = len(input_tokens_ids)
 
     print("input_tokens_ids")
@@ -322,12 +340,6 @@ def build_training_sample(sample, target_seq_length,
 
     import sys
     sys.exit()
-
-    text_tokens_ids = pad_and_convert_to_numpy(
-        input_tokens_ids+output_tokens_ids,
-        pad_id,
-        max_seq_length+max_seq_length_dec
-        )
 
     return {
         'text': text_tokens_ids,
