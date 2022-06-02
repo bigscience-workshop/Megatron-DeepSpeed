@@ -17,7 +17,7 @@
 
 from abc import ABC
 from abc import abstractmethod
-from transformers import AutoTokenizer, AddedToken
+from transformers import AutoTokenizer
 
 from .bert_tokenization import FullTokenizer as FullBertTokenizer
 from .gpt2_tokenization import GPT2Tokenizer
@@ -331,51 +331,6 @@ class _AutoTokenizer(AbstractTokenizer):
         self.encoder = self.tokenizer.get_vocab()
         self.decoder = {v: k for k, v in self.encoder.items()}
 
-        self.tokenizer.add_special_tokens({
-            'additional_special_tokens': [
-                AddedToken('<extra_id_00>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_01>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_02>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_03>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_04>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_05>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_06>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_07>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_08>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_09>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_10>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_11>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_12>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_13>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_14>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_15>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_16>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_17>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_18>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_19>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_20>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_21>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_22>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_23>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_24>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_25>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_26>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_27>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_28>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_29>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_30>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_31>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_32>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_33>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_34>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_35>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_36>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_37>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_38>', lstrip=False, rstrip=False, normalization=False),
-                AddedToken('<extra_id_39>', lstrip=False, rstrip=False, normalization=False),
-            ]
-        })
-
     @property
     def vocab_size(self):
         return len(self.tokenizer) # vocab_size doesn't contain additional tokens
@@ -399,6 +354,10 @@ class _AutoTokenizer(AbstractTokenizer):
         return self.tokenizer.decode(token_ids)
 
     @property
+    def eod(self):
+        return self.tokenizer.eos_token_id
+
+    @property
     def cls(self):
         return self.tokenizer.cls_token_id
 
@@ -409,10 +368,6 @@ class _AutoTokenizer(AbstractTokenizer):
     @property
     def pad(self):
         return self.tokenizer.pad_token_id
-
-    @property
-    def eod(self):
-        return self.tokenizer.eos_token_id
 
     @property
     def mask(self):

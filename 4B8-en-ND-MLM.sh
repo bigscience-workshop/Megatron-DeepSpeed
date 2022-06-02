@@ -8,6 +8,7 @@ CODECARBON_PATH=$REPO_PATH/codecarbon
 LOGS_PATH=$REPO_PATH/logs
 
 DATA_PATH=data/meg-gpt2-oscar-en-10k_text_document
+TOKENIZER_PATH=bigscience-tokenizer-padded
 
 # XXX: edit me
 GPUS_PER_NODE=8
@@ -59,7 +60,7 @@ GPT_ARGS=" \
     --global-batch-size $GLOBAL_BATCH_SIZE \
     --train-iters $TRAIN_ITER \
     --tokenizer-type PretrainedFromHF \
-    --tokenizer-name-or-path bigscience/tokenizer \
+    --tokenizer-name-or-path $TOKENIZER_PATH \
     --loss-scale 12 \
     --clip-grad 1.0 \
     --fp16 \
