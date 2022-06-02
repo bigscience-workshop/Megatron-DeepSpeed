@@ -23,7 +23,7 @@ from megatron import get_timers
 from megatron import get_tokenizer
 from megatron import mpu
 
-from megatron.data.non_causal_mlm_dataset import build_train_valid_test_datasets, compute_input_and_target_lengths #, build_dataset_group
+from megatron.data.non_causal_mlm_dataset import build_train_valid_test_datasets #, build_dataset_group
 from megatron.model import GPTModel, GPTModelPipe
 from megatron.training import pretrain
 from megatron.utils import get_ltor_masks_and_position_ids, get_prefix_indices, reweight_loss_mask_
@@ -192,16 +192,13 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
     # Option 1 of data loading using --data-path
 
     if args.data_path:
-
-        extended_seq_length, target_length = compute_input_and_target_lengths(args.seq_length, args.mask_prob, 3)
-
         train_ds, valid_ds, test_ds = build_train_valid_test_datasets(
             data_prefix=args.data_path,
             data_impl=args.data_impl,
             splits_string=args.split,
             train_valid_test_num_samples=train_val_test_num_samples,
-            max_seq_length=args.seq_length,
-            max_seq_length_dec=target_length,
+            max_seq_length=args.encoder_seq_length,
+            max_seq_length_dec=args.decoder_seq_length,
             masked_lm_prob=args.mask_prob,
             short_seq_prob=args.short_seq_prob,
             seed=args.seed,

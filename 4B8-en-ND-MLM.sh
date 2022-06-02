@@ -20,7 +20,9 @@ DP_SIZE=$((NNODES*GPUS_PER_NODE/(PP_SIZE*TP_SIZE))) # will get derived automatic
 MICRO_BATCH_SIZE=1
 GLOBAL_BATCH_SIZE=2048
 TRAIN_ITER=39_718
-SEQ_LEN=512
+INPUT_LEN=512
+TARGET_LEN=114
+SEQ_LEN=$((INPUT_LEN+TARGET_LEN))
 
 NLAYERS=24
 NHIDDEN=4096
@@ -54,6 +56,8 @@ GPT_ARGS=" \
     --max-position-embeddings $SEQ_LEN \
     --position-embedding-type alibi \
     --seq-length $SEQ_LEN \
+    --encoder-seq-length $INPUT_LEN \
+    --decoder-seq-length $TARGET_LEN \
     --micro-batch-size $MICRO_BATCH_SIZE \
     --global-batch-size $GLOBAL_BATCH_SIZE \
     --train-iters $TRAIN_ITER \
@@ -68,7 +72,7 @@ GPT_ARGS=" \
     "
 
 OUTPUT_ARGS=" \
-    --log-interval 200 \
+    --log-interval 1 \
     --save-interval $SAVE_INTERVAL \
     --eval-interval $TRAIN_ITER \
     --eval-iters 1 \
