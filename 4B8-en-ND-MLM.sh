@@ -55,8 +55,6 @@ GPT_ARGS=" \
     --ffn-hidden-size $FFN_HIDDEN_SIZE \
     --max-position-embeddings $SEQ_LEN \
     --position-embedding-type alibi \
-    --encoder-seq-length $INPUT_LEN \
-    --decoder-seq-length $TARGET_LEN \
     --micro-batch-size $MICRO_BATCH_SIZE \
     --global-batch-size $GLOBAL_BATCH_SIZE \
     --train-iters $TRAIN_ITER \
