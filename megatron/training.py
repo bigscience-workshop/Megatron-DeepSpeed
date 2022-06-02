@@ -456,6 +456,25 @@ def setup_model_and_optimizer(model_provider_func):
 
     else:
         args.iteration = 0
+    
+    # tp_rank = mpu.get_tensor_model_parallel_rank()
+    # pp_rank = mpu.get_pipeline_model_parallel_rank()
+    # dp_rank = mpu.get_data_parallel_rank()
+    # for n,p in model[0].named_parameters():
+    #     if 'word_embeddings.weight' not in n:
+    #         continue 
+    #     if tp_rank == 0 and pp_rank == 0:
+    #         print(f"{tp_rank=}{pp_rank=}{dp_rank=} bf16 {n=} {p[:10]=}")
+    #         if p._hp_mapping is not None:
+    #             hp = p._hp_mapping.hp_fragment
+    #             print(f'{tp_rank=}{pp_rank=}{dp_rank=} fp32 {n=} {hp[:10]=}')
+
+    #     if tp_rank == 0 and pp_rank == mpu.get_pipeline_model_parallel_world_size() - 1:
+    #         print(f"{tp_rank=}{pp_rank=}{dp_rank=} bf16 {n=} {p[:10]=}")
+    #         if p._hp_mapping is not None:
+    #             hp = p._hp_mapping.hp_fragment
+    #             print(f'{tp_rank=}{pp_rank=}{dp_rank=} fp32 {n=} {hp[:10]=}')
+
 
     # We only support local DDP with multiple micro-batches.
     if len(model) > 1 or mpu.get_pipeline_model_parallel_world_size() > 1:
