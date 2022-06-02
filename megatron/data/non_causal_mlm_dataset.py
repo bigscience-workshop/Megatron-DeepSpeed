@@ -181,8 +181,7 @@ class NonCausalMLMDataset(torch.utils.data.Dataset):
                                                    data_prefix,
                                                    num_epochs,
                                                    max_num_samples,
-                                                   # self.max_seq_length - 2, # account for added tokens
-                                                   self.max_seq_length*2,
+                                                   self.max_seq_length - 2, # account for added tokens
                                                    short_seq_prob,
                                                    self.seed,
                                                    self.name,
@@ -210,6 +209,14 @@ class NonCausalMLMDataset(torch.utils.data.Dataset):
         sample = []
         for index in range(start_index, end_index):
             sample.append(self.indexed_dataset[index])
+
+        #concat more to avoid padding
+        for i in range(0,2):
+            _idx = random.randint(idx, self.__len__)
+            start_index, end_index, seq_length = self.samples_mapping[_idx]
+            for index in range(start_index, end_index):
+                sample.append(self.indexed_dataset[index])
+
         # Note that this rng state should be numpy and not python since
         # python randint is inclusive whereas the numpy one is exclusive.
         np_rng = np.random.RandomState(seed=(self.seed + idx))
@@ -334,6 +341,9 @@ def build_training_sample(sample, target_seq_length,
     #     pad_id,
     #     max_seq_length+max_seq_length_dec
     #     )
+
+    text_tokens_ids = input_tokens_ids+output_tokens_ids
+    print*text_tokens_ids
 
     prefix_len = len(input_tokens_ids)
 
