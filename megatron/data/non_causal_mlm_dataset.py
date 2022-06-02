@@ -287,8 +287,8 @@ def build_training_sample(sample, target_seq_length,
             )
 
     tokens = np.asarray([tokens])
-    input_tokens_ids = filter_input_ids(tokens, input_ids_sentinel, eos_id)
-    output_tokens_ids = filter_input_ids(tokens, labels_sentinel, eos_id)
+    input_tokens_ids = filter_input_ids(tokens, input_ids_sentinel, eos_id)[0]
+    output_tokens_ids = filter_input_ids(tokens, labels_sentinel, eos_id)[0]
 
     # # Masking.
     # max_predictions_per_seq = masked_lm_prob * max_num_tokens
