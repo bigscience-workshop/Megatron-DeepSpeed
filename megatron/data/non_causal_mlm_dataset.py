@@ -275,8 +275,8 @@ def build_training_sample(sample, target_seq_length,
     mask_indices = np.asarray([random_spans_noise_mask(expanded_inputs_length)])
     labels_mask = ~mask_indices
     
-    input_ids_sentinel = create_sentinel_ids(mask_indices.astype(np.int8))
-    labels_sentinel = create_sentinel_ids(labels_mask.astype(np.int8))
+    input_ids_sentinel = create_sentinel_ids(mask_indices.astype(np.int8), vocab_len=len(vocab_id_list))
+    labels_sentinel = create_sentinel_ids(labels_mask.astype(np.int8), vocab_len=len(vocab_id_list))
 
     input_tokens_ids = filter_input_ids(tokens, input_ids_sentinel, eos_id)
     output_tokens_ids = filter_input_ids(tokens, labels_sentinel, eos_id)
@@ -349,7 +349,7 @@ def pad_and_convert_to_numpy(tokens, pad_id, max_seq_length):
     return tokens_np
 
 
-def create_sentinel_ids(mask_indices):
+def create_sentinel_ids(mask_indices, vocab_len):
     """
     Sentinel ids creation given the indices that should be masked.
     The start indices of each mask are replaced by the sentinel ids in increasing
@@ -359,7 +359,7 @@ def create_sentinel_ids(mask_indices):
     start_indices[:, 0] = mask_indices[:, 0]
 
     sentinel_ids = np.where(start_indices != 0, np.cumsum(start_indices, axis=-1), start_indices)
-    sentinel_ids = np.where(sentinel_ids != 0, (len(tokenizer) - sentinel_ids), 0)
+    sentinel_ids = np.where(sentinel_ids != 0, (vocab_len - sentinel_ids), 0)
     sentinel_ids -= mask_indices - start_indices
 
     return sentinel_ids
