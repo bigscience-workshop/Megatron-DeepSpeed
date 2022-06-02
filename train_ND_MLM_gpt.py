@@ -194,15 +194,13 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
     if args.data_path:
 
         extended_seq_length, target_length = compute_input_and_target_lengths(args.seq_length, args.mask_prob, 3)
-        args.max_position_embeddings = extended_seq_length
-        args.seq_length = extended_seq_length
 
         train_ds, valid_ds, test_ds = build_train_valid_test_datasets(
             data_prefix=args.data_path,
             data_impl=args.data_impl,
             splits_string=args.split,
             train_valid_test_num_samples=train_val_test_num_samples,
-            max_seq_length=extended_seq_length,
+            max_seq_length=args.seq_length,
             max_seq_length_dec=target_length,
             masked_lm_prob=args.mask_prob,
             short_seq_prob=args.short_seq_prob,
