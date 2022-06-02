@@ -150,8 +150,7 @@ mkdir -p $REPO_PATH
 mkdir -p $LOGS_PATH
 # to debug - add echo (it exits and prints what it would have launched)
 
-python -u -m torch.distributed.launch \
-    --nproc_per_node $GPUS_PER_NODE \
+deepspeed --num_gpus $GPUS_PER_NODE \
     $CMD
 
 # srun '$LAUNCHER --node_rank $SLURM_PROCID $CMD' 2>&1 | tee -a $LOGS_PATH/main_log.txt
