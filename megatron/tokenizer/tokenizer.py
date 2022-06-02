@@ -331,35 +331,6 @@ class _AutoTokenizer(AbstractTokenizer):
         self.encoder = self.tokenizer.get_vocab()
         self.decoder = {v: k for k, v in self.encoder.items()}
 
-        if 'mask_token' not in self.tokenizer.special_tokens_map:
-            tokenizer.mask_token = "<mask>"
-
-        self.tokenizer.add_special_tokens({
-            'additional_special_tokens': [
-                '<extra_id_00>',
-                '<extra_id_01>',
-                '<extra_id_02>',
-                '<extra_id_03>',
-                '<extra_id_04>',
-                '<extra_id_05>',
-                '<extra_id_06>',
-                '<extra_id_07>',
-                '<extra_id_08>',
-                '<extra_id_09>',
-                '<extra_id_10>',
-                '<extra_id_11>',
-                '<extra_id_12>',
-                '<extra_id_13>',
-                '<extra_id_14>',
-                '<extra_id_15>',
-                '<extra_id_16>',
-                '<extra_id_17>',
-                '<extra_id_18>',
-                '<extra_id_19>',
-                '<extra_id_20>',
-            ]
-        })
-
     @property
     def vocab_size(self):
         return len(self.tokenizer) # vocab_size doesn't contain additional tokens
@@ -383,6 +354,10 @@ class _AutoTokenizer(AbstractTokenizer):
         return self.tokenizer.decode(token_ids)
 
     @property
+    def eod(self):
+        return self.tokenizer.eos_token_id
+
+    @property
     def cls(self):
         return self.cls_id
 
@@ -397,22 +372,6 @@ class _AutoTokenizer(AbstractTokenizer):
     @property
     def mask(self):
         return self.mask_id
-
-    @property
-    def eod(self):
-        return self.tokenizer.eos_token_id
-
-    @property
-    def cls(self):
-        return self.tokenizer.cls_token_id
-
-    @property
-    def sep(self):
-        return self.tokenizer.sep_token_id
-
-    @property
-    def pad(self):
-        return self.tokenizer.pad_token_id
 
     @property
     def mask(self):
