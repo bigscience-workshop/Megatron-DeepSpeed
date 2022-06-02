@@ -263,15 +263,15 @@ def build_training_sample(sample, target_seq_length,
         sentinel_tokens: unique value to be substituted for every replaced span
     """
 
-    assert target_seq_length <= max_seq_length
+    # assert target_seq_length <= max_seq_length
 
     # flatten sentences into one list
     tokens = [token for sentence in sample for token in sentence]
 
-    # Truncate to `target_sequence_length`.
-    max_num_tokens = target_seq_length
-    truncated = len(tokens) > max_num_tokens
-    tokens = tokens[:max_num_tokens]
+    # # Truncate to `target_sequence_length`.
+    # max_num_tokens = target_seq_length
+    # truncated = len(tokens) > max_num_tokens
+    # tokens = tokens[:max_num_tokens]
 
     max_ngrams = 3
     # T5-like span masked language modeling will fuse consecutively masked tokens to a single sentinel token.
