@@ -287,10 +287,6 @@ def build_training_sample(sample, target_seq_length,
             )
 
     tokens = np.asarray([tokens])
-    print("input_ids_sentinel.shape")
-    print(input_ids_sentinel.shape)
-    print("tokens.shape")
-    print(tokens.shape)
     input_tokens_ids = filter_input_ids(tokens, input_ids_sentinel, eos_id)
     output_tokens_ids = filter_input_ids(tokens, labels_sentinel, eos_id)
 
@@ -334,9 +330,9 @@ def build_training_sample(sample, target_seq_length,
     prefix_len = len(input_tokens_ids)
 
     print("input_tokens_ids")
-    print(input_tokens_ids)
+    print(len(input_tokens_ids))
     print("output_tokens_ids")
-    print(output_tokens_ids)
+    print(len(output_tokens_ids))
 
     import sys
     sys.exit()
