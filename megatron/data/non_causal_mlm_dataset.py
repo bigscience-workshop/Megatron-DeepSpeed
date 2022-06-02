@@ -278,8 +278,8 @@ def build_training_sample(sample, target_seq_length,
     input_ids_sentinel = create_sentinel_ids(mask_indices.astype(np.int8))
     labels_sentinel = create_sentinel_ids(labels_mask.astype(np.int8))
 
-    input_tokens_ids = filter_input_ids(tokens, input_ids_sentinel)
-    output_tokens_ids = filter_input_ids(tokens, labels_sentinel)
+    input_tokens_ids = filter_input_ids(tokens, input_ids_sentinel, eos_id)
+    output_tokens_ids = filter_input_ids(tokens, labels_sentinel, eos_id)
 
     # # Masking.
     # max_predictions_per_seq = masked_lm_prob * max_num_tokens
@@ -346,7 +346,7 @@ def pad_and_convert_to_numpy(tokens, pad_id, max_seq_length):
     return tokens_np
 
 
-def create_sentinel_ids(self, mask_indices):
+def create_sentinel_ids(mask_indices):
     """
     Sentinel ids creation given the indices that should be masked.
     The start indices of each mask are replaced by the sentinel ids in increasing
@@ -356,13 +356,13 @@ def create_sentinel_ids(self, mask_indices):
     start_indices[:, 0] = mask_indices[:, 0]
 
     sentinel_ids = np.where(start_indices != 0, np.cumsum(start_indices, axis=-1), start_indices)
-    sentinel_ids = np.where(sentinel_ids != 0, (len(self.tokenizer) - sentinel_ids), 0)
+    sentinel_ids = np.where(sentinel_ids != 0, (len(tokenizer) - sentinel_ids), 0)
     sentinel_ids -= mask_indices - start_indices
 
     return sentinel_ids
 
 
-def filter_input_ids(self, input_ids, sentinel_ids):
+def filter_input_ids(input_ids, sentinel_ids, eos_id):
     """
     Puts sentinel mask on `input_ids` and fuse consecutive mask tokens into a single mask token by deleting.
     This will reduce the sequence length from `expanded_inputs_length` to `input_length`.
@@ -374,7 +374,7 @@ def filter_input_ids(self, input_ids, sentinel_ids):
     # masked tokens coming after sentinel tokens and should be removed
     input_ids = input_ids_full[input_ids_full >= 0].reshape((batch_size, -1))
     input_ids = np.concatenate(
-        [input_ids, np.full((batch_size, 1), self.tokenizer.eos_token_id, dtype=np.int32)], axis=-1
+        [input_ids, np.full((batch_size, 1), eos_id, dtype=np.int32)], axis=-1
     )
     return input_ids
 
