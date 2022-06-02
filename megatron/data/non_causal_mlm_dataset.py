@@ -181,7 +181,8 @@ class NonCausalMLMDataset(torch.utils.data.Dataset):
                                                    data_prefix,
                                                    num_epochs,
                                                    max_num_samples,
-                                                   self.max_seq_length - 2, # account for added tokens
+                                                   # self.max_seq_length - 2, # account for added tokens
+                                                   self.max_seq_length*2,
                                                    short_seq_prob,
                                                    self.seed,
                                                    self.name,
@@ -328,14 +329,6 @@ def build_training_sample(sample, target_seq_length,
     #     )
 
     prefix_len = len(input_tokens_ids)
-
-    print("input_tokens_ids")
-    print(len(input_tokens_ids))
-    print("output_tokens_ids")
-    print(len(output_tokens_ids))
-
-    import sys
-    sys.exit()
 
     return {
         'text': text_tokens_ids,
