@@ -213,7 +213,7 @@ class NonCausalMLMDataset(torch.utils.data.Dataset):
 
         #concat more to avoid padding
         for i in range(0,2):
-            _idx = random.randint(idx, self.__len__)
+            _idx = random.randint(idx, self.__len__())
             start_index, end_index, seq_length = self.samples_mapping[_idx]
             for index in range(start_index, end_index):
                 sample.append(self.indexed_dataset[index])
