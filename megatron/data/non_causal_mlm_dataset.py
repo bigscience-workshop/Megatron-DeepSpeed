@@ -212,11 +212,13 @@ class NonCausalMLMDataset(torch.utils.data.Dataset):
             sample.append(self.indexed_dataset[index])
 
         #concat more to avoid padding
-        for i in range(0,2):
+        while seq_length < (self.max_seq_length/self.masked_lm_prob):
             _idx = random.randint(idx, self.__len__())
-            start_index, end_index, seq_length = self.samples_mapping[_idx]
+            start_index, end_index, _seq_length = self.samples_mapping[_idx]
             for index in range(start_index, end_index):
                 sample.append(self.indexed_dataset[index])
+
+            seq_length += _seq_length
 
         # Note that this rng state should be numpy and not python since
         # python randint is inclusive whereas the numpy one is exclusive.
