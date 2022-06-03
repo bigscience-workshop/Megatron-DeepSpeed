@@ -145,7 +145,7 @@ class MegatronPretrainingRandomSampler:
                        * self.micro_batch_size
         bucket_offset = current_epoch_samples // self.data_parallel_size
         start_idx = self.data_parallel_rank * bucket_size
-        
+
         g = torch.Generator()
         g.manual_seed(self.epoch)
         random_idx = torch.randperm(bucket_size, generator=g).tolist()
