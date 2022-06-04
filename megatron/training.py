@@ -692,7 +692,8 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
         # The factor of 4 is when used with activation check-pointing,
         # otherwise it will be 3, but for 200B model, activation check-pointing will always be on.
         checkpoint_activations_factor = 4 if args.checkpoint_activations else 3
-        flops_per_iteration = (24 * checkpoint_activations_factor * batch_size * seq_len * num_layers * (hidden_size**2)) * (1. + (seq_len / (6. * hidden_size)) + (vocab_size / (16. * num_layers * hidden_size)))
+        coefficient = 32 if args.glu_activation else 24
+        flops_per_iteration = (coefficient * checkpoint_activations_factor * batch_size * seq_len * num_layers * (hidden_size**2)) * (1. + (seq_len / (6. * hidden_size)) + (vocab_size / (16. * num_layers * hidden_size)))
         tflops = flops_per_iteration / (elapsed_time_per_iteration * args.world_size * (10**12))
 
         # only the last rank process has a non-None _GLOBAL_TENSORBOARD_WRITER
