@@ -38,11 +38,9 @@ ITERATION_KEY = 'iteration'
 def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument('--input_folder',
-                        default=None,
                         type=str,
                         help='Input DeepSpeed Checkpoint folder')
     parser.add_argument('--output_folder',
-                        default=None,
                         type=str,
                         help='Output Megatron checkpoint folder')
     parser.add_argument('--target_tp',
@@ -104,11 +102,11 @@ def _save_checkpoint(file_path, chkpt_sd):
 
 
 
-def _create_latest_file(base_folder, iteration):
-    file_path = os.path.join(base_folder, 'latest_checkpointed_iteration.txt')
-    os.makedirs(base_folder, exist_ok=True)
-    with open(file_path, 'w') as f:
-        f.write(str(iteration))
+# def _create_latest_file(base_folder, iteration):
+#     file_path = os.path.join(base_folder, 'latest_checkpointed_iteration.txt')
+#     os.makedirs(base_folder, exist_ok=True)
+#     with open(file_path, 'w') as f:
+#         f.write(str(iteration))
 
 # XXX: this is a temp hack that creates fake params but with the right shapes
 def save_params_universal(dir, slice_shapes):
@@ -268,7 +266,7 @@ def main():
     ds_checkpoint = DeepSpeedCheckpoint(args.input_folder)#, 1, 2) # args.target_tp, args.target_pp)
 
     iteration = ds_checkpoint.get_iteration()
-    _create_latest_file(args.output_folder, iteration)
+    #_create_latest_file(args.output_folder, iteration)
     checkpoint_paths = _create_checkpoint_paths(args.output_folder, iteration,
                                                 ds_checkpoint.tp_degree,
                                                 ds_checkpoint.pp_degree)
@@ -290,14 +288,14 @@ def main():
                 print(f"{i=}, {j=}, {k=}")
                 extract_zero_shards(temp_dir, slice_shapes, ds_checkpoint, i, j, k)
 
-    merge_tp_slices(ds_checkpoint, os.path.join(args.output_folder, "zero"), temp_dir, slice_shapes, ds_checkpoint.tp_degree)        
+    merge_tp_slices(ds_checkpoint, os.path.join(args.output_folder, "zero"), temp_dir, slice_shapes, ds_checkpoint.tp_degree)
     shutil.rmtree(temp_dir, ignore_errors=True)
-    
-    # Copy mp* files into output folder 
-    for f in glob.glob(os.path.join(args.input_folder, 'mp*')):
-        shutil.copy2(f, args.output_folder) 
 
-    # Update latest to output folder 
+    # Copy mp* files into output folder
+    for f in glob.glob(os.path.join(args.input_folder, 'mp*')):
+        shutil.copy2(f, args.output_folder)
+
+    # Update latest to output folder
     checkpoint_root_folder, step_folder = os.path.split(args.output_folder)
     latest_file = os.path.join(checkpoint_root_folder, 'latest_universal')
     with open(latest_file, "w") as f:
