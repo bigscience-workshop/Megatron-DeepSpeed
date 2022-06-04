@@ -194,6 +194,8 @@ def _merge_zero_shards(param_base_path, state, tp_degree, slice_shape):
 ORIGINAL_VOCAB_SIZE = 'original_vocab_size'
 def _strip_vocab_padding(ds_checkpoint, padded_vocab_tensor):
     checkpoint_info = ds_checkpoint.get_checkpoint_info()
+    padding_tensor = padded_vocab_tensor.narrow(0, checkpoint_info[ORIGINAL_VOCAB_SIZE], padded_vocab_tensor.shape[0]-checkpoint_info[ORIGINAL_VOCAB_SIZE])
+    print(f'{padded_vocab_tensor[checkpoint_info[ORIGINAL_VOCAB_SIZE]-3:,:]=}')
     return padded_vocab_tensor.narrow(0, 0, checkpoint_info[ORIGINAL_VOCAB_SIZE])
 
 
@@ -246,7 +248,7 @@ def merge_tp_slices(ds_checkpoint, dir, slice_dir, slice_shapes, tp_degree):
             if "word_embeddings.weight" in name:
                 print(f"Before {param.shape=}")
                 # strip padding
-                param = _strip_vocab_padding(ds_checkpoint, param)
+                #param = _strip_vocab_padding(ds_checkpoint, param)
                 ckpt_dict['tensor_to_pad'] = True
                 print(f"After {param.shape=}")
 

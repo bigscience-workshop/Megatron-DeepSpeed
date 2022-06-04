@@ -457,6 +457,9 @@ def setup_model_and_optimizer(model_provider_func):
     else:
         args.iteration = 0
     
+    from .utils import dump_weights 
+    dump_weights(f'{args.universal_checkpoint=}', args.iteration, model, optimizer)
+
     # tp_rank = mpu.get_tensor_model_parallel_rank()
     # pp_rank = mpu.get_pipeline_model_parallel_rank()
     # dp_rank = mpu.get_data_parallel_rank()

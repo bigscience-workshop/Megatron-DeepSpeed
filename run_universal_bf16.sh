@@ -55,15 +55,15 @@ WORLD_SIZE=$((TP*PP*DP))
 GLOBAL_BATCH=4
 
 MICRO_BATCH=1
-TRAIN_ITERS=10000
+TRAIN_ITERS=100000
 CHECKPOINT_PATH=checkpoints/gpt2/tp${TP}_pp${PP}_dp${DP} 
 LOAD_CHECKPOINT_PATH=checkpoints/gpt2/tp${TP}_pp${PP}_dp4
 
-LR=6.0e-4
-MIN_LR=6.0e-5
+LR=0 # 6.0e-4
+MIN_LR=0 # 6.0e-5
 DTYPE="bf16"
 EXP_DIR=${HOME}/experiments/results/ckpt_reshape
-LOG_DIR="${EXP_DIR}/tensorboard/tp${TP}_pp${PP}_dp${DP}_hd${HIDDEN}_nl${LAYERS}_gbsz${GLOBAL_BATCH}_mbsz${MICRO_BATCH}_z${ZERO_STAGE}_LR_${LR}_${MIN_LR}_${DTYPE}_uni_2"
+LOG_DIR="${EXP_DIR}/tensorboard/tp${TP}_pp${PP}_dp${DP}_hd${HIDDEN}_nl${LAYERS}_gbsz${GLOBAL_BATCH}_mbsz${MICRO_BATCH}_z${ZERO_STAGE}_LR_${LR}_${MIN_LR}_${DTYPE}_uni"
 mkdir -p $LOG_DIR
 
 while [[ $# -gt 0 ]]
@@ -123,6 +123,7 @@ options=" \
         --load ${LOAD_CHECKPOINT_PATH} \
         --universal-checkpoint \
         --position-embedding-type alibi \
+        --override-lr-scheduler \
         --embed-layernorm \
 	--tensorboard-dir $LOG_DIR
         "
