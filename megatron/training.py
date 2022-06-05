@@ -692,7 +692,7 @@ def training_log(loss_dict, total_loss_dict, learning_rate, iteration,
         # The factor of 4 is when used with activation check-pointing,
         # otherwise it will be 3, but for 200B model, activation check-pointing will always be on.
         checkpoint_activations_factor = 4 if args.checkpoint_activations else 3
-        # GLU activations double the hidden states in the upscaling feed-forward in the each transformer layer
+        # GLU activations double the hidden states in the upscaling feed-forward in each transformer layer
         # This leads to 16bsh^2 instead of 8bsh^2 per feed-forward layer, thus we increase the coefficient by 8.
         # Refer to https://github.com/bigscience-workshop/Megatron-DeepSpeed/pull/283#issue-1260805063 for more details.
         coefficient = 32 if args.glu_activation else 24
