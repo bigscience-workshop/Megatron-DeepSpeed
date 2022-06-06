@@ -59,8 +59,8 @@ TRAIN_ITERS=100000
 CHECKPOINT_PATH=checkpoints/gpt2/tp${TP}_pp${PP}_dp${DP} 
 LOAD_CHECKPOINT_PATH=checkpoints/gpt2/tp${TP}_pp${PP}_dp${DP}
 
-LR=0 # 6.0e-4
-MIN_LR=0 # 6.0e-5
+LR=6.0e-4
+MIN_LR=6.0e-5
 DTYPE="bf16"
 EXP_DIR=${HOME}/experiments/results/ckpt_reshape
 LOG_DIR="${EXP_DIR}/tensorboard/tp${TP}_pp${PP}_dp${DP}_hd${HIDDEN}_nl${LAYERS}_gbsz${GLOBAL_BATCH}_mbsz${MICRO_BATCH}_z${ZERO_STAGE}_LR_${LR}_${MIN_LR}_${DTYPE}_cont"

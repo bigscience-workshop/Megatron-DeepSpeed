@@ -3,6 +3,7 @@
 from collections import OrderedDict
 from copy import deepcopy
 from email.policy import default
+import itertools
 from pathlib import Path
 from pprint import pprint
 import argparse
@@ -13,6 +14,7 @@ import shutil
 import sys
 import torch
 import re
+import multiprocessing
 
 # insert megatron's root dir into sys.path
 root_repo_path = str(Path(__file__).resolve().parents[2])
@@ -120,7 +122,8 @@ def save_params_universal(dir, slice_shapes):
             _save_checkpoint(path, param)
 
 
-def extract_zero_shards(dir, slice_shapes, ds_checkpoint, pp_index, tp_index, dp_index):
+def extract_zero_shards(dir, slice_shapes, ds_checkpoint, indices_3D):
+    pp_index, tp_index, dp_index = indices_3D
     sd = ds_checkpoint.get_zero_checkpoint_state(
         pp_index=pp_index,
         tp_index=tp_index,
@@ -216,7 +219,12 @@ WEIGHTS_WITH_ROW_PARALLELISM_CONTAIN = [
 ]
 
 
-
+def _get_vocab_divisibility_padding_tensor(ds_checkpoint, padded_vocab_tensor):
+    checkpoint_info = ds_checkpoint.get_checkpoint_info()
+    if padded_vocab_tensor.shape[0] > checkpoint_info[ORIGINAL_VOCAB_SIZE]:
+        return padded_vocab_tensor[-1]
+    else:
+        return torch.zeros(padded_vocab_tensor.shape[1])
 
 def merge_tp_slices(ds_checkpoint, dir, slice_dir, slice_shapes, tp_degree):
     for name, shape in slice_shapes.items():
@@ -247,13 +255,19 @@ def merge_tp_slices(ds_checkpoint, dir, slice_dir, slice_shapes, tp_degree):
                 print(f"Before {param.shape=}")
                 # strip padding
                 #param = _strip_vocab_padding(ds_checkpoint, param)
-                ckpt_dict['tensor_to_pad'] = True
+                ckpt_dict['vocab_divisibility_padding_tensor'] = _get_vocab_divisibility_padding_tensor(ds_checkpoint, param)
                 print(f"After {param.shape=}")
 
             print(f"Final shape: {param.shape}")
             ckpt_dict['param'] = param
             _save_checkpoint(final_path, ckpt_dict)
 
+
+
+
+def _get_chunks(l, n):
+    for i in range(0, len(l), n):
+        yield l[i:i + n]
 
 def main():
     print(f'Convert DeepSpeed Checkpoint to Universal Checkpoint')
@@ -282,11 +296,24 @@ def main():
     # make fake params
     # save_params_universal(args.output_folder, slice_shapes)
     temp_dir = os.path.join(args.output_folder, 'tmp')
-    for i in range(ds_checkpoint.pp_degree):
-        for j in range(ds_checkpoint.tp_degree):
-            for k in range(ds_checkpoint.dp_degree):
-                print(f"{i=}, {j=}, {k=}")
-                extract_zero_shards(temp_dir, slice_shapes, ds_checkpoint, i, j, k)
+    _3d_range_list = list(itertools.product(range(ds_checkpoint.pp_degree), range(ds_checkpoint.tp_degree), range(ds_checkpoint.dp_degree)))
+    pprint(_3d_range_list)
+    num_workers = 6
+    work_chunks = list(_get_chunks(_3d_range_list, num_workers)) 
+    pprint(work_chunks)
+
+    from functools import partial
+    calc_stuff = partial(extract_zero_shards, temp_dir, slice_shapes, ds_checkpoint)
+
+    pool = multiprocessing.Pool(num_workers)
+    for batch in work_chunks:
+        pool.map(calc_stuff, batch)
+
+    # for i in range(ds_checkpoint.pp_degree):
+    #     for j in range(ds_checkpoint.tp_degree):
+    #         for k in range(ds_checkpoint.dp_degree):
+    #             print(f"{i=}, {j=}, {k=}")
+    #             extract_zero_shards(temp_dir, slice_shapes, ds_checkpoint, i, j, k)
 
     merge_tp_slices(ds_checkpoint, os.path.join(args.output_folder, "zero"), temp_dir, slice_shapes, ds_checkpoint.tp_degree)
     shutil.rmtree(temp_dir, ignore_errors=True)
