@@ -183,7 +183,16 @@ def pretrain(train_valid_test_dataset_provider,
     timers.log(['model-and-optimizer-setup', 'train/valid/test-data-iterators-setup'])
     print_rank_0('training ...')
 
-    iteration = 0
+    iteration = args.iteration if hasattr(args, "iteration") else 0
+    if args.do_valid and args.eval_first:
+        names = args.valid_weighted_split_names
+        names = names if names is not None else ['valid'] * len(valid_data_iterator)
+        for iterator, name in zip(valid_data_iterator, names):
+            prefix = 'the start of training for val data'
+            evaluate_and_print_results(prefix, forward_step_func,
+                                       iterator, model,
+                                       iteration, False, data_group_name=name)
+
     if args.do_train and args.train_iters > 0:
         iteration = train(forward_step_func,
                           model, optimizer, lr_scheduler,
@@ -1128,7 +1137,7 @@ def build_train_valid_test_data_iterators(
         # train_dataloader is a single item while valid_dataloaders
         # and test_dataloaders are arrays
         train_dataloader = build_pretraining_data_loader(
-            train_ds[0], args.consumed_train_samples)
+            train_ds[0], 0 if args.new_dataset else args.consumed_train_samples)
 
         # We collapse None and empty list as both should mean we don't run validation
         # args.consumed_valid_samples accumulates the sum of valid steps for every dataset, which are all equal

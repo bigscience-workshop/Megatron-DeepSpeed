@@ -750,6 +750,8 @@ def _add_validation_args(parser):
     group.add_argument('--eval-interval', type=int, default=1000,
                        help='Interval between running evaluation on '
                        'validation set.')
+    group.add_argument('--eval-first', action="store_true",
+                       help='Evaluate before first data point.')
 
     return parser
 
@@ -925,6 +927,8 @@ def _add_data_args(parser):
                        'This is mostly used for prefix_lm training')
     group.add_argument('--no-shuffle', action="store_true",
                        help='Disables dataset shuffling.')
+    group.add_argument('--new-dataset', action="store_true",
+                       help='Restart training on new dataset.')
 
     return parser
 
