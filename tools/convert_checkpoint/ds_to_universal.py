@@ -3,18 +3,20 @@
 from collections import OrderedDict
 from copy import deepcopy
 from email.policy import default
-import itertools
+from functools import partial
 from pathlib import Path
 from pprint import pprint
 import argparse
 import glob
+import itertools
 import logging
+import multiprocessing
 import os
+import re
 import shutil
 import sys
 import torch
-import re
-import multiprocessing
+import tqdm
 
 # insert megatron's root dir into sys.path
 root_repo_path = str(Path(__file__).resolve().parents[2])
@@ -115,7 +117,7 @@ def save_params_universal(dir, slice_shapes):
     for name, shape in slice_shapes.items():
         param_base_path = os.path.join(dir, name)
         os.makedirs(param_base_path, exist_ok=True)
-        print(f"{name}: {shape} => {param_base_path}")
+        #print(f"{name}: {shape} => {param_base_path}")
         for state in ("fp32", "exp_avg", "exp_avg_sq"):
             path = os.path.join(param_base_path, f"{state}.pt")
             param = torch.Tensor(shape)
@@ -153,7 +155,7 @@ def extract_zero_shards(dir, slice_shapes, ds_checkpoint, indices_3D):
                 # Skip tied weights that are replicated in first and last pp stages
                 continue
 
-            print(f"{param_group_id} {name} => {fragment_mapping.start}:{fragment_mapping.numel}")
+            #print(f"{param_group_id} {name} => {fragment_mapping.start}:{fragment_mapping.numel}")
             for state_key in flat_state.keys():
                 dump_param_fragment(dir, tp_index, dp_index, state_key, flat_state[state_key], name, fragment_mapping.start, fragment_mapping.numel)
 
@@ -173,7 +175,7 @@ def dump_param_fragment(dir, tp_index, dp_index, state_name, state_flat_tensor, 
 
     path = os.path.join(param_base_path, f"{state_name}.{counter}")
 
-    print(f"{param_name}: {offset}: {numel} => {path}")
+    #print(f"{param_name}: {offset}: {numel} => {path}")
 
     t = state_flat_tensor.narrow(0, offset, numel)
     _save_checkpoint(path, t)
@@ -184,7 +186,7 @@ def _merge_zero_shards(param_base_path, state, tp_degree, slice_shape):
     for tp_index in range(tp_degree):
         prefix_path = os.path.join(param_base_path, str(tp_index), f"{state}")
         paths = sorted(list(glob.glob(f"{prefix_path}.0*")))
-        print(paths)
+        #print(paths)
         shards = [torch.load(p) for p in paths]
         slice = torch.cat(shards, dim=0).reshape(slice_shape)
         slices.append(slice)
@@ -196,7 +198,7 @@ ORIGINAL_VOCAB_SIZE = 'original_vocab_size'
 def _strip_vocab_padding(ds_checkpoint, padded_vocab_tensor):
     checkpoint_info = ds_checkpoint.get_checkpoint_info()
     padding_tensor = padded_vocab_tensor.narrow(0, checkpoint_info[ORIGINAL_VOCAB_SIZE], padded_vocab_tensor.shape[0]-checkpoint_info[ORIGINAL_VOCAB_SIZE])
-    print(f'{padded_vocab_tensor[checkpoint_info[ORIGINAL_VOCAB_SIZE]-3:,:]=}')
+    #print(f'{padded_vocab_tensor[checkpoint_info[ORIGINAL_VOCAB_SIZE]-3:,:]=}')
     return padded_vocab_tensor.narrow(0, 0, checkpoint_info[ORIGINAL_VOCAB_SIZE])
 
 
@@ -230,7 +232,7 @@ def merge_tp_slices(ds_checkpoint, dir, slice_dir, slice_shapes, tp_degree):
     for name, shape in slice_shapes.items():
         slice_base_path = os.path.join(slice_dir, name)
         param_base_path = os.path.join(dir, name)
-        print(f"\n{name}: {shape} => {slice_base_path} ----->  {param_base_path}")
+        #print(f"\n{name}: {shape} => {slice_base_path} ----->  {param_base_path}")
 
         # XXX: shouldn't be in the states
         if "position_embeddings" in name:
@@ -240,25 +242,25 @@ def merge_tp_slices(ds_checkpoint, dir, slice_dir, slice_shapes, tp_degree):
             slices = _merge_zero_shards(slice_base_path, state, tp_degree, shape)
             final_path = os.path.join(param_base_path, f"{state}.pt")
 
-            print(f"Expected shape: {shape}")
-            print(f"Fragment sizes:", list(frag.shape for frag in slices))
+            #print(f"Expected shape: {shape}")
+            #print(f"Fragment sizes:", list(frag.shape for frag in slices))
             ckpt_dict = {}
             if any(re.match(pattern, name) for pattern in WEIGHTS_TO_AVERAGE_PATTERNS):
                 param = sum(slices) / len(slices)
             else:
                 cat_dim = 1 if any(text in name for text in WEIGHTS_WITH_ROW_PARALLELISM_CONTAIN) else 0
-                print(f"CAT DIM: {cat_dim}")
+                #print(f"CAT DIM: {cat_dim}")
                 param = torch.cat(slices, dim=cat_dim)
                 ckpt_dict['cat_dim'] = cat_dim
 
             if "word_embeddings.weight" in name:
-                print(f"Before {param.shape=}")
+                #print(f"Before {param.shape=}")
                 # strip padding
                 #param = _strip_vocab_padding(ds_checkpoint, param)
                 ckpt_dict['vocab_divisibility_padding_tensor'] = _get_vocab_divisibility_padding_tensor(ds_checkpoint, param)
-                print(f"After {param.shape=}")
+                #print(f"After {param.shape=}")
 
-            print(f"Final shape: {param.shape}")
+            #print(f"Final shape: {param.shape}")
             ckpt_dict['param'] = param
             _save_checkpoint(final_path, ckpt_dict)
 
@@ -297,17 +299,19 @@ def main():
     # save_params_universal(args.output_folder, slice_shapes)
     temp_dir = os.path.join(args.output_folder, 'tmp')
     _3d_range_list = list(itertools.product(range(ds_checkpoint.pp_degree), range(ds_checkpoint.tp_degree), range(ds_checkpoint.dp_degree)))
-    pprint(_3d_range_list)
+    #pprint(_3d_range_list)
     num_workers = 6
-    work_chunks = list(_get_chunks(_3d_range_list, num_workers)) 
-    pprint(work_chunks)
+    work_chunks = list(_get_chunks(_3d_range_list, num_workers))
+    #pprint(work_chunks)
 
-    from functools import partial
     calc_stuff = partial(extract_zero_shards, temp_dir, slice_shapes, ds_checkpoint)
 
+    print('*** 1. Extracting ZeRO fragments')
     pool = multiprocessing.Pool(num_workers)
-    for batch in work_chunks:
+    for batch in tqdm.tqdm(work_chunks):
         pool.map(calc_stuff, batch)
+    pool.close()
+    pool.join()
 
     # for i in range(ds_checkpoint.pp_degree):
     #     for j in range(ds_checkpoint.tp_degree):
@@ -315,6 +319,7 @@ def main():
     #             print(f"{i=}, {j=}, {k=}")
     #             extract_zero_shards(temp_dir, slice_shapes, ds_checkpoint, i, j, k)
 
+    print('*** 2. Merging slices')
     merge_tp_slices(ds_checkpoint, os.path.join(args.output_folder, "zero"), temp_dir, slice_shapes, ds_checkpoint.tp_degree)
     shutil.rmtree(temp_dir, ignore_errors=True)
 
@@ -327,6 +332,8 @@ def main():
     latest_file = os.path.join(checkpoint_root_folder, 'latest_universal')
     with open(latest_file, "w") as f:
         f.write(step_folder)
+
+    print('*** Done!')
 
 
 if __name__ == "__main__":
