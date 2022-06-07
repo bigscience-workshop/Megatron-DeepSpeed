@@ -114,24 +114,6 @@ def _save_checkpoint(file_path, chkpt_sd):
 
 
 
-# def _create_latest_file(base_folder, iteration):
-#     file_path = os.path.join(base_folder, 'latest_checkpointed_iteration.txt')
-#     os.makedirs(base_folder, exist_ok=True)
-#     with open(file_path, 'w') as f:
-#         f.write(str(iteration))
-
-# XXX: this is a temp hack that creates fake params but with the right shapes
-def save_params_universal(dir, slice_shapes):
-    for name, shape in slice_shapes.items():
-        param_base_path = os.path.join(dir, name)
-        os.makedirs(param_base_path, exist_ok=True)
-        #print(f"{name}: {shape} => {param_base_path}")
-        for state in ("fp32", "exp_avg", "exp_avg_sq"):
-            path = os.path.join(param_base_path, f"{state}.pt")
-            param = torch.Tensor(shape)
-            _save_checkpoint(path, param)
-
-
 def extract_zero_shards(dir, slice_shapes, ds_checkpoint, indices_3D):
     pp_index, tp_index, dp_index = indices_3D
     sd = ds_checkpoint.get_zero_checkpoint_state(
@@ -238,9 +220,6 @@ def _get_vocab_divisibility_padding_tensor(ds_checkpoint, padded_vocab_tensor):
 
 def merge_tp_slices(ds_checkpoint, dir, slice_dir, tp_degree, name_and_shape):
     name, shape = name_and_shape
-    # XXX: shouldn't be in the states
-#    if "position_embeddings" in name:
-#        return 
     slice_base_path = os.path.join(slice_dir, name)
     param_base_path = os.path.join(dir, name)
 

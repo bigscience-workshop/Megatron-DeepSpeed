@@ -45,7 +45,7 @@ else
         HIDDEN=1024
         LAYERS=24
         SEQ=1024
-        EXIT_INTERVAL=10000
+        EXIT_INTERVAL=10
 fi  
 
 TP=2
@@ -57,7 +57,7 @@ GLOBAL_BATCH=4
 MICRO_BATCH=1
 TRAIN_ITERS=100000
 CHECKPOINT_PATH=checkpoints/gpt2/tp${TP}_pp${PP}_dp${DP} 
-LOAD_CHECKPOINT_PATH=checkpoints/gpt2/tp${TP}_pp${PP}_dp4
+LOAD_CHECKPOINT_PATH=checkpoints/gpt2/tp2_pp2_dp4
 
 LR=6.0e-4
 MIN_LR=6.0e-5
