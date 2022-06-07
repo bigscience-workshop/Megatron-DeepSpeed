@@ -304,12 +304,12 @@ def main():
     work_chunks = list(_get_chunks(_3d_range_list, num_workers))
     #pprint(work_chunks)
 
-    calc_stuff = partial(extract_zero_shards, temp_dir, slice_shapes, ds_checkpoint)
+    do_work = partial(extract_zero_shards, temp_dir, slice_shapes, ds_checkpoint)
 
     print('*** 1. Extracting ZeRO fragments')
     pool = multiprocessing.Pool(num_workers)
     for batch in tqdm.tqdm(work_chunks):
-        pool.map(calc_stuff, batch)
+        pool.map(do_work, batch)
     pool.close()
     pool.join()
 
