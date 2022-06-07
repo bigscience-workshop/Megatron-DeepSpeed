@@ -55,10 +55,14 @@ def parse_arguments():
                         default=1,
                         type=int,
                         help='Target PP degree')
-    parser.add_argument('--num_workers',
+    parser.add_argument('--num_extract_workers',
                         default=4,
                         type=int,
-                        help='How many parallel processes to use')
+                        help='How many parallel processes to extract zero shards')
+    parser.add_argument('--num_merge_workers',
+                        default=2,
+                        type=int,
+                        help='How many parallel processes to merge tp slices (more memory intensive, use much fewer than --num_extract_workers))')
     parser.add_argument(
         '--for_release',
         action='store_true',
@@ -135,7 +139,7 @@ def extract_zero_shards(dir, slice_shapes, ds_checkpoint, indices_3D):
         tp_index=tp_index,
         dp_index=dp_index)
 
-    pprint(f"Processing {dp_index=} {pp_index=}, {tp_index=}")
+    #pprint(f"Processing {dp_index=} {pp_index=}, {tp_index=}")
 
     optim_sd = sd["optimizer_state_dict"]
     param_slice_mappings = optim_sd["param_slice_mappings"]
@@ -232,41 +236,41 @@ def _get_vocab_divisibility_padding_tensor(ds_checkpoint, padded_vocab_tensor):
     else:
         return torch.zeros(padded_vocab_tensor.shape[1])
 
-def merge_tp_slices(ds_checkpoint, dir, slice_dir, slice_shapes, tp_degree):
-    for name, shape in slice_shapes.items():
-        slice_base_path = os.path.join(slice_dir, name)
-        param_base_path = os.path.join(dir, name)
-        #print(f"\n{name}: {shape} => {slice_base_path} ----->  {param_base_path}")
+def merge_tp_slices(ds_checkpoint, dir, slice_dir, tp_degree, name_and_shape):
+    name, shape = name_and_shape
+    # XXX: shouldn't be in the states
+#    if "position_embeddings" in name:
+#        return 
+    slice_base_path = os.path.join(slice_dir, name)
+    param_base_path = os.path.join(dir, name)
 
-        # XXX: shouldn't be in the states
-        if "position_embeddings" in name:
-            continue
+    for state in ("fp32", "exp_avg", "exp_avg_sq"):
+        slices = _merge_zero_shards(slice_base_path, state, tp_degree, shape)
+        final_path = os.path.join(param_base_path, f"{state}.pt")
 
-        for state in ("fp32", "exp_avg", "exp_avg_sq"):
-            slices = _merge_zero_shards(slice_base_path, state, tp_degree, shape)
-            final_path = os.path.join(param_base_path, f"{state}.pt")
+        #print(f"Expected shape: {shape}")
+        #print(f"Fragment sizes:", list(frag.shape for frag in slices))
+        ckpt_dict = {}
+        if any(re.match(pattern, name) for pattern in WEIGHTS_TO_AVERAGE_PATTERNS):
+            param = sum(slices) / len(slices)
+        else:
+            cat_dim = 1 if any(text in name for text in WEIGHTS_WITH_ROW_PARALLELISM_CONTAIN) else 0
+            #print(f"CAT DIM: {cat_dim}")
+            param = torch.cat(slices, dim=cat_dim)
+            ckpt_dict['cat_dim'] = cat_dim
 
-            #print(f"Expected shape: {shape}")
-            #print(f"Fragment sizes:", list(frag.shape for frag in slices))
-            ckpt_dict = {}
-            if any(re.match(pattern, name) for pattern in WEIGHTS_TO_AVERAGE_PATTERNS):
-                param = sum(slices) / len(slices)
-            else:
-                cat_dim = 1 if any(text in name for text in WEIGHTS_WITH_ROW_PARALLELISM_CONTAIN) else 0
-                #print(f"CAT DIM: {cat_dim}")
-                param = torch.cat(slices, dim=cat_dim)
-                ckpt_dict['cat_dim'] = cat_dim
+        if "word_embeddings.weight" in name:
+            #print(f"Before {param.shape=}")
+            # strip padding
+            #param = _strip_vocab_padding(ds_checkpoint, param)
+            ckpt_dict['vocab_divisibility_padding_tensor'] = _get_vocab_divisibility_padding_tensor(ds_checkpoint, param)
+            #print(f"After {param.shape=}")
 
-            if "word_embeddings.weight" in name:
-                #print(f"Before {param.shape=}")
-                # strip padding
-                #param = _strip_vocab_padding(ds_checkpoint, param)
-                ckpt_dict['vocab_divisibility_padding_tensor'] = _get_vocab_divisibility_padding_tensor(ds_checkpoint, param)
-                #print(f"After {param.shape=}")
+        #print(f"Final shape: {param.shape}")
+        ckpt_dict['param'] = param
+        _save_checkpoint(final_path, ckpt_dict)
 
-            #print(f"Final shape: {param.shape}")
-            ckpt_dict['param'] = param
-            _save_checkpoint(final_path, ckpt_dict)
+
 
 
 
@@ -274,6 +278,34 @@ def merge_tp_slices(ds_checkpoint, dir, slice_dir, slice_shapes, tp_degree):
 def _get_chunks(l, n):
     for i in range(0, len(l), n):
         yield l[i:i + n]
+
+
+def _do_parallel_work(do_work, work_chunks, num_workers):
+    pool = multiprocessing.Pool(num_workers)
+    for batch in tqdm.tqdm(work_chunks):
+        pool.map(do_work, batch)
+    pool.close()
+    pool.join()
+
+def _extract_zero_shard_files(args, ds_checkpoint, slice_shapes, temp_dir):
+    _3d_range_list = list(itertools.product(range(ds_checkpoint.pp_degree), range(ds_checkpoint.tp_degree), range(ds_checkpoint.dp_degree)))
+    #pprint(_3d_range_list)
+    work_chunks = list(_get_chunks(_3d_range_list, args.num_extract_workers))
+    #pprint(work_chunks)
+
+    do_work = partial(extract_zero_shards, temp_dir, slice_shapes, ds_checkpoint)
+    _do_parallel_work(do_work, work_chunks, args.num_extract_workers)
+
+
+
+def _merge_tp_slice_files(args, ds_checkpoint, slice_shapes, temp_dir):
+    work_chunks = list(_get_chunks(list(slice_shapes.items()), args.num_merge_workers))
+    #pprint(work_chunks)
+    zero_output_folder = os.path.join(args.output_folder, "zero") 
+    do_work = partial(merge_tp_slices, ds_checkpoint, zero_output_folder, temp_dir, ds_checkpoint.tp_degree)
+    _do_parallel_work(do_work, work_chunks, args.num_merge_workers)
+
+
 
 def main():
     print(f'Convert DeepSpeed Checkpoint to Universal Checkpoint')
@@ -298,32 +330,14 @@ def main():
 
     # fix back to normal flat dict, merge duplicates for tp>1
     slice_shapes = dict((k,v) for d in slice_shapes for k,v in d.items() )
-
-    # make fake params
-    # save_params_universal(args.output_folder, slice_shapes)
     temp_dir = os.path.join(args.output_folder, 'tmp')
-    _3d_range_list = list(itertools.product(range(ds_checkpoint.pp_degree), range(ds_checkpoint.tp_degree), range(ds_checkpoint.dp_degree)))
-    #pprint(_3d_range_list)
-    work_chunks = list(_get_chunks(_3d_range_list, args.num_workers))
-    #pprint(work_chunks)
-
-    do_work = partial(extract_zero_shards, temp_dir, slice_shapes, ds_checkpoint)
 
     print('*** 1. Extracting ZeRO fragments')
-    pool = multiprocessing.Pool(args.num_workers)
-    for batch in tqdm.tqdm(work_chunks):
-        pool.map(do_work, batch)
-    pool.close()
-    pool.join()
-
-    # for i in range(ds_checkpoint.pp_degree):
-    #     for j in range(ds_checkpoint.tp_degree):
-    #         for k in range(ds_checkpoint.dp_degree):
-    #             print(f"{i=}, {j=}, {k=}")
-    #             extract_zero_shards(temp_dir, slice_shapes, ds_checkpoint, i, j, k)
+    _extract_zero_shard_files(args, ds_checkpoint, slice_shapes, temp_dir)
 
     print('*** 2. Merging slices')
-    merge_tp_slices(ds_checkpoint, os.path.join(args.output_folder, "zero"), temp_dir, slice_shapes, ds_checkpoint.tp_degree)
+    _merge_tp_slice_files(args, ds_checkpoint, slice_shapes, temp_dir)
+
     shutil.rmtree(temp_dir, ignore_errors=True)
 
     # Copy mp* files into output folder

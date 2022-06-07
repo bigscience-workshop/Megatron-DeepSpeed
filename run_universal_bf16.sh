@@ -45,10 +45,10 @@ else
         HIDDEN=1024
         LAYERS=24
         SEQ=1024
-        EXIT_INTERVAL=10
+        EXIT_INTERVAL=10000
 fi  
 
-TP=1
+TP=2
 PP=2
 DP=4
 WORLD_SIZE=$((TP*PP*DP))
@@ -167,7 +167,7 @@ cat <<EOT > $CONFIG_JSON
 }
 EOT
 
-WORKER_STR="--num_nodes 1 --num_gpus $WORLD_SIZE"
+#WORKER_STR="--num_nodes 1 --num_gpus $WORLD_SIZE"
 #WORKER_STR="-i worker-0:0,1,2,3"
 #run_cmd="deepspeed -i worker-0:0,1,2,3 ${DIR}/pretrain_gpt.py $@ ${options}"
 #run_cmd="deepspeed -i worker-0 ${DIR}/pretrain_gpt.py $@ ${options}"
