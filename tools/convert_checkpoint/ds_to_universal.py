@@ -55,6 +55,10 @@ def parse_arguments():
                         default=1,
                         type=int,
                         help='Target PP degree')
+    parser.add_argument('--num_workers',
+                        default=4,
+                        type=int,
+                        help='How many parallel processes to use')
     parser.add_argument(
         '--for_release',
         action='store_true',
@@ -300,14 +304,13 @@ def main():
     temp_dir = os.path.join(args.output_folder, 'tmp')
     _3d_range_list = list(itertools.product(range(ds_checkpoint.pp_degree), range(ds_checkpoint.tp_degree), range(ds_checkpoint.dp_degree)))
     #pprint(_3d_range_list)
-    num_workers = 6
-    work_chunks = list(_get_chunks(_3d_range_list, num_workers))
+    work_chunks = list(_get_chunks(_3d_range_list, args.num_workers))
     #pprint(work_chunks)
 
     do_work = partial(extract_zero_shards, temp_dir, slice_shapes, ds_checkpoint)
 
     print('*** 1. Extracting ZeRO fragments')
-    pool = multiprocessing.Pool(num_workers)
+    pool = multiprocessing.Pool(args.num_workers)
     for batch in tqdm.tqdm(work_chunks):
         pool.map(do_work, batch)
     pool.close()
