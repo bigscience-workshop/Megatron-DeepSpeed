@@ -197,7 +197,7 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
             data_impl=args.data_impl,
             splits_string=args.split,
             train_valid_test_num_samples=train_val_test_num_samples,
-            max_seq_length=args.seq_length-373,
+            max_seq_length=args.encoder_seq_length,
             masked_lm_prob=args.mask_prob,
             seed=args.seed,
             skip_warmup=(not args.mmap_warmup),
