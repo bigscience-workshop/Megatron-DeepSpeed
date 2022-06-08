@@ -216,7 +216,7 @@ class NonCausalMLMDataset(torch.utils.data.Dataset):
         indices = self.samples_mapping[idx]
         sample = []
         for doc_idx, start_index, end_index in indices:
-            sample.append(self.indexed_dataset[index][start_index:end_index])
+            sample.append(self.indexed_dataset[doc_idx][start_index:end_index])
 
         return build_training_sample(
             sample, expanded_inputs_length, self.vocab_id_list,
