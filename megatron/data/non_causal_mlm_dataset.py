@@ -161,7 +161,6 @@ class NonCausalMLMDataset(torch.utils.data.Dataset):
         self.seed = seed
         self.masked_lm_prob = masked_lm_prob
         self.max_seq_length = max_seq_length
-        self.max_seq_length_dec = max_seq_length_dec
 
         # Dataset.
         self.indexed_dataset = indexed_dataset
