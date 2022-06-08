@@ -25,7 +25,7 @@ import torch
 
 from megatron import mpu, print_rank_0, get_tokenizer
 from megatron.data.blendable_dataset import BlendableDataset
-from megatron.data.dataset_utils import get_datasets_weights_and_num_samples, get_samples_mapping, create_masked_lm_predictions
+from megatron.data.dataset_utils import get_datasets_weights_and_num_samples, create_masked_lm_predictions
 from megatron.data.dataset_utils import get_train_valid_test_split_, get_split_by_range_, get_indexed_dataset_
 from megatron.data.indexed_dataset import make_dataset as make_indexed_dataset
 
@@ -177,16 +177,23 @@ class NonCausalMLMDataset(torch.utils.data.Dataset):
         # Dataset.
         self.indexed_dataset = indexed_dataset
 
+        max_ngrams = 3
+        # T5-like span masked language modeling will fuse consecutively masked tokens to a single sentinel token.
+        # To ensure that the input length is `max_seq_length`, we need to increase the maximum length
+        # according to `masked_lm_prob` and `max_ngrams`. We can also define the label length accordingly.
+        expanded_inputs_length, targets_length = compute_input_and_target_lengths(
+            self.max_seq_length,
+            self.masked_lm_prob,
+            max_ngrams
+            )
+
         # Build the samples mapping.
-        self.samples_mapping = get_samples_mapping(self.indexed_dataset,
-                                                   data_prefix,
-                                                   num_epochs,
-                                                   max_num_samples,
-                                                   self.max_seq_length - 2, # account for added tokens
-                                                   short_seq_prob,
-                                                   self.seed,
-                                                   self.name,
-                                                   False)
+        self.samples_mapping = get_samples_mapping(
+            self.indexed_dataset,
+            data_prefix,
+            self.name,
+            max_len=expanded_inputs_length
+            )
 
         # Vocab stuff.
         tokenizer = get_tokenizer()
@@ -202,88 +209,40 @@ class NonCausalMLMDataset(torch.utils.data.Dataset):
         assert len(self.sentinel_tokens) > 0, "Provide the argument --vocab-extra-ids 100 to the script"
 
     def __len__(self):
-        return self.samples_mapping.shape[0]
+        return len(self.samples_mapping)
 
     def __getitem__(self, idx):
 
-        start_index, end_index, seq_length = self.samples_mapping[idx]
+        indices = self.samples_mapping[idx]
         sample = []
-        for index in range(start_index, end_index):
-            sample.append(self.indexed_dataset[index])
+        for doc_idx, start_index, end_index in indices:
+            sample.append(self.indexed_dataset[index][start_index:end_index])
 
-        #concat more to avoid padding
-        while seq_length < (self.max_seq_length/self.masked_lm_prob):
-            _idx = random.randint(idx, self.__len__())
-            start_index, end_index, _seq_length = self.samples_mapping[_idx]
-            for index in range(start_index, end_index):
-                sample.append(self.indexed_dataset[index])
-
-            seq_length += _seq_length
-
-        # Note that this rng state should be numpy and not python since
-        # python randint is inclusive whereas the numpy one is exclusive.
-        np_rng = np.random.RandomState(seed=(self.seed + idx))
-        return build_training_sample(sample, seq_length,
-                                     self.max_seq_length,  # needed for padding
-                                     self.max_seq_length_dec,
-                                     self.vocab_id_list,
-                                     self.vocab_id_to_token_dict,
-                                     self.cls_id, self.sep_id,
-                                     self.mask_id, self.pad_id,
-                                     self.masked_lm_prob, np_rng,
-                                     self.bos_id, self.eos_id,
-                                     self.sentinel_tokens)
+        return build_training_sample(
+            sample, expanded_inputs_length, self.vocab_id_list,
+            self.cls_id, self.sep_id, self.mask_id, self.pad_id, self.bos_id, self.eos_id,
+            self.sentinel_tokens
+            )
 
 
-def build_training_sample(sample, target_seq_length,
-                          max_seq_length, max_seq_length_dec,
-                          vocab_id_list, vocab_id_to_token_dict,
-                          cls_id, sep_id, mask_id, pad_id,
-                          masked_lm_prob, np_rng, bos_id=None,
-                          eos_id=None, sentinel_tokens=None):
+def build_training_sample(
+    sample, expanded_inputs_length, vocab_id_list,
+    cls_id, sep_id, mask_id, pad_id, bos_id=None, eos_id=None, sentinel_tokens=None
+    ):
     """Build training sample.
 
     Arguments:
-        sample: A list of sentences in which each sentence is a list token ids.
-        target_seq_length: Desired sequence length.
-        max_seq_length: Maximum length of the sequence. All values are padded to
-            this length.
-        vocab_id_list: List of vocabulary ids. Used to pick a random id.
-        vocab_id_to_token_dict: A dictionary from vocab ids to text tokens.
-        cls_id: Start of example id.
-        sep_id: Separator id.
-        mask_id: Mask token id.
-        pad_id: Padding token id.
-        masked_lm_prob: Probability to mask tokens.
-        np_rng: Random number genenrator. Note that this rng state should be
-              numpy and not python since python randint is inclusive for
-              the opper bound whereas the numpy one is exclusive.
-        bos_id: start of decoder example id
-        eos_id: end of generation id
-        sentinel_tokens: unique value to be substituted for every replaced span
+        TODO: Add description
     """
-
-    # assert target_seq_length <= max_seq_length
 
     # flatten sentences into one list
     tokens = [token for sentence in sample for token in sentence]
 
-    # # Truncate to `target_sequence_length`.
-    # max_num_tokens = target_seq_length
-    # truncated = len(tokens) > max_num_tokens
-    # tokens = tokens[:max_num_tokens]
-
-    max_ngrams = 3
-    # T5-like span masked language modeling will fuse consecutively masked tokens to a single sentinel token.
-    # To ensure that the input length is `max_seq_length`, we need to increase the maximum length
-    # according to `masked_lm_prob` and `max_ngrams`. We can also define the label length accordingly.
-    expanded_inputs_length, targets_length = compute_input_and_target_lengths(
-        max_seq_length,
-        masked_lm_prob,
-        max_ngrams
-        )
-
-    mask_indices = np.asarray([random_spans_noise_mask(expanded_inputs_length)])
+    mask_indices = np.asarray([random_spans_noise_mask(
+        expanded_inputs_length,
+        noise_density=0.15,
+        mean_noise_span_length=3
+        )])
     labels_mask = ~mask_indices
     
     input_ids_sentinel = create_sentinel_ids(mask_indices.astype(np.int8), vocab_len=len(vocab_id_list))
@@ -303,43 +262,6 @@ def build_training_sample(sample, target_seq_length,
     input_tokens_ids = filter_input_ids(tokens, input_ids_sentinel, eos_id)[0]
     output_tokens_ids = filter_input_ids(tokens, labels_sentinel, eos_id)[0]
 
-    # # Masking.
-    # max_predictions_per_seq = masked_lm_prob * max_num_tokens
-    # (tokens, masked_positions, masked_labels, _, masked_spans) = create_masked_lm_predictions(
-    #     tokens, vocab_id_list, vocab_id_to_token_dict, masked_lm_prob,
-    #     cls_id, sep_id, mask_id, max_predictions_per_seq, np_rng,
-    #     max_ngrams=max_ngrams, geometric_dist=True, masking_style="t5")
-
-    # sentinel_tokens = collections.deque(sentinel_tokens)
-    # input_tokens_ids = []
-    # output_tokens_ids = [] #[bos_id]
-    # (start_index, end_index) = (0, None)
-    # for span in masked_spans:
-    #     flag = sentinel_tokens.popleft()
-
-    #     output_tokens_ids.append(flag)
-    #     output_tokens_ids.extend(span.label)
-
-    #     end_index = span.index[0]
-    #     input_tokens_ids.extend(tokens[start_index: end_index])
-    #     input_tokens_ids.append(flag)
-
-    #     # the next start index is the token after the last span token
-    #     start_index = span.index[-1] + 1
-
-
-    # # Add the remaining tokens to input_tokens_ids
-    # input_tokens_ids.extend(tokens[start_index:])
-    # input_tokens_ids.append(eos_id)
-    # # Add <eos> token to the output_tokens_ids
-    # output_tokens_ids.append(eos_id)
-    
-    # text_tokens_ids = pad_and_convert_to_numpy(
-    #     input_tokens_ids+output_tokens_ids,
-    #     pad_id,
-    #     max_seq_length+max_seq_length_dec
-    #     )
-
     text_tokens_ids = np.concatenate((input_tokens_ids, output_tokens_ids))
 
     prefix_len = len(input_tokens_ids)
@@ -348,6 +270,97 @@ def build_training_sample(sample, target_seq_length,
         'text': text_tokens_ids,
         'prefix_len': prefix_len
     }
+
+
+def get_samples_mapping(indexed_dataset, data_prefix, name, max_len=568):
+
+    def breakdown(sample_len, idx_offset=None, idx_list=None, max_len=max_len):
+
+        if idx_list is None:
+            idx_list = []
+
+        if idx_offset is None:
+            idx_offset = 0
+
+        if sample_len < max_len:
+            idx_list.append(idx_offset+sample_len)
+        else:
+            sample_len = sample_len - max_len
+            idx_list.append(idx_offset+max_len)
+            idx_offset += max_len
+
+            breakdown(sample_len, idx_offset=idx_offset, idx_list=idx_list)
+
+        idx_list = [0]+idx_list
+        return list(zip(idx_list[:-1], idx_list[1:]))
+
+
+    # Filename of the index mapping
+    indexmap_filename = data_prefix
+    indexmap_filename += '_{}_indexmap'.format(name)
+    indexmap_filename += '.npy'
+
+    # Build the indexed mapping if not exist.
+    if torch.distributed.get_rank() == 0 and \
+       not os.path.isfile(indexmap_filename):
+
+        samples_mapping = []
+        sample_indices = []
+        doc_idx = 0
+        current_len = 0
+        _idx = 0
+        for doc_idx, sample_len in zip(indexed_dataset.doc_idx, indexed_dataset.sizes):
+            _idx = 0
+
+            if current_len + sample_len > max_len:
+                end_idx = max_len - current_len
+                sample_indices.append([doc_idx, 0, end_idx])
+                samples_mapping.append(sample_indices)
+                sample_indices = []
+                current_len = 0
+                sample_len -= end_idx
+                _idx = end_idx
+
+            break_len = current_len + sample_len
+
+            indices = breakdown(sample_len)
+            for _start_idx, _end_idx in indices:
+                _len = _end_idx - _start_idx
+                if _len == max_len:
+                    samples_mapping.append([[doc_idx, _start_idx+_idx, _end_idx+_idx]])
+                else:
+                    sample_indices.append([doc_idx, _start_idx+_idx, _end_idx+_idx])
+                    current_len += _len
+
+        print_rank_0(' > done building sapmles index maping')
+        np.save(indexmap_filename, samples_mapping, allow_pickle=True)
+        print_rank_0(' > saved the index mapping in {}'.format(
+            indexmap_filename))
+        # Make sure all the ranks have built the mapping
+        print_rank_0(' > elasped time to build and save samples mapping '
+                     '(seconds): {:4f}'.format(
+                         time.time() - start_time))
+    # This should be a barrier but nccl barrier assumes
+    # device_index=rank which is not the case for model
+    # parallel case
+    counts = torch.cuda.LongTensor([1])
+    torch.distributed.all_reduce(counts, group=mpu.get_data_parallel_group())
+    torch.distributed.all_reduce(counts, group=mpu.get_pipeline_model_parallel_group())
+    assert counts[0].item() == (
+        torch.distributed.get_world_size() //
+        torch.distributed.get_world_size(group=mpu.get_tensor_model_parallel_group()))
+
+    # Load indexed dataset.
+    print_rank_0(' > loading indexed mapping from {}'.format(
+        indexmap_filename))
+    start_time = time.time()
+    samples_mapping = np.load(indexmap_filename, allow_pickle=True)
+    print_rank_0('    loaded indexed file in {:3.3f} seconds'.format(
+        time.time() - start_time))
+    print_rank_0('    total number of samples: {}'.format(
+        len(samples_mapping)))
+
+    return samples_mapping
 
 
 def pad_and_convert_to_numpy(tokens, pad_id, max_seq_length):
