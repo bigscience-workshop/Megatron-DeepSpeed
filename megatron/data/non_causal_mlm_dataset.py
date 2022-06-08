@@ -303,7 +303,18 @@ def get_samples_mapping(indexed_dataset, data_prefix, name, max_len=568):
     # Build the indexed mapping if not exist.
     if torch.distributed.get_rank() == 0 and \
        not os.path.isfile(indexmap_filename):
+        print(' > WARNING: could not find index map file {}, building '
+              'the indices on rank 0 ...'.format(indexmap_filename))
 
+        # Make sure the types match the helpers input types.
+        assert indexed_dataset.doc_idx.dtype == np.int64
+        assert indexed_dataset.sizes.dtype == np.int32
+
+        # Build samples mapping
+        verbose = torch.distributed.get_rank() == 0
+        start_time = time.time()
+        print_rank_0(' > building sapmles index mapping for {} ...'.format(
+            name))
         samples_mapping = []
         sample_indices = []
         doc_idx = 0
