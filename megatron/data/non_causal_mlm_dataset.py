@@ -33,20 +33,16 @@ from megatron.data.indexed_dataset import make_dataset as make_indexed_dataset
 def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
                                     train_valid_test_num_samples,
                                     max_seq_length,
-                                    masked_lm_prob, short_seq_prob, seed,
-                                    skip_warmup, binary_head=False,
-                                    max_seq_length_dec=None,
-                                    dataset_type='standard_bert'):
+                                    masked_lm_prob, seed,
+                                    skip_warmup
+                                    ):
     if len(data_prefix) == 1:
         return _build_train_valid_test_datasets(data_prefix[0],
                                                 data_impl, splits_string,
                                                 train_valid_test_num_samples,
                                                 max_seq_length, masked_lm_prob,
-                                                short_seq_prob, seed,
-                                                skip_warmup,
-                                                binary_head,
-                                                max_seq_length_dec,
-                                                dataset_type=dataset_type)
+                                                seed, skip_warmup
+                                                )
     # Blending dataset.
     # Parse the values.
     output = get_datasets_weights_and_num_samples(data_prefix,
@@ -61,8 +57,8 @@ def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
         train_ds, valid_ds, test_ds = _build_train_valid_test_datasets(
             prefixes[i], data_impl, splits_string,
             datasets_train_valid_test_num_samples[i],
-            max_seq_length, masked_lm_prob, short_seq_prob,
-            seed, skip_warmup, binary_head, dataset_type=dataset_type)
+            max_seq_length, masked_lm_prob,
+            seed, skip_warmup)
         if train_ds:
             train_datasets.append(train_ds)
         if valid_ds:
@@ -87,11 +83,8 @@ def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
 
 def _build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
                                      train_valid_test_num_samples,
-                                     max_seq_length,
-                                     masked_lm_prob, short_seq_prob, seed,
-                                     skip_warmup, binary_head,
-                                     max_seq_length_dec,
-                                     dataset_type='standard_bert'):
+                                     max_seq_length, masked_lm_prob, seed,
+                                     skip_warmup):
     """Build train, valid, and test datasets."""
 
 
@@ -134,16 +127,12 @@ def _build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
             kwargs = dict(
                 name=name,
                 data_prefix=data_prefix,
-                num_epochs=None,
-                max_num_samples=train_valid_test_num_samples[index],
                 max_seq_length=max_seq_length,
                 seed=seed,
             )
             dataset = NonCausalMLMDataset(
                     indexed_dataset=indexed_dataset,
                     masked_lm_prob=masked_lm_prob,
-                    max_seq_length_dec=max_seq_length_dec,
-                    short_seq_prob=short_seq_prob,
                     **kwargs
             )
             indexed_dataset.set_doc_idx(doc_idx_ptr)
@@ -163,9 +152,9 @@ def _build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
 class NonCausalMLMDataset(torch.utils.data.Dataset):
 
     def __init__(self, name, indexed_dataset, data_prefix,
-                 num_epochs, max_num_samples, masked_lm_prob,
-                 max_seq_length, max_seq_length_dec,
-                 short_seq_prob, seed):
+                 masked_lm_prob,
+                 max_seq_length,
+                 seed):
 
         # Params to store.
         self.name = name
@@ -364,21 +353,6 @@ def get_samples_mapping(indexed_dataset, data_prefix, name, max_len=568):
         len(samples_mapping)))
 
     return samples_mapping
-
-
-def pad_and_convert_to_numpy(tokens, pad_id, max_seq_length):
-    """Pad sequences and convert them to numpy."""
-
-    # Some checks.
-    num_tokens = len(tokens)
-    padding_length = max_seq_length - num_tokens
-    assert padding_length >= 0
-
-    # Tokens and token types.
-    filler = np.array([pad_id] * padding_length, dtype=np.int64)
-    tokens_np = np.concatenate((tokens, filler), dtype=np.int64)
-
-    return tokens_np
 
 
 def create_sentinel_ids(mask_indices, vocab_len):
