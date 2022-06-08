@@ -186,6 +186,8 @@ class NonCausalMLMDataset(torch.utils.data.Dataset):
             self.masked_lm_prob,
             max_ngrams
             )
+        self.expanded_inputs_length = expanded_inputs_length
+        self.targets_length = targets_length
 
         # Build the samples mapping.
         self.samples_mapping = get_samples_mapping(
@@ -219,7 +221,7 @@ class NonCausalMLMDataset(torch.utils.data.Dataset):
             sample.append(self.indexed_dataset.get(doc_idx)[start_index:end_index])
 
         return build_training_sample(
-            sample, expanded_inputs_length, self.vocab_id_list,
+            sample, self.expanded_inputs_length, self.vocab_id_list,
             self.cls_id, self.sep_id, self.mask_id, self.pad_id, self.bos_id, self.eos_id,
             self.sentinel_tokens
             )
