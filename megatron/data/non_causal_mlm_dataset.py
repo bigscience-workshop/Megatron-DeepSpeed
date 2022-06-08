@@ -250,16 +250,6 @@ def build_training_sample(
     input_ids_sentinel = create_sentinel_ids(mask_indices.astype(np.int8), vocab_len=len(vocab_id_list))
     labels_sentinel = create_sentinel_ids(labels_mask.astype(np.int8), vocab_len=len(vocab_id_list))
 
-
-    if len(tokens) <= expanded_inputs_length:
-        tokens = pad_and_convert_to_numpy(
-            tokens,
-            pad_id,
-            expanded_inputs_length
-            )
-    else:
-        tokens = tokens[:expanded_inputs_length]
-
     tokens = np.asarray([tokens])
     input_tokens_ids = filter_input_ids(tokens, input_ids_sentinel, eos_id)[0]
     output_tokens_ids = filter_input_ids(tokens, labels_sentinel, eos_id)[0]
@@ -385,7 +375,7 @@ def pad_and_convert_to_numpy(tokens, pad_id, max_seq_length):
     assert padding_length >= 0
 
     # Tokens and token types.
-    filler = np.array([pad_id] * padding_length)
+    filler = np.array([pad_id] * padding_length, dtype=np.int64)
     tokens_np = np.concatenate((tokens, filler), dtype=np.int64)
 
     return tokens_np
