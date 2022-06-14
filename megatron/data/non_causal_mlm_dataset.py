@@ -154,7 +154,8 @@ class NonCausalMLMDataset(torch.utils.data.Dataset):
     def __init__(self, name, indexed_dataset, data_prefix,
                  masked_lm_prob,
                  max_seq_length,
-                 seed):
+                 seed,
+                 max_ngrams = 3):
 
         # Params to store.
         self.name = name
@@ -165,14 +166,14 @@ class NonCausalMLMDataset(torch.utils.data.Dataset):
         # Dataset.
         self.indexed_dataset = indexed_dataset
 
-        max_ngrams = 3
+        self.max_ngrams = max_ngrams
         # T5-like span masked language modeling will fuse consecutively masked tokens to a single sentinel token.
         # To ensure that the input length is `max_seq_length`, we need to increase the maximum length
         # according to `masked_lm_prob` and `max_ngrams`. We can also define the label length accordingly.
         expanded_inputs_length, targets_length = compute_input_and_target_lengths(
             self.max_seq_length,
             self.masked_lm_prob,
-            max_ngrams
+            self.max_ngrams
             )
         self.expanded_inputs_length = expanded_inputs_length
         self.targets_length = targets_length
