@@ -879,7 +879,7 @@ def _add_data_args(parser):
     group.add_argument('--seq-length', type=int, default=None,
                        help='Maximum sequence length to process.')
     group.add_argument('--input-length', type=int, default=None,
-                       help='Maximum sequence length to process.')
+                       help='Maximum input length to process for MLM adaptation.')
     group.add_argument('--encoder-seq-length', type=int, default=None,
                        help='Maximum encoder sequence length to process.'
                        'This should be exclusive of --seq-length')
