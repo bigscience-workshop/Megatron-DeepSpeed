@@ -25,7 +25,7 @@ from megatron import mpu
 from megatron.data.gpt_dataset import build_train_valid_test_datasets, build_dataset_group
 from megatron.model import GPTModel, GPTModelPipe
 from megatron.training import pretrain
-from megatron.utils import get_ltor_masks_and_position_ids, get_prefix_indices, reweight_loss_mask_
+from megatron.utils import get_attention_masks_and_position_ids, get_prefix_indices, reweight_loss_mask_
 from megatron.utils import average_losses_across_data_parallel_group
 
 import deepspeed
@@ -97,7 +97,7 @@ def get_batch(data_iterator):
     )
 
     # Get the masks and postition ids.
-    attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
+    attention_mask, loss_mask, position_ids = get_attention_masks_and_position_ids(
         tokens,
         tokenizer.eod,
         args.reset_position_ids,
@@ -131,6 +131,7 @@ def get_batch_pipe(data):
     tokens = tokens_[:, :-1].contiguous()
 
     # Prefix
+    # TODO @thomasw21 actually since this step is random, we need to make sure that random state are synchronized. Otherwise we need to broadcast after this step.
     prefix_indices = get_prefix_indices(
         tokens,
         tokenizer.eod,
@@ -139,7 +140,7 @@ def get_batch_pipe(data):
     )
 
     # Get the masks and position ids.
-    attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
+    attention_mask, loss_mask, position_ids = get_attention_masks_and_position_ids(
         tokens,
         tokenizer.eod,
         args.reset_position_ids,
