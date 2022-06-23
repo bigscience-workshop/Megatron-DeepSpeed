@@ -101,11 +101,11 @@ class TestDataLoading(TestCasePlus):
                     skip_warmup=(not args.mmap_warmup)
                 )
 
-                print(train_ds[:5])
+                print(train_ds[0])
                 print([
                     {
                         key: tokenizer.convert_ids_to_tokens(value)
                         for key, value in sample.items()
                     }
-                    for sample in train_ds[:5]
+                    for sample in [train_ds[0]]
                 ])

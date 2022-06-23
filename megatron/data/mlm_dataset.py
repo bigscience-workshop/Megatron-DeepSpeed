@@ -221,6 +221,9 @@ class MLMDataset(torch.utils.data.Dataset):
         return len(self.samples_mapping)
 
     def __getitem__(self, idx):
+        if isinstance(idx, slice):
+            raise NotImplementedError
+
         sample = self._gpt_dataset[idx]["text"]
 
         return build_training_sample(
@@ -276,6 +279,9 @@ def build_training_sample(
             for elt in [np.full((1,), sentinel_token, dtype=np.int32), tokens[start: end]]
         ] +
         [np.full((1,), sep_id, dtype=np.int32)])
+
+    assert input_token_ids.shape[0] == inputs_length
+    assert target_token_ids.shape[0] == target_token_ids
 
     return {
         'input_tokens': input_token_ids,
