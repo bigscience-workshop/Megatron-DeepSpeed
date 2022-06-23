@@ -250,17 +250,16 @@ def build_training_sample(
         TODO: Add description
     """
 
-    # flatten sentences into one list
-    tokens = [token for sentence in sample for token in sentence]
-
-    spans_start, mask_indices = np.asarray([random_spans_noise_mask(
+    spans_start, mask_indices = random_spans_noise_mask(
         inputs_length=inputs_length,
         targets_length=targets_length,
         num_noise_spans=num_noise_spans,
-    )])
-    spans_end = np.concatenate([
-        spans_start[1:], np.full((1,), len(tokens), dtype=np.int32)]
     )
+    spans_end = np.concatenate([
+        spans_start[1:], np.full((1,), len(sample), dtype=np.int32)]
+    )
+    print(f"Sample {sample.shape}")
+    print(f"Mask_indices {mask_indices.shape}")
 
     sentinel_token_ids = all_sentinel_token_ids[:len(spans_start[1::2])]
 
@@ -268,7 +267,7 @@ def build_training_sample(
         [
             elt
             for start, end, sentinel_token in zip(spans_start[::2], spans_end[::2], sentinel_token_ids)
-            for elt in [tokens[start: end], np.full((1,), sentinel_token, dtype=np.int32)]
+            for elt in [sample[start: end], np.full((1,), sentinel_token, dtype=np.int32)]
         ] +
         [np.full((1,), sep_id, dtype=np.int32)]
     )
@@ -276,7 +275,7 @@ def build_training_sample(
         [
             elt
             for start, end, sentinel_token in zip(spans_start[1::2], spans_end[1::2], sentinel_token_ids)
-            for elt in [np.full((1,), sentinel_token, dtype=np.int32), tokens[start: end]]
+            for elt in [np.full((1,), sentinel_token, dtype=np.int32), sample[start: end]]
         ] +
         [np.full((1,), sep_id, dtype=np.int32)])
 
