@@ -78,14 +78,15 @@ class TestDataLoading(TestCasePlus):
                 tokenizer.tokenizer.add_special_tokens({
                     "additional_special_tokens": [
                         f"<extra_id_{id}>" for id in range(100)
-                    ]
+                    ],
+                    "sep_token": "<s>"
                 })
 
                 args = get_args()
                 train_val_test_num_samples = [
                     args.train_iters * args.global_batch_size,
                     args.eval_iters * args.global_batch_size,
-                    args.test_iters * args.global_batch_size
+                    0
                 ]
                 train_ds, valid_ds, test_ds = mlm_dataset.build_train_valid_test_datasets(
                     data_prefix=args.data_path,

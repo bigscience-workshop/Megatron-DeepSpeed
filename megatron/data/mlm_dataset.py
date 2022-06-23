@@ -213,7 +213,7 @@ class MLMDataset(torch.utils.data.Dataset):
 
         # Vocab stuff.
         tokenizer = get_tokenizer()
-        self.sep_id = tokenizer.sep_token_id
+        self.sep_id = tokenizer.sep
         self.sentinel_token_ids = tokenizer.additional_special_tokens_ids
         assert len(self.sentinel_tokens) > 0, "Provide the argument --vocab-extra-ids 100 to the script"
 
