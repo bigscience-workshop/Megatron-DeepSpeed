@@ -1,5 +1,5 @@
 """
-Many-to-one reshaping for checkpoints trained without ZeRO
+Many-to-many reshaping for checkpoints trained without ZeRO
 
 Usage example:
 python tools/convert_checkpoint/deepspeed_to_deepspeed_nozero.py --input_folder ../global_step156000_old --output_folder ../global_step156000_tp2pp2 --target_tp 2 --target_pp 2
@@ -14,6 +14,7 @@ Notes:
 - You need changes from https://github.com/microsoft/DeepSpeed/pull/1953/ for this script to work
 - There is a bug in PP layers in the above PR, so you may unexpectedly loose layers if reshaping to PP>1, see https://github.com/microsoft/DeepSpeed/pull/1953/files#r904886186
 - Only tested on FP16 Checkpoints
+- Only tested for decreasing the parallel dimensions
 - Data Parallelism is irrelevant here, as it does not influence non-ZeRO ckpts.
 """
 
