@@ -288,7 +288,7 @@ def build_training_sample(
     print(f"Target tokens ids: {target_token_ids.shape}")
 
     assert input_token_ids.shape[0] == inputs_length
-    assert target_token_ids.shape[0] == target_token_ids
+    assert target_token_ids.shape[0] == target_token_ids + 1
 
     return {
         'input_tokens': input_token_ids,
@@ -392,7 +392,7 @@ def random_spans_noise_mask(
     interleaved_span_lengths = np.reshape(
         np.stack([nonnoise_span_lengths, noise_span_lengths], axis=1), [num_noise_spans * 2]
     )
-    span_starts = np.cumsum(interleaved_span_lengths)[:-1]
+    span_starts = np.concatenate([np.full((1,), 0, dtype=np.int32), np.cumsum(interleaved_span_lengths)[:-1]])
     span_start_indicator = np.zeros((number_of_raw_tokens,), dtype=np.int8)
     span_start_indicator[span_starts] = True
     span_num = np.cumsum(span_start_indicator)
