@@ -20,7 +20,7 @@ initialize_megatron(
     )
 
 train_ds, valid_ds, test_ds = build_train_valid_test_datasets(
-    data_prefix=["tests/data/gpt2/meg-gpt2-openwebtext_text_document"],
+    data_prefix=["tests/data/t0/ag_news_prompt_text_document"],
     data_impl="mmap",
     splits_string="90,5,5",
     train_valid_test_num_samples=[100,100,100],
@@ -29,10 +29,17 @@ train_ds, valid_ds, test_ds = build_train_valid_test_datasets(
     skip_warmup=True
     )
 
-dl = torch.utils.data.DataLoader(
-    train_ds,
-    batch_size=4,
-    # batch_sampler=batch_sampler,
-    num_workers=4,
-    pin_memory=True
-    )
+print("Test show dataset")
+for idx in range(0,4):
+    line = train_ds[idx]
+    print(len(line))
+    print(line)
+
+
+# dl = torch.utils.data.DataLoader(
+#     train_ds,
+#     batch_size=4,
+#     # batch_sampler=batch_sampler,
+#     num_workers=4,
+#     pin_memory=True
+#     )
