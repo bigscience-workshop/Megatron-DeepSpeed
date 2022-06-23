@@ -221,6 +221,7 @@ class MLMDataset(torch.utils.data.Dataset):
         self.sep_id = tokenizer.sep
         self.sentinel_token_ids = tokenizer.additional_special_tokens_ids
         assert len(self.sentinel_token_ids) > 0, "Provide the argument --vocab-extra-ids 100 to the script"
+        assert len(self.sentinel_token_ids) >= self.num_noise_spans, "Not enough sentinel tokens, please add more"
 
     def __len__(self):
         return len(self.samples_mapping)
@@ -266,7 +267,7 @@ def build_training_sample(
     print(f"Sample {sample.shape}")
     print(f"Mask_indices {mask_indices.shape}")
 
-    sentinel_token_ids = all_sentinel_token_ids[:len(spans_start[1::2])]
+    sentinel_token_ids = all_sentinel_token_ids[:num_noise_spans]
 
     input_token_ids = np.concatenate(
         [
