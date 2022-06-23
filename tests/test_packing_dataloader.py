@@ -3,7 +3,8 @@ import torch.distributed as dist
 
 from megatron.initialize import initialize_megatron
 # from megatron.data.data_samplers import MegatronPackedRandomSampler
-from megatron.data.gpt_dataset import build_train_valid_test_datasets, build_dataset_group
+# from megatron.data.gpt_dataset import build_train_valid_test_datasets
+from megatron.data.non_causal_mtf_dataset import build_train_valid_test_datasets
 
 #Initialize Megatron with dummy variables
 initialize_megatron(

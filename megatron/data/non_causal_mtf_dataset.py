@@ -271,20 +271,12 @@ class NonCausalMTFDataset(torch.utils.data.Dataset):
         )
 
         eod_idx = np.where(sample == self.tokenizer.eod)[0]
-        if len(eod_idx) > 0:
-            prefix_len = eod_idx[0]
-        else:
-            prefix_len = 0
-
-        sample = pad_and_convert_to_numpy(
-            sample,
-            self.tokenizer.pad,
-            self.seq_length
-            )
+        input_tokens = sample[:eod_idx]
+        target_tokens = sample[eod_idx:]
 
         return {
-            'text': np.array(sample, dtype=np.int64),
-            'prefix_len': prefix_len
+            'input_tokens': np.array(input_tokens, dtype=np.int64),
+            'target_tokens': np.array(target_tokens, dtype=np.int64),
             }
 
 
