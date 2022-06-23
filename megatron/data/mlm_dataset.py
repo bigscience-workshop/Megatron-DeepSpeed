@@ -364,7 +364,7 @@ def random_spans_noise_mask(
     """
     # # pick the lengths of the noise spans and the non-noise spans
     num_noise_tokens = targets_length - num_noise_spans - 1
-    num_nonnoise_tokens = inputs_length - num_noise_tokens - 1
+    num_nonnoise_tokens = inputs_length - num_noise_spans - 1
     print(f"Noise tokens {num_noise_tokens}, {targets_length}")
     print(f"Non noise tokens {num_nonnoise_tokens}, {inputs_length}")
     number_of_raw_tokens = num_noise_tokens + num_nonnoise_tokens
