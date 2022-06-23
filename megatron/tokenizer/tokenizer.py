@@ -320,24 +320,28 @@ class _GPT2BPETokenizer(AbstractTokenizer):
 class _AutoTokenizer(AbstractTokenizer):
     """AutoTokenizer for Hf Pretrained model loading."""
 
-    def __init__(self, tokenizer_name_or_path):
+    def __init__(self, tokenizer_name_or_path, **hf_tokenizer_kwargs):
         name = tokenizer_name_or_path
         super().__init__(name)
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path)
+        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, **hf_tokenizer_kwargs)
         self.encoder = self.tokenizer.get_vocab()
         self.decoder = {v: k for k, v in self.encoder.items()}
 
     @property
     def vocab_size(self):
-        return self.tokenizer.vocab_size
+        return len(self.tokenizer) # vocab_size doesn't contain additional tokens
 
     @property
     def vocab(self):
-        return self.tokenizer.encoder
+        # TODO @thomasw21 make sure that special tokens don't collapse with vocab tokens.
+        return {
+            **{special_token: self.tokenizer.convert_tokens_to_ids(special_token) for special_token in self.tokenizer.additional_special_tokens},
+            **self.tokenizer.vocab,
+        }
 
     @property
     def inv_vocab(self):
-        return self.tokenizer.decoder
+        return {v: k for k, v in self.vocab.items()}
 
     def tokenize(self, text):
         return self.tokenizer.encode(text)
@@ -348,3 +352,34 @@ class _AutoTokenizer(AbstractTokenizer):
     @property
     def eod(self):
         return self.tokenizer.eos_token_id
+
+    @property
+    def cls(self):
+        return self.tokenizer.cls_token_id
+
+    @property
+    def sep(self):
+        return self.tokenizer.sep_token_id
+
+    @property
+    def pad(self):
+        return self.tokenizer.pad_token_id
+
+    @property
+    def mask(self):
+        return self.tokenizer.mask_token_id
+
+    @property
+    def additional_special_tokens_ids(self):
+        """ All the additional special tokens you may want to use (list of strings)."""
+        return self.tokenizer.additional_special_tokens_ids
+
+    @property
+    def bos_token_id(self):
+        raise NotImplementedError("Missing <bos>")
+
+    @property
+    def eos_token_id(self):
+        raise NotImplementedError("Missing <eos>")
+
+

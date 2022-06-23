@@ -925,6 +925,9 @@ def _add_data_args(parser):
                        'specific positions. This option tries to un-bias the loss by reweighting loss on specific '
                        'positions based on how frequently we train on that position.'
                        'This is mostly used for prefix_lm training')
+    group.add_argument("--noise_density", type=float, help="Span corruption noise density")
+    group.add_argument("--mean_noise_span_length", type=int, help="Span corruption mean noise span length")
+
 
     return parser
 
