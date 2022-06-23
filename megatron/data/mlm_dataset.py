@@ -25,6 +25,7 @@ from megatron import mpu, print_rank_0, get_tokenizer
 from megatron.data.blendable_dataset import BlendableDataset
 from megatron.data.dataset_utils import get_datasets_weights_and_num_samples
 from megatron.data.dataset_utils import get_train_valid_test_split_, get_indexed_dataset_
+from megatron.data.gpt_dataset import GPTDataset
 
 
 def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
@@ -131,29 +132,20 @@ def _build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
     def build_dataset(index, name):
         dataset = None
         if splits[index + 1] > splits[index]:
-            # Get the pointer to the original doc-idx so we can set it later.
-            doc_idx_ptr = indexed_dataset.get_doc_idx()
-            # Slice the doc-idx
-            start_index = splits[index]
-            # Add +1 so we can index into the dataset to get the upper bound.
-            end_index = splits[index + 1] + 1
-            # New doc_idx view.
-            indexed_dataset.set_doc_idx(doc_idx_ptr[start_index:end_index])
             # Build the dataset accordingly.
+            documents = np.arange(start=splits[index], stop=splits[index + 1],
+                                  step=1, dtype=np.int32)
             dataset = MLMDataset(
                     indexed_dataset=indexed_dataset,
+                    documents=documents,
                     noise_density=noise_density,
                     mean_noise_span_length=mean_noise_span_length,
                     name=name,
                     data_prefix=data_prefix,
                     sequence_length=sequence_length,
+                    num_samples=train_valid_test_num_samples[index],
                     seed=seed,
             )
-            indexed_dataset.set_doc_idx(doc_idx_ptr)
-            # Checks.
-            # assert indexed_dataset.doc_idx[0] == 0
-            # assert indexed_dataset.doc_idx.shape[0] == \
-            #     (total_num_of_documents + 1)
         return dataset
 
     train_dataset = build_dataset(0, 'train')
@@ -169,11 +161,13 @@ class MLMDataset(torch.utils.data.Dataset):
         self,
         name,
         indexed_dataset,
+        documents,
         data_prefix,
         sequence_length,
+        num_samples,
         seed,
-        noise_density = 0.15,
-        mean_noise_span_length = 3
+        noise_density=0.15,
+        mean_noise_span_length=3
     ):
 
         # Params to store.
@@ -200,13 +194,22 @@ class MLMDataset(torch.utils.data.Dataset):
         self.num_noise_spans = num_noise_spans
 
         # Build the samples mapping.
-        self.shuffle_idx, self.samples_idx = get_samples_mapping(
-            self.indexed_dataset,
-            data_prefix,
-            self.name,
-            number_of_raw_tokens=number_of_raw_tokens,
+        self._gpt_dataset = GPTDataset(
+            name=self.name,
+            data_prefix=data_prefix,
+            documents=documents,
+            indexed_dataset=self.indexed_dataset,
+            num_samples=num_samples,
+            seq_length=number_of_raw_tokens,
             seed=seed
         )
+        # self.shuffle_idx, self.samples_idx = get_samples_mapping(
+        #     self.indexed_dataset,
+        #     data_prefix,
+        #     self.name,
+        #     number_of_raw_tokens=number_of_raw_tokens,
+        #     seed=seed
+        # )
 
         # Vocab stuff.
         tokenizer = get_tokenizer()
@@ -218,12 +221,7 @@ class MLMDataset(torch.utils.data.Dataset):
         return len(self.samples_mapping)
 
     def __getitem__(self, idx):
-        idx = self.shuffle_idx[idx]
-
-        indices = self.samples_mapping[idx]
-        sample = []
-        for doc_idx, start_index, end_index in indices:
-            sample.append(self.indexed_dataset.get(doc_idx)[start_index:end_index])
+        sample = self._gpt_dataset[idx]["text"]
 
         return build_training_sample(
             sample,
@@ -283,105 +281,6 @@ def build_training_sample(
         'input_tokens': input_token_ids,
         'target_tokens': target_token_ids
     }
-
-
-def get_samples_mapping(indexed_dataset, data_prefix, name, number_of_raw_tokens, seed):
-    # Set random seed
-    np_rng = np.random.RandomState(seed=seed)
-
-    # Filename of the index mapping
-    indexmap_filename = f'{data_prefix}_{name}_mlm_dataset_indexmap_{number_of_raw_tokens}_rt_{seed}_seed.npy'
-    shuffle_idx_filename = f"{data_prefix}_{name}_mlm_dataset_shuffle_idx_{number_of_raw_tokens}_rt_{seed}_seed.npy"
-    # Build the indexed mapping if not exist.
-    if torch.distributed.get_rank() == 0 and \
-       not os.path.isfile(indexmap_filename):
-        print(' > WARNING: could not find index map file {}, building '
-              'the indices on rank 0 ...'.format(indexmap_filename))
-
-        # Make sure the types match the helpers input types.
-        assert indexed_dataset.doc_idx.dtype == np.int64
-        assert indexed_dataset.sizes.dtype == np.int32
-
-        # Build samples mapping
-        start_time = time.time()
-        print_rank_0(f' > building samples index mapping for {name} ...')
-        samples_mapping = []
-        sample_indices = []
-        current_len = 0
-        _idx = 0
-        for doc_idx, sample_len in zip(indexed_dataset.doc_idx, indexed_dataset.sizes):
-            # if document doesn't fit entirely.
-            sample_left = sample_len
-            while current_len + sample_left > number_of_raw_tokens:
-                start_idx = sample_len - sample_left
-                span_length = number_of_raw_tokens - current_len
-                assert span_length <= number_of_raw_tokens
-                sample_indices.append([doc_idx, start_idx, span_length + start_idx])
-                samples_mapping.append(sample_indices)
-                sample_indices = []
-                current_len = 0
-                sample_left -= span_length
-
-            # If there's nothing else in the sample, we continue
-            if sample_left == 0:
-                continue
-
-            # If there's something else in the sample, we add the rest as we know current_len + sample_left <= number_of_raw_tokens
-            start_idx = sample_len - sample_left
-            span_length = sample_left
-            sample_indices.append([doc_idx, start_idx, start_idx + span_length])
-            current_len += span_length
-            assert span_length <= number_of_raw_tokens
-            assert current_len <= number_of_raw_tokens
-            # If we filled up a sample we add is to `samples_mapping` and empty the buffer.
-            if current_len == number_of_raw_tokens:
-                samples_mapping.append(sample_indices)
-                sample_indices = []
-                current_len = 0
-
-
-        print_rank_0(' > done building sapmles index maping')
-        np.save(indexmap_filename, samples_mapping, allow_pickle=True)
-        print_rank_0(' > saved the index mapping in {}'.format(
-            indexmap_filename))
-
-        # shuffle-idx.
-        start_time = time.time()
-        num_samples_ = len(samples_mapping)
-        shuffle_idx = _build_shuffle_idx(num_samples_, np_rng)
-        np.save(shuffle_idx_filename, shuffle_idx, allow_pickle=True)
-
-        # Make sure all the ranks have built the mapping
-        print_rank_0(' > elasped time to build and save samples mapping '
-                     '(seconds): {:4f}'.format(
-                         time.time() - start_time))
-
-    # This should be a barrier but nccl barrier assumes
-    # device_index=rank which is not the case for model
-    # parallel case
-    counts = torch.cuda.LongTensor([1])
-    torch.distributed.all_reduce(counts, group=mpu.get_data_parallel_group())
-    torch.distributed.all_reduce(counts, group=mpu.get_pipeline_model_parallel_group())
-    assert counts[0].item() == (
-        torch.distributed.get_world_size() //
-        torch.distributed.get_world_size(group=mpu.get_tensor_model_parallel_group()))
-
-    # Load indexed dataset.
-    print_rank_0(' > loading indexed mapping from {}'.format(
-        indexmap_filename))
-    start_time = time.time()
-    samples_idx = np.load(indexmap_filename, allow_pickle=True, mmap_mode='r')
-    print_rank_0('    loaded indexed file in {:3.3f} seconds'.format(
-        time.time() - start_time))
-    print_rank_0(' > loading shuffle-idx mapping from {}'.format(
-        shuffle_idx_filename))
-    shuffle_idx = np.load(shuffle_idx_filename, allow_pickle=True, mmap_mode='r')
-    print_rank_0('    loaded indexed file in {:3.3f} seconds'.format(
-        time.time() - start_time))
-    print_rank_0('    total number of samples: {}'.format(
-        samples_idx.shape[0]))
-
-    return shuffle_idx, samples_idx
 
 
 def compute_input_and_target_lengths(sequence_length, noise_density, mean_noise_span_length):
@@ -486,16 +385,114 @@ def random_spans_noise_mask(
 
     return span_starts, is_noise
 
-def _build_shuffle_idx(num_samples, np_rng):
-    """Build the range [0, size) and shuffle."""
-    print(f' > building shuffle index with split [0, {num_samples}) '
-          f'...', flush=True)
-
-    dtype_ = np.uint32
-    if num_samples >= (np.iinfo(np.uint32).max - 1):
-        dtype_ = np.int64
-
-    shuffle_idx_first = np.arange(start=0, stop=num_samples,
-                                  step=1, dtype=dtype_)
-    np_rng.shuffle(shuffle_idx_first)
-    return shuffle_idx_first
+# def get_samples_mapping(indexed_dataset, data_prefix, name, number_of_raw_tokens, seed):
+#     # Set random seed
+#     np_rng = np.random.RandomState(seed=seed)
+#
+#     # Filename of the index mapping
+#     indexmap_filename = f'{data_prefix}_{name}_mlm_dataset_indexmap_{number_of_raw_tokens}_rt_{seed}_seed.npy'
+#     shuffle_idx_filename = f"{data_prefix}_{name}_mlm_dataset_shuffle_idx_{number_of_raw_tokens}_rt_{seed}_seed.npy"
+#     # Build the indexed mapping if not exist.
+#     if torch.distributed.get_rank() == 0 and \
+#        not os.path.isfile(indexmap_filename):
+#         print(' > WARNING: could not find index map file {}, building '
+#               'the indices on rank 0 ...'.format(indexmap_filename))
+#
+#         # Make sure the types match the helpers input types.
+#         assert indexed_dataset.doc_idx.dtype == np.int64
+#         assert indexed_dataset.sizes.dtype == np.int32
+#
+#         # Build samples mapping
+#         start_time = time.time()
+#         print_rank_0(f' > building samples index mapping for {name} ...')
+#         samples_mapping = []
+#         sample_indices = []
+#         current_len = 0
+#         _idx = 0
+#         for doc_idx, sample_len in zip(indexed_dataset.doc_idx, indexed_dataset.sizes):
+#             # if document doesn't fit entirely.
+#             sample_left = sample_len
+#             while current_len + sample_left > number_of_raw_tokens:
+#                 start_idx = sample_len - sample_left
+#                 span_length = number_of_raw_tokens - current_len
+#                 assert span_length <= number_of_raw_tokens
+#                 sample_indices.append([doc_idx, start_idx, span_length + start_idx])
+#                 samples_mapping.append(sample_indices)
+#                 sample_indices = []
+#                 current_len = 0
+#                 sample_left -= span_length
+#
+#             # If there's nothing else in the sample, we continue
+#             if sample_left == 0:
+#                 continue
+#
+#             # If there's something else in the sample, we add the rest as we know current_len + sample_left <= number_of_raw_tokens
+#             start_idx = sample_len - sample_left
+#             span_length = sample_left
+#             sample_indices.append([doc_idx, start_idx, start_idx + span_length])
+#             current_len += span_length
+#             assert span_length <= number_of_raw_tokens
+#             assert current_len <= number_of_raw_tokens
+#             # If we filled up a sample we add is to `samples_mapping` and empty the buffer.
+#             if current_len == number_of_raw_tokens:
+#                 samples_mapping.append(sample_indices)
+#                 sample_indices = []
+#                 current_len = 0
+#
+#
+#         print_rank_0(' > done building sapmles index maping')
+#         np.save(indexmap_filename, samples_mapping, allow_pickle=True)
+#         print_rank_0(' > saved the index mapping in {}'.format(
+#             indexmap_filename))
+#
+#         # shuffle-idx.
+#         start_time = time.time()
+#         num_samples_ = len(samples_mapping)
+#         shuffle_idx = _build_shuffle_idx(num_samples_, np_rng)
+#         np.save(shuffle_idx_filename, shuffle_idx, allow_pickle=True)
+#
+#         # Make sure all the ranks have built the mapping
+#         print_rank_0(' > elasped time to build and save samples mapping '
+#                      '(seconds): {:4f}'.format(
+#                          time.time() - start_time))
+#
+#     # This should be a barrier but nccl barrier assumes
+#     # device_index=rank which is not the case for model
+#     # parallel case
+#     counts = torch.cuda.LongTensor([1])
+#     torch.distributed.all_reduce(counts, group=mpu.get_data_parallel_group())
+#     torch.distributed.all_reduce(counts, group=mpu.get_pipeline_model_parallel_group())
+#     assert counts[0].item() == (
+#         torch.distributed.get_world_size() //
+#         torch.distributed.get_world_size(group=mpu.get_tensor_model_parallel_group()))
+#
+#     # Load indexed dataset.
+#     print_rank_0(' > loading indexed mapping from {}'.format(
+#         indexmap_filename))
+#     start_time = time.time()
+#     samples_idx = np.load(indexmap_filename, allow_pickle=True, mmap_mode='r')
+#     print_rank_0('    loaded indexed file in {:3.3f} seconds'.format(
+#         time.time() - start_time))
+#     print_rank_0(' > loading shuffle-idx mapping from {}'.format(
+#         shuffle_idx_filename))
+#     shuffle_idx = np.load(shuffle_idx_filename, allow_pickle=True, mmap_mode='r')
+#     print_rank_0('    loaded indexed file in {:3.3f} seconds'.format(
+#         time.time() - start_time))
+#     print_rank_0('    total number of samples: {}'.format(
+#         samples_idx.shape[0]))
+#
+#     return shuffle_idx, samples_idx
+#
+# def _build_shuffle_idx(num_samples, np_rng):
+#     """Build the range [0, size) and shuffle."""
+#     print(f' > building shuffle index with split [0, {num_samples}) '
+#           f'...', flush=True)
+#
+#     dtype_ = np.uint32
+#     if num_samples >= (np.iinfo(np.uint32).max - 1):
+#         dtype_ = np.int64
+#
+#     shuffle_idx_first = np.arange(start=0, stop=num_samples,
+#                                   step=1, dtype=dtype_)
+#     np_rng.shuffle(shuffle_idx_first)
+#     return shuffle_idx_first

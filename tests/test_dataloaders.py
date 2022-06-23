@@ -82,12 +82,17 @@ class TestDataLoading(TestCasePlus):
                 })
 
                 args = get_args()
+                train_val_test_num_samples = [
+                    args.train_iters * args.global_batch_size,
+                    args.eval_iters * args.global_batch_size,
+                    args.test_iters * args.global_batch_size
+                ]
                 train_ds, valid_ds, test_ds = mlm_dataset.build_train_valid_test_datasets(
                     data_prefix=args.data_path,
                     data_impl=args.data_impl,
                     splits_string=args.split,
                     # TODO @thomasw21 figure how that value works
-                    train_valid_test_num_samples=None,
+                    train_valid_test_num_samples=train_val_test_num_samples,
                     sequence_length=args.seq_length,
                     noise_density=args.noise_density,
                     mean_noise_span_length=args.mean_noise_span_length,
