@@ -47,7 +47,7 @@ def get_default_args(data_dir):
         # DATA_ARGS
     }
 
-class TestDataLoaing(TestCasePlus):
+class TestDataLoading(TestCasePlus):
     def setUp(self) -> None:
         super().setUp()
 
@@ -88,7 +88,7 @@ class TestDataLoaing(TestCasePlus):
                     splits_string=args.split,
                     # TODO @thomasw21 figure how that value works
                     train_valid_test_num_samples=None,
-                    max_seq_length=args.seq_length,
+                    sequence_length=args.seq_length,
                     noise_density=args.noise_density,
                     mean_noise_span_length=args.mean_noise_span_length,
                     seed=args.seed,

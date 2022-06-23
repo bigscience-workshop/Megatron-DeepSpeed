@@ -29,7 +29,7 @@ from megatron.data.dataset_utils import get_train_valid_test_split_, get_indexed
 
 def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
                                     train_valid_test_num_samples,
-                                    max_seq_length,
+                                    sequence_length,
                                     noise_density,
                                     mean_noise_span_length,
                                     seed,
@@ -42,7 +42,7 @@ def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
         return _build_train_valid_test_datasets(data_prefix[0],
                                                 data_impl, splits_string,
                                                 train_valid_test_num_samples,
-                                                max_seq_length,
+                                                sequence_length,
                                                 noise_density,
                                                 mean_noise_span_length,
                                                 seed, skip_warmup
@@ -61,7 +61,7 @@ def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
         train_ds, valid_ds, test_ds = _build_train_valid_test_datasets(
             prefixes[i], data_impl, splits_string,
             datasets_train_valid_test_num_samples[i],
-            max_seq_length,
+            sequence_length,
             noise_density,
             mean_noise_span_length,
             seed, skip_warmup)
@@ -89,7 +89,7 @@ def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
 
 def _build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
                                      train_valid_test_num_samples,
-                                     max_seq_length,
+                                     sequence_length,
                                      noise_density,
                                      mean_noise_span_length,
                                      seed,
@@ -139,7 +139,7 @@ def _build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
                     mean_noise_span_length=mean_noise_span_length,
                     name=name,
                     data_prefix=data_prefix,
-                    sequence_length=max_seq_length,
+                    sequence_length=sequence_length,
                     seed=seed,
             )
             indexed_dataset.set_doc_idx(doc_idx_ptr)
@@ -180,10 +180,10 @@ class MLMDataset(torch.utils.data.Dataset):
         self.noise_density = noise_density
         self.mean_noise_span_length = mean_noise_span_length
         # T5-like span masked language modeling will fuse consecutively masked tokens to a single sentinel token.
-        # To ensure that the input length is `max_seq_length`, we need to increase the maximum length
-        # according to `masked_lm_prob` and `max_ngrams`. We can also define the label length accordingly.
+        # To ensure that the input length is `sequence_length`, we need to increase the maximum length
+        # according to `noise_density` and `mean_noise_span_length`. We can also define the label length accordingly.
         number_of_raw_tokens, inputs_length, targets_length, num_noise_spans = compute_input_and_target_lengths(
-            self.max_seq_length,
+            self.sequence_length,
             self.noise_density,
             self.mean_noise_span_length
         )
