@@ -13,21 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""GPT Non-Causal Mask Language Model Finetune Style dataset."""
+"""Non-Causal Mask Language Model Finetune Style dataset."""
 
 import os
 import time
-import random
-import collections
 
 import numpy as np
 import torch
 
 from megatron import mpu, print_rank_0, get_tokenizer
 from megatron.data.blendable_dataset import BlendableDataset
-from megatron.data.dataset_utils import get_datasets_weights_and_num_samples, create_masked_lm_predictions
-from megatron.data.dataset_utils import get_train_valid_test_split_, get_split_by_range_, get_indexed_dataset_
-from megatron.data.indexed_dataset import make_dataset as make_indexed_dataset
+from megatron.data.dataset_utils import get_datasets_weights_and_num_samples
+from megatron.data.dataset_utils import get_train_valid_test_split_, get_indexed_dataset_
 
 
 def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
@@ -185,7 +182,7 @@ class MLMDataset(torch.utils.data.Dataset):
         # T5-like span masked language modeling will fuse consecutively masked tokens to a single sentinel token.
         # To ensure that the input length is `max_seq_length`, we need to increase the maximum length
         # according to `masked_lm_prob` and `max_ngrams`. We can also define the label length accordingly.
-        number_of_raw_tokens, inputs_length, targets_length = compute_input_and_target_lengths(
+        number_of_raw_tokens, inputs_length, targets_length, num_noise_spans = compute_input_and_target_lengths(
             self.max_seq_length,
             self.noise_density,
             self.mean_noise_span_length
@@ -193,6 +190,7 @@ class MLMDataset(torch.utils.data.Dataset):
         self.number_of_raw_tokens = number_of_raw_tokens
         self.inputs_length = inputs_length
         self.targets_length = targets_length
+        self.num_noise_spans = num_noise_spans
 
         # Build the samples mapping.
         self.shuffle_idx, self.samples_idx = get_samples_mapping(
@@ -205,13 +203,6 @@ class MLMDataset(torch.utils.data.Dataset):
 
         # Vocab stuff.
         tokenizer = get_tokenizer()
-        self.vocab_id_list = list(tokenizer.inv_vocab.keys())
-        self.vocab_id_to_token_dict = tokenizer.inv_vocab
-        self.cls_id = tokenizer.cls
-        self.sep_id = tokenizer.sep
-        self.mask_id = tokenizer.mask
-        self.pad_id = tokenizer.pad
-        self.bos_id = tokenizer.bos_token_id
         self.sep_id = tokenizer.sep_token_id
         self.sentinel_token_ids = tokenizer.additional_special_tokens_ids
         assert len(self.sentinel_tokens) > 0, "Provide the argument --vocab-extra-ids 100 to the script"
@@ -231,8 +222,9 @@ class MLMDataset(torch.utils.data.Dataset):
             sample,
             self.inputs_length,
             self.targets_length,
-            self.number_of_raw_tokens,
-            self.sentinel_tokens,
+            self.num_noise_spans,
+            self.sep_id,
+            self.sentinel_token_ids,
         )
 
 
@@ -241,6 +233,7 @@ def build_training_sample(
     inputs_length,
     targets_length,
     num_noise_spans,
+    sep_id,
     all_sentinel_token_ids,
 ):
     """Build training sample.
@@ -260,20 +253,24 @@ def build_training_sample(
     spans_end = np.concatenate([
         spans_start[1:], np.full((1,), len(tokens), dtype=np.int32)]
     )
-    labels_mask = ~mask_indices
 
     sentinel_token_ids = all_sentinel_token_ids[:len(spans_start[1::2])]
 
-    input_token_ids = np.concatenate([
-        elt
-        for start, end, sentinel_token in zip(spans_start[::2], spans_end[::2], sentinel_token_ids)
-        for elt in [tokens[start: end], np.full((1,), sentinel_token, dtype=np.int32)]
-    ])
-    target_token_ids = np.concatenate([
-        elt
-        for start, end, sentinel_token in zip(spans_start[1::2], spans_end[1::2], sentinel_token_ids)
-        for elt in [np.full((1,), sentinel_token, dtype=np.int32), tokens[start: end]]
-    ])
+    input_token_ids = np.concatenate(
+        [
+            elt
+            for start, end, sentinel_token in zip(spans_start[::2], spans_end[::2], sentinel_token_ids)
+            for elt in [tokens[start: end], np.full((1,), sentinel_token, dtype=np.int32)]
+        ] +
+        [np.full((1,), sep_id, dtype=np.int32)]
+    )
+    target_token_ids = np.concatenate(
+        [
+            elt
+            for start, end, sentinel_token in zip(spans_start[1::2], spans_end[1::2], sentinel_token_ids)
+            for elt in [np.full((1,), sentinel_token, dtype=np.int32), tokens[start: end]]
+        ] +
+        [np.full((1,), sep_id, dtype=np.int32)])
 
     return {
         'input_tokens': input_token_ids,
@@ -404,18 +401,18 @@ def compute_input_and_target_lengths(sequence_length, noise_density, mean_noise_
     def _tokens_length_to_inputs_length_targets_length(tokens_length):
         num_noise_tokens = int(round(tokens_length * noise_density))
         num_nonnoise_tokens = tokens_length - num_noise_tokens
-        num_noise_spans = int(round(num_noise_tokens / mean_noise_span_length))
+        _num_noise_spans = int(round(num_noise_tokens / mean_noise_span_length))
         # inputs contain all nonnoise tokens, sentinels for all noise spans
         # and one SEP token.
-        _input_length = num_nonnoise_tokens + num_noise_spans + 1
-        _output_length = num_noise_tokens + num_noise_spans + 1
-        return _input_length, _output_length
+        _input_length = num_nonnoise_tokens + _num_noise_spans + 1
+        _output_length = num_noise_tokens + _num_noise_spans + 1
+        return _input_length, _output_length, _num_noise_spans
 
     tokens_length = sequence_length
-    inputs_length, targets_length = _tokens_length_to_inputs_length_targets_length(tokens_length)
+    inputs_length, targets_length, _num_noise_spans = _tokens_length_to_inputs_length_targets_length(tokens_length)
     while inputs_length + targets_length > tokens_length:
         tokens_length -= 1
-        inputs_length, targets_length = _tokens_length_to_inputs_length_targets_length(tokens_length)
+        inputs_length, targets_length, _num_noise_spans = _tokens_length_to_inputs_length_targets_length(tokens_length)
 
     # minor hack to get the targets length to be equal to inputs length
     # which is more likely to have been set to a nice round number.
@@ -426,7 +423,7 @@ def compute_input_and_target_lengths(sequence_length, noise_density, mean_noise_
     # tokens_length is the number of raw tokens we need to get
     # inputs_length will be the input
     # targets_length will be the target
-    return tokens_length, inputs_length, targets_length
+    return tokens_length, inputs_length, targets_length, _num_noise_spans
 
 
 # TODO @thomasw21 handle random state correctly.

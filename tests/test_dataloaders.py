@@ -77,7 +77,7 @@ class TestDataLoaing(TestCasePlus):
                 tokenizer = get_tokenizer()
                 tokenizer.tokenizer.add_special_tokens({
                     "additional_special_tokens": [
-                        f"<extra_id_{id}" for id in range(100)
+                        f"<extra_id_{id}>" for id in range(100)
                     ]
                 })
 
