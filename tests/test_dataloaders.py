@@ -101,6 +101,9 @@ class TestDataLoading(TestCasePlus):
                     skip_warmup=(not args.mmap_warmup)
                 )
 
+                sample = train_ds[0]
+                self.assertEqual(len(sample["input_tokens"]) + len(sample["target_tokens"]) == args.seq_length)
+
                 print(train_ds[0])
                 print([
                     {
