@@ -188,6 +188,11 @@ class MLMDataset(torch.utils.data.Dataset):
             noise_density=self.noise_density,
             mean_noise_span_length=self.mean_noise_span_length
         )
+        print(f"Number raw tokens: {number_of_raw_tokens}")
+        print(f"Inputs length: {inputs_length}")
+        print(f"Targets length: {targets_length}")
+        print(f"Numver of noise spans: {num_noise_spans}")
+
         self.number_of_raw_tokens = number_of_raw_tokens
         self.inputs_length = inputs_length
         self.targets_length = targets_length
@@ -278,6 +283,9 @@ def build_training_sample(
             for elt in [np.full((1,), sentinel_token, dtype=np.int32), sample[start: end]]
         ] +
         [np.full((1,), sep_id, dtype=np.int32)])
+    
+    print(f"Input tokens ids: {input_token_ids.shape}")
+    print(f"Target tokens ids: {target_token_ids.shape}")
 
     assert input_token_ids.shape[0] == inputs_length
     assert target_token_ids.shape[0] == target_token_ids
