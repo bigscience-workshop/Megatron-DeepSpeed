@@ -39,14 +39,17 @@ def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
     assert mean_noise_span_length is not None
 
     if len(data_prefix) == 1:
-        return _build_train_valid_test_datasets(data_prefix[0],
-                                                data_impl, splits_string,
-                                                train_valid_test_num_samples,
-                                                sequence_length,
-                                                noise_density,
-                                                mean_noise_span_length,
-                                                seed, skip_warmup
-                                                )
+        return _build_train_valid_test_datasets(
+            data_prefix=data_prefix[0],
+            data_impl=data_impl,
+            splits_string=splits_string,
+            train_valid_test_num_samples=train_valid_test_num_samples,
+            sequence_length=sequence_length,
+            noise_density=noise_density,
+            mean_noise_span_length=mean_noise_span_length,
+            seed=seed,
+            skip_warmup=skip_warmup
+        )
     # Blending dataset.
     # Parse the values.
     output = get_datasets_weights_and_num_samples(data_prefix,
@@ -59,12 +62,16 @@ def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
     test_datasets = []
     for i in range(len(prefixes)):
         train_ds, valid_ds, test_ds = _build_train_valid_test_datasets(
-            prefixes[i], data_impl, splits_string,
-            datasets_train_valid_test_num_samples[i],
-            sequence_length,
-            noise_density,
-            mean_noise_span_length,
-            seed, skip_warmup)
+            data_prefix=prefixes[i],
+            data_impl=data_impl,
+            splits_string=splits_string,
+            train_valid_test_num_samples=datasets_train_valid_test_num_samples[i],
+            sequence_length=sequence_length,
+            noise_density=noise_density,
+            mean_noise_span_length=mean_noise_span_length,
+            seed=seed,
+            skip_warmup=skip_warmup
+        )
         if train_ds:
             train_datasets.append(train_ds)
         if valid_ds:
@@ -183,9 +190,9 @@ class MLMDataset(torch.utils.data.Dataset):
         # To ensure that the input length is `sequence_length`, we need to increase the maximum length
         # according to `noise_density` and `mean_noise_span_length`. We can also define the label length accordingly.
         number_of_raw_tokens, inputs_length, targets_length, num_noise_spans = compute_input_and_target_lengths(
-            self.sequence_length,
-            self.noise_density,
-            self.mean_noise_span_length
+            sequence_length=self.sequence_length,
+            noise_density=self.noise_density,
+            mean_noise_span_length=self.mean_noise_span_length
         )
         self.number_of_raw_tokens = number_of_raw_tokens
         self.inputs_length = inputs_length
@@ -297,8 +304,7 @@ def get_samples_mapping(indexed_dataset, data_prefix, name, number_of_raw_tokens
 
         # Build samples mapping
         start_time = time.time()
-        print_rank_0(' > building samples index mapping for {} ...'.format(
-            name))
+        print_rank_0(f' > building samples index mapping for {name} ...')
         samples_mapping = []
         sample_indices = []
         current_len = 0
@@ -398,9 +404,9 @@ def compute_input_and_target_lengths(sequence_length, noise_density, mean_noise_
         targets_length: an integer - length in tokens of encoded targets sequence
     """
 
-    def _tokens_length_to_inputs_length_targets_length(tokens_length):
-        num_noise_tokens = int(round(tokens_length * noise_density))
-        num_nonnoise_tokens = tokens_length - num_noise_tokens
+    def _tokens_length_to_inputs_length_targets_length(_tokens_length):
+        num_noise_tokens = int(round(_tokens_length * noise_density))
+        num_nonnoise_tokens = _tokens_length - num_noise_tokens
         _num_noise_spans = int(round(num_noise_tokens / mean_noise_span_length))
         # inputs contain all nonnoise tokens, sentinels for all noise spans
         # and one SEP token.
@@ -409,21 +415,16 @@ def compute_input_and_target_lengths(sequence_length, noise_density, mean_noise_
         return _input_length, _output_length, _num_noise_spans
 
     tokens_length = sequence_length
-    inputs_length, targets_length, _num_noise_spans = _tokens_length_to_inputs_length_targets_length(tokens_length)
-    while inputs_length + targets_length > tokens_length:
+    inputs_length, targets_length, num_noise_spans = _tokens_length_to_inputs_length_targets_length(tokens_length)
+    while inputs_length + targets_length > sequence_length:
         tokens_length -= 1
-        inputs_length, targets_length, _num_noise_spans = _tokens_length_to_inputs_length_targets_length(tokens_length)
-
-    # minor hack to get the targets length to be equal to inputs length
-    # which is more likely to have been set to a nice round number.
-    if noise_density == 0.5 and targets_length > inputs_length:
-        tokens_length -= 1
-        targets_length -= 1
+        inputs_length, targets_length, num_noise_spans = _tokens_length_to_inputs_length_targets_length(tokens_length)
 
     # tokens_length is the number of raw tokens we need to get
     # inputs_length will be the input
     # targets_length will be the target
-    return tokens_length, inputs_length, targets_length, _num_noise_spans
+    # num_noise_spans is the number of spans we have to replace
+    return tokens_length, inputs_length, targets_length, num_noise_spans
 
 
 # TODO @thomasw21 handle random state correctly.
