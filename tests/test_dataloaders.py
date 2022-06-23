@@ -75,12 +75,8 @@ class TestDataLoading(TestCasePlus):
 
                 # tokenizer
                 tokenizer = get_tokenizer()
-                tokenizer.tokenizer.add_special_tokens({
-                    "additional_special_tokens": [
-                        f"<extra_id_{id}>" for id in range(100)
-                    ],
-                    "sep_token": "<s>"
-                })
+                # SEP is required to put in MLM preprocessed.
+                tokenizer.tokenizer.add_special_tokens({"sep_token": "<s>"})
 
                 args = get_args()
                 train_val_test_num_samples = [
@@ -102,13 +98,4 @@ class TestDataLoading(TestCasePlus):
                 )
 
                 sample = train_ds[0]
-                self.assertEqual(len(sample["input_tokens"]) + len(sample["target_tokens"]) == args.seq_length)
-
-                print(train_ds[0])
-                print([
-                    {
-                        key: tokenizer.tokenizer.convert_ids_to_tokens(value)
-                        for key, value in sample.items()
-                    }
-                    for sample in [train_ds[0]]
-                ])
+                self.assertEqual(len(sample["input_tokens"]) + len(sample["target_tokens"]), args.seq_length)
