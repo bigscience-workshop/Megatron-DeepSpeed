@@ -22,7 +22,7 @@ from megatron import get_args
 from megatron import mpu
 
 
-def build_pretraining_data_loader(dataset, consumed_samples):
+def build_pretraining_data_loader(dataset, consumed_samples, num_workers=None):
     """Buld dataloader given an input dataset."""
 
     if dataset is None:
@@ -44,14 +44,25 @@ def build_pretraining_data_loader(dataset, consumed_samples):
             micro_batch_size=args.micro_batch_size,
             data_parallel_rank=mpu.get_data_parallel_rank(),
             data_parallel_size=mpu.get_data_parallel_world_size())
+    elif args.dataloader_type == 'packed':
+        batch_sampler = MegatronPackedRandomSampler(
+            sequence_length=args.seq_length,
+            total_samples=len(dataset),
+            consumed_samples=consumed_samples,
+            micro_batch_size=args.micro_batch_size,
+            data_parallel_rank=mpu.get_data_parallel_rank(),
+            data_parallel_size=mpu.get_data_parallel_world_size())
     else:
         raise Exception('{} dataloader type is not supported.'.format(
                 args.dataloader_type))
 
+    if num_workers is None:
+        num_workers = args.num_workers
+
     # Torch dataloader.
     return torch.utils.data.DataLoader(dataset,
                                        batch_sampler=batch_sampler,
-                                       num_workers=args.num_workers,
+                                       num_workers=num_workers,
                                        pin_memory=True)
 
 class MegatronPretrainingSampler:
@@ -141,9 +152,65 @@ class MegatronPretrainingRandomSampler:
                        * self.micro_batch_size
         bucket_offset = current_epoch_samples // self.data_parallel_size
         start_idx = self.data_parallel_rank * bucket_size
-        
+
         g = torch.Generator()
         g.manual_seed(self.epoch)
+        random_idx = torch.randperm(bucket_size, generator=g).tolist()
+        idx_range = [start_idx + x for x in random_idx[bucket_offset:]]
+
+        batch = []
+        # Last batch if not complete will be dropped.
+        for idx in idx_range:
+            batch.append(idx)
+            if len(batch) == self.micro_batch_size:
+                self.consumed_samples += self.micro_batch_times_data_parallel_size
+                yield batch
+                batch = []
+
+
+class MegatronPackedRandomSampler(object):
+    """docstring for MegatronPackedRandomSampler"""
+    def __init__(self, sequence_length, total_samples, consumed_samples, micro_batch_size,
+                 data_parallel_rank, data_parallel_size):
+        # Keep a copy of input params for later use.
+        self.sequence_length = sequence_length
+        self.total_samples = total_samples
+        self.consumed_samples = consumed_samples
+        self.micro_batch_size = micro_batch_size
+        self.data_parallel_rank = data_parallel_rank
+        self.data_parallel_size = data_parallel_size
+        self.micro_batch_times_data_parallel_size = \
+            self.micro_batch_size * data_parallel_size
+        self.last_batch_size = \
+            self.total_samples % self.micro_batch_times_data_parallel_size
+
+        # Sanity checks.
+        assert self.total_samples > 0, \
+            'no sample to consume: {}'.format(self.total_samples)
+        assert self.micro_batch_size > 0
+        assert data_parallel_size > 0
+        assert self.data_parallel_rank < data_parallel_size, \
+            'data_parallel_rank should be smaller than data size: {}, ' \
+            '{}'.format(self.data_parallel_rank, data_parallel_size)
+
+    def __len__(self):
+        return self.total_samples
+
+    def __iter__(self):
+        active_total_samples = self.total_samples - self.last_batch_size
+        self.epoch = self.consumed_samples // active_total_samples
+        current_epoch_samples = self.consumed_samples % active_total_samples
+        assert current_epoch_samples % self.micro_batch_times_data_parallel_size == 0
+
+        # data sharding and random sampling
+        bucket_size = (self.total_samples // self.micro_batch_times_data_parallel_size) \
+                       * self.micro_batch_size
+        bucket_offset = current_epoch_samples // self.data_parallel_size
+        start_idx = self.data_parallel_rank * bucket_size
+
+        g = torch.Generator()
+        g.manual_seed(self.epoch)
+
         random_idx = torch.randperm(bucket_size, generator=g).tolist()
         idx_range = [start_idx + x for x in random_idx[bucket_offset:]]
 
