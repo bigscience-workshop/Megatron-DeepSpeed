@@ -288,7 +288,7 @@ def build_training_sample(
     print(f"Target tokens ids: {target_token_ids.shape}")
 
     assert input_token_ids.shape[0] == inputs_length
-    assert target_token_ids.shape[0] == target_token_ids + 1
+    assert target_token_ids.shape[0] == targets_length + 1
 
     return {
         'input_tokens': input_token_ids,
