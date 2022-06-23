@@ -232,12 +232,12 @@ class MLMDataset(torch.utils.data.Dataset):
         sample = self._gpt_dataset[idx]["text"]
 
         return build_training_sample(
-            sample,
-            self.inputs_length,
-            self.targets_length,
-            self.num_noise_spans,
-            self.sep_id,
-            self.sentinel_token_ids,
+            sample=sample,
+            inputs_length=self.inputs_length,
+            targets_length=self.targets_length,
+            num_noise_spans=self.num_noise_spans,
+            sep_id=self.sep_id,
+            all_sentinel_token_ids=self.sentinel_token_ids,
         )
 
 
@@ -283,7 +283,7 @@ def build_training_sample(
             for elt in [np.full((1,), sentinel_token, dtype=np.int32), sample[start: end]]
         ] +
         [np.full((1,), sep_id, dtype=np.int32)])
-    
+
     print(f"Input tokens ids: {input_token_ids.shape}")
     print(f"Target tokens ids: {target_token_ids.shape}")
 
@@ -362,11 +362,13 @@ def random_spans_noise_mask(
         a int8 tensor with shape [num_noise_spans]
         a boolean tensor with shape [length]
     """
-    # pick the lengths of the noise spans and the non-noise spans
+    # # pick the lengths of the noise spans and the non-noise spans
     num_noise_tokens = targets_length - num_noise_spans - 1
     num_nonnoise_tokens = inputs_length - num_noise_tokens - 1
+    print(f"Noise tokens {num_noise_tokens}, {targets_length}")
+    print(f"Non noise tokens {num_nonnoise_tokens}, {inputs_length}")
     number_of_raw_tokens = num_noise_tokens + num_nonnoise_tokens
-
+    print(f"Dafuck {number_of_raw_tokens}")
     def _random_segmentation(num_items, num_segments):
         """Partition a sequence of items randomly into non-empty segments.
         Args:
