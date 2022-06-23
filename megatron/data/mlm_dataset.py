@@ -215,7 +215,7 @@ class MLMDataset(torch.utils.data.Dataset):
         tokenizer = get_tokenizer()
         self.sep_id = tokenizer.sep
         self.sentinel_token_ids = tokenizer.additional_special_tokens_ids
-        assert len(self.sentinel_tokens) > 0, "Provide the argument --vocab-extra-ids 100 to the script"
+        assert len(self.sentinel_token_ids) > 0, "Provide the argument --vocab-extra-ids 100 to the script"
 
     def __len__(self):
         return len(self.samples_mapping)
