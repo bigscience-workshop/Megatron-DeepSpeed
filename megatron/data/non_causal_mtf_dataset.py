@@ -172,11 +172,11 @@ def _build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
 
 
     # Indexed dataset.
-    indexed_dataset = get_indexed_dataset_(data_prefix,
-                                           data_impl,
-                                           skip_warmup)
+    indexed_dataset = {}
+    for field in data_prefix:
+        indexed_dataset[field] = get_indexed_dataset_(data_prefix[field], data_impl, skip_warmup)
 
-    total_num_of_documents = indexed_dataset.sizes.shape[0]
+    total_num_of_documents = indexed_dataset[field].sizes.shape[0]
     # splits here is an array of size 4  [train_start_index, valid_start_index, test_start_index, test_end_index]
     splits = get_train_valid_test_split_(splits_string, total_num_of_documents)
     # Print stats about the splits.
@@ -251,25 +251,20 @@ class NonCausalMTFDataset(torch.utils.data.Dataset):
         assert np.max(documents) < indexed_dataset.sizes.shape[0]
 
         # Build index mappings.
-        self.doc_idx, self.sample_idx, self.shuffle_idx = _build_index_mappings(
-            self.name, data_prefix, documents, self.indexed_dataset.sizes,
+        self.doc_idx, self.shuffle_idx = _build_index_mappings(
+            self.name, data_prefix, documents, self.indexed_dataset['input_tokens'].sizes,
             num_samples, seq_length, seed)
 
     def __len__(self):
         # -1 is due to data structure used to retieve the index:
         #    sample i --> [sample_idx[i], sample_idx[i+1])
-        return self.sample_idx.shape[0] - 1
+        return self.doc_idx.shape[0] - 1
 
     def __getitem__(self, idx):
         # Get the shuffled index.
         idx = self.shuffle_idx[idx]
-        sample = self.indexed_dataset.get(
-            self.doc_idx[idx]
-        )
-
-        eod_idx = np.where(sample == self.impossible_token)[0]
-        input_tokens = sample[:eod_idx]
-        target_tokens = sample[eod_idx:]
+        input_tokens = self.indexed_dataset['input_tokens'].get(self.doc_idx[idx])
+        target_tokens = self.indexed_dataset['target_tokens'].get(self.doc_idx[idx])
 
         return {
             'input_tokens': np.array(input_tokens, dtype=np.int64),
@@ -281,9 +276,7 @@ def _build_index_mappings(name, data_prefix, documents, sizes,
                           num_samples, seq_length, seed, cutoff_last_epoch=0.95):
     """Build doc-idx, sample-idx, and shuffle-idx.
     doc-idx: is an array (ordered) of documents to be used in training.
-    sample-idx: is the start document index and document offset for each
-       training sample.
-    shuffle-idx: maps the sample index into a random index into sample-idx.
+    shuffle-idx: maps the an index into a random index into sample-idx.
     """
     # Number of tokens in each epoch and number of required epochs.
     tokens_per_epoch = _num_tokens(documents, sizes)
@@ -353,29 +346,29 @@ def _build_index_mappings(name, data_prefix, documents, sizes,
             np.save(doc_idx_filename, doc_idx, allow_pickle=True)
             print_rank_0(' > elasped time to build and save doc-idx mapping '
                          '(seconds): {:4f}'.format(time.time() - start_time))
-            # sample-idx.
-            start_time = time.time()
-            # Use C++ implementation for speed.
-            # First compile and then import.
-            from megatron.data import helpers
-            assert doc_idx.dtype == np.int32
-            assert sizes.dtype == np.int32
-            sample_idx = helpers.build_sample_idx(sizes, doc_idx, seq_length,
-                                                  num_epochs, tokens_per_epoch)
+            # # sample-idx.
+            # start_time = time.time()
+            # # Use C++ implementation for speed.
+            # # First compile and then import.
+            # from megatron.data import helpers
+            # assert doc_idx.dtype == np.int32
+            # assert sizes.dtype == np.int32
+            # sample_idx = helpers.build_sample_idx(sizes, doc_idx, seq_length,
+            #                                       num_epochs, tokens_per_epoch)
 
-            np.save(sample_idx_filename, sample_idx, allow_pickle=True)
-            print_rank_0(' > elasped time to build and save sample-idx mapping '
-                         '(seconds): {:4f}'.format(time.time() - start_time))
-            # shuffle-idx.
-            start_time = time.time()
-            # -1 is due to data structure used to retieve the index:
-            #    sample i --> [sample_idx[i], sample_idx[i+1])
+            # np.save(sample_idx_filename, sample_idx, allow_pickle=True)
+            # print_rank_0(' > elasped time to build and save sample-idx mapping '
+            #              '(seconds): {:4f}'.format(time.time() - start_time))
+            # # shuffle-idx.
+            # start_time = time.time()
+            # # -1 is due to data structure used to retieve the index:
+            # #    sample i --> [sample_idx[i], sample_idx[i+1])
             if separate_last_epoch:
                 num_samples_ = num_samples_from_epochs_minus_one
             else:
                 num_samples_ = sample_idx.shape[0] - 1
-            shuffle_idx = _build_shuffle_idx(num_samples_,
-                                             sample_idx.shape[0] - 1, np_rng)
+
+            shuffle_idx = _build_shuffle_idx(num_samples_, doc_idx.shape[0] - 1, np_rng)
             np.save(shuffle_idx_filename, shuffle_idx, allow_pickle=True)
             print_rank_0(' > elasped time to build and save shuffle-idx mapping'
                          ' (seconds): {:4f}'.format(time.time() - start_time))
@@ -407,7 +400,7 @@ def _build_index_mappings(name, data_prefix, documents, sizes,
         sample_idx.shape[0]))
     print_rank_0('    total number of epochs: {}'.format(num_epochs))
 
-    return doc_idx, sample_idx, shuffle_idx
+    return doc_idx, shuffle_idx
 
 
 def _num_tokens(documents, sizes):
