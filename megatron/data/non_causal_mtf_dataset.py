@@ -252,7 +252,7 @@ class NonCausalMTFDataset(torch.utils.data.Dataset):
 
         # Build index mappings.
         self.doc_idx, self.shuffle_idx = _build_index_mappings(
-            self.name, data_prefix, documents, self.indexed_dataset['input_tokens'].sizes,
+            self.name, data_prefix['input_tokens'], documents, self.indexed_dataset['input_tokens'].sizes,
             num_samples, seq_length, seed)
 
     def __len__(self):
