@@ -47,6 +47,7 @@ def build_pretraining_data_loader(dataset, consumed_samples, num_workers=None):
     elif args.dataloader_type == 'packed':
         batch_sampler = MegatronPackedRandomSampler(
             sequence_length=args.seq_length,
+            dataset=dataset,
             total_samples=len(dataset),
             consumed_samples=consumed_samples,
             micro_batch_size=args.micro_batch_size,
