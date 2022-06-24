@@ -264,10 +264,8 @@ class NonCausalMTFDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         # Get the shuffled index.
         idx = self.shuffle_idx[idx]
-        doc_idx = self.sample_idx[idx][0]
-
         sample = self.indexed_dataset.get(
-            self.doc_idx[doc_idx]
+            self.doc_idx[idx]
         )
 
         eod_idx = np.where(sample == self.tokenizer.eod)[0]
