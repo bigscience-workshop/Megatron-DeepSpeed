@@ -248,7 +248,7 @@ class NonCausalMTFDataset(torch.utils.data.Dataset):
 
         # Checks
         assert np.min(documents) >= 0
-        assert np.max(documents) < indexed_dataset.sizes.shape[0]
+        assert np.max(documents) < indexed_dataset['input_tokens'].sizes.shape[0]
 
         # Build index mappings.
         self.doc_idx, self.shuffle_idx = _build_index_mappings(
