@@ -366,7 +366,7 @@ def _build_index_mappings(name, data_prefix, documents, sizes,
             if separate_last_epoch:
                 num_samples_ = num_samples_from_epochs_minus_one
             else:
-                num_samples_ = sample_idx.shape[0] - 1
+                num_samples_ = doc_idx.shape[0] - 1
 
             shuffle_idx = _build_shuffle_idx(num_samples_, doc_idx.shape[0] - 1, np_rng)
             np.save(shuffle_idx_filename, shuffle_idx, allow_pickle=True)
