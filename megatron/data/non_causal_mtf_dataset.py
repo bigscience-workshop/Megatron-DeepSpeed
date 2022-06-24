@@ -234,18 +234,17 @@ class NonCausalMTFDataset(torch.utils.data.Dataset):
         indexed_dataset,
         num_samples,
         seq_length,
-        seed
+        seed,
+        impossible_token=-100,
         ):
 
         # Params to store.
         self.name = name
         self.seq_length = seq_length
+        self.impossible_token = impossible_token
 
         # Dataset.
         self.indexed_dataset = indexed_dataset
-
-        # vocab
-        self.tokenizer = get_tokenizer()
 
         # Checks
         assert np.min(documents) >= 0
@@ -268,7 +267,7 @@ class NonCausalMTFDataset(torch.utils.data.Dataset):
             self.doc_idx[idx]
         )
 
-        eod_idx = np.where(sample == self.tokenizer.eod)[0]
+        eod_idx = np.where(sample == self.impossible_token)[0]
         input_tokens = sample[:eod_idx]
         target_tokens = sample[eod_idx:]
 
