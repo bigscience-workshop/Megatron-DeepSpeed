@@ -2,13 +2,10 @@ import os
 import torch.distributed as dist
 
 from megatron.initialize import initialize_megatron
-# from megatron.data.data_samplers import MegatronPackedRandomSampler
-# from megatron.data.gpt_dataset import build_train_valid_test_datasets
+from megatron.data.data_samplers import MegatronPackedRandomSampler
 from megatron.data.non_causal_mtf_dataset import build_train_valid_test_datasets
 
 from datasets import load_dataset
-
-import torch.distributed as dist
 
 ## To preprocess data before testing
 # TOKENIZER_PATH="gpt2"
@@ -34,13 +31,6 @@ import torch.distributed as dist
 #     --append-eod \
 #     --workers 8
 
-
-os.environ['MASTER_ADDR'] = 'localhost'
-os.environ['MASTER_PORT'] = '12355'
-
-# initialize the process group
-dist.init_process_group("nccl", rank=0, world_size=1)
-
 #Initialize Megatron with dummy variables
 initialize_megatron(
     extra_args_provider=None,
@@ -64,7 +54,7 @@ train_ds, valid_ds, test_ds = build_train_valid_test_datasets(
         }],
     data_impl="mmap",
     splits_string="90,5,5",
-    train_valid_test_num_samples=[100,0,0],
+    train_valid_test_num_samples=[50,0,0],
     seq_length=1024,
     seed=124,
     skip_warmup=True
@@ -77,10 +67,10 @@ for idx in range(0,4):
     print(line)
 
 
-# dl = torch.utils.data.DataLoader(
-#     train_ds,
-#     batch_size=4,
-#     # batch_sampler=batch_sampler,
-#     num_workers=4,
-#     pin_memory=True
-#     )
+dl = torch.utils.data.DataLoader(
+    train_ds,
+    batch_size=4,
+    batch_sampler=batch_sampler,
+    num_workers=4,
+    pin_memory=True
+    )
