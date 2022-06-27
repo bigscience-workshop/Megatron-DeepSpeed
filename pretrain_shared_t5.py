@@ -1,19 +1,15 @@
 import torch
-from functools import partial
 from megatron import get_args
 from megatron import print_rank_0
-from megatron import get_timers
 from megatron import get_tokenizer
 from megatron import mpu
-from megatron.data.gpt_dataset import build_train_valid_test_datasets, build_dataset_group
+from megatron.data.mlm_dataset import build_train_valid_test_datasets, build_dataset_group
 from megatron.model import SharedT5ModelPipe
 from megatron.training import pretrain
-from megatron.utils import get_attention_masks_and_position_ids, get_prefix_indices
-from megatron.utils import average_losses_across_data_parallel_group
+from megatron.utils import get_attention_masks_and_position_ids
 
 import deepspeed
 from deepspeed.runtime.utils import see_memory_usage
-import os
 
 try:
     from torch.distributed.elastic.multiprocessing.errors import record
@@ -39,24 +35,6 @@ def model_provider(pre_process=True, post_process=True):
             # TODO @thomasw21: fix this for PP > 1 (the issue is that you're passing two values that require grad)
             assert mpu.get_pipeline_model_parallel_world_size() != 1, "PP > 1 is not supported yet"
 
-            # TODO: actually I'm fairly confident that you don't need the causal mask here as it's handled with `AttnMaskType`
-            # # Precompute the attention mask and store it in args. This avoids having to
-            # # pipeline it as an activation during training. The mask is constant, and thus
-            # # we can reuse it.
-            # attention_mask = torch.tril(torch.ones(
-            #     (1, args.seq_length, args.seq_length), device=torch.cuda.current_device())).view(
-            #         1, 1, args.seq_length, args.seq_length)
-            #
-            # # Convert attention mask to binary:
-            # attention_mask = (attention_mask < 0.5)
-            # if args.fp16:
-            #     attention_mask = attention_mask.half()
-            # elif args.bf16:
-            #     attention_mask = attention_mask.bfloat16()
-            #
-            # # must be bool or the training crashes expecting bool, but getting Half
-            # args.attn_mask = attention_mask.to(torch.bool)
-
             model = SharedT5ModelPipe(
                 num_tokentypes=0,
                 parallel_output=True
@@ -72,12 +50,10 @@ def model_provider(pre_process=True, post_process=True):
 
 def get_batch_pipe(data):
     """Modification of `get_batch` to work on `next(data_iterator)` instead of `data_iterator`"""
-    raise NotImplementedError("Waiting for MLM data loader to work")
     args = get_args()
     tokenizer = get_tokenizer()
 
     # Items and their type.
-    # TODO @thomasw21
     keys = ["input_tokens", "target_tokens"]
     datatype = torch.int64
 
@@ -116,7 +92,7 @@ def get_batch_pipe(data):
 
 def train_valid_test_datasets_provider(train_val_test_num_samples):
     """Build train, valid, and test datasets."""
-    raise NotImplementedError("Waiting for MLM data loader")
+
     args = get_args()
     train_ds, valid_ds, test_ds = None, None, None
 
@@ -129,9 +105,12 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
             data_impl=args.data_impl,
             splits_string=args.split,
             train_valid_test_num_samples=train_val_test_num_samples,
-            seq_length=args.seq_length,
+            sequence_length=args.seq_length,
+            noise_density=args.noise_density,
+            mean_noise_span_length=args.mean_noise_span_length,
             seed=args.seed,
-            skip_warmup=(not args.mmap_warmup))
+            skip_warmup=(not args.mmap_warmup)
+        )
     # Option 2 of data loading using --(train|valid|test)-weighted-split-paths
     elif args.train_weighted_split_paths:
         assigned_train_valid_test = []
@@ -151,12 +130,20 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
                                 eval(f"args.{s}_weighted_split_splits"),
                                 eval(f"args.{s}_weighted_split_names"))
             for paths, weights, splits, name in data_groups:
-                d = build_dataset_group(name, paths, weights, splits,
-                                        args.data_impl,
-                                        train_val_test_num_samples,
-                                        args.seq_length, args.seed,
-                                        (not args.mmap_warmup),
-                                        train_valid_test=s)
+                d = build_dataset_group(
+                    dataset_group_name=name,
+                    paths=paths,
+                    weights=weights,
+                    splits=splits,
+                    data_impl=args.data_impl,
+                    train_valid_test_num_samples=train_val_test_num_samples,
+                    seq_length=args.seq_length,
+                    noise_density=args.noise_density,
+                    mean_noise_span_length=args.mean_noise_span_length,
+                    seed=args.seed,
+                    skip_warmup=(not args.mmap_warmup),
+                    train_valid_test=s
+                )
                 eval(f"{s}_ds").append(d)
     else:
         raise NotImplementedError("No dataloading argument passed")
