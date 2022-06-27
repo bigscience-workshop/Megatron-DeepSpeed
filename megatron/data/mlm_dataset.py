@@ -297,13 +297,14 @@ class MLMDataset(torch.utils.data.Dataset):
         # according to `noise_density` and `mean_noise_span_length`. We can also define the label length accordingly.
         number_of_raw_tokens, inputs_length, targets_length, num_noise_spans = compute_input_and_target_lengths(
             # +1 is used so that we can compute the as autoregressive systems require us to add one more token.
-            sequence_length=self.sequence_length + 1,
+            sequence_length=self.sequence_length,
             noise_density=self.noise_density,
             mean_noise_span_length=self.mean_noise_span_length
         )
-        self.number_of_raw_tokens = number_of_raw_tokens
         self.inputs_length = inputs_length
-        self.targets_length = targets_length
+        # As the loss we add a token at the end
+        self.number_of_raw_tokens = number_of_raw_tokens + 1
+        self.targets_length = targets_length +1
         self.num_noise_spans = num_noise_spans
 
         # Build the samples mapping.
