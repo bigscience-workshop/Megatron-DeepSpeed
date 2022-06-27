@@ -33,7 +33,7 @@ def model_provider(pre_process=True, post_process=True):
                              mpu=mpu):
         if args.deepspeed:
             # TODO @thomasw21: fix this for PP > 1 (the issue is that you're passing two values that require grad)
-            assert mpu.get_pipeline_model_parallel_world_size() != 1, "PP > 1 is not supported yet"
+            assert mpu.get_pipeline_model_parallel_world_size() == 1, "PP > 1 is not supported yet"
 
             model = SharedT5ModelPipe(
                 num_tokentypes=0,
