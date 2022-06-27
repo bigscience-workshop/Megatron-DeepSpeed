@@ -330,7 +330,7 @@ class MLMDataset(torch.utils.data.Dataset):
         if hasattr(args, "encoder_seq_length") and  args.encoder_seq_length is not None:
             # T5 style
             assert self.inputs_length == args.encoder_seq_length
-            assert self.targets_length == args.decoder_seq_length
+            assert self.targets_length == args.decoder_seq_length + 1
         else:
             assert self.inputs_length + self.targets_length == args.seq_length
 
