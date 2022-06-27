@@ -335,7 +335,7 @@ class MLMDataset(torch.utils.data.Dataset):
             assert self.inputs_length + self.targets_length == args.seq_length
 
     def __len__(self):
-        return len(self.samples_mapping)
+        return len(self._gpt_dataset)
 
     def __getitem__(self, idx):
         if isinstance(idx, slice):
