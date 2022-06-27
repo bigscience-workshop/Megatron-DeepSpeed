@@ -91,8 +91,8 @@ class SharedT5ModelPipe(PipelineModule, MegatronModule):
         self.specs.append(
             LayerSpec(
                 LayerNorm,
-                args.hidden_size,
                 forward_fn=lambda module, input_tokens, target_tokens: (module(input_tokens), target_tokens),
+                hidden_size=args.hidden_size,
                 eps=args.layernorm_epsilon
             ))
 
@@ -121,7 +121,7 @@ class SharedT5ModelPipe(PipelineModule, MegatronModule):
         self.specs.append(
             LayerSpec(
                 LayerNorm,
-                args.hidden_size,
+                hidden_size=args.hidden_size,
                 eps=args.layernorm_epsilon
             ))
 
