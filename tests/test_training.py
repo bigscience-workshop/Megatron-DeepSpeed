@@ -649,8 +649,8 @@ class MegDSTestTraining(TestCasePlus):
             --checkpoint-activations
             --exit-interval {exit_interval}
 
-            --merge-file {data_dir}/gpt2-tiny-merges.txt
-            --vocab-file {data_dir}/gpt2-tiny-vocab.json
+            --tokenizer-type PretrainedFromHF
+            --tokenizer-name-or-path gpt2
             --log-path {logs_dir}
             --save {output_dir}/checkpoints
             --load {output_dir}/checkpoints
