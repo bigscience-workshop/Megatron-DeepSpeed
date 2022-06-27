@@ -49,7 +49,7 @@ class SharedT5ModelPipe(PipelineModule, MegatronModule):
             else:
                 return inputs
 
-        self.specs.append(lambda inputss: tuple(tuple(_to_16bit(inputs)) for inputs in inputss))
+        self.specs.append(lambda inputss: tuple(_to_16bit(inputs) for inputs in inputss))
 
         # Embedding layer
         self.specs.append(TiedLayerSpec('embed',
@@ -57,7 +57,7 @@ class SharedT5ModelPipe(PipelineModule, MegatronModule):
                                         args.hidden_size,
                                         args.padded_vocab_size,
                                         args.hidden_dropout,
-                                        forward_fn=lambda module, input_and_target: (module(*(input_and_target[:3])), module(*(input_and_target[3:]))),
+                                        forward_fn=lambda module, input_and_target: (module(input_and_target[:3]), module(input_and_target[3:])),
                                         init_method=init_method,
                                         num_tokentypes=num_tokentypes,
                                         tied_weight_attr='word_embeddings_weight'))
