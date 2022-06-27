@@ -67,6 +67,7 @@ class TestDataLoading(TestCasePlus):
         command_args = get_default_args(f"{self.data_dir}/gpt2")
         command_args["--noise_density"] = "0.15"
         command_args["--mean_noise_span_length"] = "3"
+        command_args["--vocab-extra-ids"] = "100"
 
         with patch('sys.argv', flatten_arguments(command_args)):
             with mockenv_context(**self.dist_env_1_gpu):
