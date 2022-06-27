@@ -35,6 +35,9 @@ def model_provider(pre_process=True, post_process=True):
             # TODO @thomasw21: fix this for PP > 1 (the issue is that you're passing two values that require grad)
             assert mpu.get_pipeline_model_parallel_world_size() == 1, "PP > 1 is not supported yet"
 
+            # TODO @thomasw21 hack to bypass a specific check
+            args.attn_mask = None
+
             model = SharedT5ModelPipe(
                 num_tokentypes=0,
                 parallel_output=True
