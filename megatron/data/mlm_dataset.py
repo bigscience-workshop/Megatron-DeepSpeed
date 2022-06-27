@@ -323,6 +323,7 @@ class MLMDataset(torch.utils.data.Dataset):
         tokenizer = get_tokenizer()
         self.sep_id = tokenizer.sep
         self.sentinel_token_ids = tokenizer.additional_special_tokens_ids
+        assert self.sep_id is not None, "MLM dataset requires tokenizer to have a <sep> token"
         assert len(self.sentinel_token_ids) > 0, "Provide the argument --vocab-extra-ids 100 to the script"
         assert len(self.sentinel_token_ids) >= self.num_noise_spans, "Not enough sentinel tokens, please add more"
 
