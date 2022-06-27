@@ -651,6 +651,7 @@ class MegDSTestTraining(TestCasePlus):
 
             --tokenizer-type PretrainedFromHF
             --tokenizer-name-or-path gpt2
+            --vocab-extra-ids 100
             --log-path {logs_dir}
             --save {output_dir}/checkpoints
             --load {output_dir}/checkpoints
