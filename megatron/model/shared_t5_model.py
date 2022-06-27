@@ -147,22 +147,6 @@ class SharedT5ModelPipe(PipelineModule, MegatronModule):
                           tied_weight_attr='word_embeddings_weight')
         )
 
-        if not hasattr(args, 'attn_mask'):
-            # We drop attention mask from the pipeline
-            self.specs.append(lambda x: x[0])
-
-        # Final layernorm after transformer layers
-        self.specs.append(
-            TiedLayerSpec(
-                "final_layer_norm",
-                LayerNorm,
-                args.hidden_size,
-                eps=args.layernorm_epsilon
-            ))
-
-        # Undo data format change
-        self.specs.append(lambda x: x.transpose(0, 1).contiguous())
-
         # Convert to fp32 if needed
         if args.fp16 or args.bf16:
             self.specs.append(float16_to_fp32)
