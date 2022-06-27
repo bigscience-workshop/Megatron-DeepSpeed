@@ -83,6 +83,7 @@ class SharedT5ModelPipe(PipelineModule, MegatronModule):
                     layer_type=LayerType.encoder,
                     layer_number=layer_idx,
                     self_attn_mask_type=AttnMaskType.causal,
+                    tied_weight_attr=None,
                     tied_weight_attrs=["self_attention", "mlp"]
                 ))
 
@@ -108,6 +109,7 @@ class SharedT5ModelPipe(PipelineModule, MegatronModule):
                     layer_number=layer_idx,
                     layer_type=LayerType.decoder,
                     self_attn_mask_type=AttnMaskType.padding,
+                    tied_weight_attr=None,
                     tied_weight_attrs=["self_attention", "mlp"]
                 )
             )
