@@ -57,7 +57,7 @@ class SharedT5ModelPipe(PipelineModule, MegatronModule):
                                         args.hidden_size,
                                         args.padded_vocab_size,
                                         args.hidden_dropout,
-                                        forward_fn=lambda module, inputs, targets: (module(*inputs), module(*targets)),
+                                        forward_fn=lambda module, input_tokens, input_attention_mask, input_position_ids, target_tokens, target_attention_mask, target_position_ids: (module(input_tokens, input_attention_mask, input_position_ids), module(target_tokens, target_attention_mask, target_position_ids)),
                                         init_method=init_method,
                                         num_tokentypes=num_tokentypes,
                                         tied_weight_attr='word_embeddings_weight'))
