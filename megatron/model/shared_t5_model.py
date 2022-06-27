@@ -64,11 +64,11 @@ class SharedT5ModelPipe(PipelineModule, MegatronModule):
 
         assert hasattr(args, 'attn_mask'), "Deepspeed integration should have attention mask s"
         # Drop everything beside tokens
-        self.specs.append(lambda inputs, targets: (inputs[0], targets[0]))
+        # self.specs.append(lambda inputs, targets: (inputs[0], targets[0]))
         if args.fp32_residual_connection:
-            self.specs.append(lambda input_tokens, target_tokens: (input_tokens.transpose(0, 1).contiguous().float(), target_tokens.transpose(0, 1).contiguous().float()))
+            self.specs.append(lambda input_and_target: (input_and_target[0].transpose(0, 1).contiguous().float(), input_and_target[1].transpose(0, 1).contiguous().float()))
         else:
-            self.specs.append(lambda input_tokens, target_tokens: (input_tokens.transpose(0, 1).contiguous(), target_tokens.transpose(0, 1).contiguous()))
+            self.specs.append(lambda input_and_target: (input_and_target[0].transpose(0, 1).contiguous(), input_and_target[1].transpose(0, 1).contiguous()))
 
         ### -----  Encoder -----
         for layer_idx in range(args.num_layers):
@@ -103,8 +103,7 @@ class SharedT5ModelPipe(PipelineModule, MegatronModule):
                     f"block_{layer_idx}",
                     ParallelTransformerLayerPipe,
                     init_method=init_method,
-                    forward_fn=lambda module, encoded_and_target: (
-                    encoded_and_target[0], module(encoded_and_target[1], encoder_output=encoded_and_target[0])),
+                    forward_fn=lambda module, encoded_and_target: (encoded_and_target[0], module(encoded_and_target[1], encoder_output=encoded_and_target[0])),
                     output_layer_init_method=scaled_init_method_normal(args.init_method_std,
                                                                        args.num_layers),
                     layer_number=layer_idx,
@@ -116,7 +115,7 @@ class SharedT5ModelPipe(PipelineModule, MegatronModule):
             )
 
         # Drop encoded tokens
-        self.specs.append(lambda encoded_tokens, target_tokens: target_tokens)
+        self.specs.append(lambda encoded_and_target: encoded_and_target[1])
 
         # Final layernorm after decoder layers
         self.specs.append(
