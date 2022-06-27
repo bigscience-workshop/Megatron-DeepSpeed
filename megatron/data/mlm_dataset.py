@@ -321,7 +321,9 @@ class MLMDataset(torch.utils.data.Dataset):
 
         # Vocab stuff.
         tokenizer = get_tokenizer()
-        self.sep_id = tokenizer.sep
+        # TODO @thomasw21 find if overloading eod is acceptable.
+        # self.sep_id = tokenizer.sep
+        self.sep_id = tokenizer.eod
         self.sentinel_token_ids = tokenizer.additional_special_tokens_ids
         assert self.sep_id is not None, "MLM dataset requires tokenizer to have a <sep> token"
         assert len(self.sentinel_token_ids) > 0, "Provide the argument --vocab-extra-ids 100 to the script"
