@@ -76,9 +76,20 @@ def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
     return (blending_train_dataset, blending_valid_dataset,
             blending_test_dataset)
 
-def build_dataset_group(dataset_group_name, paths, weights, splits, data_impl,
-                        train_valid_test_num_samples,
-                        seq_length, seed, skip_warmup, train_valid_test):
+def build_dataset_group(
+    dataset_group_name,
+    paths,
+    weights,
+    splits,
+    data_impl,
+    train_valid_test_num_samples,
+    seq_length,
+    noise_density,
+    mean_noise_span_length,
+    seed,
+    skip_warmup,
+    train_valid_test
+):
     '''
     Build a single dataset group corresponding to Option 2 of data loading see arguments.py
     a dataset group is passed on the following form
@@ -91,12 +102,18 @@ def build_dataset_group(dataset_group_name, paths, weights, splits, data_impl,
 
     # Single dataset.
     if len(paths) == 1:
-        dataset = _build_single_datasets(paths[0],
-                                          splits[0],
-                                          data_impl,
-                                          train_valid_test_num_samples,
-                                          seq_length, seed, skip_warmup,
-                                          dataset_group_name, train_valid_test)
+        dataset = _build_single_datasets(
+            data_prefix=paths[0],
+            range_string=splits[0],
+            data_impl=data_impl,
+            train_valid_test_num_samples=train_valid_test_num_samples,
+            sequence_length=seq_length,
+            noise_density=noise_density,
+            mean_noise_span_length=mean_noise_span_length,
+            seed=seed,
+            skip_warmup=skip_warmup,
+            dataset_group_name=dataset_group_name,
+            train_valid_test=train_valid_test)
         return dataset
     # Blending dataset.
     else:
@@ -114,14 +131,19 @@ def build_dataset_group(dataset_group_name, paths, weights, splits, data_impl,
         # Build individual datasets.
         datasets = []
         for i in range(len(prefixes)):
-            ds = _build_single_datasets(prefixes[i],
-                                        splits[i],
-                                        data_impl,
-                                        datasets_train_valid_test_num_samples[i],
-                                        seq_length,
-                                        seed, skip_warmup,
-                                        dataset_group_name, train_valid_test)
-
+            ds = _build_single_datasets(
+                data_prefix=prefixes[i],
+                range_string=splits[i],
+                data_impl=data_impl,
+                train_valid_test_num_samples=datasets_train_valid_test_num_samples[i],
+                sequence_length=seq_length,
+                noise_density=noise_density,
+                mean_noise_span_length=mean_noise_span_length,
+                seed=seed,
+                skip_warmup=skip_warmup,
+                dataset_group_name=dataset_group_name,
+                train_valid_test=train_valid_test
+            )
             datasets.append(ds)
         all_datasets = BlendableDataset(datasets, weights)
 
