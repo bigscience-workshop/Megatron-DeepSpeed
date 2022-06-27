@@ -3,7 +3,7 @@
 import numpy as np
 import torch
 
-from megatron import print_rank_0, get_tokenizer
+from megatron import print_rank_0, get_tokenizer, get_args
 from megatron.data.blendable_dataset import BlendableDataset
 from megatron.data.dataset_utils import get_datasets_weights_and_num_samples, get_split_by_range_
 from megatron.data.dataset_utils import get_train_valid_test_split_, get_indexed_dataset_
@@ -324,6 +324,14 @@ class MLMDataset(torch.utils.data.Dataset):
         self.sentinel_token_ids = tokenizer.additional_special_tokens_ids
         assert len(self.sentinel_token_ids) > 0, "Provide the argument --vocab-extra-ids 100 to the script"
         assert len(self.sentinel_token_ids) >= self.num_noise_spans, "Not enough sentinel tokens, please add more"
+
+        args = get_args()
+        if hasattr(args, "encoder_seq_length") and  args.encoder_seq_length is not None:
+            # T5 style
+            assert self.inputs_length == args.encoder_seq_length
+            assert self.targets_length == args.decoder_seq_length
+        else:
+            assert self.inputs_length + self.targets_length == args.seq_length
 
     def __len__(self):
         return len(self.samples_mapping)
