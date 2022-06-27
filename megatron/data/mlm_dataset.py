@@ -298,8 +298,7 @@ def compute_input_and_target_lengths(sequence_length, noise_density, mean_noise_
         num_noise_tokens = int(round(_tokens_length * noise_density))
         num_nonnoise_tokens = _tokens_length - num_noise_tokens
         _num_noise_spans = int(round(num_noise_tokens / mean_noise_span_length))
-        # inputs contain all nonnoise tokens, sentinels for all noise spans
-        # and one SEP token.
+        # inputs contain all nonnoise tokens, sentinels for all noise spans and one SEP token.
         _input_length = num_nonnoise_tokens + _num_noise_spans + 1
         _output_length = num_noise_tokens + _num_noise_spans + 1
         return _input_length, _output_length, _num_noise_spans
