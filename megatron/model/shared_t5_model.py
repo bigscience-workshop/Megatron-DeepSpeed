@@ -57,7 +57,7 @@ class SharedT5ModelPipe(PipelineModule, MegatronModule):
                                         args.hidden_size,
                                         args.padded_vocab_size,
                                         args.hidden_dropout,
-                                        forward_fn=lambda module, input_tokens, input_attention_mask, input_position_ids, target_tokens, target_attention_mask, target_position_ids: (module(input_tokens, input_attention_mask, input_position_ids), module(target_tokens, target_attention_mask, target_position_ids)),
+                                        forward_fn=lambda module, input_and_target: (module(*(input_and_target[:3])), module(*(input_and_target[3:]))),
                                         init_method=init_method,
                                         num_tokentypes=num_tokentypes,
                                         tied_weight_attr='word_embeddings_weight'))
@@ -77,7 +77,7 @@ class SharedT5ModelPipe(PipelineModule, MegatronModule):
                     f"block_{layer_idx}",
                     ParallelTransformerLayerPipe,
                     init_method=init_method,
-                    forward_fn=lambda module, input_tokens, target_tokens: (module(input_tokens), target_tokens),
+                    forward_fn=lambda module, input_and_target: (module(input_and_target[0]), input_and_target[1]),
                     output_layer_init_method=scaled_init_method_normal(args.init_method_std,
                                                                        args.num_layers),
                     layer_type=LayerType.encoder,
@@ -92,7 +92,7 @@ class SharedT5ModelPipe(PipelineModule, MegatronModule):
             LayerSpec(
                 LayerNorm,
                 args.hidden_size,
-                forward_fn=lambda module, input_tokens, target_tokens: (module(input_tokens), target_tokens),
+                forward_fn=lambda module, input_and_target: (module(input_and_target[0]), input_and_target[1]),
                 eps=args.layernorm_epsilon
             ))
 
@@ -103,7 +103,8 @@ class SharedT5ModelPipe(PipelineModule, MegatronModule):
                     f"block_{layer_idx}",
                     ParallelTransformerLayerPipe,
                     init_method=init_method,
-                    forward_fn=lambda module, encoded_tokens, target_tokens: (encoded_tokens, module(target_tokens, encoder_output=encoded_tokens)),
+                    forward_fn=lambda module, encoded_and_target: (
+                    encoded_and_target[0], module(encoded_and_target[1], encoder_output=encoded_and_target[0])),
                     output_layer_init_method=scaled_init_method_normal(args.init_method_std,
                                                                        args.num_layers),
                     layer_number=layer_idx,
