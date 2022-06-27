@@ -103,6 +103,6 @@ class TestDataLoading(TestCasePlus):
                 self.assertEqual(len(sample["input_tokens"]) + len(sample["target_tokens"]), args.seq_length + 1)
 
                 # We make sure that inputs/targets end with <sep>
-                self.assertEqual(sample["input_tokens"][:, -1], tokenizer.sep)
-                self.assertEqual(sample["target_tokens"][:, -1], tokenizer.sep)
+                self.assertEqual(sample["input_tokens"][-1], tokenizer.sep)
+                self.assertEqual(sample["target_tokens"][-1], tokenizer.sep)
 
