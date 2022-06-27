@@ -90,7 +90,7 @@ def get_batch_pipe(data):
         ltor=True
     )
 
-    return (input_tokens, input_attention_mask, input_position_ids, target_tokens, target_attention_mask, target_position_ids), (label_tokens, target_loss_mask)
+    return (input_tokens, input_position_ids, input_attention_mask, target_tokens, target_position_ids, target_attention_mask), (label_tokens, target_loss_mask)
 
 
 def train_valid_test_datasets_provider(train_val_test_num_samples):
