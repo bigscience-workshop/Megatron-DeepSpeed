@@ -98,4 +98,10 @@ class TestDataLoading(TestCasePlus):
                 )
 
                 sample = train_ds[0]
-                self.assertEqual(len(sample["input_tokens"]) + len(sample["target_tokens"]), args.seq_length)
+                # +1 is needed to compute labels. As inputs and targets are just concatenated.
+                self.assertEqual(len(sample["input_tokens"]) + len(sample["target_tokens"]) + 1, args.seq_length)
+
+                # We make sure that inputs/targets end with <sep>
+                self.assertEqual(sample["input_tokens"][:, -1], tokenizer.sep)
+                self.assertEqual(sample["target_tokens"][:, -1], tokenizer.sep)
+

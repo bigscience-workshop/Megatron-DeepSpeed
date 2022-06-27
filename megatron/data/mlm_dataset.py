@@ -1,8 +1,5 @@
 """Non-Causal Mask Language Model Finetune Style dataset."""
 
-import os
-import time
-
 import numpy as np
 import torch
 
@@ -169,7 +166,8 @@ class MLMDataset(torch.utils.data.Dataset):
         # To ensure that the input length is `sequence_length`, we need to increase the maximum length
         # according to `noise_density` and `mean_noise_span_length`. We can also define the label length accordingly.
         number_of_raw_tokens, inputs_length, targets_length, num_noise_spans = compute_input_and_target_lengths(
-            sequence_length=self.sequence_length,
+            # +1 is used so that we can compute the as autoregressive systems require us to add one more token.
+            sequence_length=self.sequence_length + 1,
             noise_density=self.noise_density,
             mean_noise_span_length=self.mean_noise_span_length
         )
@@ -226,7 +224,16 @@ def build_training_sample(
     """Build training sample.
 
     Arguments:
-        TODO: Add description
+        sample: int32 tensor
+        inputs_length: integer
+        targets_length: integer
+        num_noise_spans: integer
+        sep_id: integer
+        all_sentinel_token_ids: List[int]
+    Returns:
+        Dict with following keys:
+            - `input_tokens`: int32 tensor with as length input_length,
+            - `target_tokens`: int32 tensor with as length targets_length + 1,
     """
 
     spans_start, mask_indices = random_spans_noise_mask(
@@ -269,6 +276,10 @@ def compute_input_and_target_lengths(sequence_length, noise_density, mean_noise_
     When training a model with random_spans_noise_mask, we would like to set the other
     training hyperparmeters in a way that avoids padding.
     This function helps us compute these hyperparameters.
+    The number of noise tokens and the number of noise spans and non-noise spans
+    are determined deterministically as follows:
+    num_noise_tokens = round(length * noise_density)
+    num_nonnoise_spans = num_noise_spans = round(num_noise_tokens / mean_noise_span_length)
     We assume that each noise span in the input is replaced by extra_tokens_per_span_inputs sentinel tokens,
     and each non-noise span in the targets is replaced by extra_tokens_per_span_targets sentinel tokens.
     This function tells us the required number of tokens in the raw example (for split_tokens())
@@ -312,14 +323,9 @@ def random_spans_noise_mask(
     num_noise_spans,
 ):
 
-    """This function is copy of `random_spans_helper <https://github.com/google-research/text-to-text-transfer-transformer/blob/84f8bcc14b5f2c03de51bd3587609ba8f6bbd1cd/t5/data/preprocessors.py#L2682>`__ .
+    """This function is inspired from `random_spans_noise_mask <https://github.com/google-research/text-to-text-transfer-transformer/blob/84f8bcc14b5f2c03de51bd3587609ba8f6bbd1cd/t5/data/preprocessors.py#L2682>`__ .
     Noise mask consisting of random spans of noise tokens.
-    The number of noise tokens and the number of noise spans and non-noise spans
-    are determined deterministically as follows:
-    num_noise_tokens = round(length * noise_density)
-    num_nonnoise_spans = num_noise_spans = round(num_noise_tokens / mean_noise_span_length)
     Spans alternate between non-noise and noise, beginning with non-noise.
-    Subject to the above restrictions, all masks are equally likely.
     Args:
         inputs_length: int32 scalar
         targets_length: int32 scalar
