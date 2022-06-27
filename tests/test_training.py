@@ -673,7 +673,7 @@ class MegDSTestTraining(TestCasePlus):
             --deepspeed-activation-checkpointing
         """.split()
 
-        script = [f"{src_dir}/pretrain_shated_t5_with_mlm.py"]
+        script = [f"{src_dir}/pretrain_shared_t5_with_mlm.py"]
         launcher = get_launcher(num_gpus)
 
         cmd = launcher + script + args + ds_args
