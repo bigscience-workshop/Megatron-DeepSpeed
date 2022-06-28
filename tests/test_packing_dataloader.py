@@ -110,7 +110,7 @@ dl = torch.utils.data.DataLoader(
     batch_sampler=batch_sampler,
     num_workers=4,
     pin_memory=True,
-    collate_fn=partial(pack_samples, max_seq_len=256),
+    collate_fn=partial(pack_samples, max_seq_len=seq_length),
 )
 
 for i, items in enumerate(dl):
