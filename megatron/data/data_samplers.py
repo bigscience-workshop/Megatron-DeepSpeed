@@ -26,9 +26,9 @@ from megatron import mpu
 
 def pack_samples(items, max_seq_len=2049):
     """
-    Input:
-    [{'input_tokens': array([ 6, 7, 8, 3]), 
-    'target_tokens': array([4, 5])}, {'input_tokens'...
+    Items:
+        [{'input_tokens': array([ 6, 7, 8, 3]), 
+        'target_tokens': array([4, 5])}, {'input_tokens'...
     
     Output:
         decoder_target_tokens = [[6, 7, 8, 3, 4, 5, 0]]
@@ -237,7 +237,9 @@ class MegatronPretrainingRandomSampler:
 
 
 class MegatronPackedRandomSampler(object):
-    """docstring for MegatronPackedRandomSampler"""
+    """
+    To be used with pack_samples collate_fn
+    """
     def __init__(self, sequence_length, dataset, total_samples, consumed_samples, micro_batch_size,
                  data_parallel_rank, data_parallel_size):
         # Keep a copy of input params for later use.
