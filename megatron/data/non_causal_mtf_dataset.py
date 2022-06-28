@@ -78,7 +78,7 @@ def build_dataset_group(dataset_group_name, paths, weights, splits, data_impl,
                         seq_length, seed, skip_warmup, train_valid_test):
     '''
     Build a single dataset group corresponding to Option 2 of data loading see arguments.py
-    a dataset group is passed on the following form
+    a dataset group is passed in the following form
     GIVEN_NAME WEIGHT1 START:END PATH1, WEIGHT2 START:END PATH2, WEIGHT2 START:END PATH2
     or alternatively
     GIVEN_NAME PATH1    # for a single dataset to be used fully
@@ -99,7 +99,7 @@ def build_dataset_group(dataset_group_name, paths, weights, splits, data_impl,
     else:
 
         data_prefix = []
-        # data_prefix is on the shape:
+        # data_prefix is of the shape:
         # ["WEIGHT1", "PATH1", "WEIGHT2", "PATH2", "WEIGHT3", "PATH3"]
         for w,p in zip(weights, paths):
             data_prefix += [w,p]
@@ -251,12 +251,10 @@ class NonCausalMTFDataset(torch.utils.data.Dataset):
         assert np.min(documents) >= 0
         assert np.max(documents) < indexed_dataset['input_tokens'].sizes.shape[0]
 
-        # # Build index mappings.
-        # self.doc_idx, self.shuffle_idx = _build_index_mappings(
-        #     self.name, data_prefix['input_tokens'], documents, self.indexed_dataset['input_tokens'].sizes,
-        #     num_samples, seq_length, seed)
-        self.doc_idx = documents
-        self.shuffle_idx = random.sample(self.doc_idx, len(self.doc_idx))
+        # Build index mappings.
+        self.doc_idx, self.shuffle_idx = _build_index_mappings(
+            self.name, data_prefix['input_tokens'], documents, self.indexed_dataset['input_tokens'].sizes,
+            num_samples, seq_length, seed)
 
     def __len__(self):
         # -1 is due to data structure used to retieve the index:
@@ -280,7 +278,7 @@ def _build_index_mappings(name, data_prefix, documents, sizes,
                           num_samples, seq_length, seed, cutoff_last_epoch=0.95):
     """Build doc-idx, sample-idx, and shuffle-idx.
     doc-idx: is an array (ordered) of documents to be used in training.
-    shuffle-idx: maps the an index into a random index into sample-idx.
+    shuffle-idx: maps an index into a random index into sample-idx.
     """
     # Number of tokens in each epoch and number of required epochs.
     tokens_per_epoch = _num_tokens(documents, sizes)

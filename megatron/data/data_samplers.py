@@ -15,11 +15,73 @@
 
 """Dataloaders."""
 
+from functools import partial
 
+import numpy as np
 import torch
-import random
+
 from megatron import get_args
 from megatron import mpu
+
+
+def pack_samples(items, max_seq_len=2049):
+    """
+    Items:
+        [{'input_tokens': array([ 6, 7, 8, 3]), 
+        'target_tokens': array([4, 5])}, {'input_tokens'...
+    
+    Output:
+        decoder_target_tokens = [[6, 7, 8, 3, 4, 5, 0]]
+        decoder_segment_ids = [[1, 1, 1, 2, 2, 2, 0]]
+        decoder_causal_attention = [[1, 1, 0, 1, 1, 0, 0]]
+    """
+
+    decoder_target_tokens = [[]]
+    decoder_segment_ids = [[]]
+    decoder_causal_attention = [[]]
+
+    batch_num = 0
+    item_num = 0
+    cur_len = 0
+    for token_dict in items:
+        input_token_len = len(token_dict["input_tokens"])
+        target_token_len = len(token_dict["target_tokens"])
+        total_len = input_token_len + target_token_len
+        if cur_len + total_len > max_seq_len:
+            len_diff = max_seq_len - cur_len
+            # Padding
+            if len_diff > 0:
+                decoder_target_tokens[batch_num].append(np.zeros((len_diff)))
+                decoder_segment_ids[batch_num].append(np.zeros((len_diff)))
+                decoder_causal_attention[batch_num].append(np.zeros((len_diff)))
+            batch_num += 1
+            item_num = 0
+            cur_len = 0
+            decoder_target_tokens.append([])
+            decoder_segment_ids.append([])
+            decoder_causal_attention.append([])
+
+        decoder_target_tokens[batch_num].append(token_dict["input_tokens"])
+        decoder_target_tokens[batch_num].append(token_dict["target_tokens"])
+        cur_len += total_len
+
+        decoder_segment_ids[batch_num].append(np.ones((total_len)) + item_num)
+        decoder_causal_attention[batch_num].append(np.ones((input_token_len)))
+        decoder_causal_attention[batch_num].append(np.zeros((target_token_len)))
+        item_num += 1
+    # Padding
+    len_diff = max_seq_len - cur_len
+    if len_diff > 0:
+        decoder_target_tokens[batch_num].append(np.zeros((len_diff)))
+        decoder_segment_ids[batch_num].append(np.zeros((len_diff)))
+        decoder_causal_attention[batch_num].append(np.zeros((len_diff)))
+
+    return {
+        "decoder_target_tokens": np.stack([np.concatenate(arr) for arr in decoder_target_tokens]),
+        "decoder_segment_ids": np.stack([np.concatenate(arr) for arr in decoder_segment_ids]),
+        "decoder_causal_attention": np.stack([np.concatenate(arr) for arr in decoder_causal_attention]),
+    }
+
 
 
 def build_pretraining_data_loader(dataset, consumed_samples, num_workers=None):
@@ -46,7 +108,7 @@ def build_pretraining_data_loader(dataset, consumed_samples, num_workers=None):
             data_parallel_size=mpu.get_data_parallel_world_size())
     elif args.dataloader_type == 'packed':
         batch_sampler = MegatronPackedRandomSampler(
-            sequence_length=args.seq_length,
+            sequence_length=args.seq_length + 1,
             dataset=dataset,
             total_samples=len(dataset),
             consumed_samples=consumed_samples,
@@ -60,10 +122,15 @@ def build_pretraining_data_loader(dataset, consumed_samples, num_workers=None):
     if num_workers is None:
         num_workers = args.num_workers
 
+    collate_fn = None
+    if args.dataloader_type == 'packed':
+        collate_fn = partial(pack_samples, max_seq_len=args.seq_length + 1)
+
     # Torch dataloader.
     return torch.utils.data.DataLoader(dataset,
                                        batch_sampler=batch_sampler,
                                        num_workers=num_workers,
+                                       collate_fn=collate_fn,
                                        pin_memory=True)
 
 class MegatronPretrainingSampler:
@@ -170,10 +237,13 @@ class MegatronPretrainingRandomSampler:
 
 
 class MegatronPackedRandomSampler(object):
-    """docstring for MegatronPackedRandomSampler"""
-    def __init__(self, sequence_length, total_samples, consumed_samples, micro_batch_size,
+    """
+    To be used with pack_samples collate_fn
+    """
+    def __init__(self, sequence_length, dataset, total_samples, consumed_samples, micro_batch_size,
                  data_parallel_rank, data_parallel_size):
         # Keep a copy of input params for later use.
+        self.dataset = dataset
         self.sequence_length = sequence_length
         self.total_samples = total_samples
         self.consumed_samples = consumed_samples
@@ -216,10 +286,21 @@ class MegatronPackedRandomSampler(object):
         idx_range = [start_idx + x for x in random_idx[bucket_offset:]]
 
         batch = []
+        batch_count = 0
+        token_lens = 0
         # Last batch if not complete will be dropped.
         for idx in idx_range:
-            batch.append(idx)
-            if len(batch) == self.micro_batch_size:
+            tok_len = len(self.dataset[idx]['input_tokens']) + len(self.dataset[idx]['target_tokens'])
+            if token_lens + tok_len > self.sequence_length:
+                batch_count += 1
+                token_lens = 0
+
+            if batch_count == self.micro_batch_size:
                 self.consumed_samples += self.micro_batch_times_data_parallel_size
                 yield batch
+                batch_count = 0
                 batch = []
+            else:
+                token_lens += tok_len
+                batch.append(idx)
+                
