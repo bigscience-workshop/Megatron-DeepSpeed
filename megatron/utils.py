@@ -250,6 +250,60 @@ def get_ltor_masks_and_position_ids(
     return attention_mask, loss_mask, position_ids
 
 
+def get_packed_attention_mask(causal_mask, tokens, decoder_causal_attention, segment_ids, datatype=torch.int64):
+    
+    inputs_mask = decoder_causal_attention.unsqueeze(-1) * decoder_causal_attention.unsqueeze(1)
+    inputs_mask = inputs_mask.unsqueeze(1)
+
+    """Causal Inputs Mask:
+    mask = [[[[1, 1, 0, 0, 0, 0, 0],
+            [1, 1, 0, 0, 0, 0, 0],
+            [1, 1, 1, 0, 0, 0, 0],
+            [1, 1, 1, 1, 1, 0, 0],
+            [1, 1, 1, 1, 1, 0, 0],
+            [1, 1, 1, 1, 1, 1, 0],
+            [1, 1, 1, 1, 1, 1, 1]]]]
+    """
+    causal_inputs_mask = torch.logical_or(causal_mask, inputs_mask).to(datatype)
+
+    """Padding Mask:
+    mask = [[[[1, 1, 1, 1, 1, 1, 0],
+            [1, 1, 1, 1, 1, 1, 0],
+            [1, 1, 1, 1, 1, 1, 0],
+            [1, 1, 1, 1, 1, 1, 0],
+            [1, 1, 1, 1, 1, 1, 0],
+            [1, 1, 1, 1, 1, 1, 0],
+            [0, 0, 0, 0, 0, 0, 0]]]]
+    """
+    padding_mask = (tokens > 0).unsqueeze(-1) * (tokens > 0).unsqueeze(1)
+    padding_mask = padding_mask.unsqueeze(1)
+
+
+    """Segment Mask:
+    mask = [[[[1, 1, 1, 0, 0, 0, 0],
+            [1, 1, 1, 0, 0, 0, 0],
+            [1, 1, 1, 0, 0, 0, 0],
+            [0, 0, 0, 1, 1, 1, 0],
+            [0, 0, 0, 1, 1, 1, 0],
+            [0, 0, 0, 1, 1, 1, 0],
+            [0, 0, 0, 0, 0, 0, 0]]]]
+    """
+    segment_mask = (segment_ids.unsqueeze(-1)) == (segment_ids.unsqueeze(1))
+    segment_mask = segment_mask.unsqueeze(1)
+
+    """Final Mask:
+    mask = [[[[1, 1, 0, 0, 0, 0, 0],
+            [1, 1, 0, 0, 0, 0, 0],
+            [1, 1, 1, 0, 0, 0, 0],
+            [0, 0, 0, 1, 1, 0, 0],
+            [0, 0, 0, 1, 1, 0, 0],
+            [0, 0, 0, 1, 1, 1, 0],
+            [0, 0, 0, 0, 0, 0, 0]]]]
+    """
+    attention_mask = causal_inputs_mask * padding_mask * segment_mask
+
+    return attention_mask
+    
 def param_size(parameter):
     return parameter.ds_numel if hasattr(parameter, 'ds_id') else parameter.nelement()
 

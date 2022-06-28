@@ -252,11 +252,9 @@ class NonCausalMTFDataset(torch.utils.data.Dataset):
         assert np.max(documents) < indexed_dataset['input_tokens'].sizes.shape[0]
 
         # Build index mappings.
-        # self.doc_idx, self.shuffle_idx = _build_index_mappings(
-        #     self.name, data_prefix['input_tokens'], documents, self.indexed_dataset['input_tokens'].sizes,
-        #     num_samples, seq_length, seed)
-        self.doc_idx = documents
-        self.shuffle_idx = random.sample(self.doc_idx, len(self.doc_idx))
+        self.doc_idx, self.shuffle_idx = _build_index_mappings(
+            self.name, data_prefix['input_tokens'], documents, self.indexed_dataset['input_tokens'].sizes,
+            num_samples, seq_length, seed)
 
     def __len__(self):
         # -1 is due to data structure used to retieve the index:
