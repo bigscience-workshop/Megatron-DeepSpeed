@@ -251,7 +251,9 @@ def get_ltor_masks_and_position_ids(
 
 
 def get_packed_attention_mask(causal_mask, tokens, decoder_causal_attention, segment_ids, datatype=torch.int64):
-    
+    """
+    Inspired by https://github.com/google-research/t5x/blob/7193407f98a8b18100b71a04ff777238be1682ca/t5x/examples/decoder_only/layers.py#L978
+    """
     inputs_mask = decoder_causal_attention.unsqueeze(-1) * decoder_causal_attention.unsqueeze(1)
     inputs_mask = inputs_mask.unsqueeze(1)
 
@@ -303,7 +305,7 @@ def get_packed_attention_mask(causal_mask, tokens, decoder_causal_attention, seg
     attention_mask = causal_inputs_mask * padding_mask * segment_mask
 
     return attention_mask
-    
+
 def param_size(parameter):
     return parameter.ds_numel if hasattr(parameter, 'ds_id') else parameter.nelement()
 
