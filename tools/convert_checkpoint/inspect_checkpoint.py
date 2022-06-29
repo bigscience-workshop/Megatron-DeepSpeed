@@ -3,7 +3,7 @@ import torch
 import os
 from collections import OrderedDict
 from pathlib import Path
- 
+
 # insert megatron's root dir into sys.path
 root_repo_path = str(Path(__file__).resolve().parents[2])
 if root_repo_path not in sys.path:
@@ -37,7 +37,7 @@ def main():
         exit(1)
 
     print(f'loading checkpoint file: {ckpt_file}')
-    sd = torch.load(ckpt_file)
+    sd = torch.load(ckpt_file, map_location=torch.device('cpu'))
     dump_data(sd)
 
     quit()
