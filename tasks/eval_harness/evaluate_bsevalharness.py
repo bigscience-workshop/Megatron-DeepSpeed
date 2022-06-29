@@ -8,9 +8,6 @@ cd lm-evaluation-harness
 pip install   "promptsource @ git+https://github.com/bigscience-workshop/promptsource@eval-hackathon"
 pip install -e ".[dev]"
 & then: https://github.com/bigscience-workshop/bigscience/blob/12f06bd39221f2e3788524ea86139ac1ac2b1b1a/jz/envs/README.md#creating-production-conda-env
-
-Usage:
-
 """
 
 from functools import reduce
