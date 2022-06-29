@@ -290,9 +290,7 @@ def _initialize_distributed():
                 args.local_rank = device
             torch.cuda.set_device(device)
         # Call the init process
-        torch.distributed.init_process_group(
-            backend=args.distributed_backend,
-            world_size=args.world_size, rank=args.rank)
+        deepspeed.init_distributed(args.distributed_backend)
 
     # Set the tensor model-parallel, pipeline model-parallel, and
     # data-parallel communicators.
