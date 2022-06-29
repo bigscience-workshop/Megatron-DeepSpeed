@@ -81,6 +81,7 @@ def pack_samples(items, max_seq_len: int, micro_batch_size: int, pad_token: int)
         cur_len += total_len
         assert cur_len < max_seq_len
 
+    # Normally the default collate_fn handles torch tensor conversion; As we use a custom collate_fn, do it here
     return {
         "decoder_target_tokens": decoder_target_tokens,
         "decoder_segment_ids": decoder_segment_ids,
