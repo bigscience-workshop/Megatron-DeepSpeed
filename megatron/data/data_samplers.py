@@ -22,7 +22,7 @@ from megatron import get_args
 from megatron import mpu
 
 
-def build_pretraining_data_loader(dataset, consumed_samples):
+def build_pretraining_data_loader(dataset, consumed_samples, num_workers=None):
     """Buld dataloader given an input dataset."""
 
     if dataset is None:
@@ -47,6 +47,9 @@ def build_pretraining_data_loader(dataset, consumed_samples):
     else:
         raise Exception('{} dataloader type is not supported.'.format(
                 args.dataloader_type))
+
+    if num_workers is None:
+        num_workers = args.num_workers
 
     # Torch dataloader.
     return torch.utils.data.DataLoader(dataset,
@@ -142,7 +145,7 @@ class MegatronPretrainingRandomSampler:
                        * self.micro_batch_size
         bucket_offset = current_epoch_samples // self.data_parallel_size
         start_idx = self.data_parallel_rank * bucket_size
-        
+
         g = torch.Generator()
         g.manual_seed(self.epoch)
         random_idx = torch.randperm(bucket_size, generator=g).tolist()
