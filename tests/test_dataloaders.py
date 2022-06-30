@@ -190,7 +190,7 @@ class TestDataLoading(TestCasePlus):
 
                     # Test that the first sample of each batch couldn't fit inside the previous batch
                     first_sample_segment_ids = next(itertools.groupby(items["decoder_segment_ids"][0]))[1]
-                    first_sample_size = len(first_sample_segment_ids)
+                    first_sample_size = len(list(first_sample_segment_ids))
                     self.assertGreater(first_sample_size, last_padding_size)
 
                     # update `last_padding_size`
