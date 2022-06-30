@@ -122,7 +122,7 @@ def conversion_helper(val, conversion):
     return rtn
 
 
-def fp32_to_float16(val, float16_convertor):
+def fp32_to_16bit(val, float16_convertor):
     """Convert fp32 `val` to fp16/bf16"""
     def half_conversion(val):
         val_typecheck = val
@@ -168,7 +168,7 @@ class Float16Module(MegatronModule):
 
     def forward(self, *inputs, **kwargs):
         if mpu.is_pipeline_first_stage():
-            inputs = fp32_to_float16(inputs, self.float16_convertor)
+            inputs = fp32_to_16bit(inputs, self.float16_convertor)
         outputs = self.module(*inputs, **kwargs)
         if mpu.is_pipeline_last_stage():
             outputs = float16_to_fp32(outputs)

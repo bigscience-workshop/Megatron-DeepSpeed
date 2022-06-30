@@ -151,7 +151,8 @@ def check_adlr_autoresume_termination(iteration, model,
         sys.exit(0)
 
 
-def get_ltor_masks_and_position_ids(
+
+def get_attention_masks_and_position_ids(
         data,
         eod_token,
         reset_position_ids,
@@ -159,6 +160,7 @@ def get_ltor_masks_and_position_ids(
         eod_mask_loss,
         prefix_indices,
         loss_on_targets_only,
+        ltor=True,
     ):
     """
     Build masks and position id for left to right model.
@@ -177,9 +179,10 @@ def get_ltor_masks_and_position_ids(
         att_mask_batch = micro_batch_size
     else:
         att_mask_batch = 1
-    attention_mask = torch.tril(torch.ones(
-        (att_mask_batch, seq_length, seq_length), device=data.device)).view(
-            att_mask_batch, 1, seq_length, seq_length)
+    attention_mask = torch.ones((att_mask_batch, seq_length, seq_length), device=data.device)
+    if ltor:
+        attention_mask = torch.tril(attention_mask)
+    attention_mask = attention_mask.view(att_mask_batch, 1, seq_length, seq_length)
 
     # Loss mask.
     loss_mask = torch.ones(data.size(), dtype=torch.float, device=data.device)

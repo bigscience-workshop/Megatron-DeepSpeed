@@ -21,7 +21,7 @@ import torch
 from megatron import get_args
 from megatron import mpu
 from megatron.enums import AttnMaskType
-from .module import MegatronModule, fp32_to_float16
+from .module import MegatronModule, fp32_to_16bit
 
 from .language_model import parallel_lm_logits
 from .language_model import get_language_model
@@ -213,9 +213,9 @@ class GPTModelPipe(PipelineModule,MegatronModule):
 
         def _to_float16(inputs):
             if args.fp16:
-                return fp32_to_float16(inputs, lambda v: v.half())
+                return fp32_to_16bit(inputs, lambda v: v.half())
             elif args.bf16:
-                return fp32_to_float16(inputs, lambda v: v.bfloat16())
+                return fp32_to_16bit(inputs, lambda v: v.bfloat16())
             else:
                 return inputs
 
