@@ -131,7 +131,7 @@ def build_pretraining_data_loader(dataset, consumed_samples, num_workers=None):
         num_workers = args.num_workers
 
     collate_fn = None
-    if args.dataloader_type == 'packed':
+    if args.dataloader_type == 'decoder_packed':
         collate_fn = partial(pack_samples, max_seq_len=args.seq_length + 1)
 
     # Torch dataloader.
