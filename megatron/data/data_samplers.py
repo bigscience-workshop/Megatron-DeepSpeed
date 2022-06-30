@@ -16,16 +16,11 @@
 """Dataloaders."""
 
 from functools import partial
-import logging
-
-import numpy as np
 import torch
 
 from megatron import get_args, get_tokenizer
 from megatron import mpu
 from megatron.data.mtf_dataset import MTFDataset
-
-logger = logging.get_logger(__name__)
 
 
 def pack_samples(items, max_seq_len: int, micro_batch_size: int, pad_token: int):
@@ -45,14 +40,14 @@ def pack_samples(items, max_seq_len: int, micro_batch_size: int, pad_token: int)
         ]
 
     Output:
-        decoder_target_tokens = [[6, 7, 8, 3, 4, 5, <pad>]]: Concatenation of tokens followed with padding tokens.
+        decoder_tokens = [[6, 7, 8, 3, 4, 5, <pad>]]: Concatenation of tokens followed with padding tokens.
         decoder_segment_ids = [[1, 1, 1, 2, 2, 2, 0]]: Segment ids determine original documents.
-        decoder_causal_attention = [[1, 1, 0, 1, 1, 0, 0]]: `0` depicts inputs, `1` depicts target.
+        decoder_is_inputs = [[1, 1, 0, 1, 1, 0, 0]]: `1` depicts inputs, `0` depicts target.
     """
 
-    decoder_target_tokens = np.full((micro_batch_size, max_seq_len), pad_token)
-    decoder_segment_ids = np.zeros((micro_batch_size, max_seq_len))
-    decoder_causal_attention = np.zeros((micro_batch_size, max_seq_len))
+    decoder_tokens = torch.full((micro_batch_size, max_seq_len), pad_token)
+    decoder_segment_ids = torch.zeros((micro_batch_size, max_seq_len))
+    decoder_is_inputs = torch.full((micro_batch_size, max_seq_len), False, dtype=torch.bool)
 
     batch_num = 0
     # `0` is reserved for padding
@@ -64,22 +59,21 @@ def pack_samples(items, max_seq_len: int, micro_batch_size: int, pad_token: int)
         total_len = input_token_len + target_token_len
         if cur_len + total_len > max_seq_len:
             len_diff = max_seq_len - cur_len
-            logger.info(f"Loosing {len_diff} tokens to padding.")
             # Padding
             if len_diff > 0:
-                decoder_target_tokens[batch_num][cur_len: max_seq_len] = pad_token
+                decoder_tokens[batch_num][cur_len: max_seq_len] = pad_token
                 decoder_segment_ids[batch_num][cur_len: max_seq_len] = 0
-                decoder_causal_attention[batch_num][cur_len: max_seq_len] = 0
+                # padded values are already 0, no need to update `decoder_is_inputs`
             batch_num += 1
             assert batch_num < micro_batch_size
             item_num = 1
             cur_len = 0
 
-        decoder_target_tokens[batch_num][cur_len: cur_len + input_token_len] = token_dict["input_tokens"]
-        decoder_target_tokens[batch_num][cur_len + input_token_len: cur_len + total_len] = token_dict["target_tokens"]
+        decoder_tokens[batch_num][cur_len: cur_len + input_token_len] = token_dict["input_tokens"]
+        decoder_tokens[batch_num][cur_len + input_token_len: cur_len + total_len] = token_dict["target_tokens"]
         decoder_segment_ids[batch_num][cur_len: cur_len + total_len] = item_num
-        decoder_causal_attention[batch_num][cur_len: cur_len + input_token_len] = 1  # input
-        decoder_causal_attention[batch_num][cur_len + input_token_len: cur_len + total_len] = 0  # target
+        decoder_is_inputs[batch_num][cur_len: cur_len + input_token_len] = 1  # inputs
+        # targets are already 0 at init, no need to update `decoder_is_inputs`
 
         item_num += 1
         cur_len += total_len
@@ -87,9 +81,9 @@ def pack_samples(items, max_seq_len: int, micro_batch_size: int, pad_token: int)
 
     # Normally the default collate_fn handles torch tensor conversion; As we use a custom collate_fn, do it here
     return {
-        "decoder_target_tokens": decoder_target_tokens,
+        "decoder_tokens": decoder_tokens,
         "decoder_segment_ids": decoder_segment_ids,
-        "decoder_causal_attention": decoder_causal_attention,
+        "decoder_is_inputs": decoder_is_inputs,
     }
 
 
@@ -231,32 +225,6 @@ class MegatronPretrainingRandomSampler:
 
     def __len__(self):
         return self.total_samples
-
-    def __iter__(self):
-        active_total_samples = self.total_samples - self.last_batch_size
-        self.epoch = self.consumed_samples // active_total_samples
-        current_epoch_samples = self.consumed_samples % active_total_samples
-        assert current_epoch_samples % self.micro_batch_times_data_parallel_size == 0
-
-        # data sharding and random sampling
-        bucket_size = (self.total_samples // self.micro_batch_times_data_parallel_size) \
-                       * self.micro_batch_size
-        bucket_offset = current_epoch_samples // self.data_parallel_size
-        start_idx = self.data_parallel_rank * bucket_size
-
-        g = torch.Generator()
-        g.manual_seed(self.epoch)
-        random_idx = torch.randperm(bucket_size, generator=g).tolist()
-        idx_range = [start_idx + x for x in random_idx[bucket_offset:]]
-
-        batch = []
-        # Last batch if not complete will be dropped.
-        for idx in idx_range:
-            batch.append(idx)
-            if len(batch) == self.micro_batch_size:
-                self.consumed_samples += self.micro_batch_times_data_parallel_size
-                yield batch
-                batch = []
 
 
 class MegatronPackedRandomSampler(object):

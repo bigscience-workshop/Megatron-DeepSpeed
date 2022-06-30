@@ -4,15 +4,14 @@ from multiprocessing.sharedctypes import Value
 import torch
 
 from megatron import get_args, get_tokenizer, print_rank_0, mpu
-from megatron.data.non_causal_mtf_dataset import build_train_valid_test_datasets, build_dataset_group
+from megatron.data.mtf_dataset import build_train_valid_test_datasets
+from megatron.enums import PositionEmbeddingType
 from megatron.model import GPTModelPipe
 from megatron.training import pretrain
 from megatron.utils import get_ltor_masks_and_position_ids, get_packed_attention_mask
-from megatron.utils import average_losses_across_data_parallel_group
 
 import deepspeed
 from deepspeed.runtime.utils import see_memory_usage
-import os
 
 try:
     from torch.distributed.elastic.multiprocessing.errors import record
@@ -41,39 +40,36 @@ def model_provider(pre_process=True, post_process=True):
             )
             # This is a hack to give us a reference to get_batch_pipe from within training.py
             # We need to call model.set_batch_fn after deepspeed.initialize
-            model._megatron_batch_fn = get_batch_pipe_packed
+            model._megatron_batch_fn = get_batch_pipe
         else:
             raise NotImplementedError("DeepSpeed is required for T0")
 
     see_memory_usage(f"After Building Model", force=True)
     return model
 
-def get_batch_pipe_packed(data):
+def get_batch_pipe(data):
     """
     Modification of `get_batch` to work on `next(data_iterator)` instead of `data_iterator` & in packed fashion
     
     data:
-    decoder_target_tokens = [[6, 7, 8, 3, 4, 5, 0]]
+    decoder_tokens = [[6, 7, 8, 3, 4, 5, 0]]
     decoder_segment_ids = [[1, 1, 1, 2, 2, 2, 0]]
-    decoder_causal_attention = [[1, 1, 0, 1, 1, 0, 0]]
+    decoder_is_inputs = [[1, 1, 0, 1, 1, 0, 0]]
     """
     args = get_args()
     tokenizer = get_tokenizer()
 
-    # Items and their type.
-    keys = ['decoder_target_tokens', 'decoder_segment_ids', 'decoder_causal_attention']
-    datatype = torch.int64
-
     # Broadcast data.
-    data_b = mpu.broadcast_data(keys, data, datatype)
+    data_b = mpu.broadcast_data(['decoder_tokens', 'decoder_segment_ids'], data, torch.int64)
+    data_c = mpu.broadcast_data(['decoder_is_inputs'], data, torch.bool)
 
     # Unpack.
-    tokens_ = data_b['decoder_target_tokens'].long()
+    tokens_ = data_b['decoder_tokens'].long()
     labels = tokens_[:, 1:].contiguous()
     tokens = tokens_[:, :-1].contiguous()
     
     segment_ids = data_b['decoder_segment_ids'].long()[:, :-1]
-    decoder_causal_attention = data_b['decoder_causal_attention'].long()[:, :-1]
+    decoder_is_inputs = data_c['decoder_is_inputs'][:, :-1]
 
     # Get the masks and position ids.
     causal_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
@@ -86,37 +82,22 @@ def get_batch_pipe_packed(data):
         loss_on_targets_only=False # This is done below
     )
     # Only compute loss over causal target tokens, i.e. ignore input_tokens & padding
-    loss_mask *= torch.logical_and((decoder_causal_attention - 1) * -1, tokens)
-    loss_mask = loss_mask.to(datatype)
+    loss_on_targets_only = 1 - data_c['decoder_is_inputs'][:, 1:]
+    loss_on_non_pad_only = (tokens != tokenizer.pad)
+    loss_mask *= loss_on_targets_only * loss_on_non_pad_only
 
     attention_mask = get_packed_attention_mask(
-        causal_mask=causal_mask,
-        tokens=tokens,
-        decoder_causal_attention=decoder_causal_attention,
-        segment_ids=segment_ids,
-        datatype=datatype,
+        # Run non-causal decoder
+        is_causal=False,
+        causal_mask=causal_mask.bool(),
+        decoder_is_inputs=decoder_is_inputs.bool(),
+        segment_ids=segment_ids.long(),
     )
 
-    if args.curriculum_learning and args.curriculum_seqlen < tokens.size()[1]:
-        # seqlen-based curriculum learning
-        # tokens, position_ids, labels, loss_mask have size [batch size, seqlen]
-        tokens = tokens[:, :args.curriculum_seqlen].contiguous()
-        position_ids = position_ids[:, :args.curriculum_seqlen].contiguous()
-        labels = labels[:, :args.curriculum_seqlen].contiguous()
-        loss_mask = loss_mask[:, :args.curriculum_seqlen].contiguous()
+    if args.position_embedding_type not in [PositionEmbeddingType.alibi, PositionEmbeddingType.rotary]:
+        raise NotImplementedError("absolute positional embeddings require us to reset position_ids accordingly.")
 
     return (tokens, position_ids, attention_mask), (labels, loss_mask)
-
-
-def loss_func(loss_mask, output_tensor):
-    losses = output_tensor.float()
-    loss_mask = loss_mask.view(-1).float()
-    loss = torch.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
-
-    # Reduce loss for logging.
-    averaged_loss = average_losses_across_data_parallel_group([loss])
-
-    return loss, {'lm loss': averaged_loss[0]}
 
 
 def train_valid_test_datasets_provider(train_val_test_num_samples):
@@ -128,18 +109,12 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
     # Option 1 of data loading using --data-path
     # For T0, data has to be provided in the form --data-path input-data target-data input-data2 target-data2 ...
     if args.data_path:
-
-        # Turn into list of pairs; Overwrite args.data_path to keep len = 1
         # TODO: Not yet compatible with dataset weights (Will break at prefixes, weights = analyze_data_prefix(args.data_path))
-        assert len(args.data_path) > 1, "Please provide data in pairs of two: input_tokens target_tokens"
-        args.data_path = [{"input_tokens": args.data_path[i], "target_tokens": args.data_path[i+1]} for i in range(0, len(args.data_path), 2)]
-
         train_ds, valid_ds, test_ds = build_train_valid_test_datasets(
             data_prefix=args.data_path,
             data_impl=args.data_impl,
             splits_string=args.split,
             train_valid_test_num_samples=train_val_test_num_samples,
-            seq_length=args.seq_length,
             seed=args.seed,
             skip_warmup=(not args.mmap_warmup))
     else:
@@ -150,10 +125,12 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
 
 @record
 def main():
-    pretrain(train_valid_test_datasets_provider, 
-            model_provider, 
-            forward_step_func=None,
-            args_defaults={'tokenizer_type': 'GPT2BPETokenizer'})
+    pretrain(
+        train_valid_test_datasets_provider,
+        model_provider,
+        forward_step_func=None,
+        args_defaults={}
+    )
 
 if __name__ == "__main__":
     main()

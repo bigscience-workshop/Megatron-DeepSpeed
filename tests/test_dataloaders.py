@@ -169,7 +169,7 @@ class TestDataLoading(TestCasePlus):
 
                 last_padding_size = 0
                 for i, items in enumerate(batch_sampler):
-                    micro_batch_size, seq_length = items["decoder_target_tokens"].shape
+                    micro_batch_size, seq_length = items["decoder_tokens"].shape
 
                     # `micro_batch_size` correspond to the one in argument
                     self.assertEqual(micro_batch_size, args.micro_batch_size)

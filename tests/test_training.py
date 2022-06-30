@@ -469,10 +469,7 @@ class MegDSTestTraining(TestCasePlus):
         self.assertEqual(len(tensorboard_files), 2, "tensorboard files")
 
     def test_training_t0(self):
-
-        src_dir = self.src_dir
-        data_dir = f"{self.data_dir}/gpt2"
-        data_dir_t0 = f"{self.data_dir}/t0"
+        data_path = f"{self.data_dir}/gpt2/ag_news_prompt"
         output_dir = self.get_auto_remove_tmp_dir()
         logs_dir = f"{output_dir}/logs"
         Path(logs_dir).mkdir(parents=True, exist_ok=True)
@@ -514,14 +511,13 @@ class MegDSTestTraining(TestCasePlus):
             --eval-iters 5
             --checkpoint-activations
             --exit-interval {exit_interval}
-
-            --merge-file {data_dir}/gpt2-tiny-merges.txt
-            --vocab-file {data_dir}/gpt2-tiny-vocab.json
+            --tokenizer-type PretrainedFromHF
+            --tokenizer-name-or-path gpt2
             --log-path {logs_dir}
             --save {output_dir}/checkpoints
             --load {output_dir}/checkpoints
-            --data-path {data_dir_t0}/ag_news_prompt_test_inputs_document {data_dir_t0}/ag_news_prompt_test_targets_document
-            --dataloader-type packed
+            --data-path {data_path}
+            --dataloader-type decoder_packed
             --split 90,10,0
             --tensorboard-dir {output_dir}/tensorboard
             --tensorboard-queue-size 5
@@ -539,7 +535,7 @@ class MegDSTestTraining(TestCasePlus):
             --deepspeed-activation-checkpointing
         """.split()
 
-        script = [f"{src_dir}/finetune_t0.py"]
+        script = [f"{self.src_dir}/finetune_t0_non_causal_decoder.py"]
         launcher = get_launcher(num_gpus)
 
         cmd = launcher + script + args + ds_args
@@ -583,6 +579,7 @@ class MegDSTestTraining(TestCasePlus):
         # test tensorboard (1 file from the first run, plus 1 now)
         tensorboard_files = glob.glob(f"{output_dir}/tensorboard/events*")
         self.assertEqual(len(tensorboard_files), 2, "tensorboard files")
+
     @parameterized.expand(["gpt", "prefix", "no_eval"])
     def test_mode2_dataloading(self, variation):
         src_dir = self.src_dir

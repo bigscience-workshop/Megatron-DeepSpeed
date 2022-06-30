@@ -1178,23 +1178,23 @@ def build_train_valid_test_data_iterators(
 
     # Build iterators.
     dl_type = args.dataloader_type
-    assert dl_type in ['single', 'cyclic', 'packed']
+    assert dl_type in ['single', 'cyclic', 'decoder_packed']
 
     if train_dataloader is not None:
-        train_data_iterator = iter(train_dataloader) if dl_type in ['single', 'packed'] \
+        train_data_iterator = iter(train_dataloader) if dl_type in ['single', 'decoder_packed'] \
                               else iter(cyclic_iter(train_dataloader))
     else:
         train_data_iterator = None
 
     if valid_dataloaders is not None:
-        valid_data_iterators = [iter(vdl) if dl_type in ['single', 'packed'] \
+        valid_data_iterators = [iter(vdl) if dl_type in ['single', 'decoder_packed'] \
                               else iter(cyclic_iter(valid_dataloaders))
                                  for vdl in valid_dataloaders]
     else:
         valid_data_iterators = [None] * num_valid_ds
 
     if test_dataloaders is not None:
-        test_data_iterators = [iter(tdl) if dl_type in ['single', 'packed'] \
+        test_data_iterators = [iter(tdl) if dl_type in ['single', 'decoder_packed'] \
                              else iter(cyclic_iter(test_dataloaders))
                             for tdl in test_dataloaders]
     else:
