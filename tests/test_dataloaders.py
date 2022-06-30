@@ -110,7 +110,8 @@ class TestDataLoading(TestCasePlus):
 
     def test_mtf_dataset(self):
         command_args = get_default_args(f"{self.data_dir}/t0")
-        command_args["--data-path"] = "tests/data/t0/ag_news_prompt"
+        command_args["--data-path"] = f"{self.data_dir}/data/gpt2/ag_news_prompt"
+        command_args["--dataloader-type"] = "decoder_packed"
 
         with patch('sys.argv', flatten_arguments(command_args)):
             with mockenv_context(**self.dist_env_1_gpu):
@@ -138,7 +139,8 @@ class TestDataLoading(TestCasePlus):
 
     def test_mtf_packed_dataloader(self):
         command_args = get_default_args(f"{self.data_dir}/t0")
-        command_args["--data-path"] = "tests/data/t0/ag_news_prompt"
+        command_args["--data-path"] = f"{self.data_dir}/data/gpt2/ag_news_prompt"
+        command_args["--dataloader-type"] = "decoder_packed"
 
         with patch('sys.argv', flatten_arguments(command_args)):
             with mockenv_context(**self.dist_env_1_gpu):
