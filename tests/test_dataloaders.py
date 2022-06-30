@@ -183,7 +183,7 @@ class TestDataLoading(TestCasePlus):
                         self.assertEqual(segment_ids[:-1], list(range(1, len(segment_ids))))
                         # `0` signify that the tokens are padding
                         self.assertEqual(segment_ids[-1], 0)
-                        original_samples_count += len([segment_id for segment_id in segment_ids if segment_id != 0])
+                        original_samples_count += max(segment_ids)
 
                     # Test that we actually pack, ie we have more samples than the `batch_size`
                     self.assertGreater(original_samples_count, micro_batch_size)
