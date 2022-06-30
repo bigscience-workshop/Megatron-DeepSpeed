@@ -304,6 +304,9 @@ def get_packed_attention_mask(causal_mask, tokens, decoder_causal_attention, seg
     """
     attention_mask = causal_inputs_mask * padding_mask * segment_mask
 
+    # Convert attention mask to binary:
+    attention_mask = (attention_mask < 0.5)
+
     return attention_mask
 
 def param_size(parameter):

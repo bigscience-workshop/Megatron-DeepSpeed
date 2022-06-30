@@ -16,12 +16,15 @@
 """Dataloaders."""
 
 from functools import partial
+import logging
 
 import numpy as np
 import torch
 
 from megatron import get_args
 from megatron import mpu
+
+logger = logging.get_logger(__name__)
 
 
 def pack_samples(items, max_seq_len=2049):
@@ -49,6 +52,7 @@ def pack_samples(items, max_seq_len=2049):
         total_len = input_token_len + target_token_len
         if cur_len + total_len > max_seq_len:
             len_diff = max_seq_len - cur_len
+            logger.info(f"Loosing {len_diff} tokens to padding.")
             # Padding
             if len_diff > 0:
                 decoder_target_tokens[batch_num].append(np.zeros((len_diff)))
@@ -304,4 +308,3 @@ class MegatronPackedRandomSampler(object):
             else:
                 token_lens += tok_len
                 batch.append(idx)
-                
