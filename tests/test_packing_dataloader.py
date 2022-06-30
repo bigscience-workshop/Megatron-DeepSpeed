@@ -12,7 +12,7 @@ if root_repo_path not in sys.path:
 
 from megatron.initialize import initialize_megatron
 from megatron.data.data_samplers import MegatronPackedRandomSampler, pack_samples
-from megatron.data.non_causal_mtf_dataset import build_train_valid_test_datasets
+from megatron.data.mtf_dataset import build_train_valid_test_datasets
 from megatron.utils import get_packed_attention_mask
 
 """
@@ -75,19 +75,6 @@ initialize_megatron(
     }
 )
 
-train_ds, valid_ds, test_ds = build_train_valid_test_datasets(
-    data_prefix=[{
-        "input_tokens": "tests/data/t0/ag_news_prompt_inputs_document",
-        "target_tokens": "tests/data/t0/ag_news_prompt_targets_document"
-    }],
-    data_impl="mmap",
-    splits_string="90,5,5",
-    train_valid_test_num_samples=[50,0,0],
-    seq_length=seq_length,
-    seed=124,
-    skip_warmup=True
-)
-
 print("Test show dataset")
 for idx in range(0,4):
     line = train_ds[idx]
@@ -95,40 +82,5 @@ for idx in range(0,4):
     print(line)
 
 
-batch_sampler = MegatronPackedRandomSampler(
-    sequence_length=seq_length,
-    dataset=train_ds,
-    total_samples=len(train_ds),
-    consumed_samples=0,
-    micro_batch_size=4,
-    data_parallel_rank=0,
-    data_parallel_size=1
-)
 
-dl = torch.utils.data.DataLoader(
-    train_ds,
-    batch_sampler=batch_sampler,
-    num_workers=4,
-    pin_memory=True,
-    collate_fn=partial(pack_samples, max_seq_len=seq_length),
-)
-
-for i, items in enumerate(dl):
-
-    micro_batch_size, seq_length = items['decoder_target_tokens'].shape
-    causal_mask = torch.tril(
-        torch.ones(
-            (micro_batch_size, seq_length, seq_length))
-    ).view(
-        micro_batch_size, 1, seq_length, seq_length
-    )
-
-    mask = get_packed_attention_mask(
-        causal_mask=causal_mask,
-        tokens=torch.tensor(items['decoder_target_tokens']),
-        decoder_causal_attention=torch.tensor(items['decoder_causal_attention']),
-        segment_ids=torch.tensor(items['decoder_segment_ids']),
-    )
-
-    assert mask.shape == (micro_batch_size, 1, seq_length, seq_length)
 

@@ -27,13 +27,21 @@ from megatron import mpu
 def pack_samples(items, max_seq_len=2049):
     """
     Items:
-        [{'input_tokens': array([ 6, 7, 8, 3]), 
-        'target_tokens': array([4, 5])}, {'input_tokens'...
+        [
+            {
+                'input_tokens': array([6, 7]),
+                'target_tokens': array([8])
+            },
+            {
+                'input_tokens': array([3, 4]),
+                'target_tokens': array([5])
+            }
+        ]
     
     Output:
-        decoder_target_tokens = [[6, 7, 8, 3, 4, 5, 0]]
-        decoder_segment_ids = [[1, 1, 1, 2, 2, 2, 0]]
-        decoder_causal_attention = [[1, 1, 0, 1, 1, 0, 0]]
+        decoder_target_tokens = [[6, 7, 8, 3, 4, 5, <pad>]]: Concatenation of tokens followed with padding tokens.
+        decoder_segment_ids = [[1, 1, 1, 2, 2, 2, 0]]: Segment ids determine original documents.
+        decoder_causal_attention = [[1, 1, 0, 1, 1, 0, 0]]: `0` depicts inputs, `1` depicts target.
     """
 
     decoder_target_tokens = [[]]
@@ -106,8 +114,8 @@ def build_pretraining_data_loader(dataset, consumed_samples, num_workers=None):
             micro_batch_size=args.micro_batch_size,
             data_parallel_rank=mpu.get_data_parallel_rank(),
             data_parallel_size=mpu.get_data_parallel_world_size())
-    elif args.dataloader_type == 'packed':
-        batch_sampler = MegatronPackedRandomSampler(
+    elif args.dataloader_type == 'decoder_packed':
+        batch_sampler = MegatronDecoderPackedText2TextRandomSampler(
             sequence_length=args.seq_length + 1,
             dataset=dataset,
             total_samples=len(dataset),
@@ -236,9 +244,12 @@ class MegatronPretrainingRandomSampler:
                 batch = []
 
 
-class MegatronPackedRandomSampler(object):
+class MegatronDecoderPackedText2TextRandomSampler(object):
     """
-    To be used with pack_samples collate_fn
+    Converts a two stream dataset with `input_tokens` and `target_tokens` and creates a batch that should be greedily
+    packed to be passed onto the decoder model.
+
+    To be used with `pack_samples` as collate_fn
     """
     def __init__(self, sequence_length, dataset, total_samples, consumed_samples, micro_batch_size,
                  data_parallel_rank, data_parallel_size):
