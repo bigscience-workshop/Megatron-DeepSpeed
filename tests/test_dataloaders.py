@@ -9,7 +9,7 @@ from megatron.data.data_samplers import build_pretraining_data_loader
 from megatron.testing_utils import TestCasePlus, flatten_arguments, mockenv_context
 
 
-def get_default_args(data_dir):
+def get_default_args():
     """return a dictionary with key as argument name and value as additional arguments"""
     return {
         # GPT_ARGS
@@ -65,8 +65,8 @@ class TestDataLoading(TestCasePlus):
         )
 
     def test_mlm_dataset(self):
-        command_args = get_default_args(f"{self.data_dir}/gpt2")
-        command_args["--data-path"] = f"{self.data_dir}/meg-gpt2-openwebtext_text_document"
+        command_args = get_default_args()
+        command_args["--data-path"] = f"{self.data_dir}/gpt2/meg-gpt2-openwebtext_text_document"
         command_args["--noise_density"] = "0.15"
         command_args["--mean_noise_span_length"] = "3"
         command_args["--vocab-extra-ids"] = "100"
@@ -109,8 +109,8 @@ class TestDataLoading(TestCasePlus):
                 self.assertEqual(sample["target_tokens"][-1], tokenizer.sep)
 
     def test_mtf_dataset(self):
-        command_args = get_default_args(f"{self.data_dir}/t0")
-        command_args["--data-path"] = f"{self.data_dir}/data/gpt2/ag_news_prompt"
+        command_args = get_default_args()
+        command_args["--data-path"] = f"{self.data_dir}/gpt2/ag_news_prompt"
         command_args["--dataloader-type"] = "decoder_packed"
 
         with patch('sys.argv', flatten_arguments(command_args)):
@@ -138,8 +138,8 @@ class TestDataLoading(TestCasePlus):
 
 
     def test_mtf_packed_dataloader(self):
-        command_args = get_default_args(f"{self.data_dir}/t0")
-        command_args["--data-path"] = f"{self.data_dir}/data/gpt2/ag_news_prompt"
+        command_args = get_default_args()
+        command_args["--data-path"] = f"{self.data_dir}/gpt2/ag_news_prompt"
         command_args["--dataloader-type"] = "decoder_packed"
 
         with patch('sys.argv', flatten_arguments(command_args)):

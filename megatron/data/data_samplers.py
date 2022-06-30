@@ -22,6 +22,7 @@ import torch
 
 from megatron import get_args
 from megatron import mpu
+from megatron.data.mtf_dataset import MTFDataset
 
 
 def pack_samples(items, max_seq_len=2049):
@@ -115,6 +116,7 @@ def build_pretraining_data_loader(dataset, consumed_samples, num_workers=None):
             data_parallel_rank=mpu.get_data_parallel_rank(),
             data_parallel_size=mpu.get_data_parallel_world_size())
     elif args.dataloader_type == 'decoder_packed':
+        assert isinstance(dataset, MTFDataset)
         batch_sampler = MegatronDecoderPackedText2TextRandomSampler(
             sequence_length=args.seq_length + 1,
             dataset=dataset,
@@ -132,6 +134,7 @@ def build_pretraining_data_loader(dataset, consumed_samples, num_workers=None):
 
     collate_fn = None
     if args.dataloader_type == 'decoder_packed':
+        assert isinstance(dataset, MTFDataset)
         collate_fn = partial(pack_samples, max_seq_len=args.seq_length + 1)
 
     # Torch dataloader.
