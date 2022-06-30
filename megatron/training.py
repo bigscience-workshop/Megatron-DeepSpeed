@@ -367,6 +367,93 @@ def get_learning_rate_scheduler(optimizer):
     return lr_scheduler
 
 
+def sync_layer_norm(n, p):
+
+    rank = torch.distributed.get_rank()
+
+    print(f'rank {rank} processing {n}')
+
+    #return
+
+    # # Here is how you can access fp32 version of the bf16 param and fp32 optim states
+    # #
+    # # Note that there is an all_reduce called on all dp ranks when `get_full_hp_param` is called -
+    # # so it's not free
+    # #
+    # # a. fp32 param
+    # fp32_param = p.get_full_hp_param()
+    # torch.set_printoptions(sci_mode=False, precision=6)
+    # print(f'rank {rank} bf16 = {p}')
+    # print(f'rank {rank} fp32 = {fp32_param}')
+    # torch.testing.assert_close(p, fp32_param, rtol=4e-3, atol=0, check_dtype=False)
+
+    # # b. fp32 optim states
+    # for key in ['exp_avg', 'exp_avg_sq']:
+    #     full_optim_state = p.get_full_hp_param(optim_state_key=key)
+    #     print(f'rank {rank} full optim state {key} = {full_optim_state}')
+
+    # 1. bf16
+    #print(f'rank {rank} before reduce p = {p}')
+    torch.distributed.all_reduce(p, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
+    #print(f'rank {rank} after reduce p = {p}')
+
+
+    if p._hp_mapping is not None:
+        #print(f'rank {rank} fixing hp for input_layernorm')
+        #p._hp_mapping.update_hp()
+
+        # 2. fp32
+        hp = p._hp_mapping.hp_fragment
+        torch.distributed.all_reduce(hp, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
+
+        # 3. optim states
+        for key in ['exp_avg', 'exp_avg_sq']:
+            optim_state_fragment = p._hp_mapping.get_optim_state_fragment(key)
+            #print(f'rank {rank} before reduce optim state fragment {key} = {optim_state_fragment}')
+            torch.distributed.all_reduce(optim_state_fragment, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
+            #print(f'rank {rank} after reduce optim state fragment {key} = {optim_state_fragment}')
+
+
+def sync_all_layer_norms(model):
+    # syncs weight+bias for each of the following layer norms (via averaging across TP ranks)
+    # 1. word embedding front word_embeddings.norm
+    # 2. transformer block input_layernorm x 70
+    # 3. transformer block post_attention_layernorm x 70
+    # 4. word embedding head - I think it's just weight + bias w/o a proper name in the last layer file layer_0X-model_0X-model_states.pt, see: https://github.com/bigscience-workshop/Megatron-DeepSpeed/blob/affff3d2927864c6948075700c672971782441f4/megatron/model/gpt_model.py#L267
+
+    import re
+    layer_norms_params_end_with = [
+        "word_embeddings.norm.weight", "word_embeddings.norm.bias",
+        "input_layernorm.weight", "input_layernorm.bias",
+        "post_attention_layernorm.weight", "post_attention_layernorm.bias",
+        "self_attention.dense.bias", "mlp.dense_4h_to_h.bias",
+    ]
+
+    for n,p in model.named_parameters():
+        #print(n)
+        # XXX: would be much simpler to re-do this logic to traverse children modules and act on isinstance of MixedFusedLayerNorm instead
+        # 1. first easy to identify layer norm params as they have a unique prefix each
+        for end in layer_norms_params_end_with:
+            if n.endswith(end):
+                sync_layer_norm(n, p)
+
+        # 2. now the last layer norm that has no prefix
+        # hack: (\d\d): MixedFusedLayerNorm() is hanging there w/o any prefix name, so need to match something like:
+        # /^6.weight$/ or /^6.bias$/
+        if mpu.is_pipeline_last_stage() and re.match(r'^\d+\.(weight|bias)$', n):
+            sync_layer_norm(n, p)
+
+def sync_all_torch_random_state():
+    torch_rng_state = torch.get_rng_state().cuda()
+    # We use rank 1 as source of truth and sed the new
+    torch.distributed.broadcast(
+        torch_rng_state,
+        src=mpu.get_tensor_model_parallel_src_rank() + 1,
+        group=mpu.get_tensor_model_parallel_group()
+    )
+    torch.set_rng_state(torch_rng_state.cpu())
+
+
 def setup_model_and_optimizer(model_provider_func):
     """Setup model and optimizer."""
     args = get_args()
@@ -416,8 +503,16 @@ def setup_model_and_optimizer(model_provider_func):
         torch.distributed.barrier()
         timers('load-checkpoint').stop()
         timers.log(['load-checkpoint'])
+        print_rank_0(f'module = {model[0]}')
+
+        # turn on to enable layer norm syncing
+        if 1:
+            sync_all_layer_norms(model[0].module)
+            sync_all_torch_random_state()
     else:
         args.iteration = 0
+
+    torch.distributed.barrier()
 
     # We only support local DDP with multiple micro-batches.
     if len(model) > 1 or mpu.get_pipeline_model_parallel_world_size() > 1:

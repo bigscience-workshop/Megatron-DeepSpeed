@@ -21,6 +21,7 @@ import numbers
 
 from packaging import version
 import torch
+from megatron import mpu
 from torch import nn
 from torch.nn.parameter import Parameter
 import torch.nn.functional as F
@@ -37,7 +38,6 @@ class FusedLayerNormAffineFunction(torch.autograd.Function):
 
   @staticmethod
   def forward(ctx, input, weight, bias, normalized_shape, eps):
-
     ctx.normalized_shape = normalized_shape
     ctx.eps = eps
     input_ = input.contiguous()
@@ -96,7 +96,29 @@ class MixedFusedLayerNorm(torch.nn.Module):
     init.zeros_(self.bias)
 
 
+  def forward_old(self, input):
+#    weights = [torch.empty_like(self.weight) for tp in range(mpu.get_tensor_model_parallel_world_size())]
+#    torch.distributed.all_gather(weights, self.weight, group=mpu.get_tensor_model_parallel_group())
+#    biases = [torch.empty_like(self.bias) for tp in range(mpu.get_tensor_model_parallel_world_size())]
+#    torch.distributed.all_gather(biases, self.bias, group=mpu.get_tensor_model_parallel_group())
+#    if any(torch.any(weight != self.weight) for weight in weights):
+#        if mpu.get_tensor_model_parallel_rank() == 0:
+#            print("Weight sync failed")
+#            print(weights)
+#    if any(torch.any(bias != self.bias) for bias in biases):
+#        if mpu.get_tensor_model_parallel_rank() == 0:
+#            print("Bias sync failed")
+#            print(biases)
+
+    return FusedLayerNormAffineFunction.apply(
+      input, self.weight, self.bias, self.normalized_shape,self.eps)
+
+
   def forward(self, input):
+
+    torch.distributed.all_reduce(self.weight, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
+    torch.distributed.all_reduce(self.bias, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
+
     if self.use_meg_ds_fused_layer_norm:
         return FusedLayerNormAffineFunction.apply(
             input, self.weight, self.bias, self.normalized_shape, self.eps)

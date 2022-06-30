@@ -36,26 +36,6 @@ ZERO_STAGE=0
 #GLOBAL_BATCH=128
 #WORKER_STR="-i worker-0"
 
-
-TP=1
-PP=1
-DP=2
-WORLD_SIZE=$((TP*PP*DP))
-HIDDEN=1024
-LAYERS=24
-SEQ=1024
-GLOBAL_BATCH=1
-WORKER_STR=""
-
-MICRO_BATCH=1
-
-LR=6.0e-4
-MIN_LR=6.0e-5
-DTYPE="bf16"
-EXP_DIR=${HOME}/experiments/results/bf16
-LOG_DIR="${EXP_DIR}/tensorboard/tp${TP}_pp${PP}_dp${DP}_hd${HIDDEN}_nl${LAYERS}_gbsz${GLOBAL_BATCH}_mbsz${MICRO_BATCH}_z${ZERO_STAGE}_LR_${LR}_${MIN_LR}_${DTYPE}_fix3"
-mkdir -p $LOG_DIR
-
 while [[ $# -gt 0 ]]
 do
 key="$1"
@@ -66,30 +46,69 @@ case $key in
     ;;
     -z|--zero-stage)
     ZERO_STAGE=$2;
+    shift    
     shift
     ;;
     *)
-    echo "Unknown argument(s)"
-    usage
+    echo "Unknown argument(s): $key"
     exit 1
     shift
     ;;
 esac
 done
 
+TP=4
+PP=1
+DP=2
+WORLD_SIZE=$((TP*PP*DP))
 
+HIDDEN=1024
+LAYERS=24
+NHEADS=32
+SEQ=1024
+
+#LAYERS=2
+#HIDDEN=8
+#NHEADS=2
+#SEQ=8
+
+GLOBAL_BATCH=64
+WORKER_STR=""
+EXIT_ITERS=10
+TRAIN_SAMPLES=1000000
+
+MICRO_BATCH=32
+LR=1.0e-1
+MIN_LR=1.0e-1
+DTYPE="bf16"
+RUN_VERSION=1
+EXP_DIR=${HOME}/experiments/results/bf16
+RUN_TAG="tp${TP}_pp${PP}_dp${DP}_hd${HIDDEN}_nl${LAYERS}_gbsz${GLOBAL_BATCH}_mbsz${MICRO_BATCH}_z${ZERO_STAGE}_LR_${LR}_${MIN_LR}_${DTYPE}_train_${EXIT_ITERS}_v${RUN_VERSION}"
+LOG_DIR="${EXP_DIR}/tensorboard/${RUN_TAG}"
+mkdir -p $LOG_DIR
+export BIT16_DUMP_FILE="${EXP_DIR}/${RUN_TAG}.txt"
+CHECKPOINT_DIR="./checkpoints/${DTYPE}_z${ZERO_STAGE}_tp${TP}_pp${PP}_dp${DP}_nl${LAYERS}_exit_${EXIT_ITERS}_v${RUN_VERSION}"
 options=" \
 	--tensor-model-parallel-size $TP \
 	--pipeline-model-parallel-size $PP \
         --num-layers $LAYERS \
         --hidden-size $HIDDEN \
-        --num-attention-heads 32 \
+        --num-attention-heads ${NHEADS} \
         --seq-length $SEQ \
-        --loss-scale 12 \
         --max-position-embeddings $SEQ \
 	--micro-batch-size $MICRO_BATCH \
 	--global-batch-size $GLOBAL_BATCH \
-	--train-iters 1000 \
+        --optimizer adam \
+        --adam-eps 1e-8 \
+        --lr-warmup-samples 5 \
+        --min-lr 1e-6 \
+        --lr-decay-style cosine \
+        --lr-decay-samples 12 \
+        --override-lr-scheduler \
+        --clip-grad 1.0 \
+        --weight-decay 1e-1 \
+        --embed-layernorm \
+        --partition-activations \
         --lr $LR \
 	--min-lr $MIN_LR \
         --lr-decay-style cosine \
@@ -100,17 +119,21 @@ options=" \
 	--vocab-file ${VOCAB_PATH} \
 	--merge-file ${MERGE_PATH} \
 	--save-interval 10000 \
-        --split 98,2,0 \
-        --clip-grad 1.0 \
 	--weight-decay 0.1 \
 	--adam-beta1 0.9 \
 	--adam-beta2 0.95 \
 	--init-method-std 0.006 \
         --${DTYPE} \
 	--checkpoint-activations \
-	--exit-interval 10000 \
+        --train-samples ${TRAIN_SAMPLES} \
+	--exit-interval ${EXIT_ITERS} \
+        --seed 42 \
+        --load ${CHECKPOINT_DIR} \
+        --save ${CHECKPOINT_DIR} \
 	--tensorboard-dir $LOG_DIR
         "
+#        --split 10,0,0 \
+#         --rampup-batch-size 2 2 1_000 \
 
 
 if [[ ${USE_DEEPSPEED} -eq 1 ]]; then
@@ -155,7 +178,8 @@ WORKER_STR="--num_nodes 1 --num_gpus $WORLD_SIZE"
 #WORKER_STR="-i worker-0:0,1,2,3"
 #run_cmd="deepspeed -i worker-0:0,1,2,3 ${DIR}/pretrain_gpt.py $@ ${options}"
 #run_cmd="deepspeed -i worker-0 ${DIR}/pretrain_gpt.py $@ ${options}"
-run_cmd="deepspeed --master_port 29700 $WORKER_STR ${DIR}/pretrain_gpt.py $@ ${options}"
+
+run_cmd="deepspeed --master_port 29600 $WORKER_STR ${DIR}/pretrain_gpt.py $@ ${options}"
 
 
 echo ${run_cmd}

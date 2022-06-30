@@ -82,6 +82,7 @@ class _CopyToModelParallelRegion(torch.autograd.Function):
     
     @staticmethod
     def forward(ctx, input_):
+        # TODO: we need to assert that the input_ are all the same within a group
         return input_
 
     @staticmethod
@@ -102,6 +103,7 @@ class _ReduceFromModelParallelRegion(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output):
+        # TODO: we need to assert that the grad_output are all the same within a group
         return grad_output
 
 
