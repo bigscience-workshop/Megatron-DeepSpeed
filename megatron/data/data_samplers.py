@@ -16,6 +16,7 @@
 """Dataloaders."""
 
 from functools import partial
+import logging
 
 import numpy as np
 import torch
@@ -23,6 +24,8 @@ import torch
 from megatron import get_args, get_tokenizer
 from megatron import mpu
 from megatron.data.mtf_dataset import MTFDataset
+
+logger = logging.get_logger(__name__)
 
 
 def pack_samples(items, max_seq_len: int, micro_batch_size: int, pad_token: int):
@@ -61,6 +64,7 @@ def pack_samples(items, max_seq_len: int, micro_batch_size: int, pad_token: int)
         total_len = input_token_len + target_token_len
         if cur_len + total_len > max_seq_len:
             len_diff = max_seq_len - cur_len
+            logger.info(f"Loosing {len_diff} tokens to padding.")
             # Padding
             if len_diff > 0:
                 decoder_target_tokens[batch_num][cur_len: max_seq_len] = pad_token
