@@ -3,7 +3,7 @@
 import numpy as np
 import torch
 
-from megatron import print_rank_0, get_tokenizer
+from megatron import print_rank_0, get_tokenizer, get_args
 from megatron.data.blendable_dataset import BlendableDataset
 from megatron.data.dataset_utils import get_datasets_weights_and_num_samples, get_split_by_range_
 from megatron.data.dataset_utils import get_train_valid_test_split_, get_indexed_dataset_
@@ -296,14 +296,14 @@ class MLMDataset(torch.utils.data.Dataset):
         # To ensure that the input length is `sequence_length`, we need to increase the maximum length
         # according to `noise_density` and `mean_noise_span_length`. We can also define the label length accordingly.
         number_of_raw_tokens, inputs_length, targets_length, num_noise_spans = compute_input_and_target_lengths(
-            # +1 is used so that we can compute the as autoregressive systems require us to add one more token.
-            sequence_length=self.sequence_length + 1,
+            sequence_length=self.sequence_length,
             noise_density=self.noise_density,
             mean_noise_span_length=self.mean_noise_span_length
         )
-        self.number_of_raw_tokens = number_of_raw_tokens
         self.inputs_length = inputs_length
-        self.targets_length = targets_length
+        # In order to compute loss, we need an extra token at the end.
+        self.number_of_raw_tokens = number_of_raw_tokens + 1
+        self.targets_length = targets_length + 1
         self.num_noise_spans = num_noise_spans
 
         # Build the samples mapping.
@@ -322,11 +322,20 @@ class MLMDataset(torch.utils.data.Dataset):
         tokenizer = get_tokenizer()
         self.sep_id = tokenizer.sep
         self.sentinel_token_ids = tokenizer.additional_special_tokens_ids
+        assert self.sep_id is not None, "MLM dataset requires tokenizer to have a <sep> token"
         assert len(self.sentinel_token_ids) > 0, "Provide the argument --vocab-extra-ids 100 to the script"
         assert len(self.sentinel_token_ids) >= self.num_noise_spans, "Not enough sentinel tokens, please add more"
 
+        args = get_args()
+        if hasattr(args, "encoder_seq_length") and args.encoder_seq_length is not None:
+            # T5 style
+            assert self.inputs_length == args.encoder_seq_length
+            assert self.targets_length == args.decoder_seq_length + 1
+        else:
+            assert self.inputs_length + self.targets_length == args.seq_length
+
     def __len__(self):
-        return len(self.samples_mapping)
+        return len(self._gpt_dataset)
 
     def __getitem__(self, idx):
         if isinstance(idx, slice):
