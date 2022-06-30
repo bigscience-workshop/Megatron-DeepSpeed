@@ -47,7 +47,7 @@ def pack_samples(items, max_seq_len: int, micro_batch_size: int, pad_token: int)
         decoder_causal_attention = [[1, 1, 0, 1, 1, 0, 0]]: `0` depicts inputs, `1` depicts target.
     """
 
-    decoder_target_tokens = np.zeros((micro_batch_size, max_seq_len))
+    decoder_target_tokens = np.full((micro_batch_size, max_seq_len), pad_token)
     decoder_segment_ids = np.zeros((micro_batch_size, max_seq_len))
     decoder_causal_attention = np.zeros((micro_batch_size, max_seq_len))
 
