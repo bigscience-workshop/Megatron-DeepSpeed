@@ -176,7 +176,7 @@ class TestDataLoading(TestCasePlus):
                     self.assertEqual(seq_length, args.seq_length + 1)
 
                     original_samples_count = 0
-                    for batch_id in micro_batch_size:
+                    for batch_id in range(micro_batch_size):
                         segment_ids = [k for k, _ in itertools.grouby(items["decoder_segment_ids"][batch_id])]
                         # `segment_ids` is [1,2,...]
                         self.assertEqual(segment_ids[:-1], list(range(1, len(segment_ids))))
