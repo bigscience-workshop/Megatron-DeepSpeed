@@ -20,13 +20,15 @@ from functools import partial
 import numpy as np
 import torch
 
-from megatron import get_args
+from megatron import get_args, get_tokenizer
 from megatron import mpu
 from megatron.data.mtf_dataset import MTFDataset
 
 
-def pack_samples(items, max_seq_len=2049):
+def pack_samples(items, max_seq_len: int, micro_batch_size: int, pad_token: int):
     """
+    Greedily packs samples.
+
     Items:
         [
             {
@@ -45,12 +47,13 @@ def pack_samples(items, max_seq_len=2049):
         decoder_causal_attention = [[1, 1, 0, 1, 1, 0, 0]]: `0` depicts inputs, `1` depicts target.
     """
 
-    decoder_target_tokens = [[]]
-    decoder_segment_ids = [[]]
-    decoder_causal_attention = [[]]
+    decoder_target_tokens = np.zeros((micro_batch_size, max_seq_len))
+    decoder_segment_ids = np.zeros((micro_batch_size, max_seq_len))
+    decoder_causal_attention = np.zeros((micro_batch_size, max_seq_len))
 
     batch_num = 0
-    item_num = 0
+    # `0` is reserved for padding
+    item_num = 1
     cur_len = 0
     for token_dict in items:
         input_token_len = len(token_dict["input_tokens"])
@@ -60,37 +63,29 @@ def pack_samples(items, max_seq_len=2049):
             len_diff = max_seq_len - cur_len
             # Padding
             if len_diff > 0:
-                decoder_target_tokens[batch_num].append(np.zeros((len_diff)))
-                decoder_segment_ids[batch_num].append(np.zeros((len_diff)))
-                decoder_causal_attention[batch_num].append(np.zeros((len_diff)))
+                decoder_target_tokens[batch_num][cur_len: max_seq_len] = pad_token
+                decoder_segment_ids[batch_num][cur_len: max_seq_len] = 0
+                decoder_causal_attention[batch_num][cur_len: max_seq_len] = 0
             batch_num += 1
-            item_num = 0
+            assert batch_num < micro_batch_size
+            item_num = 1
             cur_len = 0
-            decoder_target_tokens.append([])
-            decoder_segment_ids.append([])
-            decoder_causal_attention.append([])
 
-        decoder_target_tokens[batch_num].append(token_dict["input_tokens"])
-        decoder_target_tokens[batch_num].append(token_dict["target_tokens"])
-        cur_len += total_len
+        decoder_target_tokens[batch_num][cur_len: cur_len + input_token_len] = token_dict["input_tokens"]
+        decoder_target_tokens[batch_num][cur_len + input_token_len: cur_len + total_len] = token_dict["target_tokens"]
+        decoder_segment_ids[batch_num][cur_len: cur_len + total_len] = item_num
+        decoder_causal_attention[batch_num][cur_len: cur_len + input_token_len] = 1  # input
+        decoder_causal_attention[batch_num][cur_len + input_token_len: cur_len + total_len] = 0  # target
 
-        decoder_segment_ids[batch_num].append(np.ones((total_len)) + item_num)
-        decoder_causal_attention[batch_num].append(np.ones((input_token_len)))
-        decoder_causal_attention[batch_num].append(np.zeros((target_token_len)))
         item_num += 1
-    # Padding
-    len_diff = max_seq_len - cur_len
-    if len_diff > 0:
-        decoder_target_tokens[batch_num].append(np.zeros((len_diff)))
-        decoder_segment_ids[batch_num].append(np.zeros((len_diff)))
-        decoder_causal_attention[batch_num].append(np.zeros((len_diff)))
+        cur_len += total_len
+        assert cur_len < max_seq_len
 
     return {
-        "decoder_target_tokens": np.stack([np.concatenate(arr) for arr in decoder_target_tokens]),
-        "decoder_segment_ids": np.stack([np.concatenate(arr) for arr in decoder_segment_ids]),
-        "decoder_causal_attention": np.stack([np.concatenate(arr) for arr in decoder_causal_attention]),
+        "decoder_target_tokens": decoder_target_tokens,
+        "decoder_segment_ids": decoder_segment_ids,
+        "decoder_causal_attention": decoder_causal_attention,
     }
-
 
 
 def build_pretraining_data_loader(dataset, consumed_samples, num_workers=None):
@@ -127,7 +122,7 @@ def build_pretraining_data_loader(dataset, consumed_samples, num_workers=None):
             data_parallel_size=mpu.get_data_parallel_world_size())
     else:
         raise Exception('{} dataloader type is not supported.'.format(
-                args.dataloader_type))
+            args.dataloader_type))
 
     if num_workers is None:
         num_workers = args.num_workers
@@ -135,14 +130,19 @@ def build_pretraining_data_loader(dataset, consumed_samples, num_workers=None):
     collate_fn = None
     if args.dataloader_type == 'decoder_packed':
         assert isinstance(dataset, MTFDataset)
-        collate_fn = partial(pack_samples, max_seq_len=args.seq_length + 1)
+        pad_token = get_tokenizer().pad
+        collate_fn = partial(pack_samples, max_seq_len=args.seq_length + 1, micro_batch_size=args.micro_batch_size,
+                             pad_token=pad_token)
 
     # Torch dataloader.
-    return torch.utils.data.DataLoader(dataset,
-                                       batch_sampler=batch_sampler,
-                                       num_workers=num_workers,
-                                       collate_fn=collate_fn,
-                                       pin_memory=True)
+    return torch.utils.data.DataLoader(
+        dataset,
+        batch_sampler=batch_sampler,
+        num_workers=num_workers,
+        collate_fn=collate_fn,
+        pin_memory=True
+    )
+
 
 class MegatronPretrainingSampler:
 
@@ -228,7 +228,7 @@ class MegatronPretrainingRandomSampler:
 
         # data sharding and random sampling
         bucket_size = (self.total_samples // self.micro_batch_times_data_parallel_size) \
-                       * self.micro_batch_size
+                      * self.micro_batch_size
         bucket_offset = current_epoch_samples // self.data_parallel_size
         start_idx = self.data_parallel_rank * bucket_size
 
@@ -254,6 +254,7 @@ class MegatronDecoderPackedText2TextRandomSampler(object):
 
     To be used with `pack_samples` as collate_fn
     """
+
     def __init__(self, sequence_length, dataset, total_samples, consumed_samples, micro_batch_size,
                  data_parallel_rank, data_parallel_size):
         # Keep a copy of input params for later use.
@@ -289,7 +290,7 @@ class MegatronDecoderPackedText2TextRandomSampler(object):
 
         # data sharding and random sampling
         bucket_size = (self.total_samples // self.micro_batch_times_data_parallel_size) \
-                       * self.micro_batch_size
+                      * self.micro_batch_size
         bucket_offset = current_epoch_samples // self.data_parallel_size
         start_idx = self.data_parallel_rank * bucket_size
 
@@ -317,4 +318,3 @@ class MegatronDecoderPackedText2TextRandomSampler(object):
             else:
                 token_lens += tok_len
                 batch.append(idx)
-                

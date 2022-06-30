@@ -172,8 +172,8 @@ class TestDataLoading(TestCasePlus):
 
                     # `micro_batch_size` correspond to the one in argument
                     self.assertEqual(micro_batch_size, args.micro_batch_size)
-                    # `seq_length` correspond to the one in argument
-                    self.assertEqual(seq_length, args.seq_length)
+                    # `seq_length` correspond to the one in argument + 1 in order to get tokens/labels
+                    self.assertEqual(seq_length, args.seq_length + 1)
 
                     original_samples_count = 0
                     for batch_id in micro_batch_size:
