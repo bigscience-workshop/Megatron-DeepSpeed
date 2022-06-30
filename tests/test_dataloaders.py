@@ -167,6 +167,7 @@ class TestDataLoading(TestCasePlus):
                     train_ds, consumed_samples=0, num_workers=4
                 )
 
+                last_padding_size = 0
                 for i, items in enumerate(batch_sampler):
                     micro_batch_size, seq_length = items["decoder_target_tokens"].shape
 
@@ -184,4 +185,14 @@ class TestDataLoading(TestCasePlus):
                         self.assertEqual(segment_ids[-1], 0)
                         original_samples_count += len([segment_id for segment_id in segment_ids if segment_id != 0])
 
+                    # Test that we actually pack, ie we have more samples than the `batch_size`
                     self.assertGreater(original_samples_count, micro_batch_size)
+
+                    # Test that the first sample of each batch couldn't fit inside the previous batch
+                    first_sample_segment_ids = next(itertools.groupby(items["decoder_segment_ids"][0]))[1]
+                    first_sample_size = len(first_sample_segment_ids)
+                    self.assertGreater(first_sample_size, last_padding_size)
+
+                    # update `last_padding_size`
+                    last_padding_size = len([None for segment_id in items["decoder_segment_ids"][micro_batch_size - 1] if segment_id == 0])
+
