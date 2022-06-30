@@ -24,7 +24,7 @@ VARIANT="tr11-176b-ml-bsevalharness"
 
 
 CHECKPOINT_PATH=$six_ALL_CCFRSCRATCH/checkpoints/tr11-176B-ml/checkpoints/main/global_step90000
-MEGATRON_DEEPSPEED_REPO=$six_ALL_CCFRSCRATCH/commun/experiments/muennighoff/Megatron-DeepSpeed
+MEGATRON_DEEPSPEED_REPO=$six_ALL_CCFRSCRATCH/commun/experiments/muennighoff/megdsbslmeval/Megatron-DeepSpeed
 export HF_DATASETS_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 
@@ -90,10 +90,10 @@ CMD="./tasks/eval_harness/evaluate_bsevalharness.py  \
     --bf16 \
     --inference \
     --seq-length $SEQ_LEN \
-    --task_list tydiqa_primary \
+    --task_list wnli \
     --deepspeed \
     --deepspeed_config ds_config.json \
-    --bootstrap_iters 2 \
+    --intermed_results \
     --adaptive_seq_len \
     --micro_bs_multiplier 4 \
     $MEGATRON_REQUIRED_ARGS \

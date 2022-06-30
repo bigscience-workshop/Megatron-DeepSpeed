@@ -92,7 +92,6 @@ CMD="./tasks/eval_harness/evaluate.py  \
     --task_list arc_challenge,arc_easy,boolq,copa,headqa,hellaswag,lambada,logiqa,mathqa,mc_taco,mrpc,multirc,openbookqa,piqa,prost,pubmedqa,qnli,qqp,race,rte,sciq,sst,triviaqa,webqs,wic,winogrande,wnli,wsc \
     --deepspeed \
     --deepspeed_config ds_config.json \
-    --bootstrap_iters 2 \
     --intermed_results \
     --adaptive_seq_len \
     --micro_bs_multiplier 4 \

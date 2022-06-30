@@ -10,15 +10,14 @@ pip install -e ".[dev]"
 & then: https://github.com/bigscience-workshop/bigscience/blob/12f06bd39221f2e3788524ea86139ac1ac2b1b1a/jz/envs/README.md#creating-production-conda-env
 """
 
-from functools import reduce
-from logging import logMultiprocessing
+import logging
 import os
 import sys
 import datetime
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
                                              os.path.pardir,os.path.pardir)))
 
-# from lm_eval.models.gpt2 import GPT2LM
+from codecarbon import OfflineEmissionsTracker
 from lm_eval import evaluator, tasks
 from lm_eval.api import utils
 from lm_eval.api.model import CacheHook
@@ -39,13 +38,26 @@ from megatron.mpu.mappings import gather_from_tensor_model_parallel_region
 
 from megatron.utils import get_ltor_masks_and_position_ids, unwrap_model
 from megatron.p2p_communication import recv_forward, send_forward
-import pickle
 import json
 
 from torch.nn.parallel.distributed import DistributedDataParallel as torchDDP
 from megatron.model.distributed import DistributedDataParallel as LocalDDP
 from megatron.model.module import Float16Module
 from deepspeed.runtime.pipe import schedule
+
+
+def setup_example_logger(output_path):
+    """
+    Sets up a logger that will save each example and prediction.
+    Copied from https://github.com/bigscience-workshop/lm-evaluation-harness/blob/2d968c60fc8bd808e5e475ca300781f774d234c1/main.py#L74
+    """
+    example_logger = logging.getLogger("examples")
+    filename = f"./examples-{output_path}.jsonl"
+    formatter = logging.Formatter("%(message)s")
+    handler = logging.FileHandler(filename)
+    handler.setFormatter(formatter)
+    example_logger.addHandler(handler)
+    example_logger.setLevel(logging.INFO)
 
 class EvalHarnessAdaptor:
     def __init__(self, model, tokenizer):
@@ -430,30 +442,44 @@ def main():
 
     tokenizer = get_tokenizer()
     adaptor = EvalHarnessAdaptor(model, tokenizer)
-    
-    if args.intermed_results:
-        global_results = {"results": {}, "versions": {}}
-        timestamp = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
-        iteration_id = load_path.split("/")[-1].replace("/", "")
-        results_path = args.results_path.replace(".json", f"_lm-eval_{iteration_id}_{timestamp}.json")
-        # Backup file in case of interruption during writing
-        results_path_backup = args.results_path.replace(".json", f"_lm-eval_{iteration_id}_{timestamp}_backup.json")
-        for task_name, task in task_dict.items():
-            results = evaluator.evaluate(lm=adaptor, task_dict={task_name: task}, bootstrap_iters=args.bootstrap_iters)
-            global_results["results"] = {**global_results["results"], **results["results"]}
-            global_results["versions"] = {**global_results["versions"], **results["versions"]}
+
+    def add_config(results):
+        results["config"] = {
+            "adaptive_seq_len": args.adaptive_seq_len,
+            "num_fewshot": 0,
+            "bootstrap_iters": args.bootstrap_iters,
+        }
+        return results
+
+    with OfflineEmissionsTracker(country_iso_code="FRA", log_level="error"):
+        if args.intermed_results:
+            global_results = {"results": [], "versions": {}, "table_results": {}}
+            timestamp = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+            iteration_id = load_path.split("/")[-1].replace("/", "")
+            results_path = args.results_path.replace(".json", f"_lm-eval_{iteration_id}_{timestamp}.json")
+            # Backup file in case of interruption during writing
+            results_path_backup = args.results_path.replace(".json", f"_lm-eval_{iteration_id}_{timestamp}_backup.json")
+            examples_path = results_path.replace(".json", "_examples")
+            setup_example_logger(examples_path)
+            for task_name, task in task_dict.items():
+                results = evaluator.evaluate(lm=adaptor, task_dict={task_name: task}, bootstrap_iters=args.bootstrap_iters)
+                global_results["results"].extend(results["results"])
+                global_results["versions"] = {**global_results["versions"], **results["versions"]}
+                global_results["table_results"] = {**global_results["table_results"], **results["table_results"]}
+                global_results = add_config(global_results)
+                if mpu.is_pipeline_last_stage() and mpu.get_tensor_model_parallel_rank() == 0:
+                    print(json.dumps(results, indent=2))
+                    with open(results_path, 'w') as outfile:
+                        json.dump(global_results, outfile, indent=4)
+                    with open(results_path_backup, 'w') as outfile:
+                        json.dump(global_results, outfile, indent=4)
+        else:
+            global_results = evaluator.evaluate(lm=adaptor, task_dict=task_dict, bootstrap_iters=args.bootstrap_iters)
+            global_results = add_config(global_results)
             if mpu.is_pipeline_last_stage() and mpu.get_tensor_model_parallel_rank() == 0:
-                print(json.dumps(results, indent=2))
-                with open(results_path, 'w') as outfile:
+                print(json.dumps(global_results, indent=2))
+                with open(args.results_path, 'w') as outfile:
                     json.dump(global_results, outfile, indent=4)
-                with open(results_path_backup, 'w') as outfile:
-                    json.dump(global_results, outfile, indent=4)
-    else:
-        global_results = evaluator.evaluate(lm=adaptor, task_dict=task_dict, bootstrap_iters=args.bootstrap_iters)
-        if mpu.is_pipeline_last_stage() and mpu.get_tensor_model_parallel_rank() == 0:
-            print(json.dumps(global_results, indent=2))
-            with open(args.results_path, 'w') as outfile:
-                json.dump(global_results, outfile, indent=4)
 
 if __name__ == '__main__':
     main()
