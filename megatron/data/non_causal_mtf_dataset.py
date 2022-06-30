@@ -172,7 +172,7 @@ def _build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
     """Build train, valid, and test datasets."""
 
 
-    # Indexed dataset.
+    # Indexed dataset - Create seperate dataset for all fields (input & target tokens)
     indexed_dataset = {}
     for field in data_prefix:
         indexed_dataset[field] = get_indexed_dataset_(data_prefix[field], data_impl, skip_warmup)
@@ -283,6 +283,7 @@ def _build_index_mappings(name, data_prefix, documents, sizes,
     # Number of tokens in each epoch and number of required epochs.
     tokens_per_epoch = _num_tokens(documents, sizes)
     num_epochs = _num_epochs(tokens_per_epoch, seq_length, num_samples)
+
     # rng state
     np_rng = np.random.RandomState(seed=seed)
 

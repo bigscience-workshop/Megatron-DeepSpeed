@@ -76,10 +76,11 @@ def pack_samples(items, max_seq_len=2049):
         decoder_segment_ids[batch_num].append(np.zeros((len_diff)))
         decoder_causal_attention[batch_num].append(np.zeros((len_diff)))
 
+    # Normally the default collate_fn handles torch tensor conversion; As we use a custom collate_fn, do it here
     return {
-        "decoder_target_tokens": np.stack([np.concatenate(arr) for arr in decoder_target_tokens]),
-        "decoder_segment_ids": np.stack([np.concatenate(arr) for arr in decoder_segment_ids]),
-        "decoder_causal_attention": np.stack([np.concatenate(arr) for arr in decoder_causal_attention]),
+        "decoder_target_tokens": torch.as_tensor(np.stack([np.concatenate(arr) for arr in decoder_target_tokens]), dtype=torch.int64),
+        "decoder_segment_ids": torch.as_tensor(np.stack([np.concatenate(arr) for arr in decoder_segment_ids]), dtype=torch.int64),
+        "decoder_causal_attention": torch.as_tensor(np.stack([np.concatenate(arr) for arr in decoder_causal_attention]), dtype=torch.int64),
     }
 
 

@@ -5,10 +5,8 @@
 RANK=0
 WORLD_SIZE=1
 
-DATA_PATH="{ \
-        'input_tokens': 'tests/data/t0/ag_news_prompt_inputs_document',  \
-       'target_tokens': 'tests/data/t0/ag_news_prompt_targets_document'  \
-       }"
+DATA_PATH=tests/data/t0/ag_news_prompt_inputs_document tests/data/t0/ag_news_prompt_targets_document
+
 CHECKPOINT_PATH="./checkpoints"
 TOKENIZER_PATH=gpt2
 
