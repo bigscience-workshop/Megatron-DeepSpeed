@@ -41,6 +41,32 @@ python tools/preprocess_data.py \
     --tokenizer-name-or-path $TOKENIZER_PATH \
     --append-eod \
     --workers 8
+
+
+For tests tokenization:
+OUTPUT="tests/data/t0/ag_news_prompt_test"
+DATA_DIR="tests/data/gpt2"
+DATA_PATH="tests/data/t0/ag_news_classify_question_first.json"
+python tools/preprocess_data.py \
+    --input $DATA_PATH \
+    --output-prefix $OUTPUT \
+    --dataset-impl mmap \
+    --json-key inputs \
+    --merge-file $DATA_DIR/gpt2-tiny-merges.txt \
+    --vocab-file $DATA_DIR/gpt2-tiny-vocab.json \
+    --tokenizer-type GPT2BPETokenizer \
+    --append-eod \
+    --workers 8
+python tools/preprocess_data.py \
+    --input $DATA_PATH \
+    --output-prefix $OUTPUT \
+    --dataset-impl mmap \
+    --json-key targets \
+    --merge-file $DATA_DIR/gpt2-tiny-merges.txt \
+    --vocab-file $DATA_DIR/gpt2-tiny-vocab.json \
+    --tokenizer-type GPT2BPETokenizer \
+    --append-eod \
+    --workers 8
 """
 
 
