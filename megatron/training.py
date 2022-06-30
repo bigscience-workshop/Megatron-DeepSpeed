@@ -988,8 +988,6 @@ def evaluate(forward_step_func, data_iterator, model, verbose=False):
             if args.deepspeed:
                 # DeepSpeed uses eval_batch() and already aggregates losses.
                 assert isinstance(model, list) and len(model) == 1
-                print("DITER", data_iterator)
-                print("DITERNXT", next(iter(data_iterator)))
                 loss = model[0].eval_batch(data_iterator)
                 loss_dicts = [{'lm loss' : loss}] * get_num_microbatches()
             else:
