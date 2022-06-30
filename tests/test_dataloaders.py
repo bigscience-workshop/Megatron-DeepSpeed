@@ -5,7 +5,7 @@ import deepspeed
 
 from megatron import global_vars, get_tokenizer, initialize_megatron, get_args
 from megatron.data import mlm_dataset, mtf_dataset
-from megatron.data.data_samplers import MegatronPackedRandomSampler, build_pretraining_data_loader
+from megatron.data.data_samplers import build_pretraining_data_loader
 from megatron.testing_utils import TestCasePlus, flatten_arguments, mockenv_context
 
 

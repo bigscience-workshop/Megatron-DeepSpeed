@@ -380,10 +380,8 @@ class _AutoTokenizer(AbstractTokenizer):
 
     @property
     def bos_token_id(self):
-        """ Id of the beginning of sentence token in the vocabulary."""
-        return self.tokenizer.bos_token_id
+        raise NotImplementedError("Missing <bos>")
 
     @property
     def eos_token_id(self):
-        """ Id of the end of sentence token in the vocabulary."""
-        return self.tokenizer.eos_token_id
+        raise NotImplementedError("Missing <eos>")
