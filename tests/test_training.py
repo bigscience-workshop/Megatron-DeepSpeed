@@ -719,3 +719,10 @@ class MegDSTestTraining(TestCasePlus):
         tensorboard_files = glob.glob(f"{output_dir}/tensorboard/events*")
         self.assertEqual(len(tensorboard_files), 2, "tensorboard files")
 
+    def test_convert_from_gpt2_to_shared_t5_lm(self):
+        # Test structure:
+        #  - run `pretrain_gpt.py` in order to obtain GPT checkpoint
+        #  - run conversion script in order to obtain a shared t5 checkpoint
+        #  - run `pretrain_shared_t5_with_mlm.py` from that checkpoint
+        raise NotImplementedError("TODO @thomasw21 write script in order to convert gpt2 checkpoint")
+
