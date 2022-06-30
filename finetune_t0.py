@@ -135,7 +135,7 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
         args.data_path = [{"input_tokens": args.data_path[i], "target_tokens": args.data_path[i+1]} for i in range(0, len(args.data_path), 2)]
 
         train_ds, valid_ds, test_ds = build_train_valid_test_datasets(
-            data_prefix=args.data_path,
+            data_prefix=data_path_dict,
             data_impl=args.data_impl,
             splits_string=args.split,
             train_valid_test_num_samples=train_val_test_num_samples,
