@@ -469,11 +469,11 @@ class MegDSTestTraining(TestCasePlus):
         self.assertEqual(len(tensorboard_files), 2, "tensorboard files")
 
     def test_training_t0(self):
-        # all in one test
+
         src_dir = self.src_dir
         data_dir = f"{self.data_dir}/gpt2"
         data_dir_t0 = f"{self.data_dir}/t0"
-        output_dir = self.get_auto_remove_tmp_dir() # "./xxx", after=False)
+        output_dir = self.get_auto_remove_tmp_dir()
         logs_dir = f"{output_dir}/logs"
         Path(logs_dir).mkdir(parents=True, exist_ok=True)
 
