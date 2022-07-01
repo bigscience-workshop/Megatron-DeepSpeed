@@ -140,7 +140,6 @@ class MyTestCase(TestCasePlus):
 
                 model, _, _ = setup_model_and_optimizer(pretrain_gpt.model_provider)
                 model = model[0]
-                model._compute_loss = False
 
                 token_ids = torch.randint(args.padded_vocab_size, (args.micro_batch_size, args.seq_length))
 
@@ -149,7 +148,7 @@ class MyTestCase(TestCasePlus):
                 token_ids[token_ids == tokenizer.eod] %= args.padded_vocab_size
 
                 # process batch
-                input_batch, (labels, loss_mask) = pretrain_gpt.get_batch_pipe({"text": token_ids})
+                input_batch, _ = pretrain_gpt.get_batch_pipe({"text": token_ids})
 
                 # get a modified version of the first batch, we change a specific index
                 changed_index = randint(0, args.seq_length - 2)
@@ -158,8 +157,8 @@ class MyTestCase(TestCasePlus):
                 input_token_ids_changed[:, changed_index] = \
                     (input_token_ids_changed[:,changed_index] + 1) % args.padded_vocab_size
 
-                output = model.train_batch(iter_out_of_one(input_batch), (labels, loss_mask))
-                output_changed = model.train_batch(iter_out_of_one((input_token_ids_changed, *input_batch[1:])), (labels, loss_mask))
+                output = model.eval_batch(iter_out_of_one(input_batch), compute_loss=False)
+                output_changed = model.eval_batch(iter_out_of_one((input_token_ids_changed, *input_batch[1:])), compute_loss=False)
 
                 # All token in past should be unchanged
                 torch_assert_equal(output[:, :changed_index], output_changed[:, :changed_index])
@@ -189,7 +188,6 @@ class MyTestCase(TestCasePlus):
 
                 model, _, _ = setup_model_and_optimizer(pretrain_prefix_lm.model_provider)
                 model = model[0]
-                model._compute_loss = False
 
                 token_ids = torch.randint(args.padded_vocab_size, (args.micro_batch_size, args.seq_length))
 
@@ -198,7 +196,7 @@ class MyTestCase(TestCasePlus):
                 token_ids[token_ids == tokenizer.eod] %= args.padded_vocab_size
 
                 # process batch to have non empty prefix
-                input_batch, (labels, loss_mask), prefix_indices = pretrain_prefix_lm.get_batch_pipe({"text": token_ids})
+                input_batch, (_, loss_mask), prefix_indices = pretrain_prefix_lm.get_batch_pipe({"text": token_ids})
 
                 for batch_id in range(len(prefix_indices)):
                     for id in prefix_indices[batch_id]:
@@ -207,7 +205,7 @@ class MyTestCase(TestCasePlus):
                         # Make sure that the last prefix token predicts the first token.
                         self.assertTrue(loss_mask[batch_id, id -1] == 1)
 
-                output = model.train_batch(iter_out_of_one(input_batch), (labels, loss_mask))
+                output = model.eval_batch(iter_out_of_one(input_batch), compute_loss=False)
 
                 ## --------------- CHANGE A TARGET TOKEN ---------------------------
                 # get a modified version of the first batch
@@ -222,7 +220,7 @@ class MyTestCase(TestCasePlus):
                 token_ids_changed_target[token_ids_changed_target == tokenizer.eod] %= args.padded_vocab_size
 
                 # Test change
-                output_changed_target = model.train_batch(iter_out_of_one((token_ids_changed_target, *input_batch[1:])), (labels, loss_mask))
+                output_changed_target = model.eval_batch(iter_out_of_one((token_ids_changed_target, *input_batch[1:])), compute_loss=False)
 
                 # All token in past should be unchanged
                 torch_assert_equal(output[0, :changed_target_index], output_changed_target[0, :changed_target_index])
@@ -247,7 +245,7 @@ class MyTestCase(TestCasePlus):
                 token_ids_changed_input[token_ids_changed_input == tokenizer.eod] += 1
                 token_ids_changed_input[token_ids_changed_input == tokenizer.eod] %= args.padded_vocab_size
 
-                output_changed_input = model.train_batch(iter_out_of_one((token_ids_changed_input, *input_batch[1:])), (labels, loss_mask))
+                output_changed_input = model.eval_batch(iter_out_of_one((token_ids_changed_input, *input_batch[1:])), compute_loss=False)
 
                 # All tokens should be changed
                 self.assertFalse(
@@ -277,10 +275,9 @@ class MyTestCase(TestCasePlus):
 
                 model, _, _ = setup_model_and_optimizer(pretrain_prefix_lm.model_provider)
                 model = model[0]
-                model._compute_loss = False
 
                 token_ids = torch.randint(args.padded_vocab_size, (args.micro_batch_size, args.seq_length))
-                input_batch, (labels, loss_mask), prefix_indices = pretrain_prefix_lm.get_batch_pipe({"text": token_ids})
+                input_batch, (_, loss_mask), prefix_indices = pretrain_prefix_lm.get_batch_pipe({"text": token_ids})
 
                 for batch_id in range(len(prefix_indices)):
                     id = prefix_indices[batch_id]
@@ -289,7 +286,7 @@ class MyTestCase(TestCasePlus):
                     # Make sure that the last prefix token predicts the first token.
                     self.assertTrue(loss_mask[batch_id, id -1] == 1)
 
-                model.train_batch(iter_out_of_one(input_batch), (labels, loss_mask))
+                model.eval_batch(iter_out_of_one(input_batch), compute_loss=False)
 
                 #TODO: Check all invariants
 
@@ -309,7 +306,6 @@ class MyTestCase(TestCasePlus):
 
                 model, _, _ = setup_model_and_optimizer(pretrain_gpt.model_provider)
                 model = model[0]
-                model._compute_loss = False
 
                 token_ids = torch.randint(args.padded_vocab_size, (args.micro_batch_size, args.seq_length))
 
@@ -318,9 +314,9 @@ class MyTestCase(TestCasePlus):
                 token_ids[token_ids == tokenizer.eod] %= args.padded_vocab_size
 
                 # process batch
-                input_batch, (labels, loss_mask) = pretrain_gpt.get_batch_pipe({"text": token_ids})[0]
+                input_batch, _ = pretrain_gpt.get_batch_pipe({"text": token_ids})[0]
 
-                model.train_batch(iter_out_of_one(input_batch), (labels, loss_mask))
+                model.eval_batch(iter_out_of_one(input_batch), compute_loss=False)
 
                 #TODO: Check all invariants
 
@@ -386,11 +382,10 @@ class MyTestCase(TestCasePlus):
                 )
                 model, _, _ = setup_model_and_optimizer(finetune_t0_non_causal_decoder.model_provider)
                 model = model[0]
-                model._compute_loss = False
 
-                (tokens, position_ids, attention_mask), (labels, loss_mask) = finetune_t0_non_causal_decoder.get_batch_pipe(data)
+                (tokens, position_ids, attention_mask), _ = finetune_t0_non_causal_decoder.get_batch_pipe(data)
 
-                output = model.train_batch(iter_out_of_one((tokens, position_ids, attention_mask)), (labels, loss_mask))
+                output = model.eval_batch(iter_out_of_one((tokens, position_ids, attention_mask)), compute_loss=False)
 
                 ## --------------- CHANGE A TARGET TOKEN ---------------------------
                 # change the first token in the first batch
@@ -403,7 +398,7 @@ class MyTestCase(TestCasePlus):
                     token_ids_changed_target[change_batch_id, change_token_id] = (token_ids_changed_target[change_batch_id, change_token_id] + 1) % args.padded_vocab_size
 
                 # Test change
-                output_changed_target = model.train_batch(iter_out_of_one((token_ids_changed_target, position_ids, attention_mask)), (labels, loss_mask))
+                output_changed_target = model.eval_batch(iter_out_of_one((token_ids_changed_target, position_ids, attention_mask)), compute_loss=False)
 
                 first_segment_first_batch_id_end = (torch.nonzero(data["decoder_segment_ids"][change_batch_id, 1:] - data["decoder_segment_ids"][change_batch_id, :-1]) + 1)[0]
                 # Check that values changed in segment 1 of batch_id 0
