@@ -27,8 +27,8 @@ def get_default_args(test_file_dir: str):
         "--num-attention-heads": "4",
         "--seq-length": "256",
         "--max-position-embeddings": "256",
-        "--micro-batch-size": "1",
-        "--global-batch-size": "1",
+        "--micro-batch-size": "2",
+        "--global-batch-size": "2",
         "--lr-decay-iters": "320000",
         "--lr-decay-style": "cosine",
         "--lr": "0.00015",
@@ -140,7 +140,7 @@ class MyTestCase(TestCasePlus):
 
                 model, _, _ = setup_model_and_optimizer(pretrain_gpt.model_provider)
                 model = model[0]
-                model.set_train_batch_size(1)
+                model.set_train_batch_size(args.micro_batch_size)
 
                 token_ids = torch.randint(args.padded_vocab_size, (args.micro_batch_size, args.seq_length))
 
@@ -186,7 +186,7 @@ class MyTestCase(TestCasePlus):
 
                 model, _, _ = setup_model_and_optimizer(pretrain_prefix_lm.model_provider)
                 model = model[0]
-                model.set_train_batch_size(1)
+                model.set_train_batch_size(args.micro_batch_size)
                 # we preprocess batch_fn manually
                 model.set_batch_fn(None)
 
@@ -276,7 +276,7 @@ class MyTestCase(TestCasePlus):
 
                 model, _, _ = setup_model_and_optimizer(pretrain_prefix_lm.model_provider)
                 model = model[0]
-                model.set_train_batch_size(1)
+                model.set_train_batch_size(args.micro_batch_size)
                 # we preprocess batch_fn manually
                 model.set_batch_fn(None)
 
@@ -310,7 +310,7 @@ class MyTestCase(TestCasePlus):
 
                 model, _, _ = setup_model_and_optimizer(pretrain_gpt.model_provider)
                 model = model[0]
-                model.set_train_batch_size(1)
+                model.set_train_batch_size(args.micro_batch_size)
 
                 token_ids = torch.randint(args.padded_vocab_size, (args.micro_batch_size, args.seq_length))
 
@@ -384,7 +384,7 @@ class MyTestCase(TestCasePlus):
                 )
                 model, _, _ = setup_model_and_optimizer(finetune_t0_non_causal_decoder.model_provider)
                 model = model[0]
-                model.set_train_batch_size(1)
+                model.set_train_batch_size(args.micro_batch_size)
 
                 output = model.eval_batch(iter_out_of_one(data), compute_loss=False)
 
