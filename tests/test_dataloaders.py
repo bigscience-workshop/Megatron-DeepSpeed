@@ -82,7 +82,7 @@ def get_dummy_mtf_decoder_packed_data(micro_batch_size: int, seq_length: int, vo
             token = flatten_token_view[token_id]
 
     return {
-        "decoder_tokens": tokens,
+        "decoder_token_ids": tokens,
         "decoder_segment_ids": segment_ids,
         "decoder_is_inputs": is_inputs
     }
@@ -212,10 +212,10 @@ class TestDataLoading(TestCasePlus):
 
                 last_padding_size = 0
                 for i, items in enumerate(batch_sampler):
-                    micro_batch_size, seq_length = items["decoder_tokens"].shape
+                    micro_batch_size, seq_length = items["decoder_token_ids"].shape
 
                     # Check dtypes
-                    self.assertEqual(items["decoder_tokens"].dtype, torch.int64)
+                    self.assertEqual(items["decoder_token_ids"].dtype, torch.int64)
                     self.assertEqual(items["decoder_segment_ids"].dtype, torch.int64)
                     self.assertEqual(items["decoder_is_inputs"].dtype, torch.bool)
 
@@ -275,9 +275,9 @@ class TestDataLoading(TestCasePlus):
                 loss_mask = loss_mask.cpu()
 
                 self.assertEqual(loss_mask.dtype, torch.float)
-                torch_assert_equal(loss_mask.bool(), ~data["decoder_is_inputs"][:, 1:] * (data["decoder_tokens"] != tokenizer.pad))
-                torch_assert_equal(tokens, data["decoder_tokens"][:, :-1])
-                torch_assert_equal(labels, data["decoder_tokens"][:, 1:])
+                torch_assert_equal(loss_mask.bool(), ~data["decoder_is_inputs"][:, 1:] * (data["decoder_token_ids"] != tokenizer.pad))
+                torch_assert_equal(tokens, data["decoder_token_ids"][:, :-1])
+                torch_assert_equal(labels, data["decoder_token_ids"][:, 1:])
 
                 # TODO @thomasw21 check that attention_mask is `1` between segments, ie segments are independent
                 for batch_id in range(args.micro_batch_size):

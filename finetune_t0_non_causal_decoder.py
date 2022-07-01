@@ -23,13 +23,13 @@ except ImportError:
 def model_provider(pre_process=True, post_process=True):
     """Build the model."""
 
-    print_rank_0('building GPT model ...')
+    print_rank_0("building GPT model ...")
     see_memory_usage(f"Before Building Model", force=True)
 
     args = get_args()
 
     with deepspeed.zero.Init(data_parallel_group=mpu.get_data_parallel_group(),
-                             remote_device=None if args.remote_device == 'none' else args.remote_device,
+                             remote_device=None if args.remote_device == "none" else args.remote_device,
                              config_dict_or_path=args.deepspeed_config,
                              enabled=args.zero_stage == 3,
                              mpu=mpu):
@@ -60,16 +60,16 @@ def get_batch_pipe(data):
     tokenizer = get_tokenizer()
 
     # Broadcast data.
-    data_b = mpu.broadcast_data(['decoder_tokens', 'decoder_segment_ids'], data, torch.int64)
-    data_c = mpu.broadcast_data(['decoder_is_inputs'], data, torch.bool)
+    data_b = mpu.broadcast_data(["decoder_token_ids", "decoder_segment_ids"], data, torch.int64)
+    data_c = mpu.broadcast_data(["decoder_is_inputs"], data, torch.bool)
 
     # Unpack.
-    tokens_ = data_b['decoder_tokens'].long()
+    tokens_ = data_b["decoder_token_ids"].long()
     labels = tokens_[:, 1:].contiguous()
     tokens = tokens_[:, :-1].contiguous()
     
-    segment_ids = data_b['decoder_segment_ids'].long()[:, :-1]
-    decoder_is_inputs = data_c['decoder_is_inputs'][:, :-1]
+    segment_ids = data_b["decoder_segment_ids"].long()[:, :-1]
+    decoder_is_inputs = data_c["decoder_is_inputs"][:, :-1]
 
     # Get the masks and position ids.
     causal_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
@@ -82,7 +82,7 @@ def get_batch_pipe(data):
         loss_on_targets_only=False # This is done below
     )
     # Only compute loss over causal target tokens, i.e. ignore input_tokens & padding
-    loss_on_targets_only = ~data_c['decoder_is_inputs'][:, 1:]
+    loss_on_targets_only = ~data_c["decoder_is_inputs"][:, 1:]
     loss_on_non_pad_only = (tokens != tokenizer.pad)
     loss_mask *= loss_on_targets_only * loss_on_non_pad_only
 
@@ -105,7 +105,7 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
     args = get_args()
     train_ds, valid_ds, test_ds = None, None, None
 
-    print_rank_0('> building train, validation, and test datasets for T0 ...')
+    print_rank_0("> building train, validation, and test datasets for T0 ...")
     # Option 1 of data loading using --data-path
     # For T0, data has to be provided in the form --data-path input-data target-data input-data2 target-data2 ...
     if args.data_path:

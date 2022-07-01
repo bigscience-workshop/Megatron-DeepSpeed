@@ -81,7 +81,7 @@ def pack_samples(items, max_seq_len: int, micro_batch_size: int, pad_token: int)
 
     # Normally the default collate_fn handles torch tensor conversion; As we use a custom collate_fn, do it here
     return {
-        "decoder_tokens": decoder_tokens,
+        "decoder_token_ids": decoder_tokens,
         "decoder_segment_ids": decoder_segment_ids,
         "decoder_is_inputs": decoder_is_inputs,
     }
