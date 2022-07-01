@@ -11,6 +11,7 @@ from megatron.model.fused_layer_norm import MixedFusedLayerNorm
 from packaging import version
 
 from megatron import initialize_megatron, get_args, get_tokenizer, global_vars
+from megatron.model.fused_softmax import FusedScaleMaskSoftmax, ScaledMaskedSoftmax
 from megatron.testing_utils import TestCasePlus, mockenv_context, flatten_arguments, torch_assert_equal, \
     torch_assert_close
 from megatron.training import setup_model_and_optimizer
@@ -363,6 +364,45 @@ class MyTestCase(TestCasePlus):
                     torch_layer_norm_output = F.layer_norm(dummy_input.float(), normalized_shape, weight.float(), bias.float(), eps=epsilon).to(torch.bfloat16)
 
                 torch_assert_equal(mfln_output, torch_layer_norm_output)
+
+    def test_fused_masked_sofmax(self):
+        command_args = get_default_args(self.test_file_dir_str)
+
+        with patch('sys.argv', flatten_arguments(command_args)):
+            with mockenv_context(**self.dist_env_1_gpu):
+                initialize_megatron()
+                args = get_args()
+
+                dummy_input = torch.randn(
+                    args.micro_batch_size,
+                    args.num_attention_heads,
+                    args.seq_length,
+                    args.seq_length,
+                    device="cuda",
+                    dtype=args.params_dtype
+                )
+                dummy_attention_mask = torch.randn(
+                    args.micro_batch_size,
+                    args.num_attention_heads,
+                    args.seq_length,
+                    args.seq_length,
+                    device="cuda",
+                    dtype=args.params_dtype
+                ) < 0
+                scale = torch.rand(())
+
+                fused_scaled_softmax = ScaledMaskedSoftmax
+
+                fused_output = fused_scaled_softmax.apply(dummy_input, dummy_attention_mask, scale)
+
+                # mimick the same via torch
+                output = scale * dummy_input
+                output = output.masked_fill(dummy_attention_mask, -10000)
+                output = F.softmax(output, dim=-1)
+
+                # Issue is we use -10000 in mimicking instead of `inf`
+                torch_assert_close(fused_output, output)
+
 
     def test_non_causal_decoder_model_with_packed_input_passed_with_attention_mask_is_not_causal_across_segments(self):
         # TODO @thomasw21 make sure that if pass a causal mask, it is take in account. The following shows that fused_kernel completely ignores the masking is we set the variable incorrectly.
