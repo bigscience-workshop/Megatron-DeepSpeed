@@ -9,7 +9,7 @@ import finetune_t0_non_causal_decoder
 from megatron import global_vars, get_tokenizer, initialize_megatron, get_args
 from megatron.data import mlm_dataset, mtf_dataset
 from megatron.data.data_samplers import build_pretraining_data_loader
-from megatron.testing_utils import TestCasePlus, flatten_arguments, mockenv_context
+from megatron.testing_utils import TestCasePlus, flatten_arguments, mockenv_context, torch_assert_equal
 
 
 def get_default_args():
@@ -267,15 +267,15 @@ class TestDataLoading(TestCasePlus):
                 labels = labels.cpu()
                 loss_mask = loss_mask.cpu()
 
-                self.assertEqual(loss_mask, data["decoder_is_inputs"][:, 1:])
-                self.assertEqual(tokens, data["decoder_tokens"][:, :-1])
-                self.assertEqual(labels, data["decoder_tokens"][:, 1:])
+                torch_assert_equal(loss_mask, data["decoder_is_inputs"][:, 1:])
+                torch_assert_equal(tokens, data["decoder_tokens"][:, :-1])
+                torch_assert_equal(labels, data["decoder_tokens"][:, 1:])
 
                 # TODO @thomasw21 check that attention_mask is `1` between segments, ie segments are independent
                 segment_cuts = torch.nonzero(data["decoder_segment_ids"][:, 1:] - data["decoder_segment_ids"][:, :-1])
                 for batch_id in range(args.micro_batch_size):
                     for segment_start, segment_end in zip([0, *segment_cuts[batch_id]], [*segment_cuts[batch_id], args.seq_length]):
-                        self.assertEqual(attention_mask[batch_id, segment_start: segment_end, :segment_start], 1)
-                        self.assertEqual(attention_mask[batch_id, segment_start: segment_end, segment_end:], 1)
+                        torch_assert_equal(attention_mask[batch_id, segment_start: segment_end, :segment_start], 1)
+                        torch_assert_equal(attention_mask[batch_id, segment_start: segment_end, segment_end:], 1)
 
                 # TODO @thomasw21 make sure that we reset `position_ids`
