@@ -186,8 +186,8 @@ class MyTestCase(TestCasePlus):
 
                 model, _, _ = setup_model_and_optimizer(pretrain_prefix_lm.model_provider)
                 model = model[0]
-                model.set_train_batch_size(args.micro_batch_size)
                 # we preprocess batch_fn manually
+                model.set_train_batch_size(1)
                 model.set_batch_fn(None)
 
                 token_ids = torch.randint(args.padded_vocab_size, (args.micro_batch_size, args.seq_length))
@@ -276,8 +276,8 @@ class MyTestCase(TestCasePlus):
 
                 model, _, _ = setup_model_and_optimizer(pretrain_prefix_lm.model_provider)
                 model = model[0]
-                model.set_train_batch_size(args.micro_batch_size)
                 # we preprocess batch_fn manually
+                model.set_train_batch_size(1)
                 model.set_batch_fn(None)
 
                 token_ids = torch.randint(args.padded_vocab_size, (args.micro_batch_size, args.seq_length))
