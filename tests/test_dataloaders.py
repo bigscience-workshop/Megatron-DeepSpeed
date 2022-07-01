@@ -87,8 +87,6 @@ def get_dummy_mtf_decoder_packed_data(micro_batch_size: int, seq_length: int, vo
         "decoder_is_inputs": is_inputs
     }
 
-get_dummy_mtf_decoder_packed_data(1, 128, 52000, set([1,2,3,4]))
-
 class TestDataLoading(TestCasePlus):
     def setUp(self) -> None:
         super().setUp()

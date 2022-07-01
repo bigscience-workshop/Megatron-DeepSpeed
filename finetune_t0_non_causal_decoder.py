@@ -82,7 +82,7 @@ def get_batch_pipe(data):
         loss_on_targets_only=False # This is done below
     )
     # Only compute loss over causal target tokens, i.e. ignore input_tokens & padding
-    loss_on_targets_only = 1 - data_c['decoder_is_inputs'][:, 1:]
+    loss_on_targets_only = ~data_c['decoder_is_inputs'][:, 1:]
     loss_on_non_pad_only = (tokens != tokenizer.pad)
     loss_mask *= loss_on_targets_only * loss_on_non_pad_only
 
