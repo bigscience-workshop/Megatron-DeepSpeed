@@ -147,9 +147,6 @@ class MyTestCase(TestCasePlus):
                 token_ids[token_ids == tokenizer.eod] += 1
                 token_ids[token_ids == tokenizer.eod] %= args.padded_vocab_size
 
-                # process batch
-                input_batch, _ = pretrain_gpt.get_batch_pipe({"text": token_ids})
-
                 # get a modified version of the first batch, we change a specific index
                 changed_index = randint(0, args.seq_length - 2)
                 token_ids_changed = token_ids[0].clone()
@@ -157,7 +154,7 @@ class MyTestCase(TestCasePlus):
                 token_ids_changed[:, changed_index] = \
                     (token_ids_changed[:,changed_index] + 1) % args.padded_vocab_size
 
-                output = model.eval_batch(iter_out_of_one(input_batch), compute_loss=False)
+                output = model.eval_batch(iter_out_of_one({"text": token_ids}), compute_loss=False)
                 output_changed = model.eval_batch(iter_out_of_one({"text": token_ids_changed}), compute_loss=False)
 
                 # All token in past should be unchanged
@@ -189,7 +186,7 @@ class MyTestCase(TestCasePlus):
                 model, _, _ = setup_model_and_optimizer(pretrain_prefix_lm.model_provider)
                 model = model[0]
                 # we preprocess batch_fn manually
-                model._megatron_batch_fn = None
+                model.set_batch_fn(None)
 
                 token_ids = torch.randint(args.padded_vocab_size, (args.micro_batch_size, args.seq_length))
 
@@ -278,7 +275,7 @@ class MyTestCase(TestCasePlus):
                 model, _, _ = setup_model_and_optimizer(pretrain_prefix_lm.model_provider)
                 model = model[0]
                 # we preprocess batch_fn manually
-                model._megatron_batch_fn = None
+                model.set_batch_fn(None)
 
                 token_ids = torch.randint(args.padded_vocab_size, (args.micro_batch_size, args.seq_length))
                 input_batch, (_, loss_mask), prefix_indices = pretrain_prefix_lm.get_batch_pipe({"text": token_ids})
