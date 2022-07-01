@@ -317,7 +317,7 @@ def get_packed_attention_mask(is_causal: bool, causal_mask: torch.Tensor, decode
     # Convert attention mask to binary:
     attention_mask = (attention_mask < 0.5)
 
-    return attention_mask[:, None, ...]
+    return attention_mask
 
 def param_size(parameter):
     return parameter.ds_numel if hasattr(parameter, 'ds_id') else parameter.nelement()
