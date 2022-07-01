@@ -365,7 +365,7 @@ class MyTestCase(TestCasePlus):
 
                 torch_assert_equal(mfln_output, torch_layer_norm_output)
 
-    def test_fused_masked_sofmax(self):
+    def test_fused_masked_softmax(self):
         command_args = get_default_args(self.test_file_dir_str)
 
         with patch('sys.argv', flatten_arguments(command_args)):
@@ -383,7 +383,7 @@ class MyTestCase(TestCasePlus):
                 )
                 dummy_attention_mask = torch.randn(
                     args.micro_batch_size,
-                    args.num_attention_heads,
+                    1, # `args.num_attention_heads` not implemented in our cuda kernel
                     args.seq_length,
                     args.seq_length,
                     device="cuda",
