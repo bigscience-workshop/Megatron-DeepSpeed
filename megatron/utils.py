@@ -278,7 +278,7 @@ def get_packed_attention_mask(is_causal: bool, causal_mask: torch.Tensor, decode
         causal_inputs_mask = causal_mask
     else:
         assert decoder_is_inputs.dtype == torch.bool
-        inputs_mask = decoder_is_inputs[:, :, None] * decoder_is_inputs[:, None, :]
+        inputs_mask = decoder_is_inputs[:, None, :, None] * decoder_is_inputs[:, None, None, :]
         causal_inputs_mask = causal_mask + inputs_mask
 
     """Padding Mask:
@@ -290,7 +290,7 @@ def get_packed_attention_mask(is_causal: bool, causal_mask: torch.Tensor, decode
             [1, 1, 1, 1, 1, 1, 0],
             [0, 0, 0, 0, 0, 0, 0]]]]
     """
-    padding_mask = (segment_ids != 0)[:, :, None] * (segment_ids != 0)[:, None, :]
+    padding_mask = (segment_ids != 0)[:, None, :, None] * (segment_ids != 0)[:, None, None, :]
 
     """Segment Mask:
     mask = [[[[1, 1, 1, 0, 0, 0, 0],
@@ -301,7 +301,7 @@ def get_packed_attention_mask(is_causal: bool, causal_mask: torch.Tensor, decode
             [0, 0, 0, 1, 1, 1, 0],
             [0, 0, 0, 0, 0, 0, 0]]]]
     """
-    segment_mask = segment_ids[:, :, None] == segment_ids[:, None, :]
+    segment_mask = segment_ids[:, None, :, None] == segment_ids[:, None, None, :]
 
     """Final Mask:
     mask = [[[[1, 1, 0, 0, 0, 0, 0],
