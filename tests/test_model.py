@@ -1,5 +1,5 @@
-import unittest
 from random import randint
+from typing import Set
 from unittest.mock import patch
 
 import deepspeed
@@ -16,7 +16,6 @@ from megatron.training import setup_model_and_optimizer
 import pretrain_gpt
 import pretrain_prefix_lm
 import finetune_t0_non_causal_decoder
-from tests.test_dataloaders import get_dummy_mtf_decoder_packed_data
 
 
 def get_default_args():
@@ -62,6 +61,44 @@ def get_default_args():
 def equal_vectors(tensor1, tensor2, dim=-1):
     """View tensor1 and tensor2 as a list of vectors, and compute equality"""
     return torch.linalg.norm(tensor1 - tensor2, dim=dim) == 0
+
+
+def get_dummy_mtf_decoder_packed_data(micro_batch_size: int, seq_length: int, vocab_size: int, special_tokens_ids: Set[int]):
+    """Code from `tests/test_dataloaders.py"""
+    seq_length += 1
+
+    num_segments = torch.randint(1, 5, ())
+    segment_ids = torch.zeros(micro_batch_size, seq_length, dtype=torch.long)
+    is_inputs = torch.zeros(micro_batch_size, seq_length, dtype=torch.bool)
+    for batch_id in range(micro_batch_size):
+        # - `*2`: Hack in order to two start_new_segements to be seperated with two tokens at least
+        # - `+1`: Hack in order the start_mew_segments not to be 0
+        start_new_segments = torch.sort(torch.randperm((seq_length - 2) // 2, )[:num_segments]).values * 2 + 1
+        segment_ids[batch_id, start_new_segments] = 1
+
+        end_inputs = [
+            torch.randint(low=start_segment, high=end_segment, size=())
+            for start_segment, end_segment in zip([0, *start_new_segments], [*start_new_segments, seq_length])
+        ]
+        for end_input, start_segment in zip(end_inputs, [0, *start_new_segments]):
+            is_inputs[batch_id][start_segment: end_input + 1] = True
+
+    segment_ids = torch.cumsum(segment_ids, dim=-1) + 1
+
+    tokens = torch.randint(high=vocab_size, size=(micro_batch_size, seq_length), dtype=torch.long)
+    flatten_token_view = tokens.view(-1,)
+    for token_id in range(len(flatten_token_view)):
+        token = flatten_token_view[token_id]
+        # While token is a special tokens we change that token
+        while token in special_tokens_ids:
+            flatten_token_view[token_id] = (token + 1) % vocab_size
+            token = flatten_token_view[token_id]
+
+    return {
+        "decoder_tokens": tokens,
+        "decoder_segment_ids": segment_ids,
+        "decoder_is_inputs": is_inputs
+    }
 
 
 class MyTestCase(TestCasePlus):

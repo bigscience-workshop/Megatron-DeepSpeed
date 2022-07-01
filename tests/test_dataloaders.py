@@ -1,5 +1,5 @@
 import itertools
-from typing import List, Set
+from typing import Set
 from unittest.mock import patch
 
 import deepspeed
