@@ -298,7 +298,7 @@ __global__ void scaled_masked_softmax_warp_forward(
     for (int i = 0;  i < WARP_BATCH;  ++i) {
         #pragma unroll
         for (int it = 0;  it < WARP_ITERATIONS;  ++it) {
-            if (elements[i][it] == -std::numeric_limits<acc_t>::infinity()) {
+            if (elements[i][it] < -std::numeric_limits<acc_t>::infinity() + max_value[i]) {
                 elements[i][it] = 0;
             } else {
                 elements[i][it] = std::exp((elements[i][it] - max_value[i]));
@@ -320,7 +320,12 @@ __global__ void scaled_masked_softmax_warp_forward(
             if (element_index < element_count) {
                 #pragma unroll
                 for (int element = 0; element < ELEMENTS_PER_LDG_STG; ++element) {
-                    out[element] = elements[i][it + element] / sum[i];
+                    if (sum[i] == 0) {
+                        // Essentially the whole square is 0
+                        out[element] = 0;
+                    } else {
+                        out[element] = elements[i][it + element] / sum[i];
+                    }
                 }
                 copy_vector<output_t, ELEMENTS_PER_LDG_STG>(dst + i * element_count + it * WARP_SIZE, out);  
             } else {
