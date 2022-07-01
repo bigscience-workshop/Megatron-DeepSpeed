@@ -268,7 +268,7 @@ class TestDataLoading(TestCasePlus):
                 loss_mask = loss_mask.cpu()
 
                 self.assertEqual(loss_mask.dtype, torch.float)
-                torch_assert_equal(loss_mask.bool(), data["decoder_is_inputs"][:, 1:])
+                torch_assert_equal(loss_mask.bool(), ~data["decoder_is_inputs"][:, 1:] * (data["decoder_tokens"] != tokenizer.pad))
                 torch_assert_equal(tokens, data["decoder_tokens"][:, :-1])
                 torch_assert_equal(labels, data["decoder_tokens"][:, 1:])
 
