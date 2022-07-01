@@ -140,6 +140,7 @@ class MyTestCase(TestCasePlus):
 
                 model, _, _ = setup_model_and_optimizer(pretrain_gpt.model_provider)
                 model = model[0]
+                model.set_train_batch_size(1)
 
                 token_ids = torch.randint(args.padded_vocab_size, (args.micro_batch_size, args.seq_length))
 
@@ -185,6 +186,7 @@ class MyTestCase(TestCasePlus):
 
                 model, _, _ = setup_model_and_optimizer(pretrain_prefix_lm.model_provider)
                 model = model[0]
+                model.set_train_batch_size(1)
                 # we preprocess batch_fn manually
                 model.set_batch_fn(None)
 
@@ -274,6 +276,7 @@ class MyTestCase(TestCasePlus):
 
                 model, _, _ = setup_model_and_optimizer(pretrain_prefix_lm.model_provider)
                 model = model[0]
+                model.set_train_batch_size(1)
                 # we preprocess batch_fn manually
                 model.set_batch_fn(None)
 
@@ -307,6 +310,7 @@ class MyTestCase(TestCasePlus):
 
                 model, _, _ = setup_model_and_optimizer(pretrain_gpt.model_provider)
                 model = model[0]
+                model.set_train_batch_size(1)
 
                 token_ids = torch.randint(args.padded_vocab_size, (args.micro_batch_size, args.seq_length))
 
@@ -380,6 +384,7 @@ class MyTestCase(TestCasePlus):
                 )
                 model, _, _ = setup_model_and_optimizer(finetune_t0_non_causal_decoder.model_provider)
                 model = model[0]
+                model.set_train_batch_size(1)
 
                 output = model.eval_batch(iter_out_of_one(data), compute_loss=False)
 
