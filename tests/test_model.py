@@ -43,6 +43,7 @@ def get_default_args(test_file_dir: str):
         "--clip-grad": "1.0",
         "--lr-warmup-fraction": ".01",
         "--fp16": "",
+        "--inference": "",
 
         "--attention-dropout": "0",
         "--hidden-dropout": "0",
@@ -153,8 +154,8 @@ class MyTestCase(TestCasePlus):
                 input_token_ids_changed[:, changed_index] = \
                     (input_token_ids_changed[:,changed_index] + 1) % args.padded_vocab_size
 
-                output = model(*input_batch)
-                output_changed = model(input_token_ids_changed, *input_batch[1:])
+                output = model.train_batch(*input_batch)
+                output_changed = model.train_batch(input_token_ids_changed, *input_batch[1:])
 
                 # All token in past should be unchanged
                 torch_assert_equal(output[:, :changed_index], output_changed[:, :changed_index])
@@ -201,7 +202,7 @@ class MyTestCase(TestCasePlus):
                         # Make sure that the last prefix token predicts the first token.
                         self.assertTrue(loss_mask[batch_id, id -1] == 1)
 
-                output = model(*input_batch)
+                output = model.train_batch(*input_batch)
 
                 ## --------------- CHANGE A TARGET TOKEN ---------------------------
                 # get a modified version of the first batch
@@ -216,7 +217,7 @@ class MyTestCase(TestCasePlus):
                 token_ids_changed_target[token_ids_changed_target == tokenizer.eod] %= args.padded_vocab_size
 
                 # Test change
-                output_changed_target = model(token_ids_changed_target, *input_batch[1:])
+                output_changed_target = model.train_batch(token_ids_changed_target, *input_batch[1:])
 
                 # All token in past should be unchanged
                 torch_assert_equal(output[0, :changed_target_index], output_changed_target[0, :changed_target_index])
@@ -241,7 +242,7 @@ class MyTestCase(TestCasePlus):
                 token_ids_changed_input[token_ids_changed_input == tokenizer.eod] += 1
                 token_ids_changed_input[token_ids_changed_input == tokenizer.eod] %= args.padded_vocab_size
 
-                output_changed_input = model(token_ids_changed_input, *input_batch[1:])
+                output_changed_input = model.train_batch(token_ids_changed_input, *input_batch[1:])
 
                 # All tokens should be changed
                 self.assertFalse(
@@ -282,7 +283,7 @@ class MyTestCase(TestCasePlus):
                     # Make sure that the last prefix token predicts the first token.
                     self.assertTrue(loss_mask[batch_id, id -1] == 1)
 
-                model(*input_batch)
+                model.train_batch(*input_batch)
 
                 #TODO: Check all invariants
 
@@ -312,7 +313,7 @@ class MyTestCase(TestCasePlus):
                 # process batch
                 input_batch = pretrain_gpt.get_batch_pipe({"text": token_ids})[0]
 
-                model(*input_batch)
+                model.train_batch(*input_batch)
 
                 #TODO: Check all invariants
 
@@ -381,7 +382,7 @@ class MyTestCase(TestCasePlus):
 
                 (tokens, position_ids, attention_mask), (labels, loss_mask) = finetune_t0_non_causal_decoder.get_batch_pipe(data)
 
-                output = model(tokens, position_ids, attention_mask)
+                output = model.train_batch(tokens, position_ids, attention_mask)
 
                 ## --------------- CHANGE A TARGET TOKEN ---------------------------
                 # change the first token in the first batch
@@ -394,7 +395,7 @@ class MyTestCase(TestCasePlus):
                     token_ids_changed_target[change_batch_id, change_token_id] = (token_ids_changed_target[change_batch_id, change_token_id] + 1) % args.padded_vocab_size
 
                 # Test change
-                output_changed_target = model(token_ids_changed_target, position_ids, attention_mask)
+                output_changed_target = model.train_batch(token_ids_changed_target, position_ids, attention_mask)
 
                 first_segment_first_batch_id_end = (torch.nonzero(data["decoder_segment_ids"][change_batch_id, 1:] - data["decoder_segment_ids"][change_batch_id, :-1]) + 1)[0]
                 # Check that values changed in segment 1 of batch_id 0
