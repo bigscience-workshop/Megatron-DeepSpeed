@@ -88,7 +88,7 @@ def get_dummy_mtf_decoder_packed_data(micro_batch_size: int, seq_length: int, vo
         segment_ids[batch_id, start_new_segments] = 1
 
         end_inputs = [
-            torch.randint(low=start_segment, high=end_segment, size=())
+            torch.randint(low=start_segment, high=end_segment - 1, size=())
             for start_segment, end_segment in zip([0, *start_new_segments], [*start_new_segments, seq_length])
         ]
         for end_input, start_segment in zip(end_inputs, [0, *start_new_segments]):
@@ -395,7 +395,7 @@ class MyTestCase(TestCasePlus):
                 output = model.eval_batch(iter_out_of_one(data), compute_loss=False)
 
                 ## --------------- CHANGE A TARGET TOKEN ---------------------------
-                # change the first token in the first batch
+                # change the first token in the first batch to a random value
                 change_batch_id = 0
                 change_token_id = 0
                 token_ids_changed = data["decoder_token_ids"].clone()
@@ -424,3 +424,17 @@ class MyTestCase(TestCasePlus):
                 torch_assert_equal(output[:change_batch_id:], output_changed_target[:change_batch_id])
                 if change_batch_id + 1 < len(output):
                     torch_assert_equal(output[change_batch_id + 1:], output_changed_target[change_batch_id + 1:])
+
+                ## --------------- CHANGE A TARGET TOKEN ---------------------------
+                # change the last token in the first batch to a pad
+                token_ids_changed_pad = data["decoder_token_ids"].clone()
+                segment_ids_changed_pad = data["decoder_segment_ids"].clone()
+                # We increment the token id on the changed index.
+                token_ids_changed_pad[change_batch_id, -1] = tokenizer.pad
+                segment_ids_changed_pad[change_batch_id, -1] = 0
+
+                # Test model handles padding correctly
+                output_changed_pad = model.eval_batch(iter_out_of_one({**data, "decoder_token_ids": token_ids_changed_pad, "decoder_segment_ids": segment_ids_changed_pad}), compute_loss=False)
+
+                print(output_changed_pad)
+                self.assertFalse(torch.isnan(output_changed_pad))
