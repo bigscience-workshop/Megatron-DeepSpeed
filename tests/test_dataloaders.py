@@ -276,7 +276,7 @@ class TestDataLoading(TestCasePlus):
                 for batch_id in range(args.micro_batch_size):
                     segment_cuts = torch.nonzero(data["decoder_segment_ids"][batch_id, 1:] - data["decoder_segment_ids"][batch_id, :-1])
                     for segment_start, segment_end in zip([0, *segment_cuts], [*segment_cuts, args.seq_length]):
-                        self.assertTrue(torch.all(attention_mask[batch_id, 1, segment_start: segment_end, :segment_start]))
-                        self.assertTrue(torch.all(attention_mask[batch_id, 1, segment_start: segment_end, segment_end:]))
+                        self.assertTrue(torch.all(attention_mask[batch_id, 0, segment_start: segment_end, :segment_start]))
+                        self.assertTrue(torch.all(attention_mask[batch_id, 0, segment_start: segment_end, segment_end:]))
 
                 # TODO @thomasw21 make sure that we reset `position_ids`
