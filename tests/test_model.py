@@ -18,7 +18,7 @@ import pretrain_prefix_lm
 import finetune_t0_non_causal_decoder
 
 
-def get_default_args():
+def get_default_args(test_file_dir: str):
     """return a dictionary with key as argument name and value as additional arguments"""
     return {
         # GPT_ARGS
@@ -55,6 +55,12 @@ def get_default_args():
         "--checkpoint-activations": "",
 
         # DATA_ARGS
+
+        # DeepSpeed args
+        "--deepspeed": "",
+        "--deepspeed_config": f"{test_file_dir}/ds_config.json",
+        "--zero-stage": "1",
+        "--deepspeed-activation-checkpointing": ""
     }
 
 
@@ -119,7 +125,7 @@ class MyTestCase(TestCasePlus):
 
     def test_gpt(self):
         """Test causal invariance, ie past token don't depend on future tokens."""
-        command_args = get_default_args()
+        command_args = get_default_args(self.test_file_dir_str)
 
         with patch('sys.argv', flatten_arguments(command_args)):
             with mockenv_context(**self.dist_env_1_gpu):
@@ -164,7 +170,7 @@ class MyTestCase(TestCasePlus):
             - Target tokens depend on input tokens.
             - Input tokens depend on all other input tokens, but never target tokens.
         """
-        command_args = get_default_args()
+        command_args = get_default_args(self.test_file_dir_str)
 
         command_args["--reset-attention-mask"] = ""
         command_args["--loss-on-targets-only"] = ""
@@ -253,7 +259,7 @@ class MyTestCase(TestCasePlus):
             - Target tokens depend on input tokens.
             - Input tokens depend on all other input tokens, but never target tokens.
         """
-        command_args = get_default_args()
+        command_args = get_default_args(self.test_file_dir_str)
 
         command_args["--loss-on-targets-only"] = ""
 
@@ -282,7 +288,7 @@ class MyTestCase(TestCasePlus):
 
     def test_gpt_rotary_embeddings(self):
         """Test rotary embeddings"""
-        command_args = get_default_args()
+        command_args = get_default_args(self.test_file_dir_str)
 
         del command_args["--max-position-embeddings"]
         command_args["--position-embedding-type"] = "rotary"
@@ -311,7 +317,7 @@ class MyTestCase(TestCasePlus):
                 #TODO: Check all invariants
 
     def test_fused_layer_norm(self):
-        command_args = get_default_args()
+        command_args = get_default_args(self.test_file_dir_str)
 
         # Condition to use custom cuda kernel
         command_args["--bf16"] = ""
@@ -351,7 +357,7 @@ class MyTestCase(TestCasePlus):
         # TODO @thomasw21 make sure that if pass a causal mask, it is take in account. The following shows that fused_kernel completely ignores the masking is we set the variable incorrectly.
         #    https://github.com/bigscience-workshop/Megatron-DeepSpeed/blob/131bd43e9f3552f2413a442f51c22214d4f6fb19/megatron/model/fused_softmax.py#L190
         #    Maybe we should pass None is case as attention_mask instead of silently ignoring mask.
-        command_args = get_default_args()
+        command_args = get_default_args(self.test_file_dir_str)
         command_args["--position-embedding-type"] = "alibi"
 
         with patch('sys.argv', flatten_arguments(command_args)):
