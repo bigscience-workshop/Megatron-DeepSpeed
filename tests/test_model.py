@@ -59,9 +59,8 @@ def get_default_args(test_file_dir: str):
 
         # DeepSpeed args
         "--deepspeed": "",
-        "--deepspeed_config": f"{test_file_dir}/ds_config.json",
-        "--zero-stage": "1",
-        "--deepspeed-activation-checkpointing": ""
+        "--deepspeed_config": f"{test_file_dir}/ds_config_inference.json",
+        "--zero-stage": "0",
     }
 
 

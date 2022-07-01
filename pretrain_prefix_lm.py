@@ -47,12 +47,10 @@ def model_provider(pre_process=True, post_process=True):
                              enabled=args.zero_stage == 3,
                              mpu=mpu):
         if args.deepspeed:
-            assert args.attn_mask_type == AttnMaskType.prefix
-
             model = GPTModelPipe(
                 num_tokentypes=0,
                 parallel_output=True,
-                attn_mask_type=args.attn_mask_type
+                attn_mask_type=AttnMaskType.prefix
             )
             # This is a hack to give us a reference to get_batch_pipe from within training.py
             # We need to call model.set_batch_fn after deepspeed.initialize
