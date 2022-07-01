@@ -274,7 +274,7 @@ class TestDataLoading(TestCasePlus):
 
                 # TODO @thomasw21 check that attention_mask is `1` between segments, ie segments are independent
                 for batch_id in range(args.micro_batch_size):
-                    segment_cuts = torch.nonzero(data["decoder_segment_ids"][batch_id, 1:] - data["decoder_segment_ids"][batch_id, :-1])
+                    segment_cuts = torch.nonzero(data["decoder_segment_ids"][batch_id, 1:] - data["decoder_segment_ids"][batch_id, :-1]) + 1
                     for segment_start, segment_end in zip([0, *segment_cuts], [*segment_cuts, args.seq_length]):
                         self.assertTrue(torch.all(attention_mask[batch_id, 0, segment_start: segment_end, :segment_start]))
                         self.assertTrue(torch.all(attention_mask[batch_id, 0, segment_start: segment_end, segment_end:]))
