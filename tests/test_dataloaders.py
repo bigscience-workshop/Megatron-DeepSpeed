@@ -255,6 +255,9 @@ class TestDataLoading(TestCasePlus):
 
                 args = get_args()
                 tokenizer = get_tokenizer()
+                # Hack: `gpt2` doesn't have a padding token, so we override that value.
+                tokenizer.tokenizer.pad_token_id = tokenizer.tokenizer.eos_token_id
+
                 # Dummy data
                 data = get_dummy_mtf_decoder_packed_data(
                     micro_batch_size=args.micro_batch_size,
