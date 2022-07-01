@@ -242,6 +242,7 @@ class TestDataLoading(TestCasePlus):
 
     def test_finetune_t0_non_causal_decoder_get_bath_pipe(self):
         command_args = get_default_args()
+        command_args["--position-embedding-type"] = "alibi"
 
         with patch('sys.argv', flatten_arguments(command_args)):
             with mockenv_context(**self.dist_env_1_gpu):
