@@ -11,7 +11,8 @@ from megatron.model.fused_layer_norm import MixedFusedLayerNorm
 from packaging import version
 
 from megatron import initialize_megatron, get_args, get_tokenizer, global_vars
-from megatron.testing_utils import TestCasePlus, mockenv_context, flatten_arguments, torch_assert_equal
+from megatron.testing_utils import TestCasePlus, mockenv_context, flatten_arguments, torch_assert_equal, \
+    torch_assert_close
 from megatron.training import setup_model_and_optimizer
 import pretrain_gpt
 import pretrain_prefix_lm
