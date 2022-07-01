@@ -261,6 +261,12 @@ class TestDataLoading(TestCasePlus):
 
                 (tokens, position_ids, attention_mask), (labels, loss_mask) = finetune_t0_non_causal_decoder.get_batch_pipe(data)
 
+                tokens = tokens.cpu()
+                position_ids = position_ids.cpu()
+                attention_mask = attention_mask.cpu()
+                labels = labels.cpu()
+                loss_mask = loss_mask.cpu()
+
                 self.assertEqual(loss_mask, data["decoder_is_inputs"][:, 1:])
                 self.assertEqual(tokens, data["decoder_tokens"][:, :-1])
                 self.assertEqual(labels, data["decoder_tokens"][:, 1:])
