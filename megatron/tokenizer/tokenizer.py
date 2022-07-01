@@ -355,23 +355,33 @@ class _AutoTokenizer(AbstractTokenizer):
 
     @property
     def eod(self):
-        return self.tokenizer.eos_token_id
+        candidate = self.tokenizer.eos_token_id
+        self._check_token_candidate(candidate)
+        return candidate
 
     @property
     def cls(self):
-        return self.tokenizer.cls_token_id
+        candidate = self.tokenizer.cls_token_id
+        self._check_token_candidate(candidate)
+        return candidate
 
     @property
     def sep(self):
-        return self.tokenizer.sep_token_id
+        candidate = self.tokenizer.sep_token_id
+        self._check_token_candidate(candidate)
+        return candidate
 
     @property
     def pad(self):
-        return self.tokenizer.pad_token_id
+        candidate = self.tokenizer.pad_token_id
+        self._check_token_candidate(candidate)
+        return candidate
 
     @property
     def mask(self):
-        return self.tokenizer.mask_token_id
+        candidate = self.tokenizer.mask_token_id
+        self._check_token_candidate(candidate)
+        return candidate
 
     @property
     def additional_special_tokens_ids(self):
@@ -385,3 +395,8 @@ class _AutoTokenizer(AbstractTokenizer):
     @property
     def eos_token_id(self):
         raise NotImplementedError("Missing <eos>")
+
+    @staticmethod
+    def _check_token_candidate(candidate):
+        if candidate is None:
+            raise AttributeError("Token doesn't exist")
