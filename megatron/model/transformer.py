@@ -79,7 +79,7 @@ class ParallelMLP(MegatronModule):
             skip_bias_add=True)
 
         self.bias_gelu_fusion = args.bias_gelu_fusion
-        self.activation_func = F.gelu
+        self.activation_func = F.relu
         if args.glu_activation:
             self.activation_func = GLU_ACTIVATIONS[args.glu_activation]
         elif args.openai_gelu:
