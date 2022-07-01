@@ -437,4 +437,4 @@ class MyTestCase(TestCasePlus):
                 output_changed_pad = model.eval_batch(iter_out_of_one({**data, "decoder_token_ids": token_ids_changed_pad, "decoder_segment_ids": segment_ids_changed_pad}), compute_loss=False)
 
                 print(output_changed_pad)
-                self.assertFalse(torch.isnan(output_changed_pad))
+                self.assertFalse(torch.any(torch.isnan(output_changed_pad)))
