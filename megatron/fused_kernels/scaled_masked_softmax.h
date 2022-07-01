@@ -298,7 +298,7 @@ __global__ void scaled_masked_softmax_warp_forward(
     for (int i = 0;  i < WARP_BATCH;  ++i) {
         #pragma unroll
         for (int it = 0;  it < WARP_ITERATIONS;  ++it) {
-            if (elements[i][it] < -std::numeric_limits<acc_t>::infinity()) {
+            if (elements[i][it] > -std::numeric_limits<acc_t>::infinity()) {
                 elements[i][it] = 0.0f;
             } else {
                 elements[i][it] = std::exp((elements[i][it] - max_value[i]));
