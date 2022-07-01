@@ -27,8 +27,8 @@ def get_default_args(test_file_dir: str):
         "--num-attention-heads": "4",
         "--seq-length": "256",
         "--max-position-embeddings": "256",
-        "--micro-batch-size": "4",
-        "--global-batch-size": "8",
+        "--micro-batch-size": "1",
+        "--global-batch-size": "1",
         "--lr-decay-iters": "320000",
         "--lr-decay-style": "cosine",
         "--lr": "0.00015",
@@ -152,13 +152,13 @@ class MyTestCase(TestCasePlus):
 
                 # get a modified version of the first batch, we change a specific index
                 changed_index = randint(0, args.seq_length - 2)
-                input_token_ids_changed = input_batch[0].clone()
+                token_ids_changed = token_ids[0].clone()
                 # We increment the token_id by one for that index in order to artificially change the sequence.
-                input_token_ids_changed[:, changed_index] = \
-                    (input_token_ids_changed[:,changed_index] + 1) % args.padded_vocab_size
+                token_ids_changed[:, changed_index] = \
+                    (token_ids_changed[:,changed_index] + 1) % args.padded_vocab_size
 
                 output = model.eval_batch(iter_out_of_one(input_batch), compute_loss=False)
-                output_changed = model.eval_batch(iter_out_of_one((input_token_ids_changed, *input_batch[1:])), compute_loss=False)
+                output_changed = model.eval_batch(iter_out_of_one({"text": token_ids_changed}), compute_loss=False)
 
                 # All token in past should be unchanged
                 torch_assert_equal(output[:, :changed_index], output_changed[:, :changed_index])
@@ -188,6 +188,8 @@ class MyTestCase(TestCasePlus):
 
                 model, _, _ = setup_model_and_optimizer(pretrain_prefix_lm.model_provider)
                 model = model[0]
+                # we preprocess batch_fn manually
+                model._megatron_batch_fn = None
 
                 token_ids = torch.randint(args.padded_vocab_size, (args.micro_batch_size, args.seq_length))
 
@@ -275,6 +277,8 @@ class MyTestCase(TestCasePlus):
 
                 model, _, _ = setup_model_and_optimizer(pretrain_prefix_lm.model_provider)
                 model = model[0]
+                # we preprocess batch_fn manually
+                model._megatron_batch_fn = None
 
                 token_ids = torch.randint(args.padded_vocab_size, (args.micro_batch_size, args.seq_length))
                 input_batch, (_, loss_mask), prefix_indices = pretrain_prefix_lm.get_batch_pipe({"text": token_ids})
@@ -313,10 +317,7 @@ class MyTestCase(TestCasePlus):
                 token_ids[token_ids == tokenizer.eod] += 1
                 token_ids[token_ids == tokenizer.eod] %= args.padded_vocab_size
 
-                # process batch
-                input_batch, _ = pretrain_gpt.get_batch_pipe({"text": token_ids})[0]
-
-                model.eval_batch(iter_out_of_one(input_batch), compute_loss=False)
+                model.eval_batch(iter_out_of_one({"text": token_ids}), compute_loss=False)
 
                 #TODO: Check all invariants
 
@@ -383,22 +384,20 @@ class MyTestCase(TestCasePlus):
                 model, _, _ = setup_model_and_optimizer(finetune_t0_non_causal_decoder.model_provider)
                 model = model[0]
 
-                (tokens, position_ids, attention_mask), _ = finetune_t0_non_causal_decoder.get_batch_pipe(data)
-
-                output = model.eval_batch(iter_out_of_one((tokens, position_ids, attention_mask)), compute_loss=False)
+                output = model.eval_batch(iter_out_of_one(data), compute_loss=False)
 
                 ## --------------- CHANGE A TARGET TOKEN ---------------------------
                 # change the first token in the first batch
                 change_batch_id = 0
                 change_token_id = 0
-                token_ids_changed_target = tokens[0].clone()
+                token_ids_changed = data["decoder_token_ids"][0].clone()
                 # We increment the token id on the changed index.
-                token_ids_changed_target[change_batch_id, change_token_id] = (token_ids_changed_target[change_batch_id, change_token_id] + 1) % args.padded_vocab_size
-                while token_ids_changed_target[change_batch_id, change_token_id] in {tokenizer.eod, tokenizer.pad}:
-                    token_ids_changed_target[change_batch_id, change_token_id] = (token_ids_changed_target[change_batch_id, change_token_id] + 1) % args.padded_vocab_size
+                token_ids_changed[change_batch_id, change_token_id] = (token_ids_changed[change_batch_id, change_token_id] + 1) % args.padded_vocab_size
+                while token_ids_changed[change_batch_id, change_token_id] in {tokenizer.eod, tokenizer.pad}:
+                    token_ids_changed[change_batch_id, change_token_id] = (token_ids_changed[change_batch_id, change_token_id] + 1) % args.padded_vocab_size
 
                 # Test change
-                output_changed_target = model.eval_batch(iter_out_of_one((token_ids_changed_target, position_ids, attention_mask)), compute_loss=False)
+                output_changed_target = model.eval_batch(iter_out_of_one({**data, "decoder_token_ids": token_ids_changed}), compute_loss=False)
 
                 first_segment_first_batch_id_end = (torch.nonzero(data["decoder_segment_ids"][change_batch_id, 1:] - data["decoder_segment_ids"][change_batch_id, :-1]) + 1)[0]
                 # Check that values changed in segment 1 of batch_id 0
