@@ -187,6 +187,10 @@ class TestDataLoading(TestCasePlus):
                 initialize_megatron()
 
                 args = get_args()
+                tokenizer = get_tokenizer()
+                # Hack: `gpt2` doesn't have a padding token, so we override that value.
+                tokenizer.tokenizer.pad_token_id = tokenizer.tokenizer.eos_token_id
+
                 train_val_test_num_samples = [
                     args.train_iters * args.global_batch_size,
                     args.eval_iters * args.global_batch_size,

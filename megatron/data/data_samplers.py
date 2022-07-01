@@ -69,8 +69,8 @@ def pack_samples(items, max_seq_len: int, micro_batch_size: int, pad_token: int)
             item_num = 1
             cur_len = 0
 
-        decoder_tokens[batch_num][cur_len: cur_len + input_token_len] = token_dict["input_tokens"]
-        decoder_tokens[batch_num][cur_len + input_token_len: cur_len + total_len] = token_dict["target_tokens"]
+        decoder_tokens[batch_num][cur_len: cur_len + input_token_len] = torch.from_numpy(token_dict["input_tokens"])
+        decoder_tokens[batch_num][cur_len + input_token_len: cur_len + total_len] = torch.from_numpy(token_dict["target_tokens"])
         decoder_segment_ids[batch_num][cur_len: cur_len + total_len] = item_num
         decoder_is_inputs[batch_num][cur_len: cur_len + input_token_len] = 1  # inputs
         # targets are already 0 at init, no need to update `decoder_is_inputs`
