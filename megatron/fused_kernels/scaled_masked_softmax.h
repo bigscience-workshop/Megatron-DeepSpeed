@@ -269,7 +269,7 @@ __global__ void scaled_masked_softmax_warp_forward(
                       if (temp_mask[element] != 1) {
                           elements[i][it + element] = (acc_t)temp_data[element] * scale;
                       } else {
-                          elements[i][it + element] = -10000.0;
+                          elements[i][it + element] = -std::numeric_limits<acc_t>::infinity() ;
                       }
                   }
             } else {
