@@ -124,7 +124,6 @@ class FusedScaleMaskSoftmax(nn.Module):
         softmax_in_fp32: if true, softmax in performed at fp32 precision.
         scale: scaling factor used in input tensor scaling.
     """
-    custom_kernel_friendly_attn_mask_type = [AttnMaskType.causal, AttnMaskType.padding]
 
     def __init__(
         self,
@@ -187,7 +186,7 @@ class FusedScaleMaskSoftmax(nn.Module):
         b, np, sq, sk = input.size()
         scale = self.scale if self.scale is not None else 1.0
 
-        if self.attn_mask_type == AttnMaskType.causal:
+        if self.attn_mask_type == AttnMaskType.causal and mask is None:
             assert sq == sk, "causal mask is only for self attention"
 
             # input is 3D tensor (attn_batches, sq, sk)

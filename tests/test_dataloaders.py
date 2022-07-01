@@ -1,8 +1,11 @@
 import itertools
+from typing import List, Set
 from unittest.mock import patch
 
 import deepspeed
+import torch
 
+import finetune_t0_non_causal_decoder
 from megatron import global_vars, get_tokenizer, initialize_megatron, get_args
 from megatron.data import mlm_dataset, mtf_dataset
 from megatron.data.data_samplers import build_pretraining_data_loader
@@ -47,6 +50,44 @@ def get_default_args():
 
         # DATA_ARGS
     }
+
+def get_dummy_mtf_decoder_packed_data(micro_batch_size: int, seq_length: int, vocab_size: int, special_tokens_ids: Set[int]):
+    seq_length += 1
+
+    num_segments = torch.randint(1, 5, ())
+    segment_ids = torch.zeros(micro_batch_size, seq_length)
+    is_inputs = torch.zeros(micro_batch_size, seq_length, dtype=torch.bool)
+    for batch_id in range(micro_batch_size):
+        # - `*2`: Hack in order to two start_new_segements to be seperated with two tokens at least
+        # - `+1`: Hack in order the start_mew_segments not to be 0
+        start_new_segments = torch.sort(torch.randperm((seq_length - 2) // 2, )[:num_segments]).values * 2 + 1
+        segment_ids[batch_id, start_new_segments] = 1
+
+        end_inputs = [
+            torch.randint(low=start_segment, high=end_segment, size=())
+            for start_segment, end_segment in zip([0, *start_new_segments], [*start_new_segments, seq_length])
+        ]
+        for end_input, start_segment in zip(end_inputs, [0, *start_new_segments]):
+            is_inputs[batch_id][start_segment: end_input + 1] = True
+
+    segment_ids = torch.cumsum(segment_ids, dim=-1) + 1
+    tokens = torch.randint(high=vocab_size, size=(micro_batch_size, seq_length))
+
+    flatten_token_view = tokens.view(-1,)
+    for token_id in range(len(flatten_token_view)):
+        token = flatten_token_view[token_id]
+        # While token is a special tokens we change that token
+        while token in special_tokens_ids:
+            flatten_token_view[token_id] = (token + 1) % vocab_size
+            token = flatten_token_view[token_id]
+
+    return {
+        "decoder_tokens": tokens,
+        "decoder_segment_ids": segment_ids,
+        "decoder_is_inputs": is_inputs
+    }
+
+get_dummy_mtf_decoder_packed_data(1, 128, 52000, set([1,2,3,4]))
 
 class TestDataLoading(TestCasePlus):
     def setUp(self) -> None:
@@ -196,3 +237,35 @@ class TestDataLoading(TestCasePlus):
                     # update `last_padding_size`
                     last_padding_size = len([None for segment_id in items["decoder_segment_ids"][micro_batch_size - 1] if segment_id == 0])
 
+    def test_finetune_t0_non_causal_decoder_get_bath_pipe(self):
+        command_args = get_default_args()
+
+        with patch('sys.argv', flatten_arguments(command_args)):
+            with mockenv_context(**self.dist_env_1_gpu):
+                deepspeed.init_distributed()
+                initialize_megatron()
+
+                args = get_args()
+                tokenizer = get_tokenizer()
+                # Dummy data
+                data = get_dummy_mtf_decoder_packed_data(
+                    micro_batch_size=args.micro_batch_size,
+                    seq_length=args.seq_length,
+                    vocab_size=args.padded_vocab_size,
+                    special_tokens_ids={tokenizer.pad}
+                )
+
+                (tokens, position_ids, attention_mask), (labels, loss_mask) = finetune_t0_non_causal_decoder.get_batch_pipe(data)
+
+                self.assertEqual(loss_mask, data["decoder_is_inputs"][:, 1:])
+                self.assertEqual(tokens, data["decoder_tokens"][:, :-1])
+                self.assertEqual(labels, data["decoder_tokens"][:, 1:])
+
+                # TODO @thomasw21 check that attention_mask is `1` between segments, ie segments are independent
+                segment_cuts = torch.nonzero(data["decoder_segment_ids"][:, 1:] - data["decoder_segment_ids"][:, :-1])
+                for batch_id in range(args.micro_batch_size):
+                    for segment_start, segment_end in zip([0, *segment_cuts[batch_id]], [*segment_cuts[batch_id], args.seq_length]):
+                        self.assertEqual(attention_mask[batch_id, segment_start: segment_end, :segment_start], 1)
+                        self.assertEqual(attention_mask[batch_id, segment_start: segment_end, segment_end:], 1)
+
+                # TODO @thomasw21 make sure that we reset `position_ids`

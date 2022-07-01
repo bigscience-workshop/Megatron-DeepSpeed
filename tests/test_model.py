@@ -307,6 +307,13 @@ class MyTestCase(TestCasePlus):
 
                 torch_assert_equal(mfln_output, torch_layer_norm_output)
 
+    def test_gpt_model_passed_with_attention_mask_is_not_causal(self):
+        # TODO @thomasw21 make sure that if pass a causal mask, it is take in account. The following shows that fused_kernel completely ignores the masking is we set the variable incorrectly.
+        #    https://github.com/bigscience-workshop/Megatron-DeepSpeed/blob/131bd43e9f3552f2413a442f51c22214d4f6fb19/megatron/model/fused_softmax.py#L190
+        #    Maybe we should pass None is case as attention_mask instead of silently ignoring mask.
+        #    We should test that is we modify an element in a segment, it only affects that segment.
+        raise NotImplementedError()
+
 
 if __name__ == '__main__':
     unittest.main()
