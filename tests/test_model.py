@@ -149,10 +149,10 @@ class MyTestCase(TestCasePlus):
 
                 # get a modified version of the first batch, we change a specific index
                 changed_index = randint(0, args.seq_length - 2)
-                token_ids_changed = token_ids[0].clone()
+                token_ids_changed = token_ids.clone()
                 # We increment the token_id by one for that index in order to artificially change the sequence.
                 token_ids_changed[:, changed_index] = \
-                    (token_ids_changed[:,changed_index] + 1) % args.padded_vocab_size
+                    (token_ids_changed[:, changed_index] + 1) % args.padded_vocab_size
 
                 output = model.eval_batch(iter_out_of_one({"text": token_ids}), compute_loss=False)
                 output_changed = model.eval_batch(iter_out_of_one({"text": token_ids_changed}), compute_loss=False)
