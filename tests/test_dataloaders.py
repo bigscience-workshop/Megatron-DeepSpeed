@@ -55,7 +55,7 @@ def get_dummy_mtf_decoder_packed_data(micro_batch_size: int, seq_length: int, vo
     seq_length += 1
 
     num_segments = torch.randint(1, 5, ())
-    segment_ids = torch.zeros(micro_batch_size, seq_length, dtype=torch.int64)
+    segment_ids = torch.zeros(micro_batch_size, seq_length, dtype=torch.long)
     is_inputs = torch.zeros(micro_batch_size, seq_length, dtype=torch.bool)
     for batch_id in range(micro_batch_size):
         # - `*2`: Hack in order to two start_new_segements to be seperated with two tokens at least
@@ -267,7 +267,8 @@ class TestDataLoading(TestCasePlus):
                 labels = labels.cpu()
                 loss_mask = loss_mask.cpu()
 
-                torch_assert_equal(loss_mask, data["decoder_is_inputs"][:, 1:])
+                self.assertEqual(loss_mask.dtype, torch.float)
+                torch_assert_equal(loss_mask.bool(), data["decoder_is_inputs"][:, 1:])
                 torch_assert_equal(tokens, data["decoder_tokens"][:, :-1])
                 torch_assert_equal(labels, data["decoder_tokens"][:, 1:])
 
