@@ -69,6 +69,10 @@ def equal_vectors(tensor1, tensor2, dim=-1):
     return torch.linalg.norm(tensor1 - tensor2, dim=dim) == 0
 
 
+def iter_out_of_one(one):
+    return iter([one])
+
+
 def get_dummy_mtf_decoder_packed_data(micro_batch_size: int, seq_length: int, vocab_size: int, special_tokens_ids: Set[int]):
     """Code from `tests/test_dataloaders.py"""
     seq_length += 1
@@ -153,8 +157,8 @@ class MyTestCase(TestCasePlus):
                 input_token_ids_changed[:, changed_index] = \
                     (input_token_ids_changed[:,changed_index] + 1) % args.padded_vocab_size
 
-                output = model.train_batch(input_batch, loss_params)
-                output_changed = model.train_batch((input_token_ids_changed, *input_batch[1:]), loss_params)
+                output = model.train_batch(iter_out_of_one(input_batch))
+                output_changed = model.train_batch(iter_out_of_one((input_token_ids_changed, *input_batch[1:])))
 
                 # All token in past should be unchanged
                 torch_assert_equal(output[:, :changed_index], output_changed[:, :changed_index])
@@ -201,7 +205,7 @@ class MyTestCase(TestCasePlus):
                         # Make sure that the last prefix token predicts the first token.
                         self.assertTrue(loss_mask[batch_id, id -1] == 1)
 
-                output = model.train_batch(input_batch, (labels, loss_mask))
+                output = model.train_batch(iter_out_of_one(input_batch))
 
                 ## --------------- CHANGE A TARGET TOKEN ---------------------------
                 # get a modified version of the first batch
@@ -216,7 +220,7 @@ class MyTestCase(TestCasePlus):
                 token_ids_changed_target[token_ids_changed_target == tokenizer.eod] %= args.padded_vocab_size
 
                 # Test change
-                output_changed_target = model.train_batch((token_ids_changed_target, *input_batch[1:]), (labels, loss_mask))
+                output_changed_target = model.train_batch(iter_out_of_one((token_ids_changed_target, *input_batch[1:])))
 
                 # All token in past should be unchanged
                 torch_assert_equal(output[0, :changed_target_index], output_changed_target[0, :changed_target_index])
@@ -241,7 +245,7 @@ class MyTestCase(TestCasePlus):
                 token_ids_changed_input[token_ids_changed_input == tokenizer.eod] += 1
                 token_ids_changed_input[token_ids_changed_input == tokenizer.eod] %= args.padded_vocab_size
 
-                output_changed_input = model.train_batch((token_ids_changed_input, *input_batch[1:]), (labels, loss_mask))
+                output_changed_input = model.train_batch(iter_out_of_one((token_ids_changed_input, *input_batch[1:])))
 
                 # All tokens should be changed
                 self.assertFalse(
@@ -282,7 +286,7 @@ class MyTestCase(TestCasePlus):
                     # Make sure that the last prefix token predicts the first token.
                     self.assertTrue(loss_mask[batch_id, id -1] == 1)
 
-                model.train_batch(input_batch, (labels, loss_mask))
+                model.train_batch(iter_out_of_one(input_batch))
 
                 #TODO: Check all invariants
 
@@ -312,7 +316,7 @@ class MyTestCase(TestCasePlus):
                 # process batch
                 input_batch = pretrain_gpt.get_batch_pipe({"text": token_ids})[0]
 
-                model.train_batch(input_batch, (labels, loss_mask))
+                model.train_batch(iter_out_of_one(input_batch))
 
                 #TODO: Check all invariants
 
@@ -381,7 +385,7 @@ class MyTestCase(TestCasePlus):
 
                 (tokens, position_ids, attention_mask), (labels, loss_mask) = finetune_t0_non_causal_decoder.get_batch_pipe(data)
 
-                output = model.train_batch((tokens, position_ids, attention_mask), (labels, loss_mask))
+                output = model.train_batch(iter_out_of_one((tokens, position_ids, attention_mask)))
 
                 ## --------------- CHANGE A TARGET TOKEN ---------------------------
                 # change the first token in the first batch
@@ -394,7 +398,7 @@ class MyTestCase(TestCasePlus):
                     token_ids_changed_target[change_batch_id, change_token_id] = (token_ids_changed_target[change_batch_id, change_token_id] + 1) % args.padded_vocab_size
 
                 # Test change
-                output_changed_target = model.train_batch((token_ids_changed_target, position_ids, attention_mask), (labels, loss_mask))
+                output_changed_target = model.train_batch(iter_out_of_one((token_ids_changed_target, position_ids, attention_mask)))
 
                 first_segment_first_batch_id_end = (torch.nonzero(data["decoder_segment_ids"][change_batch_id, 1:] - data["decoder_segment_ids"][change_batch_id, :-1]) + 1)[0]
                 # Check that values changed in segment 1 of batch_id 0
