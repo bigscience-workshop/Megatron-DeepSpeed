@@ -13,8 +13,11 @@ from packaging import version
 from megatron import initialize_megatron, get_args, get_tokenizer, global_vars
 from megatron.testing_utils import TestCasePlus, mockenv_context, flatten_arguments, torch_assert_equal
 from megatron.training import setup_model_and_optimizer
-from pretrain_gpt import model_provider as gpt_model_provider, get_batch_pipe as get_gpt_batch_pipe
-from pretrain_prefix_lm import model_provider as prefix_lm_model_provider, get_batch_pipe as get_prefix_lm_batch_pipe
+import pretrain_gpt
+import pretrain_prefix_lm
+import finetune_t0_non_causal_decoder
+from tests.test_dataloaders import get_dummy_mtf_decoder_packed_data
+
 
 def get_default_args():
     """return a dictionary with key as argument name and value as additional arguments"""
@@ -88,7 +91,7 @@ class MyTestCase(TestCasePlus):
                 args = get_args()
                 tokenizer = get_tokenizer()
 
-                model, _, _ = setup_model_and_optimizer(gpt_model_provider)
+                model, _, _ = setup_model_and_optimizer(pretrain_gpt.model_provider)
                 model = model[0]
 
                 token_ids = torch.randint(args.padded_vocab_size, (args.micro_batch_size, args.seq_length))
@@ -98,7 +101,7 @@ class MyTestCase(TestCasePlus):
                 token_ids[token_ids == tokenizer.eod] %= args.padded_vocab_size
 
                 # process batch
-                input_batch = get_gpt_batch_pipe({"text": token_ids})[0]
+                input_batch = pretrain_gpt.get_batch_pipe({"text": token_ids})[0]
 
                 # get a modified version of the first batch, we change a specific index
                 changed_index = randint(0, args.seq_length - 2)
@@ -136,7 +139,7 @@ class MyTestCase(TestCasePlus):
                 args = get_args()
                 tokenizer = get_tokenizer()
 
-                model, _, _ = setup_model_and_optimizer(prefix_lm_model_provider)
+                model, _, _ = setup_model_and_optimizer(pretrain_prefix_lm.model_provider)
                 model = model[0]
 
                 token_ids = torch.randint(args.padded_vocab_size, (args.micro_batch_size, args.seq_length))
@@ -146,7 +149,7 @@ class MyTestCase(TestCasePlus):
                 token_ids[token_ids == tokenizer.eod] %= args.padded_vocab_size
 
                 # process batch to have non empty prefix
-                input_batch, (_, loss_mask), prefix_indices = get_prefix_lm_batch_pipe({"text": token_ids})
+                input_batch, (_, loss_mask), prefix_indices = pretrain_prefix_lm.get_batch_pipe({"text": token_ids})
 
                 for batch_id in range(len(prefix_indices)):
                     for id in prefix_indices[batch_id]:
@@ -223,11 +226,11 @@ class MyTestCase(TestCasePlus):
                 initialize_megatron()
                 args = get_args()
 
-                model, _, _ = setup_model_and_optimizer(prefix_lm_model_provider)
+                model, _, _ = setup_model_and_optimizer(pretrain_prefix_lm.model_provider)
                 model = model[0]
 
                 token_ids = torch.randint(args.padded_vocab_size, (args.micro_batch_size, args.seq_length))
-                input_batch, (_, loss_mask), prefix_indices = get_prefix_lm_batch_pipe({"text": token_ids})
+                input_batch, (_, loss_mask), prefix_indices = pretrain_prefix_lm.get_batch_pipe({"text": token_ids})
 
                 for batch_id in range(len(prefix_indices)):
                     id = prefix_indices[batch_id]
@@ -254,7 +257,7 @@ class MyTestCase(TestCasePlus):
                 args = get_args()
                 tokenizer = get_tokenizer()
 
-                model, _, _ = setup_model_and_optimizer(gpt_model_provider)
+                model, _, _ = setup_model_and_optimizer(pretrain_gpt.model_provider)
                 model = model[0]
 
                 token_ids = torch.randint(args.padded_vocab_size, (args.micro_batch_size, args.seq_length))
@@ -264,7 +267,7 @@ class MyTestCase(TestCasePlus):
                 token_ids[token_ids == tokenizer.eod] %= args.padded_vocab_size
 
                 # process batch
-                input_batch = get_gpt_batch_pipe({"text": token_ids})[0]
+                input_batch = pretrain_gpt.get_batch_pipe({"text": token_ids})[0]
 
                 model(*input_batch)
 
@@ -307,13 +310,60 @@ class MyTestCase(TestCasePlus):
 
                 torch_assert_equal(mfln_output, torch_layer_norm_output)
 
-    def test_gpt_model_passed_with_attention_mask_is_not_causal(self):
+    def test_non_causal_decoder_model_with_packed_input_passed_with_attention_mask_is_not_causal_across_segments(self):
         # TODO @thomasw21 make sure that if pass a causal mask, it is take in account. The following shows that fused_kernel completely ignores the masking is we set the variable incorrectly.
         #    https://github.com/bigscience-workshop/Megatron-DeepSpeed/blob/131bd43e9f3552f2413a442f51c22214d4f6fb19/megatron/model/fused_softmax.py#L190
         #    Maybe we should pass None is case as attention_mask instead of silently ignoring mask.
-        #    We should test that is we modify an element in a segment, it only affects that segment.
-        raise NotImplementedError()
+        command_args = get_default_args()
+        command_args["--position-embedding-type"] = "alibi"
 
+        with patch('sys.argv', flatten_arguments(command_args)):
+            with mockenv_context(**self.dist_env_1_gpu):
+                deepspeed.init_distributed()
+                initialize_megatron()
+                args = get_args()
+                tokenizer = get_tokenizer()
 
-if __name__ == '__main__':
-    unittest.main()
+                data = get_dummy_mtf_decoder_packed_data(
+                    micro_batch_size=args.micro_batch_size,
+                    seq_length=args.seq_length,
+                    vocab_size=args.padded_vocab_size,
+                    special_tokens_ids={tokenizer.pad}
+                )
+                model, _, _ = setup_model_and_optimizer(finetune_t0_non_causal_decoder.model_provider)
+                model = model[0]
+
+                (tokens, position_ids, attention_mask), (labels, loss_mask) = finetune_t0_non_causal_decoder.get_batch_pipe(data)
+
+                output = model(tokens, position_ids, attention_mask)
+
+                ## --------------- CHANGE A TARGET TOKEN ---------------------------
+                # change the first token in the first batch
+                change_batch_id = 0
+                change_token_id = 0
+                token_ids_changed_target = tokens[0].clone()
+                # We increment the token id on the changed index.
+                token_ids_changed_target[change_batch_id, change_token_id] = (token_ids_changed_target[change_batch_id, change_token_id] + 1) % args.padded_vocab_size
+                while token_ids_changed_target[change_batch_id, change_token_id] in {tokenizer.eod, tokenizer.pad}:
+                    token_ids_changed_target[change_batch_id, change_token_id] = (token_ids_changed_target[change_batch_id, change_token_id] + 1) % args.padded_vocab_size
+
+                # Test change
+                output_changed_target = model(token_ids_changed_target, position_ids, attention_mask)
+
+                first_segment_first_batch_id_end = (torch.nonzero(data["decoder_segment_ids"][change_batch_id, 1:] - data["decoder_segment_ids"][change_batch_id, :-1]) + 1)[0]
+                # Check that values changed in segment 1 of batch_id 0
+                self.assertFalse(torch.any(
+                    equal_vectors(
+                        output[change_batch_id, change_token_id:first_segment_first_batch_id_end],
+                        output_changed_target[change_batch_id, change_token_id:first_segment_first_batch_id_end]
+                    )
+                ))
+                # Check that values did not change in other segments of batch_id 0
+                torch_assert_equal(
+                    output[change_batch_id, first_segment_first_batch_id_end:],
+                    output_changed_target[change_batch_id, first_segment_first_batch_id_end:]
+                )
+                # Check that values did not change in other segments of batch_id > 0
+                torch_assert_equal(output[:change_batch_id:], output_changed_target[:change_batch_id])
+                if change_batch_id + 1 < len(output):
+                    torch_assert_equal(output[change_batch_id + 1:], output_changed_target[change_batch_id + 1:])
