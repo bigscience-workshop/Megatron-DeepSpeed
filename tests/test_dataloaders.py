@@ -55,7 +55,7 @@ def get_dummy_mtf_decoder_packed_data(micro_batch_size: int, seq_length: int, vo
     seq_length += 1
 
     num_segments = torch.randint(1, 5, ())
-    segment_ids = torch.zeros(micro_batch_size, seq_length)
+    segment_ids = torch.zeros(micro_batch_size, seq_length, dtype=torch.int64)
     is_inputs = torch.zeros(micro_batch_size, seq_length, dtype=torch.bool)
     for batch_id in range(micro_batch_size):
         # - `*2`: Hack in order to two start_new_segements to be seperated with two tokens at least
@@ -71,8 +71,8 @@ def get_dummy_mtf_decoder_packed_data(micro_batch_size: int, seq_length: int, vo
             is_inputs[batch_id][start_segment: end_input + 1] = True
 
     segment_ids = torch.cumsum(segment_ids, dim=-1) + 1
-    tokens = torch.randint(high=vocab_size, size=(micro_batch_size, seq_length))
 
+    tokens = torch.randint(high=vocab_size, size=(micro_batch_size, seq_length), dtype=torch.long)
     flatten_token_view = tokens.view(-1,)
     for token_id in range(len(flatten_token_view)):
         token = flatten_token_view[token_id]
@@ -211,6 +211,11 @@ class TestDataLoading(TestCasePlus):
                 last_padding_size = 0
                 for i, items in enumerate(batch_sampler):
                     micro_batch_size, seq_length = items["decoder_tokens"].shape
+
+                    # Check dtypes
+                    self.assertEqual(items["decoder_tokens"].dtype, torch.int64)
+                    self.assertEqual(items["decoder_segment_ids"].dtype, torch.int64)
+                    self.assertEqual(items["decoder_is_inputs"].dtype, torch.bool)
 
                     # `micro_batch_size` correspond to the one in argument
                     self.assertEqual(micro_batch_size, args.micro_batch_size)

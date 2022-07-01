@@ -45,8 +45,8 @@ def pack_samples(items, max_seq_len: int, micro_batch_size: int, pad_token: int)
         decoder_is_inputs = [[1, 1, 0, 1, 1, 0, 0]]: `1` depicts inputs, `0` depicts target.
     """
 
-    decoder_tokens = torch.full((micro_batch_size, max_seq_len), pad_token)
-    decoder_segment_ids = torch.zeros((micro_batch_size, max_seq_len))
+    decoder_tokens = torch.full((micro_batch_size, max_seq_len), pad_token, dtype=torch.int64)
+    decoder_segment_ids = torch.zeros((micro_batch_size, max_seq_len), dtype=torch.int64)
     decoder_is_inputs = torch.full((micro_batch_size, max_seq_len), False, dtype=torch.bool)
 
     batch_num = 0
