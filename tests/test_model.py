@@ -397,7 +397,7 @@ class MyTestCase(TestCasePlus):
                 # change the first token in the first batch
                 change_batch_id = 0
                 change_token_id = 0
-                token_ids_changed = data["decoder_token_ids"][0].clone()
+                token_ids_changed = data["decoder_token_ids"].clone()
                 # We increment the token id on the changed index.
                 token_ids_changed[change_batch_id, change_token_id] = (token_ids_changed[change_batch_id, change_token_id] + 1) % args.padded_vocab_size
                 while token_ids_changed[change_batch_id, change_token_id] in {tokenizer.eod, tokenizer.pad}:
