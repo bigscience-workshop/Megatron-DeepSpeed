@@ -108,16 +108,21 @@ class TestDataLoading(TestCasePlus):
     def copy_data_to_temp(self, root_dir, prefix):
         """copy data to temp, and return paths to temp version"""
         src_path = os.path.join(root_dir, prefix)
-        dirname = os.path.dirname(src_path)
-        os.makedirs(dirname, exist_ok=True)
+        src_dirname = os.path.dirname(src_path)
+
         tmp_dir = self.get_auto_remove_tmp_dir()
-        for folder in os.listdir(dirname):
-            if os.path.join(dirname, folder).startswith(src_path):
+        dest_path = os.path.join(tmp_dir, prefix)
+        dest_dirname = os.path.dirname(tmp_dir)
+        os.makedirs(dest_dirname, exist_ok=True)
+        for folder in os.listdir(src_dirname):
+            src_folder = os.path.join(src_dirname, folder)
+            dest_folder = os.path.join(dest_dirname, folder)
+            if src_folder.startswith(src_path):
                 if os.path.isdir(folder):
-                    shutil.copytree(folder, tmp_dir)
+                    shutil.copytree(src_folder, dest_folder)
                 else:
-                    shutil.copy2(folder, tmp_dir)
-        return os.path.join(tmp_dir, prefix)
+                    shutil.copy2(src_folder, dest_folder)
+        return dest_path
 
     def test_mlm_dataset(self):
         command_args = get_default_args()
