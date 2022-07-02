@@ -457,7 +457,7 @@ def _build_sample_idx(mtf_dataset, document_ids, seq_length, row_offset, old_sam
 
     full_samples = []
     current_sample_start = old_sample_start
-    assert epoch * len(document_ids) > current_sample_start
+    assert epoch * len(document_ids) >= current_sample_start
     for current_sample_end, document_id in enumerate(document_ids):
         current_sample_end = epoch * len(document_ids) + current_sample_end
         sample = mtf_dataset[document_id]
@@ -479,8 +479,7 @@ def _build_shuffle_idx(documents: np.array, np_rng):
     """Build the range [0, dataset_size) and shuffle."""
     dtype_ = np.int64
 
-    result = np.arange(start=0, stop=len(documents),
-                                  step=1, dtype=dtype_)
+    result = np.arange(start=0, stop=len(documents),step=1, dtype=dtype_)
 
     # in-place shuffling
     np_rng.shuffle(result)
