@@ -409,7 +409,7 @@ def _build_index_mappings(
                 # Generate a shuffling of the entire dataset
                 shuffle_idx.append(new_document_ids)
                 # Packs them into a single sample
-                new_samples, row_offset = _build_sample_idx(
+                new_samples, row_offset, old_sample_start = _build_sample_idx(
                     mtf_dataset=mtf_dataset,
                     document_ids=new_document_ids,
                     seq_length=seq_length,

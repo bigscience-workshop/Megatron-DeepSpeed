@@ -112,7 +112,7 @@ class TestDataLoading(TestCasePlus):
 
         tmp_dir = self.get_auto_remove_tmp_dir()
         dest_path = os.path.join(tmp_dir, prefix)
-        dest_dirname = os.path.dirname(tmp_dir)
+        dest_dirname = os.path.dirname(dest_path)
         os.makedirs(dest_dirname, exist_ok=True)
         for folder in os.listdir(src_dirname):
             src_folder = os.path.join(src_dirname, folder)
