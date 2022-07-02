@@ -271,13 +271,13 @@ __global__ void scaled_masked_softmax_warp_forward(
     uint8_t temp_mask[ELEMENTS_PER_LDG_STG];
     #pragma unroll
     for (int i = 0;  i < WARP_BATCH;  ++i) {
-//        int batch_element_count = (i >= local_batches) ? 0 : ele;
+        int batch_element_count = (i >= local_batches) ? 0 : element_count;
 
         #pragma unroll
         for (int it = 0;  it < WARP_ITERATIONS;  it+=ELEMENTS_PER_LDG_STG) {
             int element_index = ELEMENTS_PER_LDG_STG * local_idx + it * WARP_SIZE;
 
-            if (element_index < element_count) {
+            if (element_index < batch_element_count) {
                 int itr_idx = i*element_count+it*WARP_SIZE;
                 copy_vector<input_t, ELEMENTS_PER_LDG_STG>(temp_data, src + itr_idx);
                 copy_vector<uint8_t, ELEMENTS_PER_LDG_STG>(temp_mask, mask + itr_idx);
