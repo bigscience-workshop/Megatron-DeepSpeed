@@ -108,9 +108,10 @@ class TestDataLoading(TestCasePlus):
     def copy_data_to_temp(self, root_dir, prefix):
         """copy data to temp, and return paths to temp version"""
         src_path = os.path.join(root_dir, prefix)
+        dirname = os.path.dirname(src_path)
         tmp_dir = self.get_auto_remove_tmp_dir()
-        for folder in os.listdir(os.path.dirname(src_path)):
-            if folder.startswith(src_path):
+        for folder in os.listdir(dirname):
+            if os.path.join(dirname, folder).startswith(src_path):
                 if os.path.isdir(folder):
                     shutil.copytree(folder, tmp_dir)
                 else:
