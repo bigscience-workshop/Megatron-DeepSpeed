@@ -157,7 +157,16 @@ class FusedScaleMaskSoftmax(nn.Module):
         assert input.dim() == 4
 
         if self.is_kernel_available(mask, *input.size()):
-            return self.forward_fused_softmax(input, mask)
+            result = self.forward_fused_softmax(input, mask)
+            for batch_id in range(len(mask)):
+                print("Batch id", batch_id)
+                print("     inputs", input.shape, input[batch_id, 0])
+                print("     mask", mask.shape, mask[batch_id, 0])
+                print("     result", result.shape, result[batch_id, 0])
+                print("     hello", torch.nonzero(~mask[batch_id, 0])[100:150])
+                print("     bye", torch.nonzero(result[batch_id, 0])[41:100])
+                print("     all ones?", torch.sum(result, dim=-1))
+            return result
         else:
             return self.forward_torch_softmax(input, mask)
 
@@ -186,8 +195,9 @@ class FusedScaleMaskSoftmax(nn.Module):
         b, np, sq, sk = input.size()
         scale = self.scale if self.scale is not None else 1.0
 
-        if self.attn_mask_type == AttnMaskType.causal and mask is None:
+        if self.attn_mask_type == AttnMaskType.causal:
             assert sq == sk, "causal mask is only for self attention"
+            assert mask is None
 
             # input is 3D tensor (attn_batches, sq, sk)
             input = input.view(-1, sq, sk)

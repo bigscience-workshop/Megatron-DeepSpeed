@@ -47,9 +47,6 @@ __device__ __inline__ void copy_vector<uint8_t, 1>(uint8_t *dst, const uint8_t *
 template <>
 __device__ __inline__ void copy_vector<uint8_t, 4>(uint8_t *dst, const uint8_t *src) {*((half2*) dst) = *((half2*) src); }
 
-template <typename Datatype, int ELEMENTS_PER_LDG>
-__device__ __inline__ void copy_zero_vector(Datatype *dst);
-
 template <>
 __device__ __inline__ void copy_zero_vector<c10::BFloat16, 1>(c10::BFloat16 *dst) { *dst = 0.0; }
 
@@ -61,6 +58,7 @@ __device__ __inline__ void copy_zero_vector<c10::Half, 1>(c10::Half *dst) { *dst
 
 template <>
 __device__ __inline__ void copy_zero_vector<c10::Half, 4>(c10::Half *dst) { *((float2*) dst) = make_float2(0.0f, 0.0f); }
+
 
 int log2_ceil(int value) {
     int log2_value = 0;
@@ -109,16 +107,16 @@ __device__ __forceinline__ void warp_reduce(acc_t* sum) {
 /*
  * Extended softmax (from native aten pytorch) with following additional features
  * 1) input scaling
- */	
+ */
 template <typename input_t, typename output_t, typename acc_t, int log2_elements>
 __global__ void scaled_softmax_warp_forward(
-    output_t *dst, 
+    output_t *dst,
     const input_t *src,
-    const acc_t scale, 
-    int micro_batch_size, 
+    const acc_t scale,
+    int micro_batch_size,
     int element_count)
 {
-    // WARP_SIZE and WARP_BATCH must match the return values batches_per_warp and 
+    // WARP_SIZE and WARP_BATCH must match the return values batches_per_warp and
     // warp_size of method warp_softmax_forward_kernel.
     constexpr int next_power_of_two = 1 << log2_elements;
     constexpr int WARP_SIZE = (next_power_of_two < C10_WARP_SIZE) ? next_power_of_two : C10_WARP_SIZE;
@@ -127,8 +125,8 @@ __global__ void scaled_softmax_warp_forward(
     constexpr int ELEMENTS_PER_LDG_STG = (WARP_ITERATIONS < 4) ? 1 : 4;
 
     // blockDim/threadIdx = (WARP_SIZE, WARPS_PER_BLOCK, )
-    // gridDim/blockIdx = (seq_len, attn_heads, batches) 
-    int first_batch = (blockDim.y * (blockIdx.x + gridDim.x * (blockIdx.y + gridDim.y * blockIdx.z)) + threadIdx.y) * WARP_BATCH;
+    // gridDim/blockIdx = (seq_len, attn_heads, batches)
+    int first_batch = (blockDim.y * (blockIdx.x + gridDim.x * (blockIdx.y + gridDim.y * blockIdx.z))+ threadIdx.y) * WARP_BATCH;
 
     // micro_batch_size might not be a multiple of WARP_BATCH. Check how
     // many batches have to computed within this WARP.
@@ -207,10 +205,10 @@ __global__ void scaled_softmax_warp_forward(
                 for (int element = 0; element < ELEMENTS_PER_LDG_STG; ++element) {
                     out[element] = elements[i][it + element] / sum[i];
                 }
-                copy_vector<output_t, ELEMENTS_PER_LDG_STG>(dst + i * element_count + it * WARP_SIZE, out);  
+                copy_vector<output_t, ELEMENTS_PER_LDG_STG>(dst + i * element_count + it * WARP_SIZE, out);
             } else {
                 break;
-            } 
+            }
         }
     }
 }
@@ -220,18 +218,18 @@ __global__ void scaled_softmax_warp_forward(
  * Extended softmax (from native aten pytorch) with following additional features
  * 1) input scaling
  * 2) Explicit masking
- */	
+ */
 template <typename input_t, typename output_t, typename acc_t, int log2_elements>
 __global__ void scaled_masked_softmax_warp_forward(
-    output_t *dst, 
+    output_t *dst,
     const input_t *src,
-    const uint8_t *mask, 
-    const acc_t scale, 
-    int micro_batch_size, 
+    const uint8_t *mask,
+    const acc_t scale,
+    int micro_batch_size,
     int element_count,
-    int pad_batches) 
+    int pad_batches)
 {
-    // WARP_SIZE and WARP_BATCH must match the return values batches_per_warp and 
+    // WARP_SIZE and WARP_BATCH must match the return values batches_per_warp and
     // warp_size of method warp_softmax_forward_kernel.
     constexpr int next_power_of_two = 1 << log2_elements;
     constexpr int WARP_SIZE = (next_power_of_two < C10_WARP_SIZE) ? next_power_of_two : C10_WARP_SIZE;
@@ -241,16 +239,13 @@ __global__ void scaled_masked_softmax_warp_forward(
 
     // blockDim/threadIdx = (WARP_SIZE, WARPS_PER_BLOCK, )
     // gridDim/blockIdx = (seq_len, attn_heads, batches)
-    int first_batch = (blockDim.y * (blockIdx.x + gridDim.x * (blockIdx.y + gridDim.y * blockIdx.z)) + threadIdx.y) * WARP_BATCH;
+    int first_batch = (blockDim.y * (blockIdx.x + gridDim.x * (blockIdx.y + gridDim.y * blockIdx.z))+ threadIdx.y) * WARP_BATCH;
     int pad_first_batch = 0;
     if (pad_batches != 1) { // bert style
         pad_first_batch = (blockDim.y * (blockIdx.x + gridDim.x * blockIdx.z) + threadIdx.y) * WARP_BATCH;
     } else { // gpt2 style
         pad_first_batch = (blockDim.y * blockIdx.x + threadIdx.y) * WARP_BATCH;
     }
-
-//    int local_seq = blockIdx.x + 1;
-//    int warp_iteration_limit = (local_seq + ELEMENTS_PER_LDG_STG * WARP_SIZE - 1)/ WARP_SIZE;
 
     // micro_batch_size might not be a multiple of WARP_BATCH. Check how
     // many batches have to computed within this WARP.
@@ -278,18 +273,18 @@ __global__ void scaled_masked_softmax_warp_forward(
             int element_index = ELEMENTS_PER_LDG_STG * local_idx + it * WARP_SIZE;
 
             if (element_index < batch_element_count) {
-                int itr_idx = i * element_count * element_count + it * WARP_SIZE;
+                int itr_idx = i*element_count+it*WARP_SIZE;
                 copy_vector<input_t, ELEMENTS_PER_LDG_STG>(temp_data, src + itr_idx);
                 copy_vector<uint8_t, ELEMENTS_PER_LDG_STG>(temp_mask, mask + itr_idx);
 
                 #pragma unroll
-                for (int element = 0; element < ELEMENTS_PER_LDG_STG; ++element) {
-                    if (temp_mask[element] != 1) {
-                      elements[i][it + element] = (acc_t)temp_data[element] * scale;
-                    } else {
-                      elements[i][it + element] = -std::numeric_limits<acc_t>::infinity();
-                    }
-                }
+                  for (int element = 0; element < ELEMENTS_PER_LDG_STG; ++element) {
+                      if (temp_mask[element] != 1) {
+                          elements[i][it + element] = (acc_t)temp_data[element] * scale;
+                      } else {
+                          elements[i][it + element] = -std::numeric_limits<acc_t>::infinity();
+                      }
+                  }
             } else {
                 #pragma unroll
                 for (int element = 0; element < ELEMENTS_PER_LDG_STG; ++element) {
@@ -317,7 +312,7 @@ __global__ void scaled_masked_softmax_warp_forward(
         #pragma unroll
         for (int it = 0;  it < WARP_ITERATIONS;  ++it) {
             if (elements[i][it] <= -std::numeric_limits<acc_t>::infinity()) {
-                elements[i][it] = 0;
+                elements[i][it] = 0.0f;
             } else {
                 elements[i][it] = std::exp((elements[i][it] - max_value[i]));
             }
@@ -336,32 +331,32 @@ __global__ void scaled_masked_softmax_warp_forward(
         for (int it = 0;  it < WARP_ITERATIONS;  it+=ELEMENTS_PER_LDG_STG) {
             int element_index = ELEMENTS_PER_LDG_STG * local_idx + it * WARP_SIZE;
             if (element_index < element_count) {
-                if (sum[i] == 0.) {
-                    copy_zero_vector<output_t, ELEMENTS_PER_LDG_STG>(dst + i * element_count * element_count + it * WARP_SIZE);
+                if (sum[i] == 0.0f) {
+                    copy_zero_vector<output_t, ELEMENTS_PER_LDG_STG>(dst + i * element_count + it * WARP_SIZE);
                 } else {
                     #pragma unroll
                     for (int element = 0; element < ELEMENTS_PER_LDG_STG; ++element) {
                         out[element] = elements[i][it + element] / sum[i];
                     }
-                    copy_vector<output_t, ELEMENTS_PER_LDG_STG>(dst + i * element_count * element_count + it * WARP_SIZE , out);
+                    copy_vector<output_t, ELEMENTS_PER_LDG_STG>(dst + i * element_count + it * WARP_SIZE, out);
                 }
             } else {
                 break;
-            } 
+            }
         }
     }
 }
 
 template <typename input_t, typename output_t, typename acc_t, int log2_elements>
 __global__ void scaled_masked_softmax_warp_backward(
-    output_t *gradInput, 
-    input_t *grad, 
+    output_t *gradInput,
+    input_t *grad,
     const input_t *output,
-    acc_t scale, 
-    int micro_batch_size, 
+    acc_t scale,
+    int micro_batch_size,
     int element_count)
 {
-    // WARP_SIZE and WARP_BATCH must match the return values batches_per_warp and 
+    // WARP_SIZE and WARP_BATCH must match the return values batches_per_warp and
     // warp_size of method warp_softmax_backward_kernel.
     constexpr int next_power_of_two = 1 << log2_elements;
     constexpr int WARP_SIZE = (next_power_of_two < C10_WARP_SIZE) ? next_power_of_two : C10_WARP_SIZE;
@@ -370,9 +365,9 @@ __global__ void scaled_masked_softmax_warp_backward(
     constexpr int ELEMENTS_PER_LDG_STG = (WARP_ITERATIONS < 4) ? 1 : 4;
 
     // blockDim/threadIdx = (WARP_SIZE, WARPS_PER_BLOCK, )
-    // gridDim/blockIdx = (seq_len, attn_heads, batches) 
+    // gridDim/blockIdx = (seq_len, attn_heads, batches)
     int first_batch = (blockDim.y * blockIdx.x + threadIdx.y) * WARP_BATCH;
-    
+
     // micro_batch_size might not be a multiple of WARP_BATCH. Check how
     // many batches have to computed within this WARP.
     int local_batches = micro_batch_size - first_batch;
@@ -412,10 +407,10 @@ __global__ void scaled_masked_softmax_warp_backward(
                 for (int element = 0; element < ELEMENTS_PER_LDG_STG; ++element) {
                     grad_reg[i][it + element] = (acc_t)temp_grad[element] * output_reg[i][it + element];
                 }
-            } 
+            }
         }
     }
-   
+
     acc_t sum[WARP_BATCH];
     #pragma unroll
     for (int i = 0;  i < WARP_BATCH;  ++i) {
@@ -443,7 +438,7 @@ __global__ void scaled_masked_softmax_warp_backward(
                     out[element] = (output_t)(scale * (grad_reg[i][it + element] - output_reg[i][it + element] * sum[i]));
                 }
                 copy_vector<output_t, ELEMENTS_PER_LDG_STG>(gradInput + i * element_count + it * WARP_SIZE, out);
-            } 
+            }
         }
     }
 }
@@ -465,11 +460,11 @@ int get_batch_per_block(int query_seq_len, int key_seq_len, int batches, int att
 
 template<typename input_t, typename output_t, typename acc_t>
 void dispatch_scaled_softmax_forward(
-    output_t *dst, 
-    const input_t *src, 
-    const input_t scale, 
-    int query_seq_len, 
-    int key_seq_len, 
+    output_t *dst,
+    const input_t *src,
+    const input_t scale,
+    int query_seq_len,
+    int key_seq_len,
     int batches,
     int attn_heads)
 {
@@ -557,12 +552,12 @@ void dispatch_scaled_softmax_forward(
 
 template<typename input_t, typename output_t, typename acc_t>
 void dispatch_scaled_masked_softmax_forward(
-    output_t *dst, 
-    const input_t *src, 
+    output_t *dst,
+    const input_t *src,
     const uint8_t *mask,
-    const input_t scale, 
-    int query_seq_len, 
-    int key_seq_len, 
+    const input_t scale,
+    int query_seq_len,
+    int key_seq_len,
     int batches,
     int attn_heads,
     int pad_batches)
@@ -651,12 +646,12 @@ void dispatch_scaled_masked_softmax_forward(
 
 template<typename input_t, typename output_t, typename acc_t>
 void dispatch_scaled_masked_softmax_backward(
-    output_t *grad_input, 
-    input_t *grad, 
-    const input_t *output, 
-    const acc_t scale, 
-    int query_seq_len, 
-    int key_seq_len, 
+    output_t *grad_input,
+    input_t *grad,
+    const input_t *output,
+    const acc_t scale,
+    int query_seq_len,
+    int key_seq_len,
     int batches,
     int attn_heads)
 {
