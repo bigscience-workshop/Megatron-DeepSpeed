@@ -262,7 +262,6 @@ class MTFDataset(torch.utils.data.Dataset):
         documents,
         seed,
     ):
-
         # Params to store.
         self.name = name
 
@@ -318,6 +317,7 @@ def _build_index_mappings(
     # Filename of the index mappings.
     _filename = data_prefix
     _filename += '_{}_indexmap'.format(name)
+    _filename += '_{}docs'.format(len(documents))
     _filename += '_{}s'.format(seed)
     doc_idx_filename = _filename + '_mtf_doc_idx.npy'
     shuffle_idx_filename = _filename + '_mtf_shuffle_idx.npy'

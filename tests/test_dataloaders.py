@@ -154,7 +154,7 @@ class TestDataLoading(TestCasePlus):
                     splits_string=args.split,
                     # TODO @thomasw21 figure how that value works
                     train_valid_test_num_samples=train_val_test_num_samples,
-                    sequence_length=args.seq_length + 1,
+                    sequence_length=args.seq_length,
                     noise_density=args.noise_density,
                     mean_noise_span_length=args.mean_noise_span_length,
                     seed=args.seed,

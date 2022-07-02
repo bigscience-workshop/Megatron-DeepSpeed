@@ -328,7 +328,7 @@ class MLMDataset(torch.utils.data.Dataset):
 
         args = get_args()
         # TODO @thomasw21 check once we merge t5
-        assert self.inputs_length + self.targets_length == args.seq_length
+        assert self.inputs_length + self.targets_length == args.seq_length + 1
 
     def __len__(self):
         return len(self._gpt_dataset)
