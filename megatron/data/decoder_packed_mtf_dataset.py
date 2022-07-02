@@ -469,13 +469,9 @@ def _build_sample_idx(mtf_dataset, document_ids, seq_length,  row_offset):
 
     return full_samples, row_length
 
-def _build_shuffle_idx(dataset_size,  np_rng):
+def _build_shuffle_idx(documents: np.array,  np_rng):
     """Build the range [0, dataset_size) and shuffle."""
-    dtype_ = np.uint32
-    if dataset_size >= (np.iinfo(np.uint32).max - 1):
-        dtype_ = np.int64
-
-    result = np.arange(stop=dataset_size, step=1, dtype=dtype_)
+    result = np.copy(documents)
 
     # in-place shuffling
     np_rng.shuffle(result)
