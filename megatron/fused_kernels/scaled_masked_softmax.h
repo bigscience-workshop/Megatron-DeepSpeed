@@ -256,7 +256,7 @@ __global__ void scaled_masked_softmax_warp_forward(
     uint8_t temp_mask[ELEMENTS_PER_LDG_STG];
     #pragma unroll
     for (int i = 0;  i < WARP_BATCH;  ++i) {
-        int batch_element_count = (i >= local_batches) ? 0 : element_count;
+        int batch_element_count = (i >= local_batches) ? 0 : local_seq;
 
         #pragma unroll
         for (int it = 0;  it < WARP_ITERATIONS;  it+=ELEMENTS_PER_LDG_STG) {
@@ -316,6 +316,7 @@ __global__ void scaled_masked_softmax_warp_forward(
     #pragma unroll
     for (int i = 0;  i < WARP_BATCH;  ++i) {
         if (sum[i] == 0.0) {
+            copy_zero_vector<output_t, WARP_ITERATIONS>(dst + i * element_count * stride);
             break;
         }
         if (i >= local_batches)
@@ -326,11 +327,7 @@ __global__ void scaled_masked_softmax_warp_forward(
             if (element_index < element_count) {
                 #pragma unroll
                 for (int element = 0; element < ELEMENTS_PER_LDG_STG; ++element) {
-                    if (sum[i] == 0.0) {
-                        out[element] = 0.0;
-                    } else {
-                        out[element] = elements[i][it + element] / sum[i];
-                    }
+                    out[element] = elements[i][it + element] / sum[i];
                 }
                 copy_vector<output_t, ELEMENTS_PER_LDG_STG>(dst + i * element_count + it * WARP_SIZE, out);
             } else {
