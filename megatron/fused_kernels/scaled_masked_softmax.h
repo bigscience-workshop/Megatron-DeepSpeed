@@ -47,6 +47,9 @@ __device__ __inline__ void copy_vector<uint8_t, 1>(uint8_t *dst, const uint8_t *
 template <>
 __device__ __inline__ void copy_vector<uint8_t, 4>(uint8_t *dst, const uint8_t *src) {*((half2*) dst) = *((half2*) src); }
 
+template <typename Datatype, int ELEMENTS_PER_LDG>
+__device__ __inline__ void copy_zero_vector(Datatype *dst);
+
 template <>
 __device__ __inline__ void copy_zero_vector<c10::BFloat16, 1>(c10::BFloat16 *dst) { *dst = 0.0; }
 
