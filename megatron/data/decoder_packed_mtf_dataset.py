@@ -475,6 +475,17 @@ def _build_sample_idx(mtf_dataset, document_ids, seq_length, row_offset, old_sam
         # TODO @thomasw21 figure out if we add <eos> tokens
         tok_len = len(sample["input_tokens"]) + len(sample["target_tokens"])
 
+        if tok_len > seq_length:
+            # TODO @thomasw21 handle the case where a single sample cannot fit inside a row. We can
+            #   - silently skip that value [currently implemented]
+            #   - truncate to `seq_length`, and keep the right part
+
+            # Detect is the the sample is the first one.
+            if row_length != 0:
+                full_samples.append(np.asarray([current_sample_start, current_sample_end]))
+            current_sample_start = current_sample_end + 1 # skipping
+            row_length = 0
+
         row_length = row_length + tok_len
         if row_length > seq_length:
             # current sample can't be added and requires to be added in the next one
@@ -482,12 +493,7 @@ def _build_sample_idx(mtf_dataset, document_ids, seq_length, row_offset, old_sam
             current_sample_start = current_sample_end
             row_length = tok_len
 
-            if tok_len > seq_length:
-                # TODO @thomasw21 handle the case where a single sample cannot fit inside a row. We can
-                #   - silently skip that value [currently implemented]
-                #   - truncate to `seq_length`, and keep the right part
-                current_sample_start += 1
-                row_length = 0
+
 
 
     return full_samples, row_length, current_sample_start
