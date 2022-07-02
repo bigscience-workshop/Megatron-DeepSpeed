@@ -105,21 +105,21 @@ class TestDataLoading(TestCasePlus):
             MASTER_ADDR="localhost", MASTER_PORT="9994", RANK="0", LOCAL_RANK="0", WORLD_SIZE="1"
         )
 
-    def copy_data_to_temp(self, prefix):
+    def copy_data_to_temp(self, root_dir, prefix):
         """copy data to temp, and return paths to temp version"""
-        basename = os.path.basename(prefix)
+        src_path = os.path.join(root_dir, prefix)
         tmp_dir = self.get_auto_remove_tmp_dir()
-        for folder in os.listdir(os.path.dirname(prefix)):
-            if folder.startswith(prefix):
+        for folder in os.listdir(os.path.dirname(src_path)):
+            if folder.startswith(src_path):
                 if os.path.isdir(folder):
                     shutil.copytree(folder, tmp_dir)
                 else:
                     shutil.copy2(folder, tmp_dir)
-        return os.path.join(tmp_dir, basename)
+        return os.path.join(tmp_dir, prefix)
 
     def test_mlm_dataset(self):
         command_args = get_default_args()
-        data_path = self.copy_data_to_temp(f"{self.data_dir}/gpt2/meg-gpt2-openwebtext_text_document")
+        data_path = self.copy_data_to_temp(self.data_dir, "gpt2/meg-gpt2-openwebtext_text_document")
         command_args["--data-path"] = data_path
         command_args["--noise_density"] = "0.15"
         command_args["--mean_noise_span_length"] = "3"
