@@ -457,6 +457,7 @@ def _build_sample_idx(mtf_dataset, document_ids, seq_length, row_offset, old_sam
 
     full_samples = []
     current_sample_start = old_sample_start
+    assert epoch * len(document_ids) > current_sample_start
     for current_sample_end, document_id in enumerate(document_ids):
         current_sample_end = epoch * len(document_ids) + current_sample_end
         sample = mtf_dataset[document_id]
