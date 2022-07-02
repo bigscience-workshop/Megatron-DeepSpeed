@@ -389,7 +389,7 @@ class _AutoTokenizer(AbstractTokenizer):
     @property
     def eos(self):
         # TODO @thomasw21 might conflict with the notion of <eod>
-        candidate = self.tokenizer.eos
+        candidate = self.tokenizer.eos_token_id
         self._check_token_candidate(candidate)
         return candidate
 
