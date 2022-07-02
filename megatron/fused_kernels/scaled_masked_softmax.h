@@ -241,7 +241,7 @@ __global__ void scaled_masked_softmax_warp_forward(
 
     // blockDim/threadIdx = (WARP_SIZE, WARPS_PER_BLOCK, )
     // gridDim/blockIdx = (seq_len, attn_heads, batches)
-    int first_batch = (blockDim.y * (blockIdx.x + gridDim.x * (blockIdx.y + gridDim.y * blockIdx.z))+ threadIdx.y) * WARP_BATCH;
+    int first_batch = (blockDim.y * (blockIdx.x + gridDim.x * (blockIdx.y + gridDim.y * blockIdx.z)) + threadIdx.y) * WARP_BATCH;
     int pad_first_batch = 0;
     if (pad_batches != 1) { // bert style
         pad_first_batch = (blockDim.y * (blockIdx.x + gridDim.x * blockIdx.z) + threadIdx.y) * WARP_BATCH;
@@ -316,8 +316,8 @@ __global__ void scaled_masked_softmax_warp_forward(
     for (int i = 0;  i < WARP_BATCH;  ++i) {
         #pragma unroll
         for (int it = 0;  it < WARP_ITERATIONS;  ++it) {
-            if (elements[i][it] < -std::numeric_limits<acc_t>::infinity()) {
-                elements[i][it] = 0.0f;
+            if (elements[i][it] =< -std::numeric_limits<acc_t>::infinity()) {
+                elements[i][it] = 0;
             } else {
                 elements[i][it] = std::exp((elements[i][it] - max_value[i]));
             }
@@ -336,7 +336,7 @@ __global__ void scaled_masked_softmax_warp_forward(
         for (int it = 0;  it < WARP_ITERATIONS;  it+=ELEMENTS_PER_LDG_STG) {
             int element_index = ELEMENTS_PER_LDG_STG * local_idx + it * WARP_SIZE;
             if (element_index < element_count) {
-                if (sum[i] == 0.0) {
+                if (sum[i] == 0.) {
                     copy_zero_vector<output_t, ELEMENTS_PER_LDG_STG>(dst + i * element_count + it * WARP_SIZE);
                 } else {
                     #pragma unroll
