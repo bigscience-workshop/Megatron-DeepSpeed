@@ -512,7 +512,7 @@ class MegDSTestTraining(TestCasePlus):
             --checkpoint-activations
             --exit-interval {exit_interval}
             --tokenizer-type PretrainedFromHF
-            --tokenizer-name-or-path gpt2
+            --tokenizer-name-or-path bigscience/tokenizer
             --log-path {logs_dir}
             --save {output_dir}/checkpoints
             --load {output_dir}/checkpoints
