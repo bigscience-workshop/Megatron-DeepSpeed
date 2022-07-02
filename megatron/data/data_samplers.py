@@ -18,10 +18,9 @@
 from functools import partial
 import torch
 
-from megatron import get_args, get_tokenizer
+from megatron import get_args
 from megatron import mpu
 from megatron.data.decoder_packed_mtf_dataset import DecoderPackedMTFDataset
-from megatron.data.mtf_dataset import MTFDataset
 
 
 def build_pretraining_data_loader(dataset, consumed_samples, num_workers=None):
@@ -32,7 +31,7 @@ def build_pretraining_data_loader(dataset, consumed_samples, num_workers=None):
     args = get_args()
 
     # Megatron sampler
-    collate_fn = Noen
+    collate_fn = None
     if args.dataloader_type == 'single':
         batch_sampler = MegatronPretrainingSampler(
             total_samples=len(dataset),
