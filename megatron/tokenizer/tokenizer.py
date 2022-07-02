@@ -355,9 +355,8 @@ class _AutoTokenizer(AbstractTokenizer):
 
     @property
     def eod(self):
-        candidate = self.tokenizer.eos_token_id
-        self._check_token_candidate(candidate)
-        return candidate
+        # TODO @thomasw21 might conflict with <eos>
+        return self.eos
 
     @property
     def cls(self):
@@ -384,17 +383,20 @@ class _AutoTokenizer(AbstractTokenizer):
         return candidate
 
     @property
-    def additional_special_tokens_ids(self):
-        """ All the additional special tokens you may want to use (list of strings)."""
-        return self.tokenizer.additional_special_tokens_ids
-
-    @property
-    def bos_token_id(self):
+    def bos(self):
         raise NotImplementedError("Missing <bos>")
 
     @property
-    def eos_token_id(self):
-        raise NotImplementedError("Missing <eos>")
+    def eos(self):
+        # TODO @thomasw21 might conflict with the notion of <eod>
+        candidate = self.tokenizer.eos
+        self._check_token_candidate(candidate)
+        return candidate
+
+    @property
+    def additional_special_tokens_ids(self):
+        """ All the additional special tokens you may want to use (list of strings)."""
+        return self.tokenizer.additional_special_tokens_ids
 
     @staticmethod
     def _check_token_candidate(candidate):
