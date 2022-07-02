@@ -336,7 +336,7 @@ def _build_index_mappings(
             np.save(doc_idx_filename, doc_idx, allow_pickle=True)
             print_rank_0(' > elasped time to build and save doc-idx mapping '
                          '(seconds): {:4f}'.format(time.time() - start_time))
-            shuffle_idx = _build_shuffle_idx(doc_idx.shape[0] - 1 , doc_idx.shape[0] - 1, np_rng)
+            shuffle_idx = _build_shuffle_idx(doc_idx.shape[0], doc_idx.shape[0], np_rng)
             np.save(shuffle_idx_filename, shuffle_idx, allow_pickle=True)
             print_rank_0(' > elasped time to build and save shuffle-idx mapping'
                          ' (seconds): {:4f}'.format(time.time() - start_time))

@@ -293,7 +293,7 @@ class DecoderPackedMTFDataset(torch.utils.data.Dataset):
         self.pad_token = pad_token
         self.seq_length = seq_length
 
-        self.sample_index, self.shuffle_index = _build_index_mappings(name=name, data_prefix=data_prefix, mtf_dataset=self.mtf_dataset, num_samples=num_samples, seq_length=seq_length, seed=seed)
+        self.sample_index, self.shuffle_index = _build_index_mappings(name=name, data_prefix=data_prefix, documents=documents, mtf_dataset=self.mtf_dataset, num_samples=num_samples, seq_length=seq_length, seed=seed)
 
     def __len__(self):
         return len(self.sample_index)
@@ -366,6 +366,7 @@ class DecoderPackedMTFDataset(torch.utils.data.Dataset):
 def _build_index_mappings(
     name,
     data_prefix,
+    documents,
     mtf_dataset,
     num_samples: int,
     seq_length: int,
@@ -402,11 +403,17 @@ def _build_index_mappings(
             shuffle_idx = []
             sample_idx = []
             while len(sample_idx) <= num_samples:
-                new_document_ids = _build_shuffle_idx(dataset_size=len(mtf_dataset), np_rng=np_rng)
+                # TODO @thomas21 we should pass the list of documents we have acccess to instead of dataset_size
+                new_document_ids = _build_shuffle_idx(documents=documents, np_rng=np_rng)
                 # Generate a shuffling of the entire dataset
                 shuffle_idx.append(new_document_ids)
                 # Packs them into a single sample
-                new_samples, row_offset = _build_sample_idx(mtf_dataset=mtf_dataset, document_ids=new_document_ids ,seq_length=seq_length, row_offset=row_offset)
+                new_samples, row_offset = _build_sample_idx(
+                    mtf_dataset=mtf_dataset,
+                    document_ids=new_document_ids,
+                    seq_length=seq_length,
+                    row_offset=row_offset
+                )
                 sample_idx.extend(new_samples)
 
             shuffle_idx = np.concatenate(shuffle_idx, axis=0)
