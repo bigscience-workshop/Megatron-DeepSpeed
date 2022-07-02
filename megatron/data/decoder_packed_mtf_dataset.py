@@ -336,13 +336,23 @@ class DecoderPackedMTFDataset(torch.utils.data.Dataset):
         # `0` is reserved for padding
         item_num = 1
         cur_len = 0
+
+        assert len(items) > 0
+
         for token_dict in items:
             input_token_len = len(token_dict["input_tokens"])
             target_token_len = len(token_dict["target_tokens"])
+
             total_len = input_token_len + target_token_len
 
             if cur_len + total_len > self.seq_length:
-                break
+                # This should not happen at the indexing should only allow the correct number of items
+                raise ValueError(f"""Items to be packed do not fit inside a single sample.
+                    current length: {cur_len}
+                    input tokens length: {input_token_len}
+                    target token length: {target_token_len}
+                    expected sequence length: {self.seq_length}
+                """)
 
             decoder_tokens[cur_len: cur_len + input_token_len] = torch.from_numpy(token_dict["input_tokens"])
             decoder_tokens[cur_len + input_token_len: cur_len + total_len] = torch.from_numpy(
@@ -471,6 +481,13 @@ def _build_sample_idx(mtf_dataset, document_ids, seq_length, row_offset, old_sam
             full_samples.append(np.asarray([current_sample_start, current_sample_end]))
             current_sample_start = current_sample_end
             row_length = tok_len
+
+            if tok_len > seq_length:
+                # TODO @thomasw21 handle the case where a single sample cannot fit inside a row. We can
+                #   - silently skip that value [currently implemented]
+                #   - truncate to `seq_length`, and keep the right part
+                current_sample_start += 1
+                row_length = 0
 
 
     return full_samples, row_length, current_sample_start

@@ -295,6 +295,9 @@ class MTFDataset(torch.utils.data.Dataset):
         input_tokens = self.input_indexed_dataset.get(self.doc_idx[idx])
         target_tokens = self.target_indexed_dataset.get(self.doc_idx[idx])
 
+        assert len(input_tokens) > 0
+        assert len(target_tokens) > 0
+
         return {
             'input_tokens': np.array(input_tokens, dtype=np.int64),
             'target_tokens': np.array(target_tokens, dtype=np.int64),
