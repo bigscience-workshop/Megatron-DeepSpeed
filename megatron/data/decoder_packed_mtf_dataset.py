@@ -481,7 +481,7 @@ def _build_sample_idx(mtf_dataset, document_ids, seq_length, row_offset, old_sam
             #   - truncate to `seq_length`, and keep the right part
 
             # Detect is the the sample is the first one.
-            if row_length != 0:
+            if current_sample_end - 1 > current_sample_start:
                 full_samples.append(np.asarray([current_sample_start, current_sample_end]))
             current_sample_start = current_sample_end + 1 # skipping
             row_length = 0
