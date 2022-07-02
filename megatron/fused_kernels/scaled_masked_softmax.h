@@ -234,8 +234,8 @@ __global__ void scaled_masked_softmax_warp_forward(
         pad_first_batch = (blockDim.y * blockIdx.x + threadIdx.y) * WARP_BATCH;
     }
 
-    int local_seq = blockIdx.x + 1;
-    int warp_iteration_limit = (local_seq + ELEMENTS_PER_LDG_STG * WARP_SIZE - 1)/ WARP_SIZE;
+//    int local_seq = blockIdx.x + 1;
+//    int warp_iteration_limit = (local_seq + ELEMENTS_PER_LDG_STG * WARP_SIZE - 1)/ WARP_SIZE;
 
     // micro_batch_size might not be a multiple of WARP_BATCH. Check how
     // many batches have to computed within this WARP.
@@ -256,7 +256,7 @@ __global__ void scaled_masked_softmax_warp_forward(
     uint8_t temp_mask[ELEMENTS_PER_LDG_STG];
     #pragma unroll
     for (int i = 0;  i < WARP_BATCH;  ++i) {
-        int batch_element_count = (i >= local_batches) ? 0 : local_seq;
+        int batch_element_count = (i >= local_batches) ? 0 : element_count;
 
         #pragma unroll
         for (int it = 0;  it < WARP_ITERATIONS;  it+=ELEMENTS_PER_LDG_STG) {
@@ -301,14 +301,12 @@ __global__ void scaled_masked_softmax_warp_forward(
     for (int i = 0;  i < WARP_BATCH;  ++i) {
         #pragma unroll
         for (int it = 0;  it < WARP_ITERATIONS;  ++it) {
-            if (it < warp_iteration_limit) {
-                if (elements[i][it] < -std::numeric_limits<acc_t>::infinity()) {
-                    elements[i][it] = 0.0f;
-                } else {
-                    elements[i][it] = std::exp((elements[i][it] - max_value[i]));
-                }
-                sum[i] += elements[i][it];
+            if (elements[i][it] < -std::numeric_limits<acc_t>::infinity()) {
+                elements[i][it] = 0.0f;
+            } else {
+                elements[i][it] = std::exp((elements[i][it] - max_value[i]));
             }
+            sum[i] += elements[i][it];
         }
     }
     warp_reduce<acc_t, WARP_BATCH, WARP_SIZE, Add>(sum);
@@ -325,7 +323,7 @@ __global__ void scaled_masked_softmax_warp_forward(
         #pragma unroll
         for (int it = 0;  it < WARP_ITERATIONS;  it+=ELEMENTS_PER_LDG_STG) {
             int element_index = ELEMENTS_PER_LDG_STG * local_idx + it * WARP_SIZE;
-            if (element_index < local_seq) {
+            if (element_index < element_count) {
                 #pragma unroll
                 for (int element = 0; element < ELEMENTS_PER_LDG_STG; ++element) {
                     if (sum[i] == 0.0) {
