@@ -400,6 +400,9 @@ class MyTestCase(TestCasePlus):
                 output = output.masked_fill(dummy_attention_mask, -10000)
                 output = F.softmax(output, dim=-1)
 
+                # Test that the nonzeros are the same with the mask
+                for i in range(args.num_attention_heads):
+                    torch_assert_equal(torch.nonzero(fused_output[:, i]), torch.nonzero(~dummy_attention_mask[:, 0]))
                 # Issue is we use -10000 in mimicking instead of `inf`
                 torch_assert_close(fused_output, output)
 
