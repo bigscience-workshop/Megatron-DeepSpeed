@@ -408,9 +408,6 @@ class MyTestCase(TestCasePlus):
 
 
     def test_non_causal_decoder_model_with_packed_input_passed_with_attention_mask_is_not_causal_across_segments(self):
-        # TODO @thomasw21 make sure that if pass a causal mask, it is take in account. The following shows that fused_kernel completely ignores the masking is we set the variable incorrectly.
-        #    https://github.com/bigscience-workshop/Megatron-DeepSpeed/blob/131bd43e9f3552f2413a442f51c22214d4f6fb19/megatron/model/fused_softmax.py#L190
-        #    Maybe we should pass None is case as attention_mask instead of silently ignoring mask.
         command_args = get_default_args(self.test_file_dir_str)
         command_args["--position-embedding-type"] = "alibi"
 
@@ -479,5 +476,4 @@ class MyTestCase(TestCasePlus):
                 # Test model handles padding correctly
                 output_changed_pad = model.eval_batch(iter_out_of_one({**data, "decoder_token_ids": token_ids_changed_pad, "decoder_segment_ids": segment_ids_changed_pad}), compute_loss=False)
 
-                print(output_changed_pad)
                 self.assertFalse(torch.any(torch.isnan(output_changed_pad)))

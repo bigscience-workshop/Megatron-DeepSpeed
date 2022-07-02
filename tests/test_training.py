@@ -490,6 +490,7 @@ class MegDSTestTraining(TestCasePlus):
             --num-attention-heads 2
             --seq-length 128
             --max-position-embeddings 1024
+            --position-embedding-type alibi
             --micro-batch-size 1
             --rampup-batch-size 2 2 {n_samples}
             --global-batch-size 16

@@ -15,7 +15,6 @@
 
 """Dataloaders."""
 
-from functools import partial
 import torch
 
 from megatron import get_args
@@ -31,7 +30,6 @@ def build_pretraining_data_loader(dataset, consumed_samples, num_workers=None):
     args = get_args()
 
     # Megatron sampler
-    collate_fn = None
     if args.dataloader_type == 'single':
         batch_sampler = MegatronPretrainingSampler(
             total_samples=len(dataset),
@@ -54,7 +52,6 @@ def build_pretraining_data_loader(dataset, consumed_samples, num_workers=None):
             micro_batch_size=args.micro_batch_size,
             data_parallel_rank=mpu.get_data_parallel_rank(),
             data_parallel_size=mpu.get_data_parallel_world_size())
-        collate_fn = concatenate_dict_of_tensor
     else:
         raise Exception('{} dataloader type is not supported.'.format(
             args.dataloader_type))
@@ -62,19 +59,12 @@ def build_pretraining_data_loader(dataset, consumed_samples, num_workers=None):
     if num_workers is None:
         num_workers = args.num_workers
 
-    collate_fn = None
-    # if args.dataloader_type == 'decoder_packed':
-    #     assert isinstance(dataset, MTFDataset)
-    #     pad_token = get_tokenizer().pad
-    #     collate_fn = partial(pack_samples, max_seq_len=args.seq_length + 1, micro_batch_size=args.micro_batch_size,
-    #                          pad_token=pad_token)
-
     # Torch dataloader.
     return torch.utils.data.DataLoader(
         dataset,
         batch_sampler=batch_sampler,
         num_workers=num_workers,
-        collate_fn=collate_fn,
+        collate_fn=None,
         pin_memory=True
     )
 
@@ -230,10 +220,3 @@ class MegatronDecoderPackedText2TextSampler(object):
         if len(batch) > 0 and not self.drop_last:
             start_idx, end_idx = self.get_start_end_idx()
             yield batch[start_idx:end_idx]
-
-def concatenate_dict_of_tensor(list_dict_of_tensors):
-    keys = list(list_dict_of_tensors[0].keys())
-    result = {}
-    for key in keys:
-        result[key] = torch.stack([sample[key] for sample in list_dict_of_tensors])
-    return result
