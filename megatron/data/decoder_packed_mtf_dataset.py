@@ -400,10 +400,11 @@ def _build_index_mappings(
             # iteratively add the entire dataset for every epoch and see if it's enough given current packing strategy
             start_time = time.time()
             row_offset = 0
+            old_sample_start = 0
+            epoch = 0
             shuffle_idx = []
             sample_idx = []
             while len(sample_idx) <= num_samples:
-                # TODO @thomas21 we should pass the list of documents we have acccess to instead of dataset_size
                 new_document_ids = _build_shuffle_idx(documents=documents, total_size=len(mtf_dataset), np_rng=np_rng)
                 # Generate a shuffling of the entire dataset
                 shuffle_idx.append(new_document_ids)
@@ -412,9 +413,12 @@ def _build_index_mappings(
                     mtf_dataset=mtf_dataset,
                     document_ids=new_document_ids,
                     seq_length=seq_length,
-                    row_offset=row_offset
+                    row_offset=row_offset,
+                    old_sample_start=old_sample_start,
+                    epoch=epoch
                 )
                 sample_idx.extend(new_samples)
+                epoch +=1
 
             shuffle_idx = np.concatenate(shuffle_idx, axis=0)
             sample_idx = np.stack(sample_idx, axis=0)
@@ -447,13 +451,14 @@ def _build_index_mappings(
 
     return sample_idx, shuffle_idx
 
-def _build_sample_idx(mtf_dataset, document_ids, seq_length,  row_offset):
+def _build_sample_idx(mtf_dataset, document_ids, seq_length, row_offset, old_sample_start, epoch):
     """Build start and off index of each `full` batch, return that list of batch + start of the unfinished batch"""
     row_length = row_offset
 
     full_samples = []
-    current_sample_start = 0
+    current_sample_start = old_sample_start
     for current_sample_end, document_id in enumerate(document_ids):
+        current_sample_end = epoch * len(document_ids) + current_sample_end
         sample = mtf_dataset[document_id]
 
         # TODO @thomasw21 figure out if we add <eos> tokens
@@ -467,7 +472,7 @@ def _build_sample_idx(mtf_dataset, document_ids, seq_length,  row_offset):
             row_length = tok_len
 
 
-    return full_samples, row_length
+    return full_samples, row_length, current_sample_start
 
 def _build_shuffle_idx(documents: np.array, total_size: int, np_rng):
     """Build the range [0, dataset_size) and shuffle."""
