@@ -293,7 +293,7 @@ class DecoderPackedMTFDataset(torch.utils.data.Dataset):
         self.pad_token = pad_token
         self.seq_length = seq_length
 
-        self.sample_index, self.shuffle_index = _build_index_mappings(name=name, data_prefix=data_prefix, mtf_dataset=self.mtf_dataset, num_samples=num_samples, seq_length=seq_length, seed=self.seed)
+        self.sample_index, self.shuffle_index = _build_index_mappings(name=name, data_prefix=data_prefix, mtf_dataset=self.mtf_dataset, num_samples=num_samples, seq_length=seq_length, seed=seed)
 
     def __len__(self):
         return len(self.sample_index)
@@ -329,9 +329,9 @@ class DecoderPackedMTFDataset(torch.utils.data.Dataset):
             decoder_is_inputs = [[1, 1, 0, 1, 1, 0, 0]]: `1` depicts inputs, `0` depicts target.
         """
 
-        decoder_tokens = torch.full((self.seq_size), self.pad_token, dtype=torch.int64)
-        decoder_segment_ids = torch.zeros((self.seq_size), dtype=torch.int64)
-        decoder_is_inputs = torch.full((self.seq_size), False, dtype=torch.bool)
+        decoder_tokens = torch.full((self.seq_length,), self.pad_token, dtype=torch.int64)
+        decoder_segment_ids = torch.zeros((self.seq_length,), dtype=torch.int64)
+        decoder_is_inputs = torch.full((self.seq_length,), False, dtype=torch.bool)
 
         # `0` is reserved for padding
         item_num = 1
@@ -341,7 +341,7 @@ class DecoderPackedMTFDataset(torch.utils.data.Dataset):
             target_token_len = len(token_dict["target_tokens"])
             total_len = input_token_len + target_token_len
 
-            if cur_len + total_len > self.seq_size:
+            if cur_len + total_len > self.seq_length:
                 break
 
             decoder_tokens[cur_len: cur_len + input_token_len] = torch.from_numpy(token_dict["input_tokens"])
@@ -353,7 +353,7 @@ class DecoderPackedMTFDataset(torch.utils.data.Dataset):
 
             item_num += 1
             cur_len += total_len
-            assert cur_len < self.seq_size
+            assert cur_len < self.seq_length
 
         # Normally the default collate_fn handles torch tensor conversion; As we use a custom collate_fn, do it here
         return {
