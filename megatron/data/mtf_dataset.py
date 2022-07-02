@@ -44,7 +44,6 @@ def build_train_valid_test_datasets(
             data_prefix=data_prefix[0],
             data_impl=data_impl,
             splits_string=splits_string,
-            train_valid_test_num_samples=train_valid_test_num_samples,
             seed=seed,
             skip_warmup=skip_warmup
         )
@@ -63,7 +62,6 @@ def build_train_valid_test_datasets(
                 data_prefix=prefixes[i],
                 data_impl=data_impl,
                 splits_string=splits_string,
-                train_valid_test_num_samples=datasets_train_valid_test_num_samples[i],
                 seed=seed,
                 skip_warmup=skip_warmup
             )
@@ -84,9 +82,17 @@ def build_train_valid_test_datasets(
     return all_train_datasets, all_valid_datasets, all_test_datasets
 
 
-def build_dataset_group(dataset_group_name, paths, weights, splits, data_impl,
-                        train_valid_test_num_samples,
-                        seed, skip_warmup, train_valid_test):
+def build_dataset_group(
+    dataset_group_name,
+    paths,
+    weights,
+    splits,
+    data_impl,
+    train_valid_test_num_samples,
+    seed,
+    skip_warmup,
+    train_valid_test
+):
     '''
     Build a single dataset group corresponding to Option 2 of data loading see arguments.py
     a dataset group is passed in the following form
@@ -103,7 +109,6 @@ def build_dataset_group(dataset_group_name, paths, weights, splits, data_impl,
             data_prefix=paths[0],
             range_string=splits[0],
             data_impl=data_impl,
-            train_valid_test_num_samples=train_valid_test_num_samples,
             seed=seed,
             skip_warmup=skip_warmup,
             dataset_group_name=dataset_group_name,
@@ -130,7 +135,6 @@ def build_dataset_group(dataset_group_name, paths, weights, splits, data_impl,
                 data_prefix=prefixes[i],
                 range_string=splits[i],
                 data_impl=data_impl,
-                train_valid_test_num_samples=datasets_train_valid_test_num_samples[i],
                 seed=seed,
                 skip_warmup=skip_warmup,
                 dataset_group_name=dataset_group_name,
@@ -146,7 +150,6 @@ def _build_single_datasets(
     data_prefix,
     range_string,
     data_impl,
-    train_valid_test_num_samples,
     seed,
     skip_warmup,
     dataset_group_name,
@@ -190,7 +193,6 @@ def _build_single_datasets(
                 data_impl=data_impl,
                 skip_warmup=skip_warmup,
                 documents=documents,
-                num_samples=train_valid_test_num_samples[index],
                 seed=seed
             )
         return dataset
@@ -204,7 +206,6 @@ def _build_train_valid_test_datasets(
     data_prefix,
     data_impl,
     splits_string,
-    train_valid_test_num_samples,
     seed,
     skip_warmup
 ):
@@ -239,7 +240,6 @@ def _build_train_valid_test_datasets(
                 data_impl=data_impl,
                 skip_warmup=skip_warmup,
                 documents=documents,
-                num_samples=train_valid_test_num_samples[index],
                 seed=seed
             )
         return dataset
@@ -260,7 +260,6 @@ class MTFDataset(torch.utils.data.Dataset):
         data_impl,
         skip_warmup,
         documents,
-        num_samples,
         seed,
     ):
 
@@ -282,7 +281,6 @@ class MTFDataset(torch.utils.data.Dataset):
             name=self.name,
             data_prefix=data_prefix,
             documents=documents,
-            num_samples=num_samples,
             seed=seed
         )
 
@@ -295,8 +293,8 @@ class MTFDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         # Get the shuffled index.
         idx = self.shuffle_idx[idx]
-        input_tokens = self.input_indexed_dataset[self.doc_idx[idx]]
-        target_tokens = self.target_indexed_dataset[self.doc_idx[idx]]
+        input_tokens = self.input_indexed_dataset.get(self.doc_idx[idx])
+        target_tokens = self.target_indexed_dataset.get(self.doc_idx[idx])
 
         return {
             'input_tokens': np.array(input_tokens, dtype=np.int64),
@@ -308,7 +306,6 @@ def _build_index_mappings(
     name,
     data_prefix,
     documents,
-    num_samples,
     seed,
 ):
     """Build doc-idx, sample-idx, and shuffle-idx.
@@ -321,7 +318,6 @@ def _build_index_mappings(
     # Filename of the index mappings.
     _filename = data_prefix
     _filename += '_{}_indexmap'.format(name)
-    _filename += '_{}ns'.format(num_samples)
     _filename += '_{}s'.format(seed)
     doc_idx_filename = _filename + '_mtf_doc_idx.npy'
     shuffle_idx_filename = _filename + '_mtf_shuffle_idx.npy'
