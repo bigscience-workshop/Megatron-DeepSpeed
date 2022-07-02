@@ -314,7 +314,7 @@ class MLMDataset(torch.utils.data.Dataset):
             indexed_dataset=self.indexed_dataset,
             num_samples=num_samples,
             # -1 because GPTDataset will return `seq_length + 1` sequences.
-            seq_length=number_of_raw_tokens - 1,
+            seq_length=self.number_of_raw_tokens - 1,
             seed=seed
         )
 
