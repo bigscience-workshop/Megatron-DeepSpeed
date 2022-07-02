@@ -109,6 +109,7 @@ class TestDataLoading(TestCasePlus):
         """copy data to temp, and return paths to temp version"""
         src_path = os.path.join(root_dir, prefix)
         dirname = os.path.dirname(src_path)
+        os.makedirs(dirname, exist_ok=True)
         tmp_dir = self.get_auto_remove_tmp_dir()
         for folder in os.listdir(dirname):
             if os.path.join(dirname, folder).startswith(src_path):
@@ -165,7 +166,7 @@ class TestDataLoading(TestCasePlus):
 
     def test_mtf_dataset(self):
         command_args = get_default_args()
-        data_path = self.copy_data_to_temp(f"{self.data_dir}/gpt2/ag_news_prompt")
+        data_path = self.copy_data_to_temp(self.data_dir, "gpt2/ag_news_prompt")
         command_args["--data-path"] = data_path
         command_args["--dataloader-type"] = "decoder_packed"
 
@@ -195,7 +196,7 @@ class TestDataLoading(TestCasePlus):
 
     def test_decoder_packed_mtf_dataloader(self):
         command_args = get_default_args()
-        data_path = self.copy_data_to_temp(f"{self.data_dir}/gpt2/ag_news_prompt")
+        data_path = self.copy_data_to_temp(self.data_dir, "gpt2/ag_news_prompt")
         command_args["--data-path"] = data_path
         command_args["--dataloader-type"] = "decoder_packed"
 
