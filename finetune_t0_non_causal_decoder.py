@@ -4,7 +4,7 @@ from multiprocessing.sharedctypes import Value
 import torch
 
 from megatron import get_args, get_tokenizer, print_rank_0, mpu
-from megatron.data.mtf_dataset import build_train_valid_test_datasets
+from megatron.data.decoder_packed_mtf_dataset import build_train_valid_test_datasets
 from megatron.enums import PositionEmbeddingType, AttnMaskType
 from megatron.model import GPTModelPipe
 from megatron.training import pretrain

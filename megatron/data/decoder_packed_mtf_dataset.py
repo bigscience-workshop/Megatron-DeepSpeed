@@ -406,7 +406,7 @@ def _build_index_mappings(
                 # Generate a shuffling of the entire dataset
                 shuffle_idx.append(new_document_ids)
                 # Packs them into a single sample
-                new_samples, row_offset = _build_sample_idx(mtf_dataset=mtf_dataset, seq_length=seq_length, row_offset=row_offset)
+                new_samples, row_offset = _build_sample_idx(mtf_dataset=mtf_dataset, document_ids=new_document_ids ,seq_length=seq_length, row_offset=row_offset)
                 sample_idx.extend(new_samples)
 
             shuffle_idx = np.concatenate(shuffle_idx, axis=0)
