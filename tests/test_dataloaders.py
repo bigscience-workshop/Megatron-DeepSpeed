@@ -1,4 +1,6 @@
 import itertools
+import os
+import shutil
 from typing import Set
 from unittest.mock import patch
 
@@ -103,9 +105,22 @@ class TestDataLoading(TestCasePlus):
             MASTER_ADDR="localhost", MASTER_PORT="9994", RANK="0", LOCAL_RANK="0", WORLD_SIZE="1"
         )
 
+    def copy_data_to_temp(self, prefix):
+        """copy data to temp, and return paths to temp version"""
+        basename = os.path.basename(prefix)
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        for folder in os.listdir(os.path.dirname(prefix)):
+            if folder.startswith(prefix):
+                if os.path.isdir(folder):
+                    shutil.copytree(folder, tmp_dir)
+                else:
+                    shutil.copy2(folder, tmp_dir)
+        return os.path.join(tmp_dir, basename)
+
     def test_mlm_dataset(self):
         command_args = get_default_args()
-        command_args["--data-path"] = f"{self.data_dir}/gpt2/meg-gpt2-openwebtext_text_document"
+        data_path = self.copy_data_to_temp(f"{self.data_dir}/gpt2/meg-gpt2-openwebtext_text_document")
+        command_args["--data-path"] = data_path
         command_args["--noise_density"] = "0.15"
         command_args["--mean_noise_span_length"] = "3"
         command_args["--vocab-extra-ids"] = "100"
@@ -149,7 +164,8 @@ class TestDataLoading(TestCasePlus):
 
     def test_mtf_dataset(self):
         command_args = get_default_args()
-        command_args["--data-path"] = f"{self.data_dir}/gpt2/ag_news_prompt"
+        data_path = self.copy_data_to_temp(f"{self.data_dir}/gpt2/ag_news_prompt")
+        command_args["--data-path"] = data_path
         command_args["--dataloader-type"] = "decoder_packed"
 
         with patch('sys.argv', flatten_arguments(command_args)):
@@ -178,7 +194,8 @@ class TestDataLoading(TestCasePlus):
 
     def test_decoder_packed_mtf_dataloader(self):
         command_args = get_default_args()
-        command_args["--data-path"] = f"{self.data_dir}/gpt2/ag_news_prompt"
+        data_path = self.copy_data_to_temp(f"{self.data_dir}/gpt2/ag_news_prompt")
+        command_args["--data-path"] = data_path
         command_args["--dataloader-type"] = "decoder_packed"
 
         with patch('sys.argv', flatten_arguments(command_args)):
