@@ -106,6 +106,8 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
     args = get_args()
     train_ds, valid_ds, test_ds = None, None, None
 
+    tokenizer = get_tokenizer()
+
     print_rank_0("> building train, validation, and test datasets for T0 ...")
     # Option 1 of data loading using --data-path
     # For T0, data has to be provided in the form --data-path input-data target-data input-data2 target-data2 ...
@@ -115,9 +117,13 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
             data_prefix=args.data_path,
             data_impl=args.data_impl,
             splits_string=args.split,
+            seq_length=args.seq_length,
+            pad_token=tokenizer.pad,
+            eos_token=tokenizer.eos,
             train_valid_test_num_samples=train_val_test_num_samples,
             seed=args.seed,
-            skip_warmup=(not args.mmap_warmup))
+            skip_warmup=(not args.mmap_warmup)
+        )
     else:
         raise NotImplementedError("No dataloading argument passed")
 

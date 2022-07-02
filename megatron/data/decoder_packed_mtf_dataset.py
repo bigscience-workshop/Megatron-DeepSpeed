@@ -468,7 +468,12 @@ def _build_shuffle_idx(dataset_size,  np_rng):
     if dataset_size >= (np.iinfo(np.uint32).max - 1):
         dtype_ = np.int64
 
-    return np_rng.shuffle(np.arange(stop=dataset_size, step=1, dtype=dtype_))
+    result = np.arange(stop=dataset_size, step=1, dtype=dtype_)
+
+    # in-place shuffling
+    np_rng.shuffle(result)
+
+    return result
 
 
 def get_indexed_dataset(data_prefix: str, is_input: bool, data_impl: str, skip_warmup: bool):
