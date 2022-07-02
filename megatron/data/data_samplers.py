@@ -305,6 +305,7 @@ class MegatronDecoderPackedText2TextRandomSampler(object):
             self.micro_batch_size * data_parallel_size
         self.last_batch_size = \
             self.total_samples % self.micro_batch_times_data_parallel_size
+        self.active_total_samples = self.total_samples - self.last_batch_size
 
         # Sanity checks.
         assert self.total_samples > 0, \
@@ -319,9 +320,7 @@ class MegatronDecoderPackedText2TextRandomSampler(object):
         return self.total_samples
 
     def __iter__(self):
-        active_total_samples = self.total_samples - self.last_batch_size
-        self.epoch = self.consumed_samples // active_total_samples
-        current_epoch_samples = self.consumed_samples % active_total_samples
+        current_epoch_samples = self.consumed_samples % self.active_total_samples
         assert current_epoch_samples % self.micro_batch_times_data_parallel_size == 0
 
         # data sharding and random sampling
@@ -331,26 +330,34 @@ class MegatronDecoderPackedText2TextRandomSampler(object):
         start_idx = self.data_parallel_rank * bucket_size
 
         g = torch.Generator()
-        g.manual_seed(self.epoch)
 
-        random_idx = torch.randperm(bucket_size, generator=g).tolist()
-        idx_range = [start_idx + x for x in random_idx[bucket_offset:]]
+        # Infinite loader
+        while True:
+            g.manual_seed(self.epoch)
 
-        batch = []
-        batch_count = 0
-        token_lens = 0
-        # Last batch if not complete will be dropped.
-        for idx in idx_range:
-            tok_len = len(self.dataset[idx]['input_tokens']) + len(self.dataset[idx]['target_tokens'])
-            if token_lens + tok_len > self.sequence_length:
-                batch_count += 1
-                token_lens = 0
+            # Randomly shuffle the dataset
+            random_idx = torch.randperm(bucket_size, generator=g).tolist()
+            idx_range = [start_idx + x for x in random_idx[bucket_offset:]]
 
-            if batch_count == self.micro_batch_size:
-                self.consumed_samples += self.micro_batch_times_data_parallel_size
-                yield batch
-                batch_count = 0
-                batch = []
-            else:
-                token_lens += tok_len
-                batch.append(idx)
+            batch = []
+            batch_count = 0
+            token_lens = 0
+            # Last batch if not complete will be dropped.
+            for idx in idx_range:
+                tok_len = len(self.dataset[idx]['input_tokens']) + len(self.dataset[idx]['target_tokens'])
+                if token_lens + tok_len > self.sequence_length:
+                    batch_count += 1
+                    token_lens = 0
+
+                if batch_count == self.micro_batch_size:
+                    self.consumed_samples += self.micro_batch_times_data_parallel_size
+                    yield batch
+                    batch_count = 0
+                    batch = []
+                else:
+                    token_lens += tok_len
+                    batch.append(idx)
+
+    @property
+    def epoch(self):
+        return self.consumed_samples // self.active_total_samples
