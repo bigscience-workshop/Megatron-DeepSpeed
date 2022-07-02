@@ -128,8 +128,8 @@ class TestDataLoading(TestCasePlus):
         command_args = get_default_args()
         data_path = self.copy_data_to_temp(self.data_dir, "gpt2/meg-gpt2-openwebtext_text_document")
         command_args["--data-path"] = data_path
-        command_args["--noise_density"] = "0.15"
-        command_args["--mean_noise_span_length"] = "3"
+        command_args["--noise-density"] = "0.15"
+        command_args["--mean-noise-span-length"] = "3"
         command_args["--vocab-extra-ids"] = "100"
 
         with patch('sys.argv', flatten_arguments(command_args)):
@@ -307,7 +307,6 @@ class TestDataLoading(TestCasePlus):
                 torch_assert_equal(tokens, data["decoder_token_ids"][:, :-1])
                 torch_assert_equal(labels, data["decoder_token_ids"][:, 1:])
 
-                # TODO @thomasw21 check that attention_mask is `1` between segments, ie segments are independent
                 for batch_id in range(args.micro_batch_size):
                     segment_cuts = torch.nonzero(data["decoder_segment_ids"][batch_id, 1:] - data["decoder_segment_ids"][batch_id, :-1]) + 1
                     for segment_start, segment_end in zip([0, *segment_cuts], [*segment_cuts, args.seq_length]):

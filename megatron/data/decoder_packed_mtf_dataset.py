@@ -405,7 +405,7 @@ def _build_index_mappings(
             shuffle_idx = []
             sample_idx = []
             while len(sample_idx) <= num_samples:
-                new_document_ids = _build_shuffle_idx(documents=documents, total_size=len(mtf_dataset), np_rng=np_rng)
+                new_document_ids = _build_shuffle_idx(documents=documents, np_rng=np_rng)
                 # Generate a shuffling of the entire dataset
                 shuffle_idx.append(new_document_ids)
                 # Packs them into a single sample
@@ -418,7 +418,7 @@ def _build_index_mappings(
                     epoch=epoch
                 )
                 sample_idx.extend(new_samples)
-                epoch +=1
+                epoch += 1
 
             shuffle_idx = np.concatenate(shuffle_idx, axis=0)
             sample_idx = np.stack(sample_idx, axis=0)
@@ -474,11 +474,9 @@ def _build_sample_idx(mtf_dataset, document_ids, seq_length, row_offset, old_sam
 
     return full_samples, row_length, current_sample_start
 
-def _build_shuffle_idx(documents: np.array, total_size: int, np_rng):
+def _build_shuffle_idx(documents: np.array, np_rng):
     """Build the range [0, dataset_size) and shuffle."""
-    dtype_ = np.uint32
-    if total_size >= (np.iinfo(np.uint32).max - 1):
-        dtype_ = np.int64
+    dtype_ = np.int64
 
     result = np.arange(start=0, stop=len(documents),
                                   step=1, dtype=dtype_)
