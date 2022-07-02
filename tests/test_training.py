@@ -18,6 +18,7 @@ import json
 import os
 import glob
 import re
+import shutil
 import unittest
 from pathlib import Path
 from parameterized import parameterized
@@ -80,8 +81,27 @@ class MegDSTestTraining(TestCasePlus):
         if os.path.exists(meg_lock_file_path):
             os.unlink(meg_lock_file_path)
 
+    def copy_data_to_temp(self, root_dir, prefix):
+        """copy data to temp, and return paths to temp version"""
+        src_path = os.path.join(root_dir, prefix)
+        src_dirname = os.path.dirname(src_path)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        dest_path = os.path.join(tmp_dir, prefix)
+        dest_dirname = os.path.dirname(dest_path)
+        os.makedirs(dest_dirname, exist_ok=True)
+        for folder in os.listdir(src_dirname):
+            src_folder = os.path.join(src_dirname, folder)
+            dest_folder = os.path.join(dest_dirname, folder)
+            if src_folder.startswith(src_path):
+                if os.path.isdir(folder):
+                    shutil.copytree(src_folder, dest_folder)
+                else:
+                    shutil.copy2(src_folder, dest_folder)
+        return dest_path
+
     def get_variation_config(self, variation, output_dir, n_samples=None):
-        data_dir = f"{self.data_dir}/gpt2"
+        data_dir = self.copy_data_to_tempf(self.data_dir,"gpt2")
 
         pp_size, tp_size, dp_size = get_3d_dimensions()
         num_gpus = pp_size * tp_size * dp_size
@@ -354,7 +374,8 @@ class MegDSTestTraining(TestCasePlus):
     def test_training_prefix_lm_all(self, loss_on_targets_only, reweight_loss_based_on_position_frequency):
         # all in one test
         src_dir = self.src_dir
-        data_dir = f"{self.data_dir}/gpt2"
+        data_dir = self.copy_data_to_temp(self.data_dir,"gpt2")
+
         output_dir = self.get_auto_remove_tmp_dir() # "./xxx", after=False)
         logs_dir = f"{output_dir}/logs"
         Path(logs_dir).mkdir(parents=True, exist_ok=True)
@@ -469,7 +490,7 @@ class MegDSTestTraining(TestCasePlus):
         self.assertEqual(len(tensorboard_files), 2, "tensorboard files")
 
     def test_training_t0(self):
-        data_path = f"{self.data_dir}/gpt2/ag_news_prompt"
+        data_path = self.copy_data_to_temp(self.data_dir, "gpt2/ag_news_prompt")
         output_dir = self.get_auto_remove_tmp_dir()
         logs_dir = f"{output_dir}/logs"
         Path(logs_dir).mkdir(parents=True, exist_ok=True)
@@ -584,7 +605,7 @@ class MegDSTestTraining(TestCasePlus):
     @parameterized.expand(["gpt", "prefix", "no_eval"])
     def test_mode2_dataloading(self, variation):
         src_dir = self.src_dir
-        data_dir = f"{self.data_dir}/gpt2"
+        data_dir = self.copy_data_to_temp(self.data_dir, "gpt2")
         output_dir = self.get_auto_remove_tmp_dir() # "./xxx", after=False)
         logs_dir = f"{output_dir}/logs"
         Path(logs_dir).mkdir(parents=True, exist_ok=True)
