@@ -169,35 +169,6 @@ class TestDataLoading(TestCasePlus):
                 self.assertEqual(sample["input_tokens"][-1], tokenizer.sep)
                 self.assertEqual(sample["target_tokens"][-1], tokenizer.sep)
 
-    def test_mtf_dataset(self):
-        command_args = get_default_args()
-        data_path = self.copy_data_to_temp(self.data_dir, "gpt2/ag_news_prompt")
-        command_args["--data-path"] = data_path
-
-        with patch('sys.argv', flatten_arguments(command_args)):
-            with mockenv_context(**self.dist_env_1_gpu):
-                deepspeed.init_distributed()
-                initialize_megatron()
-
-                args = get_args()
-                train_val_test_num_samples = [
-                    args.train_iters * args.global_batch_size,
-                    args.eval_iters * args.global_batch_size,
-                    0
-                ]
-                train_ds, valid_ds, test_ds = mtf_dataset.build_train_valid_test_datasets(
-                    data_prefix=args.data_path,
-                    data_impl=args.data_impl,
-                    splits_string=args.split,
-                    # TODO @thomasw21 figure how that value works
-                    train_valid_test_num_samples=train_val_test_num_samples,
-                    seed=args.seed,
-                    skip_warmup=(not args.mmap_warmup)
-                )
-
-                # TODO @thomasw21 make sure that input and target are aligned.
-
-
     def test_decoder_packed_mtf_dataloader(self):
         command_args = get_default_args()
         data_path = self.copy_data_to_temp(self.data_dir, "gpt2/ag_news_prompt")

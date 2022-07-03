@@ -471,7 +471,7 @@ def _build_sample_idx(mtf_dataset, document_ids, seq_length, row_offset, old_sam
         sample_sizes = mtf_dataset.size(document_id)
 
         # TODO @thomasw21 figure out if we add <eos> tokens
-        tok_len = len(sample_sizes["input_tokens"]) + len(sample_sizes["target_tokens"])
+        tok_len = sample_sizes["input_tokens"] + sample_sizes["target_tokens"]
 
         row_length = row_length + tok_len
         if row_length > seq_length:
