@@ -94,7 +94,7 @@ class MegDSTestTraining(TestCasePlus):
             src_folder = os.path.join(src_dirname, folder)
             dest_folder = os.path.join(dest_dirname, folder)
             if src_folder.startswith(src_path):
-                if os.path.isdir(folder):
+                if os.path.isdir(src_folder):
                     shutil.copytree(src_folder, dest_folder)
                 else:
                     shutil.copy2(src_folder, dest_folder)
