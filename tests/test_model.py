@@ -404,7 +404,7 @@ class MyTestCase(TestCasePlus):
                 for i in range(args.num_attention_heads):
                     torch_assert_equal(torch.nonzero(fused_output[:, i]), torch.nonzero(~dummy_attention_mask[:, 0]))
                 # Issue is we use -10000 in mimicking instead of `inf`
-                torch_assert_equal(fused_output, output)
+                torch_assert_close(fused_output, output)
 
 
     def test_non_causal_decoder_model_with_packed_input_passed_with_attention_mask_is_not_causal_across_segments(self):
