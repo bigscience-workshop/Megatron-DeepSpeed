@@ -468,10 +468,10 @@ def _build_sample_idx(mtf_dataset, document_ids, seq_length, row_offset, old_sam
     assert epoch * len(document_ids) >= current_sample_start
     for current_sample_end, document_id in enumerate(document_ids):
         current_sample_end = epoch * len(document_ids) + current_sample_end
-        sample = mtf_dataset[document_id]
+        sample_sizes = mtf_dataset.size(document_id)
 
         # TODO @thomasw21 figure out if we add <eos> tokens
-        tok_len = len(sample["input_tokens"]) + len(sample["target_tokens"])
+        tok_len = len(sample_sizes["input_tokens"]) + len(sample_sizes["target_tokens"])
 
         row_length = row_length + tok_len
         if row_length > seq_length:
@@ -510,6 +510,7 @@ def get_indexed_dataset(data_prefix: str, is_input: bool, data_impl: str, skip_w
         field = "targets"
 
     return get_indexed_dataset_(f"{data_prefix}_{field}_document", data_impl, skip_warmup)
+
 
 def get_indexed_dataset_(path, data_impl, skip_warmup):
     """Build indexed dataset."""
