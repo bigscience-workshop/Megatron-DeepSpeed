@@ -362,7 +362,7 @@ class DecoderPackedMTFDataset(torch.utils.data.Dataset):
 
             item_num += 1
             cur_len += total_len
-            assert cur_len < self.seq_length
+            assert cur_len <= self.seq_length
 
         return {
             "decoder_token_ids": decoder_tokens,

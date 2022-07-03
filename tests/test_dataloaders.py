@@ -226,7 +226,7 @@ class TestDataLoading(TestCasePlus):
                         # `segment_ids` is [1,2,...]
                         self.assertEqual(segment_ids[:-1], list(range(1, len(segment_ids))))
                         # `0` signify that the tokens are padding
-                        self.assertIn(segment_ids[-1], [0, len(segment_ids) + 1])
+                        self.assertIn(segment_ids[-1], [0, len(segment_ids)])
                         original_samples_count += len([segment_id for segment_id in segment_ids if segment_id != 0])
 
                     # Test that we actually pack, ie we have more samples than the `batch_size`
