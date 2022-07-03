@@ -94,7 +94,10 @@ class MegDSTestTraining(TestCasePlus):
             src_folder = os.path.join(src_dirname, folder)
             dest_folder = os.path.join(dest_dirname, folder)
             if src_folder.startswith(src_path):
-                shutil.copytree(src_folder, dest_folder)
+                if os.path.isdir(folder):
+                    shutil.copytree(src_folder, dest_folder)
+                else:
+                    shutil.copy2(src_folder, dest_folder)
         return dest_path
 
     def get_variation_config(self, variation, output_dir, n_samples=None):
