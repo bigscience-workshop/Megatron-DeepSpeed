@@ -465,9 +465,11 @@ def _build_sample_idx(mtf_dataset, document_ids, seq_length, row_offset, old_sam
 
     full_samples = []
     current_sample_start = old_sample_start
-    assert epoch * len(document_ids) >= current_sample_start
+    epoch_offset = epoch * len(document_ids)
+
+    assert epoch_offset >= current_sample_start
     for current_sample_end, document_id in enumerate(document_ids):
-        current_sample_end = epoch * len(document_ids) + current_sample_end
+        current_sample_end = epoch_offset + current_sample_end
         sample_sizes = mtf_dataset.size(document_id)
 
         # TODO @thomasw21 figure out if we add <eos> tokens
