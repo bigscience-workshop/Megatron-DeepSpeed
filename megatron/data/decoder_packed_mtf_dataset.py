@@ -476,7 +476,8 @@ def _build_sample_idx(mtf_dataset, document_ids, seq_length, row_offset, old_sam
         row_length = row_length + tok_len
         if row_length > seq_length:
             # current sample can't be added and requires to be added in the next one
-            full_samples.append(np.asarray([current_sample_start, current_sample_end]))
+            if current_sample_end > current_sample_start:
+                full_samples.append(np.asarray([current_sample_start, current_sample_end]))
             current_sample_start = current_sample_end
             row_length = tok_len
 
