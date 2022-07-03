@@ -1,4 +1,6 @@
+from functools import partial
 import os
+import multiprocessing
 
 from datasets import load_dataset
 import jsonlines
@@ -332,20 +334,29 @@ TZERO_TASK_LIST = [
     'yelp_review_full_this_place'
 ]
 
-for task_name in TZERO_TASK_LIST:
+# Load first
+# for task_name in TZERO_TASK_LIST:
+#     ds = load_dataset("bigscience/P3", task_name)
+
+def write_to_jsonl(task_name, split):
     ds = load_dataset("bigscience/P3", task_name)
-    for split in ds:
+    if split in ds:
         with jsonlines.open(f'p3_{task_name}_{split}.jsonl', mode='w') as writer:
             for example in ds[split].select(range(len(ds[split]))):
                 writer.write({
                     "inputs": example["inputs_pretokenized"], 
                     "targets": example["targets_pretokenized"]
                 })
-    break
 
-# TODO: Concatenate json files / indexed datasets
+with multiprocessing.Pool(multiprocessing.cpu_count()) as pool:
+    pool.map(partial(write_to_jsonl, split="train"), TZERO_TASK_LIST)
+    pool.map(partial(write_to_jsonl, split="validation"), TZERO_TASK_LIST)
+
 
 """
+DATA_PATH=/gpfswork/rech/six/commun/bigscience-training/jsonls/p3t0/p3_t0_train.jsonl
+OUTPUT=/gpfswork/rech/six/commun/bigscience-training/p3t0/p3_t0_train
+TOKENIZER_PATH="bigscience/tokenizer"
 python tools/preprocess_data.py \
     --input $DATA_PATH \
     --output-prefix $OUTPUT \
@@ -353,7 +364,6 @@ python tools/preprocess_data.py \
     --json-key inputs \
     --tokenizer-type PretrainedFromHF \
     --tokenizer-name-or-path $TOKENIZER_PATH \
-    --append-eod \
     --workers 8
 
 python tools/preprocess_data.py \
