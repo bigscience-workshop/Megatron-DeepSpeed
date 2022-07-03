@@ -32,7 +32,6 @@ class MTFDataset(torch.utils.data.Dataset):
         data_impl,
         skip_warmup,
         documents,
-        seed,
     ):
         # Params to store.
         self.name = name
@@ -58,14 +57,14 @@ class MTFDataset(torch.utils.data.Dataset):
         assert len(target_tokens) > 0
 
         return {
-            'input_tokens': np.array(input_tokens, dtype=np.int64),
-            'target_tokens': np.array(target_tokens, dtype=np.int64),
+            'input_tokens': input_tokens,
+            'target_tokens': target_tokens,
         }
 
     def size(self, index):
         return {
             'input_tokens': self.input_indexed_dataset.size(index),
-            'target_tokens': self.input_indexed_dataset.size(index),
+            'target_tokens': self.target_indexed_dataset.size(index),
         }
 
 def get_indexed_dataset(data_prefix: str, is_input: bool, data_impl: str, skip_warmup: bool):

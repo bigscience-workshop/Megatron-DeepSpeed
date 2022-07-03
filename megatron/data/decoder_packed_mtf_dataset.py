@@ -288,7 +288,7 @@ class DecoderPackedMTFDataset(torch.utils.data.Dataset):
         eos_token: int,
         seed,
     ):
-        self.mtf_dataset = MTFDataset(name=name, data_prefix=data_prefix, data_impl=data_impl, skip_warmup=skip_warmup, documents=documents, seed=seed)
+        self.mtf_dataset = MTFDataset(name=name, data_prefix=data_prefix, data_impl=data_impl, skip_warmup=skip_warmup, documents=documents)
 
         self.pad_token = pad_token
         self.seq_length = seq_length
