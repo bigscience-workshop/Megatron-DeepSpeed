@@ -329,7 +329,7 @@ class DecoderPackedMTFDataset(torch.utils.data.Dataset):
             decoder_is_inputs = [[1, 1, 0, 1, 1, 0, 0]]: `1` depicts inputs, `0` depicts target.
         """
 
-        decoder_tokens = np.full((self.seq_length,), self.pad_token, dtype=torch.int64)
+        decoder_tokens = np.full((self.seq_length,), self.pad_token, dtype=np.int64)
         decoder_segment_ids = np.zeros((self.seq_length,), dtype=np.int64)
         decoder_is_inputs = np.full((self.seq_length,), False, dtype=bool)
 
