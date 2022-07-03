@@ -98,7 +98,7 @@ def get_batch_pipe(data):
     if args.position_embedding_type not in [PositionEmbeddingType.alibi, PositionEmbeddingType.rotary]:
         raise NotImplementedError("absolute positional embeddings require us to reset position_ids accordingly.")
 
-    return (tokens, None, attention_mask), (labels, loss_mask)
+    return (tokens, position_ids, attention_mask), (labels, loss_mask)
 
 
 def train_valid_test_datasets_provider(train_val_test_num_samples):
