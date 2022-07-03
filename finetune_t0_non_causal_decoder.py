@@ -98,7 +98,7 @@ def get_batch_pipe(data):
     if args.position_embedding_type not in [PositionEmbeddingType.alibi, PositionEmbeddingType.rotary]:
         raise NotImplementedError("absolute positional embeddings require us to reset position_ids accordingly.")
 
-    return (tokens, position_ids, attention_mask), (labels, loss_mask)
+    return (tokens, None, attention_mask), (labels, loss_mask)
 
 
 def train_valid_test_datasets_provider(train_val_test_num_samples):
@@ -110,7 +110,6 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
 
     print_rank_0("> building train, validation, and test datasets for T0 ...")
     # Option 1 of data loading using --data-path
-    # For T0, data has to be provided in the form --data-path input-data target-data input-data2 target-data2 ...
     if args.data_path:
         # TODO: Not yet compatible with dataset weights (Will break at prefixes, weights = analyze_data_prefix(args.data_path))
         train_ds, valid_ds, test_ds = build_train_valid_test_datasets(

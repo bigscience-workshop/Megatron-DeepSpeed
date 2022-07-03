@@ -207,7 +207,14 @@ class FusedScaleMaskSoftmax(nn.Module):
 
         if self.scale is not None:
             input = input * self.scale
+
+        if self.attn_mask_type == AttnMaskType.causal:
+            assert mask is None
+            mask = torch.ones_like(input, dtype=torch.bool)
+            mask = torch.triu(mask, diagonal=1, out=mask)
+
         mask_output = self.mask_func(input, mask) if mask is not None else input
+
         probs = torch.nn.Softmax(dim=-1)(mask_output)
 
         if self.input_in_float16 and self.softmax_in_fp32:

@@ -94,14 +94,11 @@ class MegDSTestTraining(TestCasePlus):
             src_folder = os.path.join(src_dirname, folder)
             dest_folder = os.path.join(dest_dirname, folder)
             if src_folder.startswith(src_path):
-                if os.path.isdir(folder):
-                    shutil.copytree(src_folder, dest_folder)
-                else:
-                    shutil.copy2(src_folder, dest_folder)
+                shutil.copytree(src_folder, dest_folder)
         return dest_path
 
     def get_variation_config(self, variation, output_dir, n_samples=None):
-        data_dir = self.copy_data_to_tempf(self.data_dir,"gpt2")
+        data_dir = self.copy_data_to_temp(self.data_dir,"gpt2")
 
         pp_size, tp_size, dp_size = get_3d_dimensions()
         num_gpus = pp_size * tp_size * dp_size
@@ -539,7 +536,6 @@ class MegDSTestTraining(TestCasePlus):
             --save {output_dir}/checkpoints
             --load {output_dir}/checkpoints
             --data-path {data_path}
-            --dataloader-type decoder_packed
             --split 90,10,0
             --tensorboard-dir {output_dir}/tensorboard
             --tensorboard-queue-size 5

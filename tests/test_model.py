@@ -397,14 +397,14 @@ class MyTestCase(TestCasePlus):
 
                 # mimick the same via torch
                 output = scale * dummy_input
-                output = output.masked_fill(dummy_attention_mask, -10000)
+                output = output.masked_fill(dummy_attention_mask, torch.finfo(args.params_dtype).min)
                 output = F.softmax(output, dim=-1)
 
                 # Test that the nonzeros are the same with the mask
                 for i in range(args.num_attention_heads):
                     torch_assert_equal(torch.nonzero(fused_output[:, i]), torch.nonzero(~dummy_attention_mask[:, 0]))
                 # Issue is we use -10000 in mimicking instead of `inf`
-                torch_assert_close(fused_output, output)
+                torch_assert_equal(fused_output, output)
 
 
     def test_non_causal_decoder_model_with_packed_input_passed_with_attention_mask_is_not_causal_across_segments(self):
@@ -460,10 +460,9 @@ class MyTestCase(TestCasePlus):
                     output[change_batch_id, first_segment_first_batch_id_end:],
                     output_changed_target[change_batch_id, first_segment_first_batch_id_end:]
                 )
-                # Check that values did not change in other segments of batch_id > 0
-                torch_assert_equal(output[:change_batch_id:], output_changed_target[:change_batch_id])
-                if change_batch_id + 1 < len(output):
-                    torch_assert_equal(output[change_batch_id + 1:], output_changed_target[change_batch_id + 1:])
+                # Check that values did not change in other segments in other batches
+                non_change_ids = torch.arange(output.shape[0]) != change_batch_id
+                torch_assert_equal(output[non_change_ids], output_changed_target[non_change_ids])
 
                 ## --------------- CHANGE A TARGET TOKEN ---------------------------
                 # change the last token in the first batch to a pad

@@ -293,7 +293,7 @@ class DecoderPackedMTFDataset(torch.utils.data.Dataset):
         self.pad_token = pad_token
         self.seq_length = seq_length
 
-        self.sample_index, self.shuffle_index = _build_index_mappings(name=name, data_prefix=data_prefix, documents=documents, mtf_dataset=self.mtf_dataset, num_samples=num_samples, seq_length=seq_length, seed=seed)
+        self.sample_index, self.shuffle_index = _build_index_mappings(name=name, data_prefix=data_prefix, nb_documents=len(documents), mtf_dataset=self.mtf_dataset, num_samples=num_samples, seq_length=seq_length, seed=seed)
 
     def __len__(self):
         return len(self.sample_index)
@@ -329,9 +329,9 @@ class DecoderPackedMTFDataset(torch.utils.data.Dataset):
             decoder_is_inputs = [[1, 1, 0, 1, 1, 0, 0]]: `1` depicts inputs, `0` depicts target.
         """
 
-        decoder_tokens = torch.full((self.seq_length,), self.pad_token, dtype=torch.int64)
-        decoder_segment_ids = torch.zeros((self.seq_length,), dtype=torch.int64)
-        decoder_is_inputs = torch.full((self.seq_length,), False, dtype=torch.bool)
+        decoder_tokens = np.full((self.seq_length,), self.pad_token, dtype=torch.int64)
+        decoder_segment_ids = np.zeros((self.seq_length,), dtype=np.int64)
+        decoder_is_inputs = np.full((self.seq_length,), False, dtype=bool)
 
         # `0` is reserved for padding
         item_num = 1
@@ -354,9 +354,8 @@ class DecoderPackedMTFDataset(torch.utils.data.Dataset):
                     expected sequence length: {self.seq_length}
                 """)
 
-            decoder_tokens[cur_len: cur_len + input_token_len] = torch.from_numpy(token_dict["input_tokens"])
-            decoder_tokens[cur_len + input_token_len: cur_len + total_len] = torch.from_numpy(
-                token_dict["target_tokens"])
+            decoder_tokens[cur_len: cur_len + input_token_len] = token_dict["input_tokens"]
+            decoder_tokens[cur_len + input_token_len: cur_len + total_len] = token_dict["target_tokens"]
             decoder_segment_ids[cur_len: cur_len + total_len] = item_num
             decoder_is_inputs[cur_len: cur_len + input_token_len] = 1  # inputs
             # targets are already 0 at init, no need to update `decoder_is_inputs`
@@ -365,7 +364,6 @@ class DecoderPackedMTFDataset(torch.utils.data.Dataset):
             cur_len += total_len
             assert cur_len < self.seq_length
 
-        # Normally the default collate_fn handles torch tensor conversion; As we use a custom collate_fn, do it here
         return {
             "decoder_token_ids": decoder_tokens,
             "decoder_segment_ids": decoder_segment_ids,
@@ -376,7 +374,7 @@ class DecoderPackedMTFDataset(torch.utils.data.Dataset):
 def _build_index_mappings(
     name,
     data_prefix,
-    documents,
+    nb_documents,
     mtf_dataset,
     num_samples: int,
     seq_length: int,
@@ -415,7 +413,7 @@ def _build_index_mappings(
             shuffle_idx = []
             sample_idx = []
             while len(sample_idx) <= num_samples:
-                new_document_ids = _build_shuffle_idx(documents=documents, np_rng=np_rng)
+                new_document_ids = _build_shuffle_idx(nb_documents=nb_documents, np_rng=np_rng)
                 # Generate a shuffling of the entire dataset
                 shuffle_idx.append(new_document_ids)
                 # Packs them into a single sample
@@ -475,17 +473,6 @@ def _build_sample_idx(mtf_dataset, document_ids, seq_length, row_offset, old_sam
         # TODO @thomasw21 figure out if we add <eos> tokens
         tok_len = len(sample["input_tokens"]) + len(sample["target_tokens"])
 
-        if tok_len > seq_length:
-            # TODO @thomasw21 handle the case where a single sample cannot fit inside a row. We can
-            #   - silently skip that value [currently implemented]
-            #   - truncate to `seq_length`, and keep the right part
-
-            # Detect is the the sample is the first one.
-            if current_sample_end - 1 > current_sample_start:
-                full_samples.append(np.asarray([current_sample_start, current_sample_end]))
-            current_sample_start = current_sample_end + 1 # skipping
-            row_length = 0
-
         row_length = row_length + tok_len
         if row_length > seq_length:
             # current sample can't be added and requires to be added in the next one
@@ -493,16 +480,21 @@ def _build_sample_idx(mtf_dataset, document_ids, seq_length, row_offset, old_sam
             current_sample_start = current_sample_end
             row_length = tok_len
 
-
-
+            if tok_len > seq_length:
+                # TODO @thomasw21 handle the case where a single sample cannot fit inside a row. We can
+                #   - silently skip that value [currently implemented]
+                #   - truncate to `seq_length`, and keep the right part
+                current_sample_start = current_sample_end + 1  # skipping
+                row_length = 0
+                continue
 
     return full_samples, row_length, current_sample_start
 
-def _build_shuffle_idx(documents: np.array, np_rng):
+def _build_shuffle_idx(nb_documents: int, np_rng):
     """Build the range [0, dataset_size) and shuffle."""
     dtype_ = np.int64
 
-    result = np.arange(start=0, stop=len(documents),step=1, dtype=dtype_)
+    result = np.arange(start=0, stop=nb_documents, step=1, dtype=dtype_)
 
     # in-place shuffling
     np_rng.shuffle(result)

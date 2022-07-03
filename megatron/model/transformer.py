@@ -634,16 +634,10 @@ class ParallelTransformerLayerPipe(ParallelTransformerLayer):
     2) forward(input, **kwargs) -> output
        When the mask is static over all samples, it is advantageous to
        cache the mask and avoid communicating it.
-
-       If no mask is provided, the module will query `self._args.attn_mask`
-       for the mask and only return `super().forward(...)`
     """
     def forward(self, inputs, **kwargs):
         assert torch.is_tensor(inputs) or isinstance(inputs, tuple)
         if torch.is_tensor(inputs) or len(inputs) == 1:
-            # No attention mask forwarded, search for args.attn_mask
-            if not hasattr(self, '_args'):
-                self._args = get_args()
             hidden_states, attention_mask = inputs, None
             return super().forward(hidden_states, attention_mask, **kwargs)
         elif len(inputs) == 2:

@@ -118,10 +118,7 @@ class TestDataLoading(TestCasePlus):
             src_folder = os.path.join(src_dirname, folder)
             dest_folder = os.path.join(dest_dirname, folder)
             if src_folder.startswith(src_path):
-                if os.path.isdir(folder):
-                    shutil.copytree(src_folder, dest_folder)
-                else:
-                    shutil.copy2(src_folder, dest_folder)
+                shutil.copytree(src_folder, dest_folder)
         return dest_path
 
     def test_mlm_dataset(self):
@@ -173,7 +170,6 @@ class TestDataLoading(TestCasePlus):
         command_args = get_default_args()
         data_path = self.copy_data_to_temp(self.data_dir, "gpt2/ag_news_prompt")
         command_args["--data-path"] = data_path
-        command_args["--dataloader-type"] = "decoder_packed"
 
         with patch('sys.argv', flatten_arguments(command_args)):
             with mockenv_context(**self.dist_env_1_gpu):
@@ -203,7 +199,6 @@ class TestDataLoading(TestCasePlus):
         command_args = get_default_args()
         data_path = self.copy_data_to_temp(self.data_dir, "gpt2/ag_news_prompt")
         command_args["--data-path"] = data_path
-        command_args["--dataloader-type"] = "decoder_packed"
 
         with patch('sys.argv', flatten_arguments(command_args)):
             with mockenv_context(**self.dist_env_1_gpu):
@@ -233,12 +228,12 @@ class TestDataLoading(TestCasePlus):
                     skip_warmup=(not args.mmap_warmup)
                 )
 
-                batch_sampler = build_pretraining_data_loader(
+                batch_iterator = build_pretraining_data_loader(
                     train_ds, consumed_samples=0, num_workers=4
                 )
 
                 last_padding_size = 0
-                for i, items in enumerate(batch_sampler):
+                for i, items in enumerate(batch_iterator):
                     micro_batch_size, seq_length = items["decoder_token_ids"].shape
 
                     # Check dtypes
@@ -257,7 +252,7 @@ class TestDataLoading(TestCasePlus):
                         # `segment_ids` is [1,2,...]
                         self.assertEqual(segment_ids[:-1], list(range(1, len(segment_ids))))
                         # `0` signify that the tokens are padding
-                        self.assertEqual(segment_ids[-1], 0)
+                        self.assertIn(segment_ids[-1], [0, len(segment_ids) + 1])
                         original_samples_count += len([segment_id for segment_id in segment_ids if segment_id != 0])
 
                     # Test that we actually pack, ie we have more samples than the `batch_size`
@@ -272,7 +267,7 @@ class TestDataLoading(TestCasePlus):
                     last_padding_size = len([None for segment_id in items["decoder_segment_ids"][micro_batch_size - 1] if segment_id == 0])
 
 
-    def test_finetune_t0_non_causal_decoder_get_bath_pipe(self):
+    def test_finetune_t0_non_causal_decoder_get_batch_pipe(self):
         command_args = get_default_args()
         command_args["--position-embedding-type"] = "alibi"
 
