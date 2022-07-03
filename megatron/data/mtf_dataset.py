@@ -51,8 +51,8 @@ class MTFDataset(torch.utils.data.Dataset):
         return len(self.input_indexed_dataset)
 
     def __getitem__(self, idx):
-        input_tokens = self.input_indexed_dataset.get(self.doc_idx[idx])
-        target_tokens = self.target_indexed_dataset.get(self.doc_idx[idx])
+        input_tokens = self.input_indexed_dataset.get(idx)
+        target_tokens = self.target_indexed_dataset.get(idx)
 
         assert len(input_tokens) > 0
         assert len(target_tokens) > 0
