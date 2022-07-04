@@ -35,7 +35,7 @@ def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
 
     # Single dataset.
     if len(data_prefix) == 1:
-        all_train_datasets, all_valid_datasets, all_test_datasets =  _build_train_valid_test_datasets(data_prefix[0],
+        all_train_datasets, all_valid_datasets, all_test_datasets = _build_train_valid_test_datasets(data_prefix[0],
                                                 data_impl, splits_string,
                                                 train_valid_test_num_samples,
                                                 seq_length, seed, skip_warmup)

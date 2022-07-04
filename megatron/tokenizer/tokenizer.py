@@ -55,7 +55,7 @@ def build_tokenizer(args):
 
         if args.rank == 0:
             print(" vocab file is un-used. loading tokenizer from pre-trained model")
-        tokenizer = _AutoTokenizer(args.tokenizer_name_or_path)
+        tokenizer = _AutoTokenizer(args.tokenizer_name_or_path, vocab_extra_ids=args.vocab_extra_ids)
     else:
         raise NotImplementedError('{} tokenizer is not '
                                   'implemented.'.format(args.tokenizer_type))
@@ -320,24 +320,32 @@ class _GPT2BPETokenizer(AbstractTokenizer):
 class _AutoTokenizer(AbstractTokenizer):
     """AutoTokenizer for Hf Pretrained model loading."""
 
-    def __init__(self, tokenizer_name_or_path):
+    def __init__(self, tokenizer_name_or_path, vocab_extra_ids):
         name = tokenizer_name_or_path
         super().__init__(name)
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path)
+        hf_tokenizer_kwargs = {}
+        if vocab_extra_ids > 0:
+            # TODO @thomasw21 we might need to concatenate to a pre-existing list?
+            hf_tokenizer_kwargs["additional_special_tokens"] = [f"<extra_id_{_id}>" for _id in range(vocab_extra_ids)]
+        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, **hf_tokenizer_kwargs)
         self.encoder = self.tokenizer.get_vocab()
         self.decoder = {v: k for k, v in self.encoder.items()}
 
     @property
     def vocab_size(self):
-        return self.tokenizer.vocab_size
+        return len(self.tokenizer) # vocab_size doesn't contain additional tokens
 
     @property
     def vocab(self):
-        return self.tokenizer.encoder
+        # TODO @thomasw21 make sure that special tokens don't collapse with vocab tokens.
+        return {
+            **{special_token: self.tokenizer.convert_tokens_to_ids(special_token) for special_token in self.tokenizer.additional_special_tokens},
+            **self.tokenizer.vocab,
+        }
 
     @property
     def inv_vocab(self):
-        return self.tokenizer.decoder
+        return {v: k for k, v in self.vocab.items()}
 
     def tokenize(self, text):
         return self.tokenizer.encode(text)
@@ -348,3 +356,32 @@ class _AutoTokenizer(AbstractTokenizer):
     @property
     def eod(self):
         return self.tokenizer.eos_token_id
+
+    @property
+    def cls(self):
+        return self.tokenizer.cls_token_id
+
+    @property
+    def sep(self):
+        return self.tokenizer.sep_token_id
+
+    @property
+    def pad(self):
+        return self.tokenizer.pad_token_id
+
+    @property
+    def mask(self):
+        return self.tokenizer.mask_token_id
+
+    @property
+    def additional_special_tokens_ids(self):
+        """ All the additional special tokens you may want to use (list of strings)."""
+        return self.tokenizer.additional_special_tokens_ids
+
+    @property
+    def bos_token_id(self):
+        raise NotImplementedError("Missing <bos>")
+
+    @property
+    def eos_token_id(self):
+        raise NotImplementedError("Missing <eos>")

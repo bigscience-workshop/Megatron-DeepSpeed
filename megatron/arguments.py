@@ -553,7 +553,7 @@ def _add_training_args(parser):
                        'please refer https://github.com/facebookresearch/bitsandbytes.',
                        dest='use_bnb_optimizer')
     group.add_argument('--dataloader-type', type=str, default=None,
-                       choices=['single', 'cyclic'],
+                       choices=['single', 'cyclic', 'decoder_packed'],
                        help='Single pass vs multiple pass data loader')
     group.add_argument('--cpu-optimizer', action='store_true',
                        help='Run optimizer on CPU')
@@ -567,6 +567,8 @@ def _add_training_args(parser):
                        'will be performed' )
     group.add_argument('--skip-train-iteration-range', type=str, nargs='+', default=None,
                        help='Iteration ranges to skip. The values are one or more dash-separated ranges. e.g., 101-200 251-300.')
+    group.add_argument('--inference', action='store_true',
+                       help='Very basic inference mode: not allocating optim/lr - requires ZERO_STAGE=0')
     group.add_argument('--abort-on-unmet-fused-kernel-constraints', action='store_true',
                        help="If set to True, the program will abort if the constraints for loading a fused kernel aren't met")
     group.add_argument('--pp-partition-method', type=str, default=None,
@@ -927,6 +929,9 @@ def _add_data_args(parser):
                        'specific positions. This option tries to un-bias the loss by reweighting loss on specific '
                        'positions based on how frequently we train on that position.'
                        'This is mostly used for prefix_lm training')
+    group.add_argument("--noise-density", type=float, default=None, help="Span corruption noise density")
+    group.add_argument("--mean-noise-span-length", type=int, default=None, help="Span corruption mean noise span length")
+
 
     return parser
 
