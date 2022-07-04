@@ -24,7 +24,7 @@ from megatron import mpu
 from megatron.training import setup_model_and_optimizer, get_model
 from megatron.mpu.mappings import gather_from_tensor_model_parallel_region
 
-from megatron.utils import get_ltor_masks_and_position_ids, unwrap_model
+from megatron.utils import get_attention_masks_and_position_ids, unwrap_model
 from megatron.p2p_communication import recv_forward, send_forward
 import pickle
 import json
@@ -185,7 +185,7 @@ class EvalHarnessAdaptor(GPT2LM):
     def create_model_inputs(self, tokens):
         args = get_args()
 
-        attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
+        attention_mask, loss_mask, position_ids = get_attention_masks_and_position_ids(
             tokens,
             self.EOT_TOKEN_ID,
             args.reset_position_ids,

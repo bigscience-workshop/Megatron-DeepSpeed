@@ -26,7 +26,7 @@ from megatron.data.gpt_dataset import build_train_valid_test_datasets, build_dat
 from megatron.enums import AttnMaskType
 from megatron.model import GPTModel, GPTModelPipe
 from megatron.training import pretrain
-from megatron.utils import get_ltor_masks_and_position_ids, get_prefix_indices
+from megatron.utils import get_attention_masks_and_position_ids, get_prefix_indices
 from megatron.utils import average_losses_across_data_parallel_group
 
 import deepspeed
@@ -98,7 +98,7 @@ def get_batch(data_iterator):
     tokens = tokens_[:, :-1].contiguous()
 
     # Get the masks and postition ids.
-    attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
+    attention_mask, loss_mask, position_ids = get_attention_masks_and_position_ids(
         tokens,
         tokenizer.eod,
         args.reset_position_ids,
@@ -129,7 +129,7 @@ def get_batch_pipe(data):
     tokens = tokens_[:, :-1].contiguous()
 
     # Get the masks and position ids.
-    attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
+    attention_mask, loss_mask, position_ids = get_attention_masks_and_position_ids(
         tokens,
         tokenizer.eod,
         args.reset_position_ids,

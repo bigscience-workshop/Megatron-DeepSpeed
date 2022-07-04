@@ -151,7 +151,7 @@ def check_adlr_autoresume_termination(iteration, model,
         sys.exit(0)
 
 
-def get_ltor_masks_and_position_ids(
+def get_attention_masks_and_position_ids(
         data,
         eod_token,
         reset_position_ids,
@@ -159,6 +159,7 @@ def get_ltor_masks_and_position_ids(
         eod_mask_loss,
         prefix_indices,
         loss_on_targets_only,
+        ltor: bool = True,
     ):
     """
     Build masks and position id for left to right model.
@@ -177,9 +178,10 @@ def get_ltor_masks_and_position_ids(
         att_mask_batch = micro_batch_size
     else:
         att_mask_batch = 1
-    attention_mask = torch.tril(torch.ones(
-        (att_mask_batch, seq_length, seq_length), device=data.device)).view(
-            att_mask_batch, 1, seq_length, seq_length)
+    attention_mask = torch.ones((att_mask_batch, seq_length, seq_length), device=data.device)
+    if ltor:
+        attention_mask = torch.tril(attention_mask)
+    attention_mask = attention_mask.view(att_mask_batch, 1, seq_length, seq_length)
 
     # Loss mask.
     loss_mask = torch.ones(data.size(), dtype=torch.float, device=data.device)
@@ -198,42 +200,43 @@ def get_ltor_masks_and_position_ids(
         # Loop through the batches:
         for b in range(micro_batch_size):
 
-            # Find indecies where EOD token is.
-            eod_index = position_ids[b, data[b] == eod_token]
+            if reset_position_ids or reset_attention_mask:
+                # Find indecies where EOD token is.
+                eod_index = position_ids[b, data[b] == eod_token]
 
-            # If the last eod token is not the last token of the sequence, we suppose that there is a partial document
-            # We treat this case as if we add an eod token at the end of the sequence.
-            if data[b][-1] != eod_token:
-                eod_index = torch.cat(
-                    (eod_index, torch.tensor([len(data[b])], dtype=eod_index.dtype, device=eod_index.device))
-                )
+                # If the last eod token is not the last token of the sequence, we suppose that there is a partial document
+                # We treat this case as if we add an eod token at the end of the sequence.
+                if data[b][-1] != eod_token:
+                    eod_index = torch.cat(
+                        (eod_index, torch.tensor([len(data[b])], dtype=eod_index.dtype, device=eod_index.device))
+                    )
 
-            # Detach indecies from positions if going to modify positions.
-            if reset_position_ids:
-                eod_index = eod_index.clone()
-
-            # Loop through EOD indecies:
-            prev_index = 0
-            for j in range(eod_index.size()[0]):
-                i = eod_index[j]
-
-                if reset_attention_mask:
-                    # Prevent cross document interactions.
-                    attention_mask[b, 0, (i + 1):, :(i + 1)] = 0
-
-                    # Prefix lm per document.
-                    if prefix_indices:
-                        assert isinstance(prefix_indices[b], list), f"prefix for a row has to be document specific, and consequently return a list, got {prefix_indices[b]}"
-                        attention_mask[b, 0, prev_index: prefix_indices[b][j], prev_index: prefix_indices[b][j]] = 1
-                        if loss_on_targets_only:
-                            # Last token of the prefix should predict the prefix_index id
-                            loss_mask[b, prev_index: prefix_indices[b][j] - 1] = 0.0
-
-                # Reset positions.
+                # Detach indecies from positions if going to modify positions.
                 if reset_position_ids:
-                    position_ids[b, (i + 1):] -= (i + 1 - prev_index)
+                    eod_index = eod_index.clone()
 
-                prev_index = i + 1
+                # Loop through EOD indecies:
+                prev_index = 0
+                for j in range(eod_index.size()[0]):
+                    i = eod_index[j]
+
+                    if reset_attention_mask:
+                        # Prevent cross document interactions.
+                        attention_mask[b, 0, (i + 1):, :(i + 1)] = 0
+
+                        # Prefix lm per document.
+                        if prefix_indices:
+                            assert isinstance(prefix_indices[b], list), f"prefix for a row has to be document specific, and consequently return a list, got {prefix_indices[b]}"
+                            attention_mask[b, 0, prev_index: prefix_indices[b][j], prev_index: prefix_indices[b][j]] = 1
+                            if loss_on_targets_only:
+                                # Last token of the prefix should predict the prefix_index id
+                                loss_mask[b, prev_index: prefix_indices[b][j] - 1] = 0.0
+
+                    # Reset positions.
+                    if reset_position_ids:
+                        position_ids[b, (i + 1):] -= (i + 1 - prev_index)
+
+                    prev_index = i + 1
 
             # Prefix lm per row.
             if prefix_indices is not None and (reset_attention_mask is False):
