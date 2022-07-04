@@ -19,16 +19,16 @@
 
 import numbers
 
-from packaging import version
-import torch
-from torch import nn
-from torch.nn.parameter import Parameter
-import torch.nn.functional as F
-from torch.nn import init
-import importlib
-from megatron import mpu
 
 from megatron import get_args
+from megatron import mpu
+from packaging import version
+from torch import nn
+from torch.nn import init
+from torch.nn.parameter import Parameter
+import importlib
+import torch
+import torch.nn.functional as F
 
 global fused_mix_prec_layer_norm_cuda
 fused_mix_prec_layer_norm_cuda = None
@@ -84,6 +84,7 @@ class MixedFusedLayerNorm(torch.nn.Module):
     self.reset_parameters()
 
     args = get_args()
+    self.layernorm_tp_auto_sync = args.layernorm_tp_auto_sync
 
     self.use_meg_ds_fused_layer_norm = (
       args.bf16 # Current Meg-DS cuda kernel has better throughput than torch.nn.LayerNorm
@@ -99,25 +100,12 @@ class MixedFusedLayerNorm(torch.nn.Module):
 
   def forward(self, input):
 
-    torch.distributed.all_reduce(self.weight, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
-    torch.distributed.all_reduce(self.bias, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
+    if self.layernorm_tp_auto_sync:
+      torch.distributed.all_reduce(self.weight, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
+      torch.distributed.all_reduce(self.bias, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
 
     if self.use_meg_ds_fused_layer_norm:
         return FusedLayerNormAffineFunction.apply(
             input, self.weight, self.bias, self.normalized_shape, self.eps)
     else:
         return F.layer_norm(input, self.normalized_shape, self.weight, self.bias)
-
-
-  def forward1(self, input):
-    # TODO: temporary hack in order to synchronize all layer norms params despite them being
-    # unsynced at the moment due to a bug in deepspeed's bf16 optimizer
-    if 1:
-      tp_world_size = mpu.get_tensor_model_parallel_world_size()
-      weight = torch.clone(self.weight)
-      bias = torch.clone(self.bias)
-      weight = mpu.reduce_from_tensor_model_parallel_region(weight) / tp_world_size
-      bias = mpu.reduce_from_tensor_model_parallel_region(bias) / tp_world_size
-
-    return FusedLayerNormAffineFunction.apply(
-      input, weight, bias, self.normalized_shape,self.eps)
