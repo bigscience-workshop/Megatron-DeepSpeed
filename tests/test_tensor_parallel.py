@@ -18,7 +18,7 @@ import multiprocessing as mp
 from multiprocessing import Pool
 from megatron.checkpointing import save_checkpoint
 
-from megatron.utils import get_ltor_masks_and_position_ids
+from megatron.utils import get_attention_masks_and_position_ids
 
 @require_deepspeed
 @require_torch_multi_gpu
@@ -98,7 +98,7 @@ class MegDSTestTP(TestCasePlus):
                 def create_model_inputs(tokens):
                     args = get_args()
 
-                    attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
+                    attention_mask, loss_mask, position_ids = get_attention_masks_and_position_ids(
                         tokens,
                         tokenizer.eod,
                         args.reset_position_ids,

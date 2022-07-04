@@ -22,7 +22,7 @@ from megatron import print_rank_0
 from megatron import get_timers
 from megatron import get_tokenizer
 from megatron import mpu
-from megatron.data.gpt_dataset import build_train_valid_test_datasets, build_dataset_group
+from megatron.data.mlm_dataset import build_train_valid_test_datasets, build_dataset_group
 from megatron.enums import AttnMaskType
 from megatron.model import GPTModel, GPTModelPipe
 from megatron.training import pretrain
@@ -57,62 +57,9 @@ def model_provider(pre_process=True, post_process=True):
             model._megatron_batch_fn = get_batch_pipe
 
         else:
-            model = GPTModel(
-                num_tokentypes=0,
-                parallel_output=True,
-                pre_process=pre_process,
-                post_process=post_process,
-                prefix_lm=True
-            )
+            raise NotImplementedError("DeepSpeed has to be activated.")
     see_memory_usage(f"After Building Model", force=True)
     return model
-
-
-def get_batch(data_iterator):
-    """Generate a batch"""
-    args = get_args()
-    tokenizer = get_tokenizer()
-
-    # Items and their type.
-    keys = ['text']
-    datatype = torch.int64
-
-    # Broadcast data.
-    if data_iterator is not None:
-        data = next(data_iterator)
-    else:
-        data = None
-    data_b = mpu.broadcast_data(keys, data, datatype)
-
-    # Unpack.
-    tokens_ = data_b['text'].long()
-    labels = tokens_[:, 1:].contiguous()
-    tokens = tokens_[:, :-1].contiguous()
-
-    # Prefix
-    prefix_indices = get_prefix_indices(
-        tokens,
-        tokenizer.eod,
-        partial_prefix_indices=None,
-        reset_attention_mask=args.reset_attention_mask
-    )
-
-    # Get the masks and postition ids.
-    attention_mask, loss_mask, position_ids = get_attention_masks_and_position_ids(
-        tokens,
-        tokenizer.eod,
-        args.reset_position_ids,
-        args.reset_attention_mask,
-        args.eod_mask_loss,
-        prefix_indices=prefix_indices,
-        loss_on_targets_only=args.loss_on_targets_only
-    )
-
-    # weight loss_mask
-    if args.reweight_loss_based_on_position_frequency:
-        reweight_loss_mask_(loss_mask, tokens)
-
-    return tokens, labels, loss_mask, attention_mask, position_ids
 
 def get_batch_pipe(data):
     """Modification of `get_batch` to work on `next(data_iterator)` instead of `data_iterator`"""
@@ -120,68 +67,39 @@ def get_batch_pipe(data):
     tokenizer = get_tokenizer()
 
     # Items and their type.
-    keys = ['text']
+    keys = ["input_tokens", "target_tokens"]
     datatype = torch.int64
 
     # Broadcast data.
     data_b = mpu.broadcast_data(keys, data, datatype)
 
     # Unpack.
-    tokens_ = data_b['text'].long()
+    # Unpack.
+    input_tokens = data_b["input_tokens"].long()
+    target_tokens = data_b["target_tokens"].long()
+    tokens_ = torch.concat([input_tokens, target_tokens], dim=-1)
     labels = tokens_[:, 1:].contiguous()
     tokens = tokens_[:, :-1].contiguous()
 
     # Prefix
-    prefix_indices = get_prefix_indices(
-        tokens,
-        tokenizer.eod,
-        partial_prefix_indices=None,
-        reset_attention_mask=args.reset_attention_mask
-    )
+    batch_size, input_size = input_tokens.shape
+    prefix_indices = torch.full((batch_size,), input_size, dtype=torch.long, device=input_tokens.device)
 
     # Get the masks and position ids.
     attention_mask, loss_mask, position_ids = get_attention_masks_and_position_ids(
         tokens,
         tokenizer.eod,
-        args.reset_position_ids,
-        args.reset_attention_mask,
-        args.eod_mask_loss,
+        # TODO @thomasw21 not supported
+        reset_position_ids=None,
+        # TODO @thomasw21 not supported
+        reset_attention_mask=None,
+        # TODO @thomasw21 not supported
+        eod_mask_loss=False,
         prefix_indices=prefix_indices,
         loss_on_targets_only=args.loss_on_targets_only
     )
 
-    # weight loss_mask
-    if args.reweight_loss_based_on_position_frequency:
-        reweight_loss_mask_(loss_mask, tokens)
-
-    return (tokens, position_ids, attention_mask), (labels, loss_mask), prefix_indices
-
-def loss_func(loss_mask, output_tensor):
-    losses = output_tensor.float()
-    loss_mask = loss_mask.view(-1).float()
-    loss = torch.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
-
-    # Reduce loss for logging.
-    averaged_loss = average_losses_across_data_parallel_group([loss])
-
-    return loss, {'lm loss': averaged_loss[0]}
-
-
-def forward_step(data_iterator, model):
-    """Forward step."""
-    args = get_args()
-    timers = get_timers()
-
-    # Get the batch.
-    timers('batch-generator').start()
-    tokens, labels, loss_mask, attention_mask, position_ids = get_batch(
-        data_iterator)
-    timers('batch-generator').stop()
-
-    output_tensor = model(tokens, position_ids, attention_mask,
-                          labels=labels)
-
-    return output_tensor, partial(loss_func, loss_mask)
+    return (tokens, position_ids, attention_mask), (labels, loss_mask)
 
 
 def train_valid_test_datasets_provider(train_val_test_num_samples):
@@ -198,7 +116,9 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
             data_impl=args.data_impl,
             splits_string=args.split,
             train_valid_test_num_samples=train_val_test_num_samples,
-            seq_length=args.seq_length,
+            sequence_length=args.seq_length,
+            noise_density=args.noise_density,
+            mean_noise_span_length=args.mean_noise_span_length,
             seed=args.seed,
             skip_warmup=(not args.mmap_warmup))
     # Option 2 of data loading using --(train|valid|test)-weighted-split-paths
@@ -261,5 +181,5 @@ def git_ds_info():
 
 if __name__ == "__main__":
     git_ds_info()
-    pretrain(train_valid_test_datasets_provider, model_provider, forward_step,
+    pretrain(train_valid_test_datasets_provider, model_provider, forward_step_func=None,
              args_defaults={'tokenizer_type': 'GPT2BPETokenizer'})

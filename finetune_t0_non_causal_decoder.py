@@ -8,7 +8,7 @@ from megatron.data.decoder_packed_mtf_dataset import build_train_valid_test_data
 from megatron.enums import PositionEmbeddingType, AttnMaskType
 from megatron.model import GPTModelPipe
 from megatron.training import pretrain
-from megatron.utils import get_ltor_masks_and_position_ids, get_packed_attention_mask
+from megatron.utils import get_attention_masks_and_position_ids, get_packed_attention_mask
 
 import deepspeed
 from deepspeed.runtime.utils import see_memory_usage
@@ -73,7 +73,7 @@ def get_batch_pipe(data):
     decoder_is_inputs = data_c["decoder_is_inputs"][:, :-1]
 
     # Get the masks and position ids.
-    causal_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
+    causal_mask, loss_mask, position_ids = get_attention_masks_and_position_ids(
         tokens,
         tokenizer.eod,
         args.reset_position_ids,
