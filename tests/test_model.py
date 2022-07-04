@@ -403,7 +403,7 @@ class MyTestCase(TestCasePlus):
                 # Test that the nonzeros are the same with the mask
                 for i in range(args.num_attention_heads):
                     torch_assert_equal(torch.nonzero(fused_output[:, i]), torch.nonzero(~dummy_attention_mask[:, 0]))
-                # Issue is we use -10000 in mimicking instead of `inf`
+                # Cuda kernel produces slightly different results
                 torch_assert_close(fused_output, output)
 
 
