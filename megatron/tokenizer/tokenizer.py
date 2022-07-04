@@ -327,7 +327,7 @@ class _AutoTokenizer(AbstractTokenizer):
         if vocab_extra_ids > 0:
             # TODO @thomasw21 we might need to concatenate to a pre-existing list?
             hf_tokenizer_kwargs["additional_special_tokens"] = [f"<extra_id_{_id}>" for _id in range(vocab_extra_ids)]
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, **hf_tokenizer_kwargs)
+        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, **hf_tokenizer_kwargs, use_fast=False)
         self.encoder = self.tokenizer.get_vocab()
         self.decoder = {v: k for k, v in self.encoder.items()}
 
