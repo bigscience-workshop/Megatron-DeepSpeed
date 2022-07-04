@@ -4,13 +4,14 @@ import time
 import numpy as np
 import torch
 
-from megatron import print_rank_0, mpu
+from megatron import print_rank_0, mpu, logging
 from megatron.data.blendable_dataset import BlendableDataset
 from megatron.data.dataset_utils import get_datasets_weights_and_num_samples, get_split_by_range_, \
     get_train_valid_test_split_
 from megatron.data.mtf_dataset import MTFDataset
 from megatron.data.indexed_dataset import make_dataset as make_indexed_dataset
 
+logger = logging.get_logger(__name__)
 
 def build_train_valid_test_datasets(
     data_prefix,
@@ -487,6 +488,7 @@ def _build_sample_idx(mtf_dataset, document_ids, seq_length, row_offset, old_sam
                 # TODO @thomasw21 handle the case where a single sample cannot fit inside a row. We can
                 #   - silently skip that value [currently implemented]
                 #   - truncate to `seq_length`, and keep the right part
+                logger.warning(f"Skipping sample id={document_id}. Maximum sequence length: {seq_length}, sample length: {tok_len}")
                 current_sample_start = current_sample_end + 1  # skipping
                 row_length = 0
                 continue
