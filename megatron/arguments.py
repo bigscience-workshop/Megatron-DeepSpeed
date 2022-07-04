@@ -557,7 +557,7 @@ def _add_training_args(parser):
                        'please refer https://github.com/facebookresearch/bitsandbytes.',
                        dest='use_bnb_optimizer')
     group.add_argument('--dataloader-type', type=str, default=None,
-                       choices=['single', 'cyclic'],
+                       choices=['single', 'cyclic', 'decoder_packed'],
                        help='Single pass vs multiple pass data loader')
     group.add_argument('--cpu-optimizer', action='store_true',
                        help='Run optimizer on CPU')
@@ -931,8 +931,8 @@ def _add_data_args(parser):
                        'specific positions. This option tries to un-bias the loss by reweighting loss on specific '
                        'positions based on how frequently we train on that position.'
                        'This is mostly used for prefix_lm training')
-    group.add_argument("--noise_density", type=float, default=None, help="Span corruption noise density")
-    group.add_argument("--mean_noise_span_length", type=int, default=None, help="Span corruption mean noise span length")
+    group.add_argument("--noise-density", type=float, default=None, help="Span corruption noise density")
+    group.add_argument("--mean-noise-span-length", type=int, default=None, help="Span corruption mean noise span length")
 
 
     return parser
