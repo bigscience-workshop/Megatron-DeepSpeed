@@ -11,7 +11,7 @@ from megatron.model.fused_layer_norm import MixedFusedLayerNorm
 from packaging import version
 
 from megatron import initialize_megatron, get_args, get_tokenizer, global_vars
-from megatron.testing_utils import TestCasePlus, mockenv_context, flatten_arguments, torch_assert_equal
+from megatron.testing_utils import TestCasePlus, mockenv_context, flatten_arguments, torch_assert_equal, require_torch_bf16
 from megatron.training import setup_model_and_optimizer
 from pretrain_gpt import model_provider as gpt_model_provider, get_batch_pipe as get_gpt_batch_pipe
 from pretrain_prefix_lm import model_provider as prefix_lm_model_provider, get_batch_pipe as get_prefix_lm_batch_pipe
@@ -270,6 +270,7 @@ class MyTestCase(TestCasePlus):
 
                 #TODO: Check all invariants
 
+    @require_torch_bf16
     def test_fused_layer_norm(self):
         command_args = get_default_args()
 
