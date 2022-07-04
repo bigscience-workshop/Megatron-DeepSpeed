@@ -288,7 +288,7 @@ class DecoderPackedMTFDataset(torch.utils.data.Dataset):
         eos_token: int,
         seed,
     ):
-        self.mtf_dataset = MTFDataset(name=name, data_prefix=data_prefix, data_impl=data_impl, skip_warmup=skip_warmup, documents=documents, seed=seed)
+        self.mtf_dataset = MTFDataset(name=name, data_prefix=data_prefix, data_impl=data_impl, skip_warmup=skip_warmup, documents=documents)
 
         self.pad_token = pad_token
         self.seq_length = seq_length
@@ -362,7 +362,7 @@ class DecoderPackedMTFDataset(torch.utils.data.Dataset):
 
             item_num += 1
             cur_len += total_len
-            assert cur_len < self.seq_length
+            assert cur_len <= self.seq_length
 
         return {
             "decoder_token_ids": decoder_tokens,
@@ -465,13 +465,15 @@ def _build_sample_idx(mtf_dataset, document_ids, seq_length, row_offset, old_sam
 
     full_samples = []
     current_sample_start = old_sample_start
-    assert epoch * len(document_ids) >= current_sample_start
+    epoch_offset = epoch * len(document_ids)
+
+    assert epoch_offset >= current_sample_start
     for current_sample_end, document_id in enumerate(document_ids):
-        current_sample_end = epoch * len(document_ids) + current_sample_end
-        sample = mtf_dataset[document_id]
+        current_sample_end = epoch_offset + current_sample_end
+        sample_sizes = mtf_dataset.size(document_id)
 
         # TODO @thomasw21 figure out if we add <eos> tokens
-        tok_len = len(sample["input_tokens"]) + len(sample["target_tokens"])
+        tok_len = sample_sizes["input_tokens"] + sample_sizes["target_tokens"]
 
         row_length = row_length + tok_len
         if row_length > seq_length:
@@ -510,6 +512,7 @@ def get_indexed_dataset(data_prefix: str, is_input: bool, data_impl: str, skip_w
         field = "targets"
 
     return get_indexed_dataset_(f"{data_prefix}_{field}_document", data_impl, skip_warmup)
+
 
 def get_indexed_dataset_(path, data_impl, skip_warmup):
     """Build indexed dataset."""

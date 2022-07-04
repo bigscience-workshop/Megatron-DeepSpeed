@@ -169,35 +169,6 @@ class TestDataLoading(TestCasePlus):
                 self.assertEqual(sample["input_tokens"][-1], tokenizer.sep)
                 self.assertEqual(sample["target_tokens"][-1], tokenizer.sep)
 
-    def test_mtf_dataset(self):
-        command_args = get_default_args()
-        data_path = self.copy_data_to_temp(self.data_dir, "gpt2/ag_news_prompt")
-        command_args["--data-path"] = data_path
-
-        with patch('sys.argv', flatten_arguments(command_args)):
-            with mockenv_context(**self.dist_env_1_gpu):
-                deepspeed.init_distributed()
-                initialize_megatron()
-
-                args = get_args()
-                train_val_test_num_samples = [
-                    args.train_iters * args.global_batch_size,
-                    args.eval_iters * args.global_batch_size,
-                    0
-                ]
-                train_ds, valid_ds, test_ds = mtf_dataset.build_train_valid_test_datasets(
-                    data_prefix=args.data_path,
-                    data_impl=args.data_impl,
-                    splits_string=args.split,
-                    # TODO @thomasw21 figure how that value works
-                    train_valid_test_num_samples=train_val_test_num_samples,
-                    seed=args.seed,
-                    skip_warmup=(not args.mmap_warmup)
-                )
-
-                # TODO @thomasw21 make sure that input and target are aligned.
-
-
     def test_decoder_packed_mtf_dataloader(self):
         command_args = get_default_args()
         data_path = self.copy_data_to_temp(self.data_dir, "gpt2/ag_news_prompt")
@@ -255,7 +226,7 @@ class TestDataLoading(TestCasePlus):
                         # `segment_ids` is [1,2,...]
                         self.assertEqual(segment_ids[:-1], list(range(1, len(segment_ids))))
                         # `0` signify that the tokens are padding
-                        self.assertIn(segment_ids[-1], [0, len(segment_ids) + 1])
+                        self.assertIn(segment_ids[-1], [0, len(segment_ids)])
                         original_samples_count += len([segment_id for segment_id in segment_ids if segment_id != 0])
 
                     # Test that we actually pack, ie we have more samples than the `batch_size`
