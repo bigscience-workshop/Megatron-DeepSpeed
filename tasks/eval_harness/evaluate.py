@@ -288,47 +288,10 @@ def override_args(args, override_args, skip_keys, skip_if_specified_keys):
 # We then use the megatron deepspeed converter to load the deepspeed checkpoints as if they we're megatron checkpoints.
 def load_ds_checkpoint_and_setup_megatron(args):
     _print_args = megatron.arguments._print_args
-    megatron.arguments._print_args = lambda *_args, **kwarg: None
+    # megatron.arguments._print_args = lambda *_args, **kwarg: None
 
     if not os.path.exists(args.load):
         raise ValueError(f"checkpoint path {args.load} doesn't exit")
-
-    ds_checkpoint = DeepSpeedCheckpoint(args.load,
-                                        tp_degree=args.tensor_model_parallel_size,
-                                        pp_degree=args.pipeline_model_parallel_size)
-
-
-    cp_args = ds_checkpoint.get_args()
-    # Merge the current args with the checkpoint args.
-    skip_keys = [
-        'abort_on_unmet_fused_kernel_constraints',
-        'batch_size',
-        'data_parallel_size',
-        'deepspeed',
-        'deepspeed_config',
-        'device_count',
-        'global_batch_size',
-        'inference',
-        'iteration',
-        'load',
-        'local_rank',
-        'micro_batch_size',
-        'pipeline_model_parallel_size',
-        'rampup_batch_size',
-        'rank',
-        'tensor_model_parallel_size',
-        'tensorboard_dir',
-        'world_size',
-    ]
-
-    skip_if_specified = ['merge_file', 'vocab_file']
-
-    if args.eval_fp32:
-        cp_args.fp16 = False
-        cp_args.bf16 = False
-        cp_args.params_dtype = torch.float32
-
-    override_args(args, cp_args, skip_keys, skip_if_specified)
 
     # stop megatron from reparsing the arguments.
     megatron.global_vars._parse_args = lambda *_args, **kwarg: args
@@ -336,9 +299,6 @@ def load_ds_checkpoint_and_setup_megatron(args):
 
     initialize_megatron()
     torch.distributed.barrier()
-
-    # Initializing megatron will update eg. tokenizer size. Override again.
-    override_args(args, cp_args, skip_keys, skip_if_specified)
 
     # print final arguments.
     _print_args(args)
