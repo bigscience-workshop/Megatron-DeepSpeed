@@ -40,7 +40,7 @@ def pack_samples(items, max_seq_len: int, micro_batch_size: int, pad_token: int)
                 'target_tokens': array([5])
             }
         ]
-    
+
     Output:
         decoder_target_tokens = [[6, 7, 8, 3, 4, 5, <pad>]]: Concatenation of tokens followed with padding tokens.
         decoder_segment_ids = [[1, 1, 1, 2, 2, 2, 0]]: Segment ids determine original documents.
@@ -139,6 +139,7 @@ def build_pretraining_data_loader(dataset, consumed_samples, num_workers=None):
         dataset,
         batch_sampler=batch_sampler,
         num_workers=num_workers,
+        generator=torch.Generator().manual_seed(args.seed),
         collate_fn=collate_fn,
         pin_memory=True
     )
