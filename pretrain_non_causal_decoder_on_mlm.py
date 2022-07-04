@@ -13,21 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Pretrain GPT"""
+"""Pretrain GPT on MLM dataset"""
 
 import torch
-from functools import partial
 from megatron import get_args
 from megatron import print_rank_0
-from megatron import get_timers
 from megatron import get_tokenizer
 from megatron import mpu
 from megatron.data.mlm_dataset import build_train_valid_test_datasets, build_dataset_group
 from megatron.enums import AttnMaskType
-from megatron.model import GPTModel, GPTModelPipe
+from megatron.model import GPTModelPipe
 from megatron.training import pretrain
-from megatron.utils import get_attention_masks_and_position_ids, get_prefix_indices, reweight_loss_mask_
-from megatron.utils import average_losses_across_data_parallel_group
+from megatron.utils import get_attention_masks_and_position_ids
 
 import deepspeed
 from deepspeed.runtime.utils import see_memory_usage
