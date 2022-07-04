@@ -83,6 +83,8 @@ pip install -r requirements-ms.txt
 
 - apex - needs a hack to deal with mismatching minor cuda versions (and it takes forever to build), so using this patch:
 
+XXX: this no longer works - had to manually patch pytorch to avoid mismatch failure
+
 ```
 --- a/setup.py
 +++ b/setup.py
@@ -110,8 +112,8 @@ cd code/apex
 
 Once the needed things got installed (and every time anything new is installed) a new AMI must be created (this is like an .iso image snapshot)
 
-1. go to https://us-east-2.console.aws.amazon.com/ec2/v2/home?region=us-east-1#Instances:
-2. choose the image to create a new image from
+1. go to https://us-east-1.console.aws.amazon.com/ec2/v2/home?region=us-east-1#Instances:
+2. choose the instance to create a new image from
 3. Actions -> Image and Templates -> Create Image
 
 Must ensure it's created in the correct region (same as in script) - or can copy it to the right region.

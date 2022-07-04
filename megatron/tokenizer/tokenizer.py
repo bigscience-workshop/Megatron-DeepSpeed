@@ -385,5 +385,3 @@ class _AutoTokenizer(AbstractTokenizer):
     @property
     def eos_token_id(self):
         raise NotImplementedError("Missing <eos>")
-
-

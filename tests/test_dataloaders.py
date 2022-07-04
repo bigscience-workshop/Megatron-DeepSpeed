@@ -1,13 +1,16 @@
+import itertools
+import unittest
 from unittest.mock import patch
 
 import deepspeed
 
 from megatron import global_vars, get_tokenizer, initialize_megatron, get_args
-from megatron.data import mlm_dataset
+from megatron.data import mlm_dataset, mtf_dataset
+from megatron.data.data_samplers import build_pretraining_data_loader
 from megatron.testing_utils import TestCasePlus, flatten_arguments, mockenv_context
 
 
-def get_default_args(data_dir):
+def get_default_args():
     """return a dictionary with key as argument name and value as additional arguments"""
     return {
         # GPT_ARGS
@@ -25,7 +28,6 @@ def get_default_args(data_dir):
         "--train-iters": "5000",
         "--tokenizer-type": "PretrainedFromHF",
         "--tokenizer-name-or-path": "gpt2",
-        "--data-path": f"{data_dir}/meg-gpt2-openwebtext_text_document",
         "--data-impl": "mmap",
         "--split": "949,50,1",
         "--distributed-backend": "nccl",
@@ -63,10 +65,12 @@ class TestDataLoading(TestCasePlus):
             MASTER_ADDR="localhost", MASTER_PORT="9994", RANK="0", LOCAL_RANK="0", WORLD_SIZE="1"
         )
 
+    @unittest.skip("broken test")
     def test_mlm_dataset(self):
-        command_args = get_default_args(f"{self.data_dir}/gpt2")
-        command_args["--noise_density"] = "0.15"
-        command_args["--mean_noise_span_length"] = "3"
+        command_args = get_default_args()
+        command_args["--data-path"] = f"{self.data_dir}/gpt2/meg-gpt2-openwebtext_text_document"
+        command_args["--noise-density"] = "0.15"
+        command_args["--mean-noise-span-length"] = "3"
         command_args["--vocab-extra-ids"] = "100"
 
         with patch('sys.argv', flatten_arguments(command_args)):
@@ -106,3 +110,90 @@ class TestDataLoading(TestCasePlus):
                 self.assertEqual(sample["input_tokens"][-1], tokenizer.sep)
                 self.assertEqual(sample["target_tokens"][-1], tokenizer.sep)
 
+    def test_mtf_dataset(self):
+        command_args = get_default_args()
+        command_args["--data-path"] = f"{self.data_dir}/gpt2/ag_news_prompt"
+        command_args["--dataloader-type"] = "decoder_packed"
+
+        with patch('sys.argv', flatten_arguments(command_args)):
+            with mockenv_context(**self.dist_env_1_gpu):
+                deepspeed.init_distributed()
+                initialize_megatron()
+
+                args = get_args()
+                train_val_test_num_samples = [
+                    args.train_iters * args.global_batch_size,
+                    args.eval_iters * args.global_batch_size,
+                    0
+                ]
+                train_ds, valid_ds, test_ds = mtf_dataset.build_train_valid_test_datasets(
+                    data_prefix=args.data_path,
+                    data_impl=args.data_impl,
+                    splits_string=args.split,
+                    # TODO @thomasw21 figure how that value works
+                    train_valid_test_num_samples=train_val_test_num_samples,
+                    seed=args.seed,
+                    skip_warmup=(not args.mmap_warmup)
+                )
+
+                # TODO @thomasw21 make sure that input and target are aligned.
+
+
+    def test_mtf_packed_dataloader(self):
+        command_args = get_default_args()
+        command_args["--data-path"] = f"{self.data_dir}/gpt2/ag_news_prompt"
+        command_args["--dataloader-type"] = "decoder_packed"
+
+        with patch('sys.argv', flatten_arguments(command_args)):
+            with mockenv_context(**self.dist_env_1_gpu):
+                deepspeed.init_distributed()
+                initialize_megatron()
+
+                args = get_args()
+                train_val_test_num_samples = [
+                    args.train_iters * args.global_batch_size,
+                    args.eval_iters * args.global_batch_size,
+                    0
+                ]
+                train_ds, valid_ds, test_ds = mtf_dataset.build_train_valid_test_datasets(
+                    data_prefix=args.data_path,
+                    data_impl=args.data_impl,
+                    splits_string=args.split,
+                    # TODO @thomasw21 figure how that value works
+                    train_valid_test_num_samples=train_val_test_num_samples,
+                    seed=args.seed,
+                    skip_warmup=(not args.mmap_warmup)
+                )
+
+                batch_sampler = build_pretraining_data_loader(
+                    train_ds, consumed_samples=0, num_workers=4
+                )
+
+                last_padding_size = 0
+                for i, items in enumerate(batch_sampler):
+                    micro_batch_size, seq_length = items["decoder_target_tokens"].shape
+
+                    # `micro_batch_size` correspond to the one in argument
+                    self.assertEqual(micro_batch_size, args.micro_batch_size)
+                    # `seq_length` correspond to the one in argument + 1 in order to get tokens/labels
+                    self.assertEqual(seq_length, args.seq_length + 1)
+
+                    original_samples_count = 0
+                    for batch_id in range(micro_batch_size):
+                        segment_ids = [k for k, _ in itertools.groupby(items["decoder_segment_ids"][batch_id])]
+                        # `segment_ids` is [1,2,...]
+                        self.assertEqual(segment_ids[:-1], list(range(1, len(segment_ids))))
+                        # `0` signify that the tokens are padding
+                        self.assertIn(segment_ids[-1], [0, len(segment_ids) + 1])
+                        original_samples_count += len([segment_id for segment_id in segment_ids if segment_id != 0])
+
+                    # Test that we actually pack, ie we have more samples than the `batch_size`
+                    self.assertGreater(original_samples_count, micro_batch_size)
+
+                    # Test that the first sample of each batch couldn't fit inside the previous batch
+                    first_sample_segment_ids = next(itertools.groupby(items["decoder_segment_ids"][0]))[1]
+                    first_sample_size = len(list(first_sample_segment_ids))
+                    self.assertGreater(first_sample_size, last_padding_size)
+
+                    # update `last_padding_size`
+                    last_padding_size = len([None for segment_id in items["decoder_segment_ids"][micro_batch_size - 1] if segment_id == 0])
