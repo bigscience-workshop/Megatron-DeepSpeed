@@ -95,7 +95,7 @@ CMD="./tasks/eval_harness/evaluate_bsevalharness.py  \
     --deepspeed_config ds_config.json \
     --intermed_results \
     --adaptive_seq_len \
-    --micro_bs_multiplier 4 \
+    --micro_bs_multiplier 16 \
     $MEGATRON_REQUIRED_ARGS \
     "
 

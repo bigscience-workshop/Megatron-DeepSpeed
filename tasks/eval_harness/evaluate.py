@@ -157,7 +157,7 @@ class EvalHarnessAdaptor(GPT2LM):
                 logits = self._model_call(torch.cat(inps, dim=0))
                 res_len += len(chunk)
                 if logits is not None:
-                    multi_logits = F.log_softmax(logits, dim=-1).cpu()  # [batch, seq, vocab]
+                    multi_logits = F.log_softmax(logits, dim=-1) # [batch, seq, vocab]
 
                     for (cache_key, _, _), logits, inp, inplen, cont_toks in zip(chunk, multi_logits, inps, inplens, contlens):
                         contlen = len(cont_toks)
@@ -217,7 +217,7 @@ class EvalHarnessAdaptor(GPT2LM):
 
 
             if output is not None:
-                output = torch.cat(output, 0)[:len(inps)]
+                output = torch.cat([o.cpu() for o in output], 0)[:len(inps)]
             else:
                 output = None
 
