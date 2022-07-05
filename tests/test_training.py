@@ -167,6 +167,7 @@ class MegDSTestTraining(TestCasePlus):
                 --clip-grad 1.0
                 --weight-decay 1e-1
                 --embed-layernorm
+                --layernorm-tp-auto-sync
                 --fp16
 
                 --log-level debug

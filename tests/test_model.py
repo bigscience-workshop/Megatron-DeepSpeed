@@ -11,9 +11,9 @@ from megatron.model.fused_layer_norm import MixedFusedLayerNorm
 from packaging import version
 
 from megatron import initialize_megatron, get_args, get_tokenizer, global_vars
-from megatron.model.fused_softmax import FusedScaleMaskSoftmax, ScaledMaskedSoftmax
+from megatron.model.fused_softmax import ScaledMaskedSoftmax
 from megatron.testing_utils import TestCasePlus, mockenv_context, flatten_arguments, torch_assert_equal, \
-    torch_assert_close
+    torch_assert_close, require_torch_bf16
 from megatron.training import setup_model_and_optimizer
 import pretrain_gpt
 import pretrain_prefix_lm
@@ -328,6 +328,7 @@ class MyTestCase(TestCasePlus):
 
                 #TODO: Check all invariants
 
+    @require_torch_bf16
     def test_fused_layer_norm(self):
         command_args = get_default_args(self.test_file_dir_str)
 

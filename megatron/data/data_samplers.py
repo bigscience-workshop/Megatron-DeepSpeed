@@ -56,6 +56,7 @@ def build_pretraining_data_loader(dataset, consumed_samples, num_workers=None):
         dataset,
         batch_sampler=batch_sampler,
         num_workers=num_workers,
+        generator=torch.Generator().manual_seed(args.seed),
         collate_fn=None,
         pin_memory=True
     )
@@ -150,7 +151,6 @@ class MegatronPretrainingRandomSampler:
 
         g = torch.Generator()
         g.manual_seed(self.epoch)
-
         random_idx = torch.randperm(bucket_size, generator=g).tolist()
         idx_range = [start_idx + x for x in random_idx[bucket_offset:]]
 
