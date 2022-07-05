@@ -197,7 +197,7 @@ class EvalHarnessAdaptor(GPT2LM):
             prefix_indices=None,
             loss_on_targets_only=False)
 
-        position_ids = position_ids -1
+        position_ids = position_ids + 2
 
         return (tokens, position_ids, attention_mask), (tokens, loss_mask)
 
