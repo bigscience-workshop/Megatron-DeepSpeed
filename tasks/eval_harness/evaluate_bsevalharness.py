@@ -13,6 +13,9 @@ import logging
 import os
 import sys
 import datetime
+
+from megatron.checkpointing import load_checkpoint
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
                                              os.path.pardir,os.path.pardir)))
 
