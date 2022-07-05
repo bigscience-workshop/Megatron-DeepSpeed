@@ -48,9 +48,9 @@ def attention_mask_func(attention_scores, attention_mask):
         if actual_seqlen != attention_mask_.size()[2]:
             # attention_mask has size [1, 1, seqlen, seqlen]
             attention_mask_ = attention_mask_[:, :, :actual_seqlen, :actual_seqlen].contiguous()
-        attention_scores.masked_fill_(attention_mask_, -10000.0)
+        attention_scores.masked_fill_(attention_mask_, torch.finfo(attention_scores.dtype).min)
     else:
-        attention_scores.masked_fill_(attention_mask, -10000.0)
+        attention_scores.masked_fill_(attention_mask, torch.finfo(attention_scores.dtype).min)
     return attention_scores
 
 
