@@ -323,11 +323,11 @@ def load_ds_checkpoint_and_setup_megatron(args):
         cp_path = args.load
         args.load = None
         model, _, _ = setup_model_and_optimizer(model_provider)
-        model = model[0]
-        zero_enabled = model._config.zero_enabled
-        model._config.zero_enabled = False
+        zero_enabled = model[0]._config.zero_enabled
+        model[0]._config.zero_enabled = False
         load_checkpoint(model, optimizer=None, lr_scheduler=None)
-        model._config.zero_enabled = zero_enabled
+        model[0]._config.zero_enabled = zero_enabled
+        model = model[0]
     else:
         model = get_model(model_provider)[0]
         # Initialize megatron model using the parsed state dict.
