@@ -82,7 +82,7 @@ class EvalHarnessAdaptor(GPT2LM):
                 # end of text as context
                 context_enc = [self.EOT_TOKEN_ID]
             else:
-                context_enc = self.tokenizer_encode(context)
+                context_enc = [self.EOT_TOKEN_ID, self.tokenizer_encode(context)]
 
             continuation_enc = self.tokenizer_encode(continuation)
 
@@ -193,6 +193,8 @@ class EvalHarnessAdaptor(GPT2LM):
             args.eod_mask_loss,
             prefix_indices=None,
             loss_on_targets_only=False)
+
+        position_ids = position_ids -1
 
         return (tokens, position_ids, attention_mask), (tokens, loss_mask)
 
