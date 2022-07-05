@@ -388,6 +388,15 @@ def main():
     # parse the megatron args. But wait with initalizing megatron.
     # avoid printing the arguments, since they will later be overridden.
     args = _parse_args(tasks_args)
+
+    # TODO @thomasw21 If all the tasks require `greedy_until` then we early stop as this isn't implemented
+    task_list = ALL_TASKS if args.task_list == 'all' else args.task_list.split(',')
+    task_dict = tasks.get_task_dict_promptsource(task_list)
+    task_dict = {task_name: task for task_name, task in task_dict.items() if task.need_greedy_until is False}
+    if len(task_dict) == 0:
+        print_rank_0("Early stopping as `greedy_until` is not implemented yet.")
+        return
+
     load_path = args.load
     model = load_ds_checkpoint_and_setup_megatron(args)
 
@@ -397,9 +406,6 @@ def main():
         # CL automatically enables reset_activation_shape() which allows us to change input shapes
         # and it also reshapes the attenion scores in attention_mask_func
         args.curriculum_learning = 1
-
-    task_list = ALL_TASKS if args.task_list == 'all' else args.task_list.split(',')
-    task_dict = tasks.get_task_dict_promptsource(task_list)
 
     model.module.activation_checkpoint_interval = 0
     model._compute_loss = False
