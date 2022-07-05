@@ -352,6 +352,7 @@ def tasks_args(parser):
     group.add_argument('--intermed_results',  default = False, action='store_true', help='Whether to print & write intermediate results for each task')
     group.add_argument('--bootstrap_iters', type=int, default=100000, help='How many iterations to use for stderr estimation')
     group.add_argument('--micro_bs_multiplier', type=int, default=1, help='Increase the global batch size to remove bubble when pipeline parallel')
+    group.add_argument('--offloadearly',  default = False, action='store_true', help='Offloads logits to CPU earlier to allow using a higher micro_bs_multiplier - Speeds up eval by up to 1.5x for 176B')
     return parser
 
 from megatron.global_vars import _parse_args
