@@ -3,6 +3,9 @@ from logging import logMultiprocessing
 import os
 import sys
 import datetime
+
+from megatron.checkpointing import load_checkpoint
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
                                              os.path.pardir,os.path.pardir)))
 
@@ -323,7 +326,7 @@ def load_ds_checkpoint_and_setup_megatron(args):
         model = model[0]
         zero_enabled = model._config.zero_enabled
         model._config.zero_enabled = False
-        _, _ = model.load_checkpoint(cp_path, tag = '.', load_optimizer_states=False, load_lr_scheduler_states=False, load_module_only=True)
+        load_checkpoint(model, optimizer=None, lr_scheduler=None)
         model._config.zero_enabled = zero_enabled
     else:
         model = get_model(model_provider)[0]
