@@ -224,6 +224,8 @@ class EvalHarnessAdaptor:
             prefix_indices=None,
             loss_on_targets_only=False)
 
+        position_ids = position_ids + 2
+
         return (tokens, position_ids, attention_mask), (tokens, loss_mask)
 
     def _model_call(self, inps, count_lens, input):
