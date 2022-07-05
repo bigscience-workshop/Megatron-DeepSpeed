@@ -17,7 +17,6 @@
 
 from functools import partial
 import torch
-from torch import nn
 
 from megatron import get_args
 from megatron import mpu
@@ -196,20 +195,6 @@ def get_cross_entropy(is_prefix: bool):
     return CrossEntropy
 
 
-class OutputVocab(nn.Module):
-    """Useful when models don't have a shared embedding space"""
-    def __init__(self, hidden_size: int, padded_vocab_size: int, parallel_output: bool):
-        super(OutputVocab, self).__init__()
-        self.parallel_output = parallel_output
-        self.lm_head = mpu.VocabParallelEmbedding(
-            padded_vocab_size,
-            hidden_size,
-        )
-
-    def forward(self, x):
-        return self.parallel_lm_logits(self.lm_head, x, self.parallel_output)
-
-
 class GPTModelPipe(PipelineModule,MegatronModule):
     """GPT-2 Language model."""
 
@@ -283,12 +268,23 @@ class GPTModelPipe(PipelineModule,MegatronModule):
                       args.hidden_size,
                       eps=args.layernorm_epsilon))
 
+        def _logits_helper(embedding, lm_output):
+            """A wrapper to massage inputs/outputs from pipeline. """
+            return parallel_lm_logits(
+                lm_output,
+                embedding.word_embeddings_weight,
+                self.parallel_output)
+
         self.specs.append(
-            LayerSpec(OutputVocab,
-                      args.hidden_size,
-                      args.padded_vocab_size,
-                      self.parallel_output
-                     )
+            TiedLayerSpec('embed',
+                          EmbeddingPipe,
+                          args.hidden_size,
+                          args.padded_vocab_size,
+                          args.hidden_dropout,
+                          init_method=init_method,
+                          num_tokentypes=num_tokentypes,
+                          forward_fn=_logits_helper,
+                          tied_weight_attr='word_embeddings_weight')
         )
 
         # Convert to fp32 if needed
