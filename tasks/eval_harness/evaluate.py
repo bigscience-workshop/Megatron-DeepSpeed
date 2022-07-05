@@ -319,9 +319,9 @@ def load_ds_checkpoint_and_setup_megatron(args):
         import deepspeed
         deepspeed.runtime.state_dict_factory.MegatronSDLoader.sanity_check = lambda self, ckpt_file_name: None
 
-
-        cp_path = args.load
-        args.load = None
+        #
+        # cp_path = args.load
+        # args.load = None
         model, _, _ = setup_model_and_optimizer(model_provider)
         zero_enabled = model[0]._config.zero_enabled
         model[0]._config.zero_enabled = False
