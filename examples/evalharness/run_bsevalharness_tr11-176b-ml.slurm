@@ -96,6 +96,7 @@ CMD="./tasks/eval_harness/evaluate_bsevalharness.py  \
     --intermed_results \
     --adaptive_seq_len \
     --micro_bs_multiplier 16 \
+    --offloadearly \
     $MEGATRON_REQUIRED_ARGS \
     "
 
