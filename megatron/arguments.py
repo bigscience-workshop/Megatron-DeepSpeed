@@ -557,7 +557,7 @@ def _add_training_args(parser):
                        'please refer https://github.com/facebookresearch/bitsandbytes.',
                        dest='use_bnb_optimizer')
     group.add_argument('--dataloader-type', type=str, default=None,
-                       choices=['single', 'cyclic', 'decoder_packed'],
+                       choices=['single', 'cyclic'],
                        help='Single pass vs multiple pass data loader')
     group.add_argument('--cpu-optimizer', action='store_true',
                        help='Run optimizer on CPU')

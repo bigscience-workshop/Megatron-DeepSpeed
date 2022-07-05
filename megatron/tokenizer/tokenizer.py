@@ -355,33 +355,46 @@ class _AutoTokenizer(AbstractTokenizer):
 
     @property
     def eod(self):
-        return self.tokenizer.eos_token_id
+        # TODO @thomasw21 might conflict with <eos>
+        return self.eos
 
     @property
     def cls(self):
-        return self.tokenizer.cls_token_id
+        candidate = self.tokenizer.cls_token_id
+        return self._check_token_candidate(candidate)
 
     @property
     def sep(self):
-        return self.tokenizer.sep_token_id
+        candidate = self.tokenizer.sep_token_id
+        return self._check_token_candidate(candidate)
 
     @property
     def pad(self):
-        return self.tokenizer.pad_token_id
+        candidate = self.tokenizer.pad_token_id
+        return self._check_token_candidate(candidate)
 
     @property
     def mask(self):
-        return self.tokenizer.mask_token_id
+        candidate = self.tokenizer.mask_token_id
+        return self._check_token_candidate(candidate)
+
+    @property
+    def bos(self):
+        raise NotImplementedError("Missing <bos>")
+
+    @property
+    def eos(self):
+        # TODO @thomasw21 might conflict with the notion of <eod>
+        candidate = self.tokenizer.eos_token_id
+        return self._check_token_candidate(candidate)
 
     @property
     def additional_special_tokens_ids(self):
         """ All the additional special tokens you may want to use (list of strings)."""
         return self.tokenizer.additional_special_tokens_ids
 
-    @property
-    def bos_token_id(self):
-        raise NotImplementedError("Missing <bos>")
-
-    @property
-    def eos_token_id(self):
-        raise NotImplementedError("Missing <eos>")
+    @staticmethod
+    def _check_token_candidate(candidate):
+        if candidate is None:
+            raise AttributeError("Token doesn't exist")
+        return candidate
