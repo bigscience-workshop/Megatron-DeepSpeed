@@ -422,35 +422,35 @@ def main():
         }
         return results
 
-    with OfflineEmissionsTracker(country_iso_code="FRA", log_level="error"):
-        if args.intermed_results:
-            global_results = {"results": [], "versions": {}, "table_results": {}}
-            timestamp = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
-            iteration_id = load_path.split("/")[-1].replace("/", "")
-            results_path = args.results_path.replace(".json", f"_lm-eval_{iteration_id}_{timestamp}.json")
-            # Backup file in case of interruption during writing
-            results_path_backup = args.results_path.replace(".json", f"_lm-eval_{iteration_id}_{timestamp}_backup.json")
-            examples_path = results_path.replace(".json", "_examples")
-            setup_example_logger(examples_path)
-            for task_name, task in task_dict.items():
-                results = evaluator.evaluate(lm=adaptor, task_dict={task_name: task}, bootstrap_iters=args.bootstrap_iters)
-                global_results["results"].extend(results["results"])
-                global_results["versions"] = {**global_results["versions"], **results["versions"]}
-                global_results["table_results"] = {**global_results["table_results"], **results["table_results"]}
-                global_results = add_config(global_results)
-                if mpu.is_pipeline_last_stage() and mpu.get_tensor_model_parallel_rank() == 0:
-                    print(json.dumps(results, indent=2))
-                    with open(results_path, 'w') as outfile:
-                        json.dump(global_results, outfile, indent=4)
-                    with open(results_path_backup, 'w') as outfile:
-                        json.dump(global_results, outfile, indent=4)
-        else:
-            global_results = evaluator.evaluate(lm=adaptor, task_dict=task_dict, bootstrap_iters=args.bootstrap_iters)
+    # with OfflineEmissionsTracker(country_iso_code="FRA", log_level="error"):
+    if args.intermed_results:
+        global_results = {"results": [], "versions": {}, "table_results": {}}
+        timestamp = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+        iteration_id = load_path.split("/")[-1].replace("/", "")
+        results_path = args.results_path.replace(".json", f"_lm-eval_{iteration_id}_{timestamp}.json")
+        # Backup file in case of interruption during writing
+        results_path_backup = args.results_path.replace(".json", f"_lm-eval_{iteration_id}_{timestamp}_backup.json")
+        examples_path = results_path.replace(".json", "_examples")
+        setup_example_logger(examples_path)
+        for task_name, task in task_dict.items():
+            results = evaluator.evaluate(lm=adaptor, task_dict={task_name: task}, bootstrap_iters=args.bootstrap_iters)
+            global_results["results"].extend(results["results"])
+            global_results["versions"] = {**global_results["versions"], **results["versions"]}
+            global_results["table_results"] = {**global_results["table_results"], **results["table_results"]}
             global_results = add_config(global_results)
             if mpu.is_pipeline_last_stage() and mpu.get_tensor_model_parallel_rank() == 0:
-                print(json.dumps(global_results, indent=2))
-                with open(args.results_path, 'w') as outfile:
+                print(json.dumps(results, indent=2))
+                with open(results_path, 'w') as outfile:
                     json.dump(global_results, outfile, indent=4)
+                with open(results_path_backup, 'w') as outfile:
+                    json.dump(global_results, outfile, indent=4)
+    else:
+        global_results = evaluator.evaluate(lm=adaptor, task_dict=task_dict, bootstrap_iters=args.bootstrap_iters)
+        global_results = add_config(global_results)
+        if mpu.is_pipeline_last_stage() and mpu.get_tensor_model_parallel_rank() == 0:
+            print(json.dumps(global_results, indent=2))
+            with open(args.results_path, 'w') as outfile:
+                json.dump(global_results, outfile, indent=4)
 
 if __name__ == '__main__':
     main()
