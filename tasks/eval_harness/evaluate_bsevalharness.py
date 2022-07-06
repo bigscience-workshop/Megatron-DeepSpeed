@@ -52,7 +52,7 @@ def setup_example_logger(output_path):
     Copied from https://github.com/bigscience-workshop/lm-evaluation-harness/blob/2d968c60fc8bd808e5e475ca300781f774d234c1/main.py#L74
     """
     example_logger = logging.getLogger("examples")
-    filename = f"./examples-{output_path}.jsonl"
+    filename = f"{output_path}.jsonl"
     formatter = logging.Formatter("%(message)s")
     handler = logging.FileHandler(filename)
     handler.setFormatter(formatter)
