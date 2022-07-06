@@ -228,7 +228,7 @@ class EvalHarnessAdaptor:
 
         return (tokens, position_ids, attention_mask), (tokens, loss_mask)
 
-    def _model_call(self, inps, count_lens, input):
+    def _model_call(self, inps):
         args = get_args()
 
         if args.deepspeed:
