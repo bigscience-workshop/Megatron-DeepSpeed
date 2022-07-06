@@ -182,6 +182,7 @@ class EvalHarnessAdaptor:
                     inplens.append(inplen)
 
                 logits = self._model_call(torch.cat(inps, dim=0))
+                torch.distributed.barrier()
                 res_len += len(chunk)
                 if logits is not None:
                     if self.args.offloadearly:
