@@ -254,13 +254,12 @@ class GPTModelPipe(PipelineModule,MegatronModule):
                     # TODO: Change naming of class from GPT to something that encapsulate prefix lm.
                     self_attn_mask_type=attn_mask_type))
 
-
-        if not hasattr(args, 'attn_mask'):
-            # We drop attention mask from the pipeline
-            self.specs.append(lambda x: x[0])
-
         # Undo data format change
-        self.specs.append(lambda x: x.transpose(0, 1).contiguous())
+        def undo(x):
+            if not hasattr(args, 'attn_mask'):
+                x = x[0]
+            return x.transpose(0, 1).contiguous()
+        self.specs.append(undo)
 
         # Final layernorm after transformer layers
         self.specs.append(
