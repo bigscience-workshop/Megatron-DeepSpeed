@@ -382,7 +382,6 @@ def tasks_args(parser):
     group.add_argument('--bootstrap_iters', type=int, default=100000, help='How many iterations to use for stderr estimation')
     group.add_argument('--micro_bs_multiplier', type=int, default=1, help='Increase the global batch size to remove bubble when pipeline parallel')
     group.add_argument('--offloadearly',  default = False, action='store_true', help='Offloads logits to CPU earlier to allow using a higher micro_bs_multiplier - Speeds up eval by up to 1.5x for 176B')
-    group.add_argument('--seed', default=42, type=int, help='Random state seed')
     return parser
 
 from megatron.global_vars import _parse_args
@@ -437,7 +436,7 @@ def main():
             examples_path = results_path.replace(".json", "_examples")
             setup_example_logger(examples_path)
             for task_name, task in task_dict.items():
-                results = evaluator.evaluate(lm=adaptor, task_dict={task_name: task}, bootstrap_iters=args.bootstrap_iters, rng=np.random.seed(args.seed))
+                results = evaluator.evaluate(lm=adaptor, task_dict={task_name: task}, bootstrap_iters=args.bootstrap_iters, rng=np.random.default_rng(args.seed))
                 global_results["results"].extend(results["results"])
                 global_results["versions"] = {**global_results["versions"], **results["versions"]}
                 global_results["table_results"] = {**global_results["table_results"], **results["table_results"]}
@@ -449,7 +448,7 @@ def main():
                     with open(results_path_backup, 'w') as outfile:
                         json.dump(global_results, outfile, indent=4)
         else:
-            global_results = evaluator.evaluate(lm=adaptor, task_dict=task_dict, bootstrap_iters=args.bootstrap_iters, rng=np.random.seed(args.seed))
+            global_results = evaluator.evaluate(lm=adaptor, task_dict=task_dict, bootstrap_iters=args.bootstrap_iters, rng=np.random.default_rng(args.seed))
             global_results = add_config(global_results)
             if mpu.is_pipeline_last_stage() and mpu.get_tensor_model_parallel_rank() == 0:
                 print(json.dumps(global_results, indent=2))
