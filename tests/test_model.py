@@ -369,7 +369,7 @@ class MyTestCase(TestCasePlus):
 
                 torch_assert_equal(mfln_output, torch_layer_norm_output)
 
-    @parameterized.expand(list(AttnMaskType))
+    @parameterized.expand([(attn_mask_type,) for attn_mask_type in AttnMaskType])
     def test_fused_masked_softmax(self, attn_mask_type: AttnMaskType):
         command_args = get_default_args(self.test_file_dir_str)
 
