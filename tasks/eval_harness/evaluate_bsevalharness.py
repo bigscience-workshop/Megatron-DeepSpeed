@@ -210,7 +210,7 @@ class EvalHarnessAdaptor:
         if not mpu.is_pipeline_last_stage():
             # @HACK: To make the eval harness happy on threads that don't have access to the results.
             #        We just randomly generate some data.
-            res = [(0.5, 0.5) for _ in requests]
+            res = [(0.5, True) for _ in requests]
 
         return reord.get_original(res)
 
