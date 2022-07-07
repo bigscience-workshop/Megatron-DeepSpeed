@@ -375,8 +375,8 @@ def _add_network_size_args(parser):
                        ', needs to be divisible by TP size and `make-vocab-size-divisible-by`.')
     group.add_argument('--layernorm-epsilon', type=float, default=1e-5,
                        help='Layer norm epsilon.')
-    group.add_argument('--layernorm-tp-auto-sync', action='store_true',
-                       help='Force syncing layernorm params across TP ranks in forward. '
+    group.add_argument('--sync-tp-duplicated-parameters', action='store_true',
+                       help='Force syncing duplicated params across TP ranks in forward. '
                        'This is a workaround for an unresolved bug leading to TP ranks '
                        'getting out of sync with each other.')
     group.add_argument('--apply-residual-connection-post-layernorm',
@@ -557,7 +557,7 @@ def _add_training_args(parser):
                        'please refer https://github.com/facebookresearch/bitsandbytes.',
                        dest='use_bnb_optimizer')
     group.add_argument('--dataloader-type', type=str, default=None,
-                       choices=['single', 'cyclic', 'decoder_packed'],
+                       choices=['single', 'cyclic'],
                        help='Single pass vs multiple pass data loader')
     group.add_argument('--cpu-optimizer', action='store_true',
                        help='Run optimizer on CPU')

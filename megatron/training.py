@@ -1245,20 +1245,20 @@ def build_train_valid_test_data_iterators(
     assert dl_type in ['single', 'cyclic']
 
     if train_dataloader is not None:
-        train_data_iterator = iter(train_dataloader) if dl_type == 'single' \
+        train_data_iterator = iter(train_dataloader) if dl_type in ['single'] \
                               else iter(cyclic_iter(train_dataloader))
     else:
         train_data_iterator = None
 
     if valid_dataloaders is not None:
-        valid_data_iterators = [iter(vdl) if dl_type == 'single' \
+        valid_data_iterators = [iter(vdl) if dl_type in ['single'] \
                               else iter(cyclic_iter(valid_dataloaders))
                                  for vdl in valid_dataloaders]
     else:
         valid_data_iterators = [None] * num_valid_ds
 
     if test_dataloaders is not None:
-        test_data_iterators = [iter(tdl) if dl_type == 'single' \
+        test_data_iterators = [iter(tdl) if dl_type in ['single'] \
                              else iter(cyclic_iter(test_dataloaders))
                             for tdl in test_dataloaders]
     else:

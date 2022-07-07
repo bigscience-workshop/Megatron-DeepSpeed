@@ -124,7 +124,6 @@ class FusedScaleMaskSoftmax(nn.Module):
         softmax_in_fp32: if true, softmax in performed at fp32 precision.
         scale: scaling factor used in input tensor scaling.
     """
-    custom_kernel_friendly_attn_mask_type = [AttnMaskType.causal, AttnMaskType.padding]
 
     def __init__(
         self,
@@ -189,6 +188,7 @@ class FusedScaleMaskSoftmax(nn.Module):
 
         if self.attn_mask_type == AttnMaskType.causal:
             assert sq == sk, "causal mask is only for self attention"
+            assert mask is None, "Mask is silently ignored due to the use of a custom kernel"
 
             # input is 3D tensor (attn_batches, sq, sk)
             input = input.view(-1, sq, sk)
@@ -207,7 +207,14 @@ class FusedScaleMaskSoftmax(nn.Module):
 
         if self.scale is not None:
             input = input * self.scale
+
+        if self.attn_mask_type == AttnMaskType.causal:
+            assert mask is None
+            mask = torch.ones_like(input, dtype=torch.bool)
+            mask = torch.triu(mask, diagonal=1, out=mask)
+
         mask_output = self.mask_func(input, mask) if mask is not None else input
+
         probs = torch.nn.Softmax(dim=-1)(mask_output)
 
         if self.input_in_float16 and self.softmax_in_fp32:

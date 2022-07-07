@@ -202,7 +202,7 @@ class GPTModelPipe(PipelineModule,MegatronModule):
         self,
         num_tokentypes=0,
         parallel_output=True,
-        prefix_lm=False
+        attn_mask_type: AttnMaskType = AttnMaskType.causal
     ):
         args = get_args()
         self.parallel_output = parallel_output
@@ -252,15 +252,14 @@ class GPTModelPipe(PipelineModule,MegatronModule):
                                                                        args.num_layers),
                     layer_number=layer_idx,
                     # TODO: Change naming of class from GPT to something that encapsulate prefix lm.
-                    self_attn_mask_type=AttnMaskType.prefix if prefix_lm else AttnMaskType.causal))
-
-
-        if not hasattr(args, 'attn_mask'):
-            # We drop attention mask from the pipeline
-            self.specs.append(lambda x: x[0])
+                    self_attn_mask_type=attn_mask_type))
 
         # Undo data format change
-        self.specs.append(lambda x: x.transpose(0, 1).contiguous())
+        def undo(x):
+            if not hasattr(args, 'attn_mask'):
+                x = x[0]
+            return x.transpose(0, 1).contiguous()
+        self.specs.append(undo)
 
         # Final layernorm after transformer layers
         self.specs.append(
@@ -314,7 +313,7 @@ class GPTModelPipe(PipelineModule,MegatronModule):
             partition_method = 'type:transformer'
 
         super().__init__(layers=self.specs,
-                         loss_fn=get_cross_entropy(is_prefix=prefix_lm),
+                         loss_fn=get_cross_entropy(is_prefix=attn_mask_type is AttnMaskType.prefix),
                          topology=topo,
                          activation_checkpoint_interval=interval,
                          partition_method=partition_method)
