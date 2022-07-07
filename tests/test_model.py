@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import deepspeed
 import torch
-from absl.testing import parameterized
+from parameterized import parameterized
 from torch import nn
 import torch.nn.functional as F
 
