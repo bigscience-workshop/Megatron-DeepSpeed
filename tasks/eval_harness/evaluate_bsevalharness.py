@@ -155,12 +155,7 @@ class EvalHarnessAdaptor:
 
             reord = utils.Reorderer(requests, _collate)
 
-            if mpu.is_pipeline_last_stage():
-                chunks = utils.chunks(tqdm(reord.get_reordered(), disable=disable_tqdm), self.batch_size)
-            else:
-                chunks = utils.chunks(reord.get_reordered(), self.batch_size)
-
-            for chunk in chunks:
+            for chunk in utils.chunks(tqdm(reord.get_reordered(), disable=disable_tqdm), self.batch_size):
                 inps, contlens, inplens, padding_length = [], [], [], None
                 for _, context_enc, continuation_enc in chunk:
                     # when too long to fit in context, truncate from the left
