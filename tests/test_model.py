@@ -4,14 +4,17 @@ from unittest.mock import patch
 
 import deepspeed
 import torch
+from parameterized import parameterized
 from torch import nn
 import torch.nn.functional as F
 
+from megatron.enums import AttnMaskType
 from megatron.model.fused_layer_norm import MixedFusedLayerNorm
 from packaging import version
 
 from megatron import initialize_megatron, get_args, get_tokenizer, global_vars
-from megatron.model.fused_softmax import ScaledMaskedSoftmax
+from megatron.model.fused_softmax import ScaledMaskedSoftmax, FusedScaleMaskSoftmax
+from megatron.model.utils import attention_mask_func
 from megatron.testing_utils import TestCasePlus, mockenv_context, flatten_arguments, torch_assert_equal, \
     torch_assert_close, require_torch_bf16
 from megatron.training import setup_model_and_optimizer
@@ -366,7 +369,8 @@ class MyTestCase(TestCasePlus):
 
                 torch_assert_equal(mfln_output, torch_layer_norm_output)
 
-    def test_fused_masked_softmax(self):
+    @parameterized.expand([(attn_mask_type,) for attn_mask_type in AttnMaskType])
+    def test_fused_masked_softmax(self, attn_mask_type: AttnMaskType):
         command_args = get_default_args(self.test_file_dir_str)
 
         with patch('sys.argv', flatten_arguments(command_args)):
@@ -382,30 +386,54 @@ class MyTestCase(TestCasePlus):
                     device="cuda",
                     dtype=args.params_dtype
                 )
-                dummy_attention_mask = torch.randn(
-                    args.micro_batch_size,
-                    1, # `args.num_attention_heads` not implemented in our cuda kernel
-                    args.seq_length,
-                    args.seq_length,
-                    device="cuda",
-                    dtype=args.params_dtype
-                ) < 0
+                if attn_mask_type == AttnMaskType.causal:
+                    dummy_attention_mask = None
+                else:
+                    dummy_attention_mask = torch.randn(
+                        args.micro_batch_size,
+                        1, # `args.num_attention_heads` not implemented in our cuda kernel
+                        args.seq_length,
+                        args.seq_length,
+                        device="cuda",
+                        dtype=args.params_dtype
+                    ) < 0
                 scale = torch.rand(())
 
-                fused_scaled_softmax = ScaledMaskedSoftmax
+                fused_scaled_softmax = FusedScaleMaskSoftmax(
+                    input_in_fp16=args.params_dtype == torch.float16,
+                    input_in_bf16=args.params_dtype == torch.bfloat16,
+                    attn_mask_type=attn_mask_type,
+                    scaled_masked_softmax_fusion=True,
+                    mask_func=attention_mask_func,
+                    softmax_in_fp32=True,
+                    scale=scale,
+                )
+                unfused_scaled_softmax = FusedScaleMaskSoftmax(
+                    input_in_fp16=args.params_dtype == torch.float16,
+                    input_in_bf16=args.params_dtype == torch.bfloat16,
+                    attn_mask_type=attn_mask_type,
+                    scaled_masked_softmax_fusion=False,
+                    mask_func=attention_mask_func,
+                    softmax_in_fp32=True,
+                    scale=scale,
+                )
 
-                fused_output = fused_scaled_softmax.apply(dummy_input, dummy_attention_mask, scale)
-
-                # mimick the same via torch
-                output = scale * dummy_input
-                output = output.masked_fill(dummy_attention_mask, torch.finfo(args.params_dtype).min)
-                output = F.softmax(output, dim=-1)
+                self.assertTrue(fused_scaled_softmax.is_kernel_available(dummy_attention_mask, *dummy_input.size()))
+                fused_output = fused_scaled_softmax(dummy_input, dummy_attention_mask)
+                self.assertFalse(unfused_scaled_softmax.is_kernel_available(dummy_attention_mask, *dummy_input.size()))
+                unfused_output = unfused_scaled_softmax(dummy_input, dummy_attention_mask)
 
                 # Test that the nonzeros are the same with the mask
                 for i in range(args.num_attention_heads):
-                    torch_assert_equal(torch.nonzero(fused_output[:, i]), torch.nonzero(~dummy_attention_mask[:, 0]))
+                    if dummy_attention_mask is None:
+                        # Make sure it's causal, values in the lower triangle should be not zero.
+                        non_zero_values = torch.tril(torch.ones_like(fused_output[:, i]))
+                        torch_assert_equal(torch.nonzero(fused_output[:, i]), torch.nonzero(non_zero_values))
+                    else:
+                        torch_assert_equal(torch.nonzero(fused_output[:, i]), torch.nonzero(~dummy_attention_mask[:, 0]))
+
                 # Cuda kernel produces slightly different results
-                torch_assert_close(fused_output, output)
+                torch_assert_close(fused_output, unfused_output)
 
 
     def test_non_causal_decoder_model_with_packed_input_passed_with_attention_mask_is_not_causal_across_segments(self):
