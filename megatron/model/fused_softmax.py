@@ -204,7 +204,7 @@ class FusedScaleMaskSoftmax(nn.Module):
     @staticmethod
     @lru_cache(maxsize=1)
     def get_causal_mask(sequence_length: int):
-        mask = torch.ones(1, 1, sequence_length, sequence_length, dtype=torch.bool)
+        mask = torch.ones(1, 1, sequence_length, sequence_length, dtype=torch.bool, device=torch.cuda.current_device())
         return torch.triu(mask, diagonal=1, out=mask)
 
     def forward_torch_softmax(self, input, mask):

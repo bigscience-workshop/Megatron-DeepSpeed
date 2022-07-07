@@ -432,7 +432,7 @@ class MyTestCase(TestCasePlus):
                         torch_assert_equal(torch.nonzero(fused_output[:, i]), torch.nonzero(~dummy_attention_mask[:, 0]))
 
                 # Cuda kernel produces slightly different results
-                torch_assert_equal(fused_output, unfused_output)
+                torch_assert_close(fused_output, unfused_output)
 
 
     def test_non_causal_decoder_model_with_packed_input_passed_with_attention_mask_is_not_causal_across_segments(self):
