@@ -427,7 +427,8 @@ class MyTestCase(TestCasePlus):
                 for i in range(args.num_attention_heads):
                     if dummy_attention_mask is None:
                         # Make sure it's causal
-                        torch_assert_equal(torch.nonzero(fused_output[:, i]), torch.nonzero(torch.triu(torch.ones_like(fused_output[:, i]))))
+                        causal_mask = torch.triu(torch.ones_like(fused_output[:, i]), diagonal=1)
+                        torch_assert_equal(torch.nonzero(fused_output[:, i]), torch.nonzero(causal_mask))
                     else:
                         torch_assert_equal(torch.nonzero(fused_output[:, i]), torch.nonzero(~dummy_attention_mask[:, 0]))
 
