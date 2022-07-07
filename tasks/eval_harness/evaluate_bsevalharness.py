@@ -123,9 +123,12 @@ class EvalHarnessAdaptor:
         loglikelihoods = []
         with torch.no_grad():
             for string, in tqdm(requests):
+                tokens = self.tokenizer_encode(string)
+                prefix_token = tokens[0]
+                token_list = tokens[1:]
                 rolling_token_windows = list(map(utils.make_disjoint_window, utils.get_rolling_token_windows(
-                    token_list=self.tokenizer_encode(string),
-                    prefix_token=self.EOT_TOKEN_ID,
+                    token_list=token_list,
+                    prefix_token=prefix_token,
                     max_seq_len=self.max_length,
                     context_len=1,
                 )))
