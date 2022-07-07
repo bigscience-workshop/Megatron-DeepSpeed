@@ -423,6 +423,7 @@ class RowParallelLinear(torch.nn.Module):
         else:
             self.register_parameter('bias', None)
 
+        self.bias_tp_auto_sync = args.sync_tp_duplicated_parameters
 
 
     def forward(self, input_):
@@ -435,6 +436,10 @@ class RowParallelLinear(torch.nn.Module):
         output_parallel = F.linear(input_parallel, self.weight)
         # All-reduce across all the partitions.
         output_ = reduce_from_tensor_model_parallel_region(output_parallel)
+
+        if self.bias_tp_auto_sync:
+            torch.distributed.all_reduce(self.bias, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
+
         if not self.skip_bias_add:
             output = output_ + self.bias if self.bias is not None else output_
             output_bias = None

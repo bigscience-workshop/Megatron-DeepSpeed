@@ -84,7 +84,7 @@ class MixedFusedLayerNorm(torch.nn.Module):
     self.reset_parameters()
 
     args = get_args()
-    self.layernorm_tp_auto_sync = args.layernorm_tp_auto_sync
+    self.layernorm_tp_auto_sync = args.sync_tp_duplicated_parameters
 
     self.use_meg_ds_fused_layer_norm = (
       args.bf16 # Current Meg-DS cuda kernel has better throughput than torch.nn.LayerNorm
