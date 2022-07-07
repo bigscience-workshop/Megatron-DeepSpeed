@@ -232,13 +232,13 @@ class GPTModelPipe(PipelineModule,MegatronModule):
                                         tied_weight_attr='word_embeddings_weight'))
 
         if args.fp32_residual_connection:
-            if hasattr(args, 'attn_mask'):
+            if hasattr(args, 'pretrain_causal_attention') and (args.pretrain_causal_attention is True):
                 self.specs.append(lambda x: x.transpose(0, 1).contiguous().float())
             else:
                 # EmbeddingPipe returns attention mask as well
                 self.specs.append(lambda x: (x[0].transpose(0, 1).contiguous().float(), *x[1:]))
         else:
-            if hasattr(args, 'attn_mask'):
+            if hasattr(args, 'pretrain_causal_attention') and (args.pretrain_causal_attention is True):
                 self.specs.append(lambda x: x.transpose(0, 1).contiguous())
             else:
                 # EmbeddingPipe returns attention mask as well
@@ -256,7 +256,7 @@ class GPTModelPipe(PipelineModule,MegatronModule):
 
         # Undo data format change
         def undo(x):
-            if not hasattr(args, 'attn_mask'):
+            if not hasattr(args, 'pretrain_causal_attention') or (args.pretrain_causal_attention is False):
                 x = x[0]
             return x.transpose(0, 1).contiguous()
         self.specs.append(undo)

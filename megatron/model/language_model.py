@@ -274,7 +274,7 @@ class EmbeddingPipe(Embedding):
 
         input_ids = inputs[0]
         position_ids = inputs[1]
-        if hasattr(self._args, 'attn_mask'):
+        if hasattr(self._args, 'pretrain_causal_attention') and (self._args.pretrain_causal_attention is True):
             attention_mask = None
         else:
             attention_mask = inputs[2]
@@ -287,7 +287,7 @@ class EmbeddingPipe(Embedding):
         embeddings = super().forward(input_ids, position_ids, tokentype_ids=tokentype_ids)
 
         # If cmd args has attn_mask, we don't forward it as an activation.
-        if hasattr(self._args, 'attn_mask'):
+        if hasattr(self._args, 'pretrain_causal_attention') and (self._args.pretrain_causal_attention is True):
             return embeddings
         else:
             return embeddings, attention_mask

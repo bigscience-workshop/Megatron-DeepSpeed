@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+from functools import lru_cache
 
 import torch
 import torch.nn as nn
@@ -201,6 +201,12 @@ class FusedScaleMaskSoftmax(nn.Module):
             else:
                 return ScaledSoftmax.apply(input, scale)
 
+    @staticmethod
+    @lru_cache(maxsize=1)
+    def get_causal_mask(sequence_length: int):
+        mask = torch.ones(1, 1, sequence_length, sequence_length, dtype=torch.bool)
+        return torch.triu(mask, diagonal=1, out=mask)
+
     def forward_torch_softmax(self, input, mask):
         if self.input_in_float16 and self.softmax_in_fp32:
             input = input.float()
@@ -210,8 +216,8 @@ class FusedScaleMaskSoftmax(nn.Module):
 
         if self.attn_mask_type == AttnMaskType.causal:
             assert mask is None
-            mask = torch.ones_like(input, dtype=torch.bool)
-            mask = torch.triu(mask, diagonal=1, out=mask)
+            assert input.shape[2] == input.shape[3]
+            mask = self.get_causal_mask(input.shape[2])
 
         mask_output = self.mask_func(input, mask) if mask is not None else input
 

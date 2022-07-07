@@ -54,9 +54,7 @@ def model_provider(pre_process=True, post_process=True):
                              enabled=args.zero_stage == 3,
                              mpu=mpu):
         if args.deepspeed:
-            # Hack @thomasw21 to get fused_softmax.forward_torch_softmax working
-            args.attn_mask = None
-
+            args.pretrain_causal_attention = True
             model = GPTModelPipe(
                 num_tokentypes=0,
                 parallel_output=True,
