@@ -418,8 +418,9 @@ class MyTestCase(TestCasePlus):
                     scale=scale,
                 )
 
-                # TODO @thomasw21 make sure that we actually use fusion kernel
+                self.assertTrue(fused_scaled_softmax.is_kernel_available(dummy_attention_mask, *dummy_input.size()))
                 fused_output = fused_scaled_softmax(dummy_input, dummy_attention_mask)
+                self.assertFalse(unfused_scaled_softmax.is_kernel_available(dummy_attention_mask, *dummy_input.size()))
                 unfused_output = unfused_scaled_softmax(dummy_input, dummy_attention_mask)
 
                 # Test that the nonzeros are the same with the mask
