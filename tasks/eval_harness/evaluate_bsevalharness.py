@@ -442,6 +442,10 @@ def main():
 
     task_list = ALL_TASKS if args.task_list == 'all' else args.task_list.split(',')
     task_dict = tasks.get_task_dict_promptsource(task_list)
+    task_dict = {task_name: task for task_name, task in task_dict.items() if task.need_greedy_until is False}
+    if len(task_dict) == 0:
+        print_rank_0("Early stopping as `greedy_until` is not implemented yet.")
+        return
 
     model.module.activation_checkpoint_interval = 0
     model._compute_loss = False
