@@ -426,9 +426,9 @@ class MyTestCase(TestCasePlus):
                 # Test that the nonzeros are the same with the mask
                 for i in range(args.num_attention_heads):
                     if dummy_attention_mask is None:
-                        # Make sure it's causal
-                        causal_mask = torch.triu(torch.ones_like(fused_output[:, i]), diagonal=1)
-                        torch_assert_equal(torch.nonzero(fused_output[:, i]), torch.nonzero(causal_mask))
+                        # Make sure it's causal, values in the lower triangle should be not zero.
+                        non_zero_values = torch.tril(torch.ones_like(fused_output[:, i]))
+                        torch_assert_equal(torch.nonzero(fused_output[:, i]), torch.nonzero(non_zero_values))
                     else:
                         torch_assert_equal(torch.nonzero(fused_output[:, i]), torch.nonzero(~dummy_attention_mask[:, 0]))
 
