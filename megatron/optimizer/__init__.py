@@ -60,7 +60,10 @@ def _get_params_for_weight_decay_optimization(modules):
     #return weight_decay_params, no_weight_decay_params
 
 def _get_params_for_bitfit(modules):
-    """Get params to do BitFit"""
+    """
+    Get params to do BitFit
+    See https://arxiv.org/abs/2106.10199
+    """
     # No weight (bias) decay is used
     no_weight_decay_params = {'params': [], 'weight_decay': 0.0}
     for module in modules:
@@ -69,8 +72,7 @@ def _get_params_for_bitfit(modules):
                     [p for n, p in list(module_._parameters.items())
                      if p is not None and 'bias' in n])
 
-    # TODO: Add dummy parameters
-    return no_weight_decay_params
+    return no_weight_decay_params,
 
 def get_megatron_optimizer(model):
     args = get_args()
