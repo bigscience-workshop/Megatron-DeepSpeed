@@ -68,16 +68,23 @@ model_name = args.name
 
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 config = AutoConfig.from_pretrained(model_name)
+
+# XXX: can't automatically derive dtype via config's `from_pretrained`
+dtype = torch.bfloat16 if model_name == "bigscience/bloom" else torch.float16
+
+#dtype = config.dtype
+print(dtype)
+
 model_hidden_size = config.hidden_size
 train_batch_size = 1 * world_size
 model = AutoModelForCausalLM.from_config(config)
 
 ds_config = {
     "fp16": {
-        "enabled": model.dtype == torch.float16,
+        "enabled": dtype == torch.float16,
     },
     "bf16": {
-        "enabled": model.dtype == torch.bfloat16,
+        "enabled": dtype == torch.bfloat16,
     },
     "zero_optimization": {
         "stage": 3,
@@ -96,6 +103,8 @@ ds_config = {
     "train_micro_batch_size_per_gpu": 1,
     "wall_clock_breakdown": False
 }
+
+print(ds_config)
 
 dschf = HfDeepSpeedConfig(ds_config)
 
