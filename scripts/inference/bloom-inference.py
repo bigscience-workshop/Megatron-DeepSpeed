@@ -72,6 +72,9 @@ config = AutoConfig.from_pretrained(model_name)
 # XXX: can't automatically derive dtype via config's `from_pretrained`
 dtype = torch.bfloat16 if model_name in ["bigscience/bloom", "bigscience/bigscience-small-testing"] else torch.float16
 
+# XXX: for now ds-inference only works with fp16
+dtype = torch.float16
+
 #dtype = config.dtype
 print(dtype)
 
@@ -131,11 +134,15 @@ with io.open(checkpoints_json, 'w', encoding='utf-8') as f:
     json.dump(data, f)
 
 
+# use one of these args to `init_inference`
+# 1. injection_policy is the slower version, but it's plain pytorch so it'll always work
+# 2. replace_with_kernel_inject is the faster one (fast fused kernels)
+
 model = deepspeed.init_inference(model,
                                  mp_size=world_size,
                                  dtype=torch.half,
                                  checkpoint=checkpoints_json,
-                                 #injection_policy={BloomBlock: ('self_attention.dense', 'mlp.dense_4h_to_h')}
+                                 #injection_policy={BloomBlock: ('self_attention.dense', 'mlp.dense_4h_to_h')},
                                  replace_with_kernel_inject=True
                                  )
 model = model.module
