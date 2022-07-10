@@ -132,7 +132,7 @@ with io.open(checkpoints_json, 'w', encoding='utf-8') as f:
 
 
 model = deepspeed.init_inference(model,
-                                 mp_size=1,
+                                 mp_size=world_size,
                                  dtype=torch.half,
                                  checkpoint=checkpoints_json,
                                  #injection_policy={BloomBlock: ('self_attention.dense', 'mlp.dense_4h_to_h')}
