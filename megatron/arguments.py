@@ -476,7 +476,8 @@ def _add_regularization_args(parser):
                        'numerical stability')
     group.add_argument('--sgd-momentum', type=float, default=0.9,
                        help='Momentum factor for sgd')
-
+    group.add_argument('--bitfit', action='store_true',
+                       help='Use BitFit')
     return parser
 
 

@@ -59,6 +59,18 @@ def _get_params_for_weight_decay_optimization(modules):
 
     #return weight_decay_params, no_weight_decay_params
 
+def _get_params_for_bitfit(modules):
+    """Get params to do BitFit"""
+    # No weight (bias) decay is used
+    no_weight_decay_params = {'params': [], 'weight_decay': 0.0}
+    for module in modules:
+        for module_ in module.modules():
+            no_weight_decay_params['params'].extend(
+                    [p for n, p in list(module_._parameters.items())
+                     if p is not None and 'bias' in n])
+
+    # TODO: Add dummy parameters
+    return no_weight_decay_params
 
 def get_megatron_optimizer(model):
     args = get_args()
@@ -67,7 +79,10 @@ def get_megatron_optimizer(model):
         raise NotImplementedError('need to add cpu adam')
 
     # Base optimizer.
-    param_groups = _get_params_for_weight_decay_optimization(model)
+    if args.bitfit:
+        param_groups = _get_params_for_bitfit(model)
+    else:
+        param_groups = _get_params_for_weight_decay_optimization(model)
     if args.optimizer == 'adam':
         if args.use_bnb_optimizer:
             import bitsandbytes as bnb
