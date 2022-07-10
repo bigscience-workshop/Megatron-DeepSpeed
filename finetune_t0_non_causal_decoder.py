@@ -89,7 +89,7 @@ def get_batch_pipe(data):
     attention_mask = get_packed_attention_mask(
         # Run non-causal decoder
         is_causal=False,
-        causal_mask=~(causal_mask.bool()),
+        causal_mask=~(causal_mask.bool()), # Turn back into tril being ones
         decoder_is_inputs=decoder_is_inputs.bool(),
         segment_ids=segment_ids.long(),
     )
