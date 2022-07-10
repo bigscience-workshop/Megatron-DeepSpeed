@@ -70,7 +70,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_name)
 config = AutoConfig.from_pretrained(model_name)
 
 # XXX: can't automatically derive dtype via config's `from_pretrained`
-dtype = torch.bfloat16 if model_name == "bigscience/bloom" else torch.float16
+dtype = torch.bfloat16 if model_name in ["bigscience/bloom", "bigscience/bigscience-small-testing"] else torch.float16
 
 #dtype = config.dtype
 print(dtype)
