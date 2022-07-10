@@ -23,9 +23,6 @@ Rule of thumb for using this script instead of `tools/preprocess_data.py`:
  - cpus >= 20 (logical cores)
  - large inputs: size >= 1GB
 
-Caveat:
- - It does not preserve original ordering. So not usable to `targets` and `inputs`
-
 For example using a 40 physical cores (80 logical cores) setup, we can run 60 workers on oscar (1.2T) to increase the speed of preprocessing.
 """
 
@@ -96,22 +93,20 @@ class Encoder(object):
         else:
             self.splitter = IdentitySplitter()
 
-    def encode(self, data):
+    def encode(self, text):
         ids = {}
         # TODO: a character is not a byte for non-ascii scripts. this was like this before, maybe fix at some point
         #  (counting the actual bytes will slow down processing though)
         bytes = 0
-        for key in self.content_keys:
-            text = data[key]
-            bytes += len(text)
-            doc_ids = []
-            for sentence in self.splitter.tokenize(text):
-                sentence_ids = self.tokenizer.tokenize(sentence)
-                if len(sentence_ids) > 0:
-                    doc_ids.append(sentence_ids)
-            if len(doc_ids) > 0 and self.append_eod:
-                doc_ids[-1].append(self.tokenizer.eod)
-            ids[key] = doc_ids
+        bytes += len(text)
+        doc_ids = []
+        for sentence in self.splitter.tokenize(text):
+            sentence_ids = self.tokenizer.tokenize(sentence)
+            if len(sentence_ids) > 0:
+                doc_ids.append(sentence_ids)
+        if len(doc_ids) > 0 and self.append_eod:
+            doc_ids[-1].append(self.tokenizer.eod)
+        ids["text"] = doc_ids
         return ids, bytes
 
 
@@ -152,16 +147,8 @@ def process_lines(lines, encoder, builders, writer):
     total_bytes_processed = 0
     for line in lines:
 
-        if isinstance(line, str):
-            if line.strip() == "":
-                continue
-            data = json.loads(line)
-            doc, bytes_processed = encoder.encode(data)
-            total_bytes_processed += bytes_processed
-
-        elif isinstance(line, dict):
-            doc, bytes_processed = encoder.encode(line)
-            total_bytes_processed += bytes_processed
+        doc, bytes_processed = encoder.encode(line)
+        total_bytes_processed += bytes_processed
 
         for key, sentences in doc.items():
             if len(sentences) == 0:
@@ -178,6 +165,8 @@ def get_args():
     group = parser.add_argument_group(title='input data')
     group.add_argument('--input', type=str, required=True,
                        help='Path to input JSON or arrow file')
+    group.add_argument('--max-size', type=int, default=None,
+                       help='Max size of data to treat')
     group.add_argument('--content-keys', nargs='+', default=['text'],
                        help='space separate listed of keys to extract from data')
     group.add_argument('--split-sentences', action='store_true',
@@ -243,19 +232,21 @@ def fill_simple_queue_from_file(filename, simple_queue, chunk_size:int):
                 print(f"Finished reading input file", flush=True)
                 return
             simple_queue.put(acc)
+        return
 
-def fill_simple_queue_from_arrow(dirname, simple_queue, chunk_size:int):
+def fill_simple_queue_from_arrow(dirname, simple_queue, chunk_size:int, max_size: int = None):
     # TODO: Assess if instead we could feed pointers which process can then load.
     dataset = datasets.load_from_disk(dirname)
     print("Start filling queue", flush=True)
     start = 0
+    total_text_len = 0
     while True:
-        # row format
-        acc = [dataset[i] for i in range(start, max(len(dataset), start + chunk_size))]
+        acc = dataset[start:start + chunk_size]["text"]
+        total_text_len += sum([len(item) for item in acc])
         start += chunk_size
-        if len(acc) == 0:
+        if len(acc) == 0 or (max_size is not None and total_text_len > max_size):
             simple_queue.put(None)
-            print(f"Finished reading input file", flush=True)
+            print(f"Finished reading input file, total_text_len {total_text_len}, max_size {max_size}", flush=True)
             return
         simple_queue.put(acc)
 
@@ -333,7 +324,7 @@ def main():
         fill_thread = multiprocessing.Process(target=fill_simple_queue_from_file, args=(args.input, simple_queue, chunk_size))
     elif os.path.isdir(args.input):
         print("assuming arrow folder input for HF-datasets")
-        fill_thread = multiprocessing.Process(target=fill_simple_queue_from_arrow, args=(args.input, simple_queue, chunk_size))
+        fill_thread = multiprocessing.Process(target=fill_simple_queue_from_arrow, args=(args.input, simple_queue, chunk_size, args.max_size))
 
     fill_thread.start()
     log_thread.start()
