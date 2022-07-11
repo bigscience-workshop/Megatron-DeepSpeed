@@ -83,7 +83,7 @@ class Encoder(object):
         for key in self.args.json_keys:
             text = data[key]
             if self.args.prepend_space:
-                text = " " + text
+                text = f" {text}"
             doc_ids = []
             for sentence in Encoder.splitter.tokenize(text):
                 sentence_ids = Encoder.tokenizer.tokenize(sentence)
