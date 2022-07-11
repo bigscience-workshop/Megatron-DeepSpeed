@@ -48,13 +48,11 @@ def model_provider(pre_process=True, post_process=True):
     return model
 
 def visualize_model_inputs(tokens, attention_mask, labels, loss_mask):
-    tokenizer = get_tokenizer()
     import os
     if os.path.exists("batchoutput.json"):
         return
     out = {
         "tokens": tokens[0,:].tolist(),
-        #"detokens": tokenizer.detokenize(tokens[0,:].tolist()),
         "labels": labels[0,:].tolist(),
         "attention_mask": attention_mask[0,:].tolist(),
         "loss_mask": loss_mask[0,:].tolist(),
