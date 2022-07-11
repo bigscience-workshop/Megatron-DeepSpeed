@@ -47,6 +47,31 @@ def model_provider(pre_process=True, post_process=True):
     see_memory_usage(f"After Building Model", force=True)
     return model
 
+def visualize_model_inputs(tokens, attention_mask, labels, loss_mask):
+    tokenizer = get_tokenizer()
+    import os
+    if os.path.exists("batchoutput.json"):
+        return
+    out = {
+        "tokens": tokens[0,:].tolist(),
+        "detokens": tokenizer.detokenize(tokens[0,:].tolist()),
+        "labels": labels[0,:].tolist(),
+        "attention_mask": attention_mask[0,:].tolist(),
+        "loss_mask": loss_mask[0,:].tolist(),
+    }
+    import json
+    with open('batchoutput.json', 'w') as fp:
+        json.dump(out, fp)
+
+    #if os.path.exists("batchoutput.txt"):
+    #    return
+    #with open("batchoutput.txt", "w", encoding="UTF-8") as f:
+    #    batch_log_string = f"TOKENS\n{tokens[0,:].tolist()}\n\nDETOKENS\n{[tokenizer.detokenize(tokens[0,:])]}\n\n"
+    #    batch_log_string += f"LABELS\n{labels[0,:].tolist()}\n\nttention_mask\n{attention_mask[0,:].tolist()}\n\n"
+    #    batch_log_string += f"LABELS\n{loss_mask[0,:].tolist()}"
+    #    print(batch_log_string)
+    #    f.write(batch_log_string)
+
 def get_batch_pipe(data):
     """
     Modification of `get_batch` to work on `next(data_iterator)` instead of `data_iterator` & in packed fashion
@@ -83,16 +108,19 @@ def get_batch_pipe(data):
     )
     # Only compute loss over causal target tokens, i.e. ignore input_tokens & padding
     loss_on_targets_only = ~data_c["decoder_is_inputs"][:, 1:]
-    loss_on_non_pad_only = (tokens != tokenizer.pad)
+    loss_on_non_pad_only = (labels != tokenizer.pad)
     loss_mask *= loss_on_targets_only * loss_on_non_pad_only
 
     attention_mask = get_packed_attention_mask(
         # Run non-causal decoder
-        is_causal=False,
+        is_causal=True,
         causal_mask=~(causal_mask.bool()), # Turn back into tril being ones
         decoder_is_inputs=decoder_is_inputs.bool(),
         segment_ids=segment_ids.long(),
     )
+
+    # Helper script
+    # visualize_model_inputs(tokens, attention_mask, labels, loss_mask)
 
     if args.position_embedding_type not in [PositionEmbeddingType.alibi, PositionEmbeddingType.rotary]:
         raise NotImplementedError("absolute positional embeddings require us to reset position_ids accordingly.")
