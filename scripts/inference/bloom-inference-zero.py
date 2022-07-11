@@ -23,7 +23,7 @@ parser = ArgumentParser()
 
 parser.add_argument("--name", required=True, type=str)
 parser.add_argument("--local_rank", required=False, type=int)
-parser.add_argument("--deepspeed", action="store_true")
+#parser.add_argument("--deepspeed", action="store_true")
 args = parser.parse_args()
 
 local_rank = int(os.getenv('LOCAL_RANK', '0'))
@@ -40,16 +40,15 @@ model_hidden_size = config.hidden_size
 
 train_batch_size = 1 * world_size
 model_name = args.name
-model = AutoModelForCausalLM.from_pretrained(model_name)
-
+dtype = torch.bfloat16 if model_name in ["bigscience/bloom", "bigscience/bigscience-small-testing"] else torch.float16
 
 # Note: you need to edit nvme_path to an actual path on your filesystem where the model will be offloaded to
 ds_config = {
     "fp16": {
-        "enabled": model.dtype == torch.float16,
+        "enabled": dtype == torch.float16,
     },
     "bf16": {
-        "enabled": model.dtype == torch.bfloat16,
+        "enabled": dtype == torch.bfloat16,
     },
     "zero_optimization": {
         "stage": 3,
@@ -58,6 +57,7 @@ ds_config = {
             "nvme_path": "/mnt/nvme0/offload/",
             "pin_memory": True,
             "buffer_count": 4,
+            "buffer_size": 4e9, # for bloom, otherwise the default 1e8 should be enough
             "fast_init": False
         },
         "overlap_comm": True,
@@ -73,21 +73,27 @@ ds_config = {
 }
 
 deepspeed.runtime.utils.see_memory_usage('pre-init', force=True)
-if args.deepspeed:
-    dschf = HfDeepSpeedConfig(ds_config)
+#if args.deepspeed:
+dschf = HfDeepSpeedConfig(ds_config)
+
+model = AutoModelForCausalLM.from_pretrained(model_name)
 
 #generator = pipeline('text-generation', model=args.name, device=local_rank, framework="pt")
 deepspeed.runtime.utils.see_memory_usage('post-init', force=True)
 
-
-if args.deepspeed:
-    ds_engine = deepspeed.initialize(model=model, config_params=ds_config)[0]
-    ds_engine.module.eval()
+ds_engine = deepspeed.initialize(model=model, config_params=ds_config)[0]
+ds_engine.module.eval()
 #    generator.model = ds_engine.module
-    deepspeed.runtime.utils.see_memory_usage('post-ds-init', force=True)
-else:
-    dist.init_process_group("nccl")
-    model = model.to(device=local_rank)
+deepspeed.runtime.utils.see_memory_usage('post-ds-init', force=True)
+
+# if args.deepspeed:
+#     ds_engine = deepspeed.initialize(model=model, config_params=ds_config)[0]
+#     ds_engine.module.eval()
+# #    generator.model = ds_engine.module
+#     deepspeed.runtime.utils.see_memory_usage('post-ds-init', force=True)
+# else:
+#     dist.init_process_group("nccl")
+#     model = model.to(device=local_rank)
 
 #response = generator('DeepSpeed is', min_length=50, max_length=50, do_sample=False)
 
