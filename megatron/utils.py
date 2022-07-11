@@ -265,8 +265,8 @@ def get_packed_attention_mask(is_causal: bool, causal_mask: torch.Tensor, decode
     Input example for the mask examples:
         att_mask_batch = 1
         seq_length = 7
-        decoder_is_inputs = torch.tensor([[1, 1, 1, 2, 2, 2, 0]])
-        segment_ids = torch.tensor([[1, 1, 0, 1, 1, 0, 0]])
+        decoder_is_inputs = torch.tensor([[1, 1, 0, 1, 1, 0, 0]])
+        segment_ids = torch.tensor([[1, 1, 1, 2, 2, 2, 0]])
         causal_mask = torch.tril(torch.ones(att_mask_batch, seq_length, seq_length)).view(att_mask_batch, 1, seq_length, seq_length)
     """
 
