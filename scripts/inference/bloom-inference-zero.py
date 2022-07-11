@@ -102,7 +102,7 @@ text_in = 'DeepSpeed is'
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 inputs = tokenizer.encode(text_in, return_tensors="pt").to(device=local_rank)
 with torch.no_grad():
-    model = ds_engine.module if args.deepspeed else model
+    #model = ds_engine.module if args.deepspeed else model
     outputs = model.generate(inputs, synced_gpus=True, min_length=50, max_length=50, do_sample=False)
 text_out = tokenizer.decode(outputs[0], skip_special_tokens=True)
 print(f"in={text_in}\nout={text_out}")
