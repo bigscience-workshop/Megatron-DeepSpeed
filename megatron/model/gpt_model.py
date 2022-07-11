@@ -160,13 +160,14 @@ class GPTModel(MegatronModule):
 
 def visualize_outputs(losses):
     import os
-    if os.path.exists("losses.txt"):
+    if os.path.exists("losses.json"):
         return
-    with open("losses.txt", "w", encoding="UTF-8") as f:
-        batch_log_string = f"LOSESS\n{losses[0,:].tolist()}"
-        print(batch_log_string)
-        f.write(batch_log_string)
-
+    out = {
+        "losses": losses[0,:].tolist(),
+    }
+    import json
+    with open('losses.json', 'w') as fp:
+        json.dump(out, fp)
 
 def get_cross_entropy(is_prefix: bool):
     def CrossEntropy(output, labels):

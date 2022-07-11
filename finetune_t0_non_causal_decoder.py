@@ -54,7 +54,7 @@ def visualize_model_inputs(tokens, attention_mask, labels, loss_mask):
         return
     out = {
         "tokens": tokens[0,:].tolist(),
-        "detokens": tokenizer.detokenize(tokens[0,:].tolist()),
+        #"detokens": tokenizer.detokenize(tokens[0,:].tolist()),
         "labels": labels[0,:].tolist(),
         "attention_mask": attention_mask[0,:].tolist(),
         "loss_mask": loss_mask[0,:].tolist(),
@@ -63,14 +63,6 @@ def visualize_model_inputs(tokens, attention_mask, labels, loss_mask):
     with open('batchoutput.json', 'w') as fp:
         json.dump(out, fp)
 
-    #if os.path.exists("batchoutput.txt"):
-    #    return
-    #with open("batchoutput.txt", "w", encoding="UTF-8") as f:
-    #    batch_log_string = f"TOKENS\n{tokens[0,:].tolist()}\n\nDETOKENS\n{[tokenizer.detokenize(tokens[0,:])]}\n\n"
-    #    batch_log_string += f"LABELS\n{labels[0,:].tolist()}\n\nttention_mask\n{attention_mask[0,:].tolist()}\n\n"
-    #    batch_log_string += f"LABELS\n{loss_mask[0,:].tolist()}"
-    #    print(batch_log_string)
-    #    f.write(batch_log_string)
 
 def get_batch_pipe(data):
     """
