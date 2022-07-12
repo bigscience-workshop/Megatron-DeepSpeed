@@ -1,6 +1,6 @@
 
 # usage:
-# deepspeed --num_gpus 1 bloom-inference.py --name bigscience/bloom-350m
+# deepspeed --num_gpus 8 bloom-ds-inference.py --name bigscience/bloom
 #
 
 import glob
