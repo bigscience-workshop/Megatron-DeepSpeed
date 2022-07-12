@@ -158,16 +158,6 @@ class GPTModel(MegatronModule):
             state_dict = state_dict[self._language_model_key]
         self.language_model.load_state_dict(state_dict, strict=strict)
 
-def visualize_outputs(losses):
-    import os
-    if os.path.exists("losses.json"):
-        return
-    out = {
-        "losses": losses[0,:].tolist(),
-    }
-    import json
-    with open('losses.json', 'w') as fp:
-        json.dump(out, fp)
 
 def get_cross_entropy(is_prefix: bool):
     def CrossEntropy(output, labels):
@@ -176,9 +166,6 @@ def get_cross_entropy(is_prefix: bool):
         args = get_args()
 
         losses = mpu.vocab_parallel_cross_entropy(output.contiguous().float(), labels)
-
-        # Helper script
-        # visualize_outputs(losses)
 
         if is_prefix:
             micro_batch_size, sequence_length = loss_mask.shape

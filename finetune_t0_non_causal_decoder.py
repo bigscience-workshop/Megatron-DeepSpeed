@@ -47,20 +47,6 @@ def model_provider(pre_process=True, post_process=True):
     see_memory_usage(f"After Building Model", force=True)
     return model
 
-def visualize_model_inputs(tokens, attention_mask, labels, loss_mask):
-    import os
-    if os.path.exists("batchoutput.json"):
-        return
-    out = {
-        "tokens": tokens[0,:].tolist(),
-        "labels": labels[0,:].tolist(),
-        "attention_mask": attention_mask[0,:].tolist(),
-        "loss_mask": loss_mask[0,:].tolist(),
-    }
-    import json
-    with open('batchoutput.json', 'w') as fp:
-        json.dump(out, fp)
-
 
 def get_batch_pipe(data):
     """
@@ -108,9 +94,6 @@ def get_batch_pipe(data):
         decoder_is_inputs=decoder_is_inputs.bool(),
         segment_ids=segment_ids.long(),
     )
-
-    # Helper script
-    # visualize_model_inputs(tokens, attention_mask, labels, loss_mask)
 
     if args.position_embedding_type not in [PositionEmbeddingType.alibi, PositionEmbeddingType.rotary]:
         raise NotImplementedError("absolute positional embeddings require us to reset position_ids accordingly.")
