@@ -3,15 +3,17 @@
 # deepspeed --num_gpus 1 bloom-inference.py --name bigscience/bloom-350m
 #
 
-#import glob
+import glob
 from argparse import ArgumentParser
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 from transformers.deepspeed import HfDeepSpeedConfig
 from transformers.models.bloom.modeling_bloom import BloomBlock as BloomBlock
 import deepspeed
 import io
+import sys
 import json
 import os
+import gc
 import torch
 import torch.distributed as dist
 
@@ -30,6 +32,7 @@ def get_checkpoint_files(pretrained_model_name_or_path):
     # shards into cache and returning the cached entries - note that I removed most arguments
 
     from transformers.utils import WEIGHTS_NAME, WEIGHTS_INDEX_NAME, cached_path, hf_bucket_url
+    from transformers.utils.hub import EntryNotFoundError
 
     cache_dir = None
     is_sharded = False
@@ -72,15 +75,20 @@ config = AutoConfig.from_pretrained(model_name)
 # XXX: can't automatically derive dtype via config's `from_pretrained`
 dtype = torch.bfloat16 if model_name in ["bigscience/bloom", "bigscience/bigscience-small-testing"] else torch.float16
 
-# XXX: for now ds-inference only works with fp16
-dtype = torch.float16
+kernel_inject = True
+#kernel_inject = False
+
+if kernel_inject:
+    # XXX: for now ds-inference only works with fp16
+    dtype = torch.float16
+else:
+    dtype = torch.bfloat16
 
 #dtype = config.dtype
 print(dtype)
 
 model_hidden_size = config.hidden_size
 train_batch_size = 1 * world_size
-model = AutoModelForCausalLM.from_config(config)
 
 ds_config = {
     "fp16": {
@@ -91,10 +99,10 @@ ds_config = {
     },
     "zero_optimization": {
         "stage": 3,
-        "offload_param": {
-            "device": "cpu",
-            "pin_memory": True
-        },
+#        "offload_param": {
+#            "device": "none",
+#            "pin_memory": True
+#        },
         "overlap_comm": True,
         "contiguous_gradients": True,
         "reduce_bucket_size": model_hidden_size * model_hidden_size,
@@ -111,40 +119,94 @@ print(ds_config)
 
 dschf = HfDeepSpeedConfig(ds_config)
 
+torch.cuda.empty_cache()
+gc.collect()
+deepspeed.runtime.utils.see_memory_usage('pre-from-pretrained', force=True)
+
+model = AutoModelForCausalLM.from_config(config, torch_dtype=torch.bfloat16)
+
+deepspeed.runtime.utils.see_memory_usage('post-from-pretrained', force=True)
+
 model = model.eval()
+
+
 ds_engine = deepspeed.initialize(model=model, config_params=ds_config)[0]
 ds_engine.module.eval()
 model = ds_engine.module
 
+# a must to remove ZeRO hooks!
+ds_engine.destroy()
+
+from deepspeed.runtime.zero.partition_parameters import ZeroParamStatus
+def ds_clear_params(ds_engine):
+    for p in ds_engine.parameters():
+        if hasattr(p, "ds_tensor"):
+            p.ds_tensor = torch.empty(0, dtype=p.dtype, device=p.device)
+            p.ds_status = ZeroParamStatus.NOT_AVAILABLE
+
+# this frees the memory used by zero
+ds_clear_params(ds_engine)
+
+#ds_engine.module = None
+del ds_engine
+
+torch.cuda.empty_cache()
+gc.collect()
+deepspeed.runtime.utils.see_memory_usage('post-init-ds-zero-init', force=True)
 
 
 checkpoints_json = "checkpoints.json"
-with io.open(checkpoints_json, 'w', encoding='utf-8') as f:
+def write_checkponts_json():
 
-    #checkpoint_files = glob.glob(f"args.checkpoint_dir/*bin")
-    checkpoint_files = get_checkpoint_files(model_name)
+    with io.open(checkpoints_json, 'w', encoding='utf-8') as f:
 
-    print("Checkpoint files:", checkpoint_files)
+        checkpoint_dir = "/gpfsscratch/rech/six/commun/uan68tv-model-conversion/bloom"
+        checkpoint_files = glob.glob(f"{checkpoint_dir}/*bin")
+        #checkpoint_files = get_checkpoint_files(model_name)
 
-    data = {
-	"type": "BLOOM-176B",
-	"checkpoints": checkpoint_files,
-	"version": 1.0
-    }
-    json.dump(data, f)
+        print("Checkpoint files:", checkpoint_files)
 
+        data = {
+            "type": "BLOOM-176B",
+            "checkpoints": checkpoint_files,
+            "version": 1.0
+        }
+        json.dump(data, f)
+
+rank = dist.get_rank()
+if rank == 0:
+    write_checkponts_json()
+dist.barrier()
+
+#print("before deepspeed.init_inference")
+torch.cuda.empty_cache()
+gc.collect()
+deepspeed.runtime.utils.see_memory_usage('pre-ds-inference-init', force=True)
 
 # use one of these args to `init_inference`
 # 1. injection_policy is the slower version, but it's plain pytorch so it'll always work
 # 2. replace_with_kernel_inject is the faster one (fast fused kernels)
 
+if kernel_inject:
+    kwargs = dict(replace_with_kernel_inject=True)
+else:
+    kwargs = dict(injection_policy={BloomBlock: ('self_attention.dense', 'mlp.dense_4h_to_h')})
+
+#checkpoints_json=None
 model = deepspeed.init_inference(model,
                                  mp_size=world_size,
                                  dtype=torch.half,
                                  checkpoint=checkpoints_json,
-                                 #injection_policy={BloomBlock: ('self_attention.dense', 'mlp.dense_4h_to_h')},
-                                 replace_with_kernel_inject=True
+                                 **kwargs
                                  )
+#                                 injection_policy={BloomBlock: ('self_attention.dense', 'mlp.dense_4h_to_h')},
+#                                 #replace_with_kernel_inject=True
+
+torch.cuda.empty_cache()
+gc.collect()
+deepspeed.runtime.utils.see_memory_usage('post-ds-inference-init', force=True)
+
+#print("after deepspeed.init_inference")
 model = model.module
 
 text_in = 'DeepSpeed is'
@@ -167,3 +229,8 @@ with torch.no_grad():
 text_out = tokenizer.batch_decode(gen_tokens)[0]
 
 print(f"in={text_in}\nout={text_out}")
+
+torch.cuda.empty_cache()
+gc.collect()
+deepspeed.runtime.utils.see_memory_usage('end-of-run', force=True)
+
