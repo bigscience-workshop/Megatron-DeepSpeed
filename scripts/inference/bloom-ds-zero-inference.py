@@ -1,11 +1,8 @@
 
 # usage:
 #
-# direct HF
-# deepspeed --num_gpus 1 bloom-test.py --name bigscience/bloom-350m
-#
 # via deepspeed/zero-3 inference
-# deepspeed --num_gpus 1 bloom-test.py --name bigscience/bloom-350m --deepspeed
+# deepspeed --num_gpus 8 bloom-ds-zero-inference.py --name bigscience/bloom
 #
 
 
