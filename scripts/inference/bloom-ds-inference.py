@@ -27,17 +27,24 @@ args = parser.parse_args()
 local_rank = int(os.getenv('LOCAL_RANK', '0'))
 world_size = int(os.getenv('WORLD_SIZE', '1'))
 
+
 def get_checkpoint_files(pretrained_model_name_or_path):
     # XXX: I just hacked this one together to automatically handle the fetching of the model file or
     # shards into cache and returning the cached entries - note that I removed most arguments
 
     from transformers.utils import WEIGHTS_NAME, WEIGHTS_INDEX_NAME, cached_path, hf_bucket_url
     from transformers.utils.hub import EntryNotFoundError
+    from transformers.modeling_utils import get_checkpoint_shard_files
 
     cache_dir = None
     is_sharded = False
+
+    revision = None
+    #revision = "sharded"
+
     filename = WEIGHTS_NAME
-    archive_file = hf_bucket_url(pretrained_model_name_or_path, filename=filename)
+    archive_file = hf_bucket_url(pretrained_model_name_or_path, filename=filename, revision=revision
+)
 
     try:
         resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir)
@@ -49,6 +56,7 @@ def get_checkpoint_files(pretrained_model_name_or_path):
             archive_file = hf_bucket_url(
                 pretrained_model_name_or_path,
                 filename=WEIGHTS_INDEX_NAME,
+                revision=revision,
             )
             resolved_archive_file = cached_path(
                 archive_file,
@@ -62,9 +70,11 @@ def get_checkpoint_files(pretrained_model_name_or_path):
             pretrained_model_name_or_path,
             resolved_archive_file,
             cache_dir=cache_dir,
+                revision=revision
         )
 
         return resolved_archive_file
+
 
 
 model_name = args.name
@@ -233,4 +243,3 @@ print(f"in={text_in}\nout={text_out}")
 torch.cuda.empty_cache()
 gc.collect()
 deepspeed.runtime.utils.see_memory_usage('end-of-run', force=True)
-
