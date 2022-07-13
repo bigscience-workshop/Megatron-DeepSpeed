@@ -32,7 +32,7 @@ def get_checkpoint_files(pretrained_model_name_or_path):
     # XXX: I just hacked this one together to automatically handle the fetching of the model file or
     # shards into cache and returning the cached entries - note that I removed most arguments
 
-    from transformers.utils import WEIGHTS_NAME, WEIGHTS_INDEX_NAME, cached_path, hf_bucket_url
+    from transformers.utils import WEIGHTS_NAME, WEIGHTS_INDEX_NAME, cached_path, hf_bucket_url, is_offline_mode
     from transformers.utils.hub import EntryNotFoundError
     from transformers.modeling_utils import get_checkpoint_shard_files
 
@@ -42,15 +42,19 @@ def get_checkpoint_files(pretrained_model_name_or_path):
     revision = None
     #revision = "sharded"
 
+    if is_offline_mode():
+        print("Offline mode: forcing local_files_only=True")
+        local_files_only = True
+
     filename = WEIGHTS_NAME
     archive_file = hf_bucket_url(pretrained_model_name_or_path, filename=filename, revision=revision
 )
 
     try:
-        resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir)
+        resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir, local_files_only=local_files_only,)
         return [resolved_archive_file]
 
-    except EntryNotFoundError:
+    except (EntryNotFoundError, FileNotFoundError):
         if filename == WEIGHTS_NAME:
             # Maybe the checkpoint is sharded, we try to grab the index name in this case.
             archive_file = hf_bucket_url(
@@ -61,6 +65,7 @@ def get_checkpoint_files(pretrained_model_name_or_path):
             resolved_archive_file = cached_path(
                 archive_file,
                 cache_dir=cache_dir,
+                local_files_only=local_files_only,
             )
             is_sharded = True
 
@@ -70,14 +75,16 @@ def get_checkpoint_files(pretrained_model_name_or_path):
             pretrained_model_name_or_path,
             resolved_archive_file,
             cache_dir=cache_dir,
-                revision=revision
+            revision=revision
         )
 
         return resolved_archive_file
 
-
-
 model_name = args.name
+
+#print(get_checkpoint_files(model_name))
+#die
+
 
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 config = AutoConfig.from_pretrained(model_name)
@@ -95,7 +102,7 @@ else:
     dtype = torch.bfloat16
 
 #dtype = config.dtype
-print(dtype)
+#print(dtype)
 
 model_hidden_size = config.hidden_size
 train_batch_size = 1 * world_size
@@ -125,7 +132,6 @@ ds_config = {
     "wall_clock_breakdown": False
 }
 
-print(ds_config)
 
 dschf = HfDeepSpeedConfig(ds_config)
 
@@ -138,6 +144,11 @@ model = AutoModelForCausalLM.from_config(config, torch_dtype=torch.bfloat16)
 deepspeed.runtime.utils.see_memory_usage('post-from-pretrained', force=True)
 
 model = model.eval()
+
+rank = dist.get_rank()
+
+if rank == 0:
+    print(ds_config)
 
 
 ds_engine = deepspeed.initialize(model=model, config_params=ds_config)[0]
@@ -170,9 +181,9 @@ def write_checkponts_json():
 
     with io.open(checkpoints_json, 'w', encoding='utf-8') as f:
 
-        checkpoint_dir = "/gpfsscratch/rech/six/commun/uan68tv-model-conversion/bloom"
-        checkpoint_files = glob.glob(f"{checkpoint_dir}/*bin")
-        #checkpoint_files = get_checkpoint_files(model_name)
+        #checkpoint_dir = "/gpfsscratch/rech/six/commun/uan68tv-model-conversion/bloom"
+        #checkpoint_files = glob.glob(f"{checkpoint_dir}/*bin")
+        checkpoint_files = get_checkpoint_files(model_name)
 
         print("Checkpoint files:", checkpoint_files)
 
@@ -183,7 +194,6 @@ def write_checkponts_json():
         }
         json.dump(data, f)
 
-rank = dist.get_rank()
 if rank == 0:
     write_checkponts_json()
 dist.barrier()
@@ -219,7 +229,7 @@ deepspeed.runtime.utils.see_memory_usage('post-ds-inference-init', force=True)
 #print("after deepspeed.init_inference")
 model = model.module
 
-text_in = 'DeepSpeed is'
+text_in = 'DeepSpeed is a machine learning framework'
 
 tokens = tokenizer(text_in, return_tensors="pt")
 
@@ -230,15 +240,16 @@ for t in tokens:
 with torch.no_grad():
     gen_tokens = model.generate(
         **tokens,
-        min_length=50,
-        max_length=50,
+        min_length=100,
+        max_length=100,
         do_sample=False,
     )
 
 
 text_out = tokenizer.batch_decode(gen_tokens)[0]
 
-print(f"in={text_in}\nout={text_out}")
+if rank == 0:
+    print(f"in={text_in}\nout={text_out}")
 
 torch.cuda.empty_cache()
 gc.collect()
