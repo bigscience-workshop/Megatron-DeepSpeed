@@ -17,10 +17,10 @@ Adding `--benchmark` to activate the benchmarks
 deepspeed --num_gpus 8 scripts/inference/bloom-ds-inference.py --name bigscience/bloom --benchmark
 
 *** Performance stats:
-Start to ready to generate: 698.697 secs
-Generate 100 tokens: 23.008 secs
-Start to finish 721.705 secs
-Througput per token: 0.0412 secs
+Throughput per token: 40.73 msecs
+Start to ready to generate: 673.429 secs
+Tokenize and generate 100 tokens: 4.089 secs
+Start to finish: 677.518 secs
 ```
 
 While processing memory per process:
