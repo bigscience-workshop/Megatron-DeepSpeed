@@ -256,24 +256,24 @@ if args.benchmark:
 if rank == 0:
     print(f"*** Starting to generate {num_tokens} tokens")
 
-text_in = 'DeepSpeed is a machine learning framework'
+def generate():
+    text_in = 'DeepSpeed is a machine learning framework'
+    tokens = tokenizer(text_in, return_tensors="pt")
+    for t in tokens:
+        if torch.is_tensor(tokens[t]):
+            tokens[t] = tokens[t].to(torch.cuda.current_device())
+    gen_tokens = model.generate(**tokens, min_length=num_tokens, max_length=num_tokens, do_sample=False)
+    text_out = tokenizer.batch_decode(gen_tokens)[0]
+    return text_in, text_out
 
-tokens = tokenizer(text_in, return_tensors="pt")
+# warmup
+text_in, text_out = generate()
 
-for t in tokens:
-    if torch.is_tensor(tokens[t]):
-        tokens[t] = tokens[t].to(torch.cuda.current_device())
-
-with torch.no_grad():
-    gen_tokens = model.generate(
-        **tokens,
-        min_length=num_tokens,
-        max_length=num_tokens,
-        do_sample=False,
-    )
-
-
-text_out = tokenizer.batch_decode(gen_tokens)[0]
+if args.benchmark:
+    # make sure one generate is run earlier as a warmup
+    t_generate_start = time.time()
+    text_in, text_out = generate()
+    t_generate_span = time.time() - t_generate_start
 
 if rank == 0:
     print(f"in={text_in}\nout={text_out}")
@@ -295,25 +295,14 @@ if args.benchmark:
 
     # warm up
     for i in range(1):
-        gen_tokens = model.generate(
-                    **tokens,
-                    min_length=num_tokens,
-                    max_length=num_tokens,
-                    do_sample=True,
-                )
-
+        generate()
     torch.cuda.synchronize()
 
     # benchmark
     t0 = time.time()
     cycles = 5
     for i in range(cycles):
-        gen_tokens = model.generate(
-                    **tokens,
-                    min_length=num_tokens,
-                    max_length=num_tokens,
-                    do_sample=True,
-                )
+        generate()
     torch.cuda.synchronize()
     if rank == 0:
         througput = (time.time() - t0)/(cycles*num_tokens)
@@ -321,6 +310,6 @@ if args.benchmark:
 *** Performance stats:
 Throughput per token: {througput*1000:.2f} msecs
 Start to ready to generate: {t_ready - t_start:.3f} secs
-Generate {num_tokens} tokens: {t_finish - t_ready:.3f} secs
-Start to finish: {t_finish - t_start:.3f} secs
+Tokenize and generate {num_tokens} tokens: {t_generate_span:.3f} secs
+Start to finish: {t_ready - t_start + t_generate_span:.3f} secs
 """)
