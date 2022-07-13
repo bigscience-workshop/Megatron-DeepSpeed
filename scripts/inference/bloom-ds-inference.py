@@ -67,6 +67,8 @@ def get_checkpoint_files(pretrained_model_name_or_path):
     if is_offline_mode():
         print("Offline mode: forcing local_files_only=True")
         local_files_only = True
+    else:
+        local_files_only = False
 
     filename = WEIGHTS_NAME
     archive_file = hf_bucket_url(pretrained_model_name_or_path, filename=filename, revision=revision)
