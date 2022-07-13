@@ -149,9 +149,9 @@ model = deepspeed.init_inference(model,
                                  )
 model = model.module
 input_sentence = ["DeepSpeed is", 
-                  "Reza is working on", 
-                  "Jeff has a", 
-                  "Stas got all", 
+                  "He is working on", 
+                  "He has a", 
+                  "He got all", 
                   "Everyone is happy and I can", 
                   "The new movie that got Oscar this year", 
                   "In the far far distance from our galaxy,", 
