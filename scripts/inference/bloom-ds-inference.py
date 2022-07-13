@@ -16,12 +16,17 @@ import os
 import gc
 import torch
 import torch.distributed as dist
+import time
+
+t_start = time.time()
+
+num_tokens = 100
 
 parser = ArgumentParser()
 
 parser.add_argument("--name", required=True, type=str)
 parser.add_argument("--local_rank", required=False, type=int)
-parser.add_argument("--deepspeed", action="store_true")
+parser.add_argument("--benchmark", action="store_true")
 args = parser.parse_args()
 
 local_rank = int(os.getenv('LOCAL_RANK', '0'))
@@ -39,16 +44,18 @@ def get_checkpoint_files(pretrained_model_name_or_path):
     cache_dir = None
     is_sharded = False
 
+    # XXX: preparation for revision branches if needed
     revision = None
     #revision = "sharded"
 
+    # this supports nodes with no network (so you need to pre-cache the model and the tokenizer with
+    # python -c "from transformers import AutoModel; AutoModel.from_pretrained('bigscience/bloom')"
     if is_offline_mode():
         print("Offline mode: forcing local_files_only=True")
         local_files_only = True
 
     filename = WEIGHTS_NAME
-    archive_file = hf_bucket_url(pretrained_model_name_or_path, filename=filename, revision=revision
-)
+    archive_file = hf_bucket_url(pretrained_model_name_or_path, filename=filename, revision=revision)
 
     try:
         resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir, local_files_only=local_files_only,)
@@ -83,8 +90,9 @@ def get_checkpoint_files(pretrained_model_name_or_path):
 model_name = args.name
 
 #print(get_checkpoint_files(model_name))
-#die
 
+if local_rank == 0:
+    print(f"*** Loading the model {model_name}")
 
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 config = AutoConfig.from_pretrained(model_name)
@@ -226,8 +234,13 @@ torch.cuda.empty_cache()
 gc.collect()
 deepspeed.runtime.utils.see_memory_usage('post-ds-inference-init', force=True)
 
-#print("after deepspeed.init_inference")
+if rank == 0:
+    print(f"*** Starting to generate {num_tokens}")
+
 model = model.module
+
+if args.benchmark:
+    t_ready = time.time()
 
 text_in = 'DeepSpeed is a machine learning framework'
 
@@ -240,8 +253,8 @@ for t in tokens:
 with torch.no_grad():
     gen_tokens = model.generate(
         **tokens,
-        min_length=100,
-        max_length=100,
+        min_length=num_tokens,
+        max_length=num_tokens,
         do_sample=False,
     )
 
@@ -251,22 +264,24 @@ text_out = tokenizer.batch_decode(gen_tokens)[0]
 if rank == 0:
     print(f"in={text_in}\nout={text_out}")
 
+if args.benchmark:
+    t_finish = time.time()
+
 torch.cuda.empty_cache()
 gc.collect()
 deepspeed.runtime.utils.see_memory_usage('end-of-run', force=True)
 
 # benchmark it!
-if 1:
-    print("Now running a benchmark of performance")
-
-    import time
+if args.benchmark:
+    if rank == 0:
+        print(f"*** Running benchmark")
 
     # warm up
-    for i in range(5):
+    for i in range(1):
         gen_tokens = model.generate(
                     **tokens,
-                    min_length=100,
-                    max_length=100,
+                    min_length=num_tokens,
+                    max_length=num_tokens,
                     do_sample=True,
                 )
 
@@ -274,15 +289,21 @@ if 1:
 
     # benchmark
     t0 = time.time()
-    for i in range(5):
-
+    cycles = 5
+    for i in range(cycles):
         gen_tokens = model.generate(
                     **tokens,
-                    min_length=100,
-                    max_length=100,
+                    min_length=num_tokens,
+                    max_length=num_tokens,
                     do_sample=True,
                 )
     torch.cuda.synchronize()
-    if torch.distributed.get_rank() == 0:
-        print(f'token latency: {(time.time() - t0)/500}')
-
+    if rank == 0:
+        througput = (time.time() - t0)/(cycles*num_tokens)
+        print(f"""
+*** Performance stats:
+Start to ready to generate {t_ready - t_start:.3f} secs
+Generate {num_tokens} tokens: {t_finish - t_ready:.3f} secs
+Start to finish {t_finish - t_start:.3f} secs
+Througput per token: {througput:.4f} secs
+""")
