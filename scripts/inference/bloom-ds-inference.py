@@ -38,6 +38,7 @@ parser = ArgumentParser()
 
 parser.add_argument("--name", required=True, type=str, help="model_name")
 parser.add_argument("--local_rank", required=False, type=int, help="used by dist launchers")
+parser.add_argument("--batch_size", default=1, type=int, help="batch size")
 parser.add_argument("--benchmark", action="store_true", help="additionally run benchmark")
 args = parser.parse_args()
 
@@ -256,33 +257,50 @@ if args.benchmark:
 ### Generate
 
 if rank == 0:
-    print(f"*** Starting to generate {num_tokens} tokens")
+    print(f"*** Starting to generate {num_tokens} tokens with bs={args.batch_size}")
 
+input_sentences = [
+    "DeepSpeed is a machine learning framework",
+    "He is working on",
+    "He has a",
+    "He got all",
+    "Everyone is happy and I can",
+    "The new movie that got Oscar this year",
+    "In the far far distance from our galaxy,",
+    "Peace is the only way"
+]
+
+if args.batch_size > len(input_sentences):
+    raise ValueError(f"--batch_size should be <= {len(input_sentences)}")
+
+inputs = input_sentences[:args.batch_size]
 def generate():
-    text_in = 'DeepSpeed is a machine learning framework'
-    tokens = tokenizer(text_in, return_tensors="pt")
+    """ returns a list of pairs of inputs and outputs """
+
+    tokens = tokenizer.batch_encode_plus(inputs, return_tensors="pt", padding=True)
+
     for t in tokens:
         if torch.is_tensor(tokens[t]):
             tokens[t] = tokens[t].to(torch.cuda.current_device())
-    gen_tokens = model.generate(**tokens, min_length=num_tokens, max_length=num_tokens, do_sample=False)
-    text_out = tokenizer.batch_decode(gen_tokens)[0]
-    return text_in, text_out
+
+    greedy_output = model.generate(**tokens, min_length=num_tokens, max_length=num_tokens, do_sample=True)
+
+    outputs = tokenizer.batch_decode(greedy_output, skip_special_tokens=True)
+
+    return zip(inputs, outputs)
+
 
 # warmup is a must if measuring speed as it's when all the optimizations are performed
 # e.g. on 8x80 a100 the first pass of 100 tokens takes 23sec, and the next one is 4secs
-text_in, text_out = generate()
+pairs = generate()
+for i,o in pairs:
+    print(f"{'-'*60}\nin={i}\nout={o}\n")
 
 if args.benchmark:
     # make sure one generate is run earlier as a warmup
     t_generate_start = time.time()
-    text_in, text_out = generate()
+    _ = generate()
     t_generate_span = time.time() - t_generate_start
-
-if rank == 0:
-    print(f"in={text_in}\nout={text_out}")
-
-if args.benchmark:
-    t_finish = time.time()
 
 if args.benchmark:
     torch.cuda.empty_cache()
@@ -298,14 +316,14 @@ if args.benchmark:
 
     # warm up
     for i in range(1):
-        generate()
+        _ = generate()
     torch.cuda.synchronize()
 
     # benchmark
     t0 = time.time()
     cycles = 5
     for i in range(cycles):
-        generate()
+        _ = generate()
     torch.cuda.synchronize()
     if rank == 0:
         througput = (time.time() - t0)/(cycles*num_tokens)
