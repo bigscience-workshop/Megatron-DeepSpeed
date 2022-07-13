@@ -283,7 +283,7 @@ def generate():
         if torch.is_tensor(tokens[t]):
             tokens[t] = tokens[t].to(torch.cuda.current_device())
 
-    greedy_output = model.generate(**tokens, min_length=num_tokens, max_length=num_tokens, do_sample=True)
+    greedy_output = model.generate(**tokens, min_length=num_tokens, max_length=num_tokens, do_sample=False)
 
     outputs = tokenizer.batch_decode(greedy_output, skip_special_tokens=True)
 
