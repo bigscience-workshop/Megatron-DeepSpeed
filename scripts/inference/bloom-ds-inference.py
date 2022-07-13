@@ -1,7 +1,19 @@
-
 # usage:
 # deepspeed --num_gpus 8 bloom-ds-inference.py --name bigscience/bloom
 #
+# to run benchmarks:
+# deepspeed --num_gpus 8 bloom-ds-inference.py --name bigscience/bloom --benchmark
+#
+
+
+# This is going to improve, but at the moment, the process is a bit cumbersome - we first use
+# 1. use Deepspeed-ZeRO to instantiate the model on GPUs, w/o loading the checkpoints,
+# 2. free the allocated storage
+# 3. start Deepspeed-Inference and only now load the checkpoint
+# 4. run generate
+# Done.
+#
+
 
 import glob
 from argparse import ArgumentParser
@@ -24,14 +36,16 @@ num_tokens = 100
 
 parser = ArgumentParser()
 
-parser.add_argument("--name", required=True, type=str)
-parser.add_argument("--local_rank", required=False, type=int)
-parser.add_argument("--benchmark", action="store_true")
+parser.add_argument("--name", required=True, type=str, help="model_name")
+parser.add_argument("--local_rank", required=False, type=int, help="used by dist launchers")
+parser.add_argument("--benchmark", action="store_true", help="additionally run benchmark")
 args = parser.parse_args()
 
 local_rank = int(os.getenv('LOCAL_RANK', '0'))
 world_size = int(os.getenv('WORLD_SIZE', '1'))
 
+
+### Model loading and instantiating on GPU (via ZeRO)
 
 def get_checkpoint_files(pretrained_model_name_or_path):
     # XXX: I just hacked this one together to automatically handle the fetching of the model file or
@@ -98,8 +112,12 @@ tokenizer = AutoTokenizer.from_pretrained(model_name)
 config = AutoConfig.from_pretrained(model_name)
 
 # XXX: can't automatically derive dtype via config's `from_pretrained`
-dtype = torch.bfloat16 if model_name in ["bigscience/bloom", "bigscience/bigscience-small-testing"] else torch.float16
+#dtype = torch.bfloat16 if model_name in ["bigscience/bloom", "bigscience/bigscience-small-testing"] else torch.float16
 
+
+# use one of these args to `init_inference`
+# 1. injection_policy is the slower version, but it's plain pytorch so it'll always work
+# 2. replace_with_kernel_inject is the faster one (fast fused kernels)
 kernel_inject = True
 #kernel_inject = False
 
@@ -124,10 +142,6 @@ ds_config = {
     },
     "zero_optimization": {
         "stage": 3,
-#        "offload_param": {
-#            "device": "none",
-#            "pin_memory": True
-#        },
         "overlap_comm": True,
         "contiguous_gradients": True,
         "reduce_bucket_size": model_hidden_size * model_hidden_size,
@@ -143,13 +157,15 @@ ds_config = {
 
 dschf = HfDeepSpeedConfig(ds_config)
 
-torch.cuda.empty_cache()
-gc.collect()
-deepspeed.runtime.utils.see_memory_usage('pre-from-pretrained', force=True)
+if args.benchmark:
+    torch.cuda.empty_cache()
+    gc.collect()
+    deepspeed.runtime.utils.see_memory_usage('pre-from-pretrained', force=True)
 
 model = AutoModelForCausalLM.from_config(config, torch_dtype=torch.bfloat16)
 
-deepspeed.runtime.utils.see_memory_usage('post-from-pretrained', force=True)
+if args.benchmark:
+    deepspeed.runtime.utils.see_memory_usage('post-from-pretrained', force=True)
 
 model = model.eval()
 
@@ -158,14 +174,16 @@ rank = dist.get_rank()
 if rank == 0:
     print(ds_config)
 
-
 ds_engine = deepspeed.initialize(model=model, config_params=ds_config)[0]
 ds_engine.module.eval()
 model = ds_engine.module
 
-# a must to remove ZeRO hooks!
+### Deepspeed-ZeRO Unloading
+
+# a must to remove ZeRO-installed hooks!
 ds_engine.destroy()
 
+# free GPU storage used by ZeRO
 from deepspeed.runtime.zero.partition_parameters import ZeroParamStatus
 def ds_clear_params(ds_engine):
     for p in ds_engine.parameters():
@@ -173,16 +191,13 @@ def ds_clear_params(ds_engine):
             p.ds_tensor = torch.empty(0, dtype=p.dtype, device=p.device)
             p.ds_status = ZeroParamStatus.NOT_AVAILABLE
 
-# this frees the memory used by zero
 ds_clear_params(ds_engine)
-
-#ds_engine.module = None
 del ds_engine
 
-torch.cuda.empty_cache()
-gc.collect()
-deepspeed.runtime.utils.see_memory_usage('post-init-ds-zero-init', force=True)
-
+if args.benchmark:
+    torch.cuda.empty_cache()
+    gc.collect()
+    deepspeed.runtime.utils.see_memory_usage('post-init-ds-zero-init', force=True)
 
 checkpoints_json = "checkpoints.json"
 def write_checkponts_json():
@@ -206,14 +221,10 @@ if rank == 0:
     write_checkponts_json()
 dist.barrier()
 
-#print("before deepspeed.init_inference")
-torch.cuda.empty_cache()
-gc.collect()
-deepspeed.runtime.utils.see_memory_usage('pre-ds-inference-init', force=True)
-
-# use one of these args to `init_inference`
-# 1. injection_policy is the slower version, but it's plain pytorch so it'll always work
-# 2. replace_with_kernel_inject is the faster one (fast fused kernels)
+if args.benchmark:
+    torch.cuda.empty_cache()
+    gc.collect()
+    deepspeed.runtime.utils.see_memory_usage('pre-ds-inference-init', force=True)
 
 if kernel_inject:
     kwargs = dict(replace_with_kernel_inject=True)
@@ -225,14 +236,13 @@ model = deepspeed.init_inference(model,
                                  mp_size=world_size,
                                  dtype=torch.half,
                                  checkpoint=checkpoints_json,
-                                 **kwargs
+                                 **kwargs,
                                  )
-#                                 injection_policy={BloomBlock: ('self_attention.dense', 'mlp.dense_4h_to_h')},
-#                                 #replace_with_kernel_inject=True
 
-torch.cuda.empty_cache()
-gc.collect()
-deepspeed.runtime.utils.see_memory_usage('post-ds-inference-init', force=True)
+if args.benchmark:
+    torch.cuda.empty_cache()
+    gc.collect()
+    deepspeed.runtime.utils.see_memory_usage('post-ds-inference-init', force=True)
 
 if rank == 0:
     print(f"*** Starting to generate {num_tokens}")
@@ -241,6 +251,9 @@ model = model.module
 
 if args.benchmark:
     t_ready = time.time()
+
+
+### Generate
 
 text_in = 'DeepSpeed is a machine learning framework'
 
@@ -267,9 +280,12 @@ if rank == 0:
 if args.benchmark:
     t_finish = time.time()
 
-torch.cuda.empty_cache()
-gc.collect()
-deepspeed.runtime.utils.see_memory_usage('end-of-run', force=True)
+if args.benchmark:
+    torch.cuda.empty_cache()
+    gc.collect()
+    deepspeed.runtime.utils.see_memory_usage('end-of-run', force=True)
+
+### Benchmark
 
 # benchmark it!
 if args.benchmark:
