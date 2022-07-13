@@ -268,7 +268,8 @@ def generate():
     text_out = tokenizer.batch_decode(gen_tokens)[0]
     return text_in, text_out
 
-# warmup
+# warmup is a must if measuring speed as it's when all the optimizations are performed
+# e.g. on 8x80 a100 the first pass of 100 tokens takes 23sec, and the next one is 4secs
 text_in, text_out = generate()
 
 if args.benchmark:
