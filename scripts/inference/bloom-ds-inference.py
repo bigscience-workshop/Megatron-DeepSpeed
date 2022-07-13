@@ -244,8 +244,6 @@ if args.benchmark:
     gc.collect()
     deepspeed.runtime.utils.see_memory_usage('post-ds-inference-init', force=True)
 
-if rank == 0:
-    print(f"*** Starting to generate {num_tokens}")
 
 model = model.module
 
@@ -254,6 +252,9 @@ if args.benchmark:
 
 
 ### Generate
+
+if rank == 0:
+    print(f"*** Starting to generate {num_tokens} tokens")
 
 text_in = 'DeepSpeed is a machine learning framework'
 
