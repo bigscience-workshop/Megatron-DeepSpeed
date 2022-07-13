@@ -302,8 +302,8 @@ if args.benchmark:
         througput = (time.time() - t0)/(cycles*num_tokens)
         print(f"""
 *** Performance stats:
+Throughput per token: {througput*1000:.2f} msecs
 Start to ready to generate: {t_ready - t_start:.3f} secs
 Generate {num_tokens} tokens: {t_finish - t_ready:.3f} secs
-Start to finish {t_finish - t_start:.3f} secs
-Throughput per token: {througput:.4f} secs
+Start to finish: {t_finish - t_start:.3f} secs
 """)
