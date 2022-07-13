@@ -254,3 +254,35 @@ if rank == 0:
 torch.cuda.empty_cache()
 gc.collect()
 deepspeed.runtime.utils.see_memory_usage('end-of-run', force=True)
+
+# benchmark it!
+if 1:
+    print("Now running a benchmark of performance")
+
+    import time
+
+    # warm up
+    for i in range(5):
+        gen_tokens = model.generate(
+                    **tokens,
+                    min_length=100,
+                    max_length=100,
+                    do_sample=True,
+                )
+
+    torch.cuda.synchronize()
+
+    # benchmark
+    t0 = time.time()
+    for i in range(5):
+
+        gen_tokens = model.generate(
+                    **tokens,
+                    min_length=100,
+                    max_length=100,
+                    do_sample=True,
+                )
+    torch.cuda.synchronize()
+    if torch.distributed.get_rank() == 0:
+        print(f'token latency: {(time.time() - t0)/500}')
+
