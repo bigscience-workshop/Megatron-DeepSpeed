@@ -333,7 +333,7 @@ if args.benchmark:
         _ = generate()
     torch.cuda.synchronize()
     if rank == 0:
-        througput = (time.time() - t0)/(cycles*num_tokens)
+        througput = (time.time() - t0)/(cycles*num_tokens*args.batch_size)
         print(f"""
 *** Performance stats:
 Throughput per token including tokenize: {througput*1000:.2f} msecs
