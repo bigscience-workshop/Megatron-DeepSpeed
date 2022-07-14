@@ -296,8 +296,9 @@ def generate():
 # warmup is a must if measuring speed as it's when all the optimizations are performed
 # e.g. on 8x80 a100 the first pass of 100 tokens takes 23sec, and the next one is 4secs
 pairs = generate()
-for i,o in pairs:
-    print(f"{'-'*60}\nin={i}\nout={o}\n")
+if rank == 0:
+    for i,o in pairs:
+        print(f"{'-'*60}\nin={i}\nout={o}\n")
 
 if args.benchmark:
     # make sure one generate is run earlier as a warmup
