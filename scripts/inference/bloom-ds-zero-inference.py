@@ -1,45 +1,69 @@
-
 # usage:
+# deepspeed --num_gpus 8 bloom-ds-inference.py --name bigscience/bloom
 #
-# via deepspeed/zero-3 inference
-# deepspeed --num_gpus 8 bloom-ds-zero-inference.py --name bigscience/bloom
+# to run benchmarks:
+# deepspeed --num_gpus 8 bloom-ds-inference.py --name bigscience/bloom --benchmark
 #
 
 
-import torch
-import deepspeed
-import transformers
-from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig, pipeline
+# This is going to improve, but at the moment, the process is a bit cumbersome - we first use
+# 1. use Deepspeed-ZeRO to instantiate the model on GPUs, w/o loading the checkpoints,
+# 2. free the allocated storage
+# 3. start Deepspeed-Inference and only now load the checkpoint
+# 4. run generate
+# Done.
+#
+
+
+import glob
 from argparse import ArgumentParser
-import os
-from transformers.models.bloom.modeling_bloom import BloomBlock as BloomBlock
+from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 from transformers.deepspeed import HfDeepSpeedConfig
+from transformers.models.bloom.modeling_bloom import BloomBlock as BloomBlock
+import deepspeed
+import io
+import math
+import sys
+import json
+import os
+import gc
+import torch
 import torch.distributed as dist
+import time
+
+t_start = time.time()
+
+num_tokens = 100
 
 parser = ArgumentParser()
 
-parser.add_argument("--name", required=True, type=str)
-parser.add_argument("--local_rank", required=False, type=int)
-#parser.add_argument("--deepspeed", action="store_true")
+parser.add_argument("--name", required=True, type=str, help="model_name")
+parser.add_argument("--local_rank", required=False, type=int, help="used by dist launchers")
+parser.add_argument("--batch_size", default=1, type=int, help="batch size")
+parser.add_argument("--benchmark", action="store_true", help="additionally run benchmark")
+parser.add_argument("--cpu_offload", action="store_true", help="whether to activate CPU offload")
 args = parser.parse_args()
 
 local_rank = int(os.getenv('LOCAL_RANK', '0'))
 world_size = int(os.getenv('WORLD_SIZE', '1'))
 
-print(
-    "***************** Creating model in RANK ({0}) with WORLD_SIZE = {1} *****************"
-    .format(local_rank,
-            world_size))
 
-config = AutoConfig.from_pretrained(args.name)
+### Model loading and instantiating on GPU (via ZeRO)
 
-model_hidden_size = config.hidden_size
-
-train_batch_size = 1 * world_size
 model_name = args.name
+
+if local_rank == 0:
+    print(f"*** Loading the model {model_name}")
+
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+config = AutoConfig.from_pretrained(model_name)
+
+# XXX: can't automatically derive dtype via config's `from_pretrained`
 dtype = torch.bfloat16 if model_name in ["bigscience/bloom", "bigscience/bigscience-small-testing"] else torch.float16
 
-# Note: you need to edit nvme_path to an actual path on your filesystem where the model will be offloaded to
+model_hidden_size = config.hidden_size
+train_batch_size = 1 * world_size
+
 ds_config = {
     "fp16": {
         "enabled": dtype == torch.float16,
@@ -49,19 +73,11 @@ ds_config = {
     },
     "zero_optimization": {
         "stage": 3,
-        "offload_param": {
-            "device": "nvme",
-            "nvme_path": "/mnt/nvme0/offload/",
-            "pin_memory": True,
-            "buffer_count": 4,
-            "buffer_size": 4e9, # for bloom, otherwise the default 1e8 should be enough
-            "fast_init": False
-        },
         "overlap_comm": True,
         "contiguous_gradients": True,
         "reduce_bucket_size": model_hidden_size * model_hidden_size,
         "stage3_prefetch_bucket_size": 0.9 * model_hidden_size * model_hidden_size,
-        "stage3_param_persistence_threshold": 10 * model_hidden_size
+        "stage3_param_persistence_threshold": 0
     },
     "steps_per_print": 2000,
     "train_batch_size": train_batch_size,
@@ -69,37 +85,119 @@ ds_config = {
     "wall_clock_breakdown": False
 }
 
-deepspeed.runtime.utils.see_memory_usage('pre-init', force=True)
-#if args.deepspeed:
-dschf = HfDeepSpeedConfig(ds_config)
+if args.cpu_offload:
+    ds_config["zero_optimization"]["offload_param"] = dict(device="cpu", pin_memory=True)
 
-model = AutoModelForCausalLM.from_pretrained(model_name)
+dschf = HfDeepSpeedConfig(ds_config) # this tells from_pretrained to instantiate directly on gpus
 
-#generator = pipeline('text-generation', model=args.name, device=local_rank, framework="pt")
-deepspeed.runtime.utils.see_memory_usage('post-init', force=True)
+if args.benchmark:
+    torch.cuda.empty_cache()
+    gc.collect()
+    deepspeed.runtime.utils.see_memory_usage('pre-from-pretrained', force=True)
+
+model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.bfloat16)
+
+if args.benchmark:
+    deepspeed.runtime.utils.see_memory_usage('post-from-pretrained', force=True)
+
+model = model.eval()
+
+rank = dist.get_rank()
+
+if rank == 0:
+    print(ds_config)
 
 ds_engine = deepspeed.initialize(model=model, config_params=ds_config)[0]
 ds_engine.module.eval()
-#    generator.model = ds_engine.module
-deepspeed.runtime.utils.see_memory_usage('post-ds-init', force=True)
+model = ds_engine.module
 
-# if args.deepspeed:
-#     ds_engine = deepspeed.initialize(model=model, config_params=ds_config)[0]
-#     ds_engine.module.eval()
-# #    generator.model = ds_engine.module
-#     deepspeed.runtime.utils.see_memory_usage('post-ds-init', force=True)
-# else:
-#     dist.init_process_group("nccl")
-#     model = model.to(device=local_rank)
+if args.benchmark:
+    t_ready = time.time()
 
-#response = generator('DeepSpeed is', min_length=50, max_length=50, do_sample=False)
 
-text_in = 'DeepSpeed is'
+### Generate
 
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-inputs = tokenizer.encode(text_in, return_tensors="pt").to(device=local_rank)
-with torch.no_grad():
-    #model = ds_engine.module if args.deepspeed else model
-    outputs = model.generate(inputs, synced_gpus=True, min_length=50, max_length=50, do_sample=False)
-text_out = tokenizer.decode(outputs[0], skip_special_tokens=True)
-print(f"in={text_in}\nout={text_out}")
+if rank == 0:
+    print(f"*** Starting to generate {num_tokens} tokens with bs={args.batch_size}")
+
+input_sentences = [
+    "DeepSpeed is a machine learning framework",
+    "He is working on",
+    "He has a",
+    "He got all",
+    "Everyone is happy and I can",
+    "The new movie that got Oscar this year",
+    "In the far far distance from our galaxy,",
+    "Peace is the only way"
+]
+
+if args.batch_size > len(input_sentences):
+    # dynamically extend to support larger bs by repetition
+    input_sentences *= math.ceil(args.batch_size / len(input_sentences))
+
+#generate_kwargs = dict(min_length=num_tokens, max_length=num_tokens, do_sample=False)
+generate_kwargs = dict(min_length=num_tokens, max_length=num_tokens, do_sample=True)
+if rank == 0:
+    print(f"Generate args {generate_kwargs}")
+inputs = input_sentences[:args.batch_size]
+def generate():
+    """ returns a list of pairs of inputs and outputs """
+
+    tokens = tokenizer.batch_encode_plus(inputs, return_tensors="pt", padding=True)
+
+    for t in tokens:
+        if torch.is_tensor(tokens[t]):
+            tokens[t] = tokens[t].to(torch.cuda.current_device())
+
+    greedy_output = model.generate(**tokens, **generate_kwargs)
+
+    outputs = tokenizer.batch_decode(greedy_output, skip_special_tokens=True)
+
+    return zip(inputs, outputs)
+
+
+# warmup is a must if measuring speed as it's when all the optimizations are performed
+# e.g. on 8x80 a100 the first pass of 100 tokens takes 23sec, and the next one is 4secs
+pairs = generate()
+if rank == 0:
+    for i,o in pairs:
+        print(f"{'-'*60}\nin={i}\nout={o}\n")
+
+if args.benchmark:
+    # make sure one generate is run earlier as a warmup
+    t_generate_start = time.time()
+    _ = generate()
+    t_generate_span = time.time() - t_generate_start
+
+if args.benchmark:
+    torch.cuda.empty_cache()
+    gc.collect()
+    deepspeed.runtime.utils.see_memory_usage('end-of-run', force=True)
+
+### Benchmark
+
+# benchmark it!
+if args.benchmark:
+    if rank == 0:
+        print(f"*** Running benchmark")
+
+    # warm up
+    for i in range(1):
+        _ = generate()
+    torch.cuda.synchronize()
+
+    # benchmark
+    t0 = time.time()
+    cycles = 5
+    for i in range(cycles):
+        _ = generate()
+    torch.cuda.synchronize()
+    if rank == 0:
+        througput = (time.time() - t0)/(cycles*num_tokens*args.batch_size)
+        print(f"""
+*** Performance stats:
+Throughput per token including tokenize: {througput*1000:.2f} msecs
+Start to ready to generate: {t_ready - t_start:.3f} secs
+Tokenize and generate {num_tokens*args.batch_size} (bs={args.batch_size}) tokens: {t_generate_span:.3f} secs
+Start to finish: {t_ready - t_start + t_generate_span:.3f} secs
+""")
