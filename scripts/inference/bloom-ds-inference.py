@@ -22,6 +22,7 @@ from transformers.deepspeed import HfDeepSpeedConfig
 from transformers.models.bloom.modeling_bloom import BloomBlock as BloomBlock
 import deepspeed
 import io
+import math
 import sys
 import json
 import os
@@ -271,9 +272,11 @@ input_sentences = [
 ]
 
 if args.batch_size > len(input_sentences):
-    raise ValueError(f"--batch_size should be <= {len(input_sentences)}")
+    # dynamically extend to support larger bs by repetition
+    input_sentences *= math.ceil(args.batch_size / len(input_sentences))
 
-generate_kwargs = dict(min_length=num_tokens, max_length=num_tokens, do_sample=False)
+#generate_kwargs = dict(min_length=num_tokens, max_length=num_tokens, do_sample=False)
+generate_kwargs = dict(min_length=num_tokens, max_length=num_tokens, do_sample=True)
 if rank == 0:
     print(f"Generate args {generate_kwargs}")
 inputs = input_sentences[:args.batch_size]
