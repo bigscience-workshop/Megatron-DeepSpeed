@@ -273,7 +273,7 @@ input_sentences = [
 if args.batch_size > len(input_sentences):
     raise ValueError(f"--batch_size should be <= {len(input_sentences)}")
 
-generate_kwargs = dict(in_length=num_tokens, max_length=num_tokens, do_sample=False)
+generate_kwargs = dict(min_length=num_tokens, max_length=num_tokens, do_sample=False)
 if rank == 0:
     print(f"Generate args {generate_kwargs}")
 inputs = input_sentences[:args.batch_size]
