@@ -45,6 +45,7 @@ args = parser.parse_args()
 local_rank = int(os.getenv('LOCAL_RANK', '0'))
 world_size = int(os.getenv('WORLD_SIZE', '1'))
 
+deepspeed.init_distributed('nccl')
 
 ### Model loading and instantiating on GPU (via ZeRO)
 
@@ -158,14 +159,16 @@ ds_config = {
 }
 
 
-dschf = HfDeepSpeedConfig(ds_config)
+#dschf = HfDeepSpeedConfig(ds_config)
 
 if args.benchmark:
     torch.cuda.empty_cache()
     gc.collect()
     deepspeed.runtime.utils.see_memory_usage('pre-from-pretrained', force=True)
 
-model = AutoModelForCausalLM.from_config(config, torch_dtype=torch.bfloat16)
+from ongpu import OnGPU
+with OnGPU(dtype=torch.float16, enabled=True):
+    model = AutoModelForCausalLM.from_config(config, torch_dtype=torch.bfloat16)
 
 if args.benchmark:
     deepspeed.runtime.utils.see_memory_usage('post-from-pretrained', force=True)
@@ -177,30 +180,30 @@ rank = dist.get_rank()
 if rank == 0:
     print(ds_config)
 
-ds_engine = deepspeed.initialize(model=model, config_params=ds_config)[0]
-ds_engine.module.eval()
-model = ds_engine.module
+#ds_engine = deepspeed.initialize(model=model, config_params=ds_config)[0]
+#ds_engine.module.eval()
+#model = ds_engine.module
 
 ### Deepspeed-ZeRO Unloading
 
 # a must to remove ZeRO-installed hooks!
-ds_engine.destroy()
+#ds_engine.destroy()
 
 # free GPU storage used by ZeRO
-from deepspeed.runtime.zero.partition_parameters import ZeroParamStatus
-def ds_clear_params(ds_engine):
-    for p in ds_engine.parameters():
-        if hasattr(p, "ds_tensor"):
-            p.ds_tensor = torch.empty(0, dtype=p.dtype, device=p.device)
-            p.ds_status = ZeroParamStatus.NOT_AVAILABLE
+#from deepspeed.runtime.zero.partition_parameters import ZeroParamStatus
+#def ds_clear_params(ds_engine):
+#    for p in ds_engine.parameters():
+#        if hasattr(p, "ds_tensor"):
+#            p.ds_tensor = torch.empty(0, dtype=p.dtype, device=p.device)
+#            p.ds_status = ZeroParamStatus.NOT_AVAILABLE
 
-ds_clear_params(ds_engine)
-del ds_engine
+#ds_clear_params(ds_engine)
+#del ds_engine
 
-if args.benchmark:
-    torch.cuda.empty_cache()
-    gc.collect()
-    deepspeed.runtime.utils.see_memory_usage('post-init-ds-zero-init', force=True)
+#if args.benchmark:
+#    torch.cuda.empty_cache()
+#    gc.collect()
+#    deepspeed.runtime.utils.see_memory_usage('post-init-ds-zero-init', force=True)
 
 checkpoints_json = "checkpoints.json"
 def write_checkponts_json():
