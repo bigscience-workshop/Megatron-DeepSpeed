@@ -135,8 +135,8 @@ if args.batch_size > len(input_sentences):
     # dynamically extend to support larger bs by repetition
     input_sentences *= math.ceil(args.batch_size / len(input_sentences))
 
-#generate_kwargs = dict(min_length=num_tokens, max_length=num_tokens, do_sample=False)
-generate_kwargs = dict(min_length=num_tokens, max_length=num_tokens, do_sample=True)
+generate_kwargs = dict(min_length=num_tokens, max_length=num_tokens, do_sample=False)
+#generate_kwargs = dict(min_length=num_tokens, max_length=num_tokens, do_sample=True)
 if rank == 0:
     print(f"Generate args {generate_kwargs}")
 inputs = input_sentences[:args.batch_size]
@@ -168,6 +168,8 @@ if args.benchmark:
     t_generate_start = time.time()
     _ = generate()
     t_generate_span = time.time() - t_generate_start
+
+# XXX: this is currently doing 8 streams on 8 gpus, so we can feed it different inputs on each!
 
 if args.benchmark:
     torch.cuda.empty_cache()
