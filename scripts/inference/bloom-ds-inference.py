@@ -41,6 +41,7 @@ parser.add_argument("--name", required=True, type=str, help="model_name")
 parser.add_argument("--local_rank", required=False, type=int, help="used by dist launchers")
 parser.add_argument("--batch_size", default=1, type=int, help="batch size")
 parser.add_argument("--benchmark", action="store_true", help="additionally run benchmark")
+parser.add_argument("--cpu_offload", action="store_true", help="whether to activate CPU offload")
 args = parser.parse_args()
 
 local_rank = int(os.getenv('LOCAL_RANK', '0'))
@@ -158,8 +159,10 @@ ds_config = {
     "wall_clock_breakdown": False
 }
 
+if args.cpu_offload:
+    ds_config["zero_optimization"]["offload_param"] = dict(device="cpu", pin_memory=True)
 
-dschf = HfDeepSpeedConfig(ds_config)
+dschf = HfDeepSpeedConfig(ds_config) # this tells from_pretrained to instantiate directly on gpus
 
 if args.benchmark:
     torch.cuda.empty_cache()
