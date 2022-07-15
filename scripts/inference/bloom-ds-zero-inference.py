@@ -194,11 +194,12 @@ if args.benchmark:
     torch.cuda.synchronize()
     if rank == 0:
         # note that dividing by world_size as well as we can have world_size streams
-        througput = (time.time() - t0)/(cycles*num_tokens*args.batch_size*world_size)
+        tokens_in_cycle_total = num_tokens*args.batch_size*world_size
+        througput = (time.time() - t0)/(cycles*tokens_in_cycle_total)
         print(f"""
 *** Performance stats:
 Throughput per token including tokenize: {througput*1000:.2f} msecs
 Start to ready to generate: {t_ready - t_start:.3f} secs
-Tokenize and generate {num_tokens*args.batch_size} (bs={args.batch_size}) tokens: {t_generate_span:.3f} secs
+Tokenize and generate {tokens_in_cycle_total} (bs={args.batch_size}) tokens: {t_generate_span:.3f} secs
 Start to finish: {t_ready - t_start + t_generate_span:.3f} secs
 """)
