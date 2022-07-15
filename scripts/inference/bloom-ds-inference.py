@@ -206,6 +206,10 @@ if args.benchmark:
     gc.collect()
     deepspeed.runtime.utils.see_memory_usage('post-init-ds-zero-init', force=True)
 
+
+
+### Deepspeed-Inference Loading
+
 checkpoints_json = "checkpoints.json"
 def write_checkponts_json():
 
@@ -301,16 +305,15 @@ def generate():
 
 # warmup is a must if measuring speed as it's when all the optimizations are performed
 # e.g. on 8x80 a100 the first pass of 100 tokens takes 23sec, and the next one is 4secs
+_ = generate()
+
+t_generate_start = time.time()
 pairs = generate()
+t_generate_span = time.time() - t_generate_start
 if rank == 0:
     for i,o in pairs:
         print(f"{'-'*60}\nin={i}\nout={o}\n")
 
-if args.benchmark:
-    # make sure one generate is run earlier as a warmup
-    t_generate_start = time.time()
-    _ = generate()
-    t_generate_span = time.time() - t_generate_start
 
 if args.benchmark:
     torch.cuda.empty_cache()

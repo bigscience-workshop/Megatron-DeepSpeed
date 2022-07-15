@@ -155,21 +155,19 @@ def generate():
 
     return zip(inputs, outputs)
 
+# XXX: this is currently doing world_size streams on world_size gpus, so we can feed it different inputs on each! and hence the time can be divided by world_size
 
 # warmup is a must if measuring speed as it's when all the optimizations are performed
 # e.g. on 8x80 a100 the first pass of 100 tokens takes 23sec, and the next one is 4secs
+_ = generate()
+
+t_generate_start = time.time()
 pairs = generate()
+t_generate_span = time.time() - t_generate_start
 if rank == 0:
     for i,o in pairs:
         print(f"{'-'*60}\nin={i}\nout={o}\n")
 
-if args.benchmark:
-    # make sure one generate is run earlier as a warmup
-    t_generate_start = time.time()
-    _ = generate()
-    t_generate_span = time.time() - t_generate_start
-
-# XXX: this is currently doing 8 streams on 8 gpus, so we can feed it different inputs on each!
 
 if args.benchmark:
     torch.cuda.empty_cache()
@@ -195,7 +193,8 @@ if args.benchmark:
         _ = generate()
     torch.cuda.synchronize()
     if rank == 0:
-        througput = (time.time() - t0)/(cycles*num_tokens*args.batch_size)
+        # note that dividing by world_size as well as we can have world_size streams
+        througput = (time.time() - t0)/(cycles*num_tokens*args.batch_size*world_size)
         print(f"""
 *** Performance stats:
 Throughput per token including tokenize: {througput*1000:.2f} msecs
