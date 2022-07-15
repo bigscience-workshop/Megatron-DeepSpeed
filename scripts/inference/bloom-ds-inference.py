@@ -15,21 +15,21 @@
 #
 
 
-import glob
 from argparse import ArgumentParser
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 from transformers.deepspeed import HfDeepSpeedConfig
 from transformers.models.bloom.modeling_bloom import BloomBlock as BloomBlock
 import deepspeed
-import io
-import math
-import sys
-import json
-import os
 import gc
+import glob
+import io
+import json
+import math
+import os
+import sys
+import time
 import torch
 import torch.distributed as dist
-import time
 
 t_start = time.time()
 
