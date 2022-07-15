@@ -33,7 +33,8 @@ world_size = int(os.getenv('WORLD_SIZE', '1'))
 rank = local_rank
 
 model_name = args.name
-print(f"Loading model {model_name}")
+if rank == 0:
+    print(f"Loading model {model_name}")
 
 
 tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -135,7 +136,7 @@ if args.benchmark:
     torch.cuda.synchronize()
     if rank == 0:
         # note that dividing by world_size as well as we can have world_size streams
-        tokens_in_cycle = num_tokens * args.batch_size * world_size
+        tokens_in_cycle = num_tokens * args.batch_size
         througput = (time.time() - t0)/(cycles * tokens_in_cycle)
         print(f"""
 *** Performance stats:
