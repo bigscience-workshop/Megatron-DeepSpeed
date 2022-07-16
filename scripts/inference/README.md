@@ -62,6 +62,15 @@ $ deepspeed --num_gpus 8 scripts/inference/bloom-ds-inference.py --name bigscien
 
 ```
 
+BS=128
+
+```
+$ deepspeed --num_gpus 8 scripts/inference/bloom-ds-inference.py --name bigscience/bloom --batch_size 128 --benchmark 2>&1 | tee bloom-ds-inference_bs=128.txt
+
+
+
+
+```
 
 ## Deepspeed ZeRO-Inference
 
@@ -127,19 +136,32 @@ pip install transformers
 ```
 
 
-BS=1
-
 
 ### Run
 
 
 
+
+BS=1
 ```
-$ deepspeed --num_gpus 8 scripts/inference/bloom-accelerate-inference.py --name bigscience/bloom --batch_size 1 --benchmark 2>&1 | tee bloom-ds-zero-inference_bs=1.txt
+$ python scripts/inference/bloom-accelerate-inference.py --name bigscience/bloom --batch_size 1 --benchmark 2>&1 | tee bloom-ds-zero-inference_bs=1.txt
 [...]
-*** Performance stats:
-Throughput per token including tokenize: 282.93 msecs
-Start to ready to generate: 501.871 secs
-Tokenize and generate 800 (bs=1) tokens: 226.188 secs
-Start to finish: 728.060 secs
+
+
+```
+
+BS=8
+```
+$ python scripts/inference/bloom-accelerate-inference.py --name bigscience/bloom --batch_size 8 --benchmark 2>&1 | tee bloom-ds-zero-inference_bs=8.txt
+[...]
+
+
+```
+
+BS=16
+```
+$ python scripts/inference/bloom-accelerate-inference.py --name bigscience/bloom --batch_size 16 --benchmark 2>&1 | tee bloom-ds-zero-inference_bs=16.txt
+[...]
+
+
 ```
