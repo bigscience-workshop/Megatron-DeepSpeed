@@ -19,15 +19,16 @@
 
 import numbers
 
-from packaging import version
-import torch
-from torch import nn
-from torch.nn.parameter import Parameter
-import torch.nn.functional as F
-from torch.nn import init
-import importlib
 
 from megatron import get_args
+from megatron import mpu
+from packaging import version
+from torch import nn
+from torch.nn import init
+from torch.nn.parameter import Parameter
+import importlib
+import torch
+import torch.nn.functional as F
 
 global fused_mix_prec_layer_norm_cuda
 fused_mix_prec_layer_norm_cuda = None
@@ -83,6 +84,7 @@ class MixedFusedLayerNorm(torch.nn.Module):
     self.reset_parameters()
 
     args = get_args()
+    self.layernorm_tp_auto_sync = args.sync_tp_duplicated_parameters
 
     self.use_meg_ds_fused_layer_norm = (
       args.bf16 # Current Meg-DS cuda kernel has better throughput than torch.nn.LayerNorm
@@ -97,6 +99,11 @@ class MixedFusedLayerNorm(torch.nn.Module):
 
 
   def forward(self, input):
+
+    if self.layernorm_tp_auto_sync:
+      torch.distributed.all_reduce(self.weight, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
+      torch.distributed.all_reduce(self.bias, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
+
     if self.use_meg_ds_fused_layer_norm:
         return FusedLayerNormAffineFunction.apply(
             input, self.weight, self.bias, self.normalized_shape, self.eps)

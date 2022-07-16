@@ -250,6 +250,75 @@ def get_ltor_masks_and_position_ids(
     return attention_mask, loss_mask, position_ids
 
 
+def get_packed_attention_mask(is_causal: bool, causal_mask: torch.Tensor, decoder_is_inputs: torch.Tensor, segment_ids: torch.Tensor):
+    """
+    Inspired by https://github.com/google-research/t5x/blob/7193407f98a8b18100b71a04ff777238be1682ca/t5x/examples/decoder_only/layers.py#L978
+
+    Arguments:
+        - is_causal: determines if the masking should be causal in the `inputs` part
+        - causal_mask: torch.BoolTensor [batch_size, sequence_length, sequence_length]
+        - decoder_is_inputs: torch.BoolTensor [batch_size, sequence_length]
+        - segment_ids: torch.IntTensor [batch_size, sequence_length]
+    Returns:
+        - attention_mask: torch.BoolTensor [batch_size, 1, sequence_length, sequence_length]
+    """
+
+    """Causal Inputs Mask:
+    mask = [[[[1, 1, 0, 0, 0, 0, 0],
+            [1, 1, 0, 0, 0, 0, 0],
+            [1, 1, 1, 0, 0, 0, 0],
+            [1, 1, 1, 1, 1, 0, 0],
+            [1, 1, 1, 1, 1, 0, 0],
+            [1, 1, 1, 1, 1, 1, 0],
+            [1, 1, 1, 1, 1, 1, 1]]]]
+    """
+    assert causal_mask.dtype == torch.bool
+    assert segment_ids.dtype == torch.long
+    if is_causal:
+        causal_inputs_mask = causal_mask
+    else:
+        assert decoder_is_inputs.dtype == torch.bool
+        inputs_mask = decoder_is_inputs[:, None, :, None] * decoder_is_inputs[:, None, None, :]
+        causal_inputs_mask = causal_mask + inputs_mask
+
+    """Padding Mask:
+    mask = [[[[1, 1, 1, 1, 1, 1, 0],
+            [1, 1, 1, 1, 1, 1, 0],
+            [1, 1, 1, 1, 1, 1, 0],
+            [1, 1, 1, 1, 1, 1, 0],
+            [1, 1, 1, 1, 1, 1, 0],
+            [1, 1, 1, 1, 1, 1, 0],
+            [0, 0, 0, 0, 0, 0, 0]]]]
+    """
+    padding_mask = (segment_ids != 0)[:, None, :, None] * (segment_ids != 0)[:, None, None, :]
+
+    """Segment Mask:
+    mask = [[[[1, 1, 1, 0, 0, 0, 0],
+            [1, 1, 1, 0, 0, 0, 0],
+            [1, 1, 1, 0, 0, 0, 0],
+            [0, 0, 0, 1, 1, 1, 0],
+            [0, 0, 0, 1, 1, 1, 0],
+            [0, 0, 0, 1, 1, 1, 0],
+            [0, 0, 0, 0, 0, 0, 0]]]]
+    """
+    segment_mask = segment_ids[:, None, :, None] == segment_ids[:, None, None, :]
+
+    """Final Mask:
+    mask = [[[[1, 1, 0, 0, 0, 0, 0],
+            [1, 1, 0, 0, 0, 0, 0],
+            [1, 1, 1, 0, 0, 0, 0],
+            [0, 0, 0, 1, 1, 0, 0],
+            [0, 0, 0, 1, 1, 0, 0],
+            [0, 0, 0, 1, 1, 1, 0],
+            [0, 0, 0, 0, 0, 0, 0]]]]
+    """
+    attention_mask = causal_inputs_mask * padding_mask * segment_mask
+
+    # Convert attention mask to binary:
+    attention_mask = (attention_mask < 0.5)
+
+    return attention_mask
+
 def param_size(parameter):
     return parameter.ds_numel if hasattr(parameter, 'ds_id') else parameter.nelement()
 

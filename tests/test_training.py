@@ -18,6 +18,7 @@ import json
 import os
 import glob
 import re
+import shutil
 import unittest
 from pathlib import Path
 from parameterized import parameterized
@@ -80,8 +81,27 @@ class MegDSTestTraining(TestCasePlus):
         if os.path.exists(meg_lock_file_path):
             os.unlink(meg_lock_file_path)
 
+    def copy_data_to_temp(self, root_dir, prefix):
+        """copy data to temp, and return paths to temp version"""
+        src_path = os.path.join(root_dir, prefix)
+        src_dirname = os.path.dirname(src_path)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        dest_path = os.path.join(tmp_dir, prefix)
+        dest_dirname = os.path.dirname(dest_path)
+        os.makedirs(dest_dirname, exist_ok=True)
+        for folder in os.listdir(src_dirname):
+            src_folder = os.path.join(src_dirname, folder)
+            dest_folder = os.path.join(dest_dirname, folder)
+            if src_folder.startswith(src_path):
+                if os.path.isdir(src_folder):
+                    shutil.copytree(src_folder, dest_folder)
+                else:
+                    shutil.copy2(src_folder, dest_folder)
+        return dest_path
+
     def get_variation_config(self, variation, output_dir, n_samples=None):
-        data_dir = f"{self.data_dir}/gpt2"
+        data_dir = self.copy_data_to_temp(self.data_dir,"gpt2")
 
         pp_size, tp_size, dp_size = get_3d_dimensions()
         num_gpus = pp_size * tp_size * dp_size
@@ -147,6 +167,7 @@ class MegDSTestTraining(TestCasePlus):
                 --clip-grad 1.0
                 --weight-decay 1e-1
                 --embed-layernorm
+                --sync-tp-duplicated-parameters
                 --fp16
 
                 --log-level debug
@@ -354,7 +375,8 @@ class MegDSTestTraining(TestCasePlus):
     def test_training_prefix_lm_all(self, loss_on_targets_only, reweight_loss_based_on_position_frequency):
         # all in one test
         src_dir = self.src_dir
-        data_dir = f"{self.data_dir}/gpt2"
+        data_dir = self.copy_data_to_temp(self.data_dir,"gpt2")
+
         output_dir = self.get_auto_remove_tmp_dir() # "./xxx", after=False)
         logs_dir = f"{output_dir}/logs"
         Path(logs_dir).mkdir(parents=True, exist_ok=True)
@@ -468,10 +490,122 @@ class MegDSTestTraining(TestCasePlus):
         tensorboard_files = glob.glob(f"{output_dir}/tensorboard/events*")
         self.assertEqual(len(tensorboard_files), 2, "tensorboard files")
 
+    def test_training_t0(self):
+        data_path = self.copy_data_to_temp(self.data_dir, "gpt2/ag_news_prompt")
+        output_dir = self.get_auto_remove_tmp_dir()
+        logs_dir = f"{output_dir}/logs"
+        Path(logs_dir).mkdir(parents=True, exist_ok=True)
+
+        pp_size, tp_size, dp_size = get_3d_dimensions()
+        num_gpus = pp_size * tp_size * dp_size
+
+        n_samples = 200 # about 37 iterations
+        exit_interval = 10 # some samples in the first half and then some more in the 2nd half after resume
+
+        args = f"""
+            --tensor-model-parallel-size {tp_size}
+            --pipeline-model-parallel-size {pp_size}
+            --distributed-backend nccl
+
+            --num-layers 2
+            --hidden-size 64
+            --num-attention-heads 2
+            --seq-length 128
+            --max-position-embeddings 1024
+            --position-embedding-type alibi
+            --micro-batch-size 1
+            --rampup-batch-size 2 2 {n_samples}
+            --global-batch-size 16
+            --train-samples {n_samples}
+
+            --optimizer adam
+            --adam-beta1 0.9
+            --adam-beta2 0.95
+            --adam-eps 1e-8
+            --lr 1e-4
+            --lr-warmup-samples 5
+            --clip-grad 1.0
+            --weight-decay 1e-1
+            --fp16
+
+            --log-interval 5
+            --save-interval 10
+            --eval-interval 10
+            --eval-iters 5
+            --checkpoint-activations
+            --exit-interval {exit_interval}
+            --tokenizer-type PretrainedFromHF
+            --tokenizer-name-or-path bigscience/tokenizer
+            --log-path {logs_dir}
+            --save {output_dir}/checkpoints
+            --load {output_dir}/checkpoints
+            --data-path {data_path}
+            --split 90,10,0
+            --tensorboard-dir {output_dir}/tensorboard
+            --tensorboard-queue-size 5
+            --log-timers-to-tensorboard
+            --log-batch-size-to-tensorboard
+            --log-validation-ppl-to-tensorboard
+
+            --log-level debug
+        """.split()
+
+        ds_args = f"""
+            --deepspeed
+            --deepspeed_config {self.test_file_dir_str}/ds_config.json
+            --zero-stage 1
+            --deepspeed-activation-checkpointing
+        """.split()
+
+        script = [f"{self.src_dir}/finetune_t0_non_causal_decoder.py"]
+        launcher = get_launcher(num_gpus)
+
+        cmd = launcher + script + args + ds_args
+        # keep for quick debug
+        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
+
+        # 1. test training from scratch (no checkpoint)
+        with CaptureStdout() as cs:
+            execute_subprocess_async(cmd, env=self.get_env())
+
+        # test deepspeed is running
+        self.assertIn("DeepSpeed info", cs.out)
+
+        # test reports
+        self.assertIn("consumed samples", cs.out)
+
+        # test there should be no checkpoint this round
+        self.assertIn(f"Unable to find latest file at {output_dir}/checkpoints/latest", cs.out)
+
+        # test checkpoint saving
+        self.assertIn("successfully saved checkpoint at iteration", cs.out)
+
+        # test tensorboard
+        tensorboard_files = glob.glob(f"{output_dir}/tensorboard/events*")
+        self.assertEqual(len(tensorboard_files), 1, "tensorboard files")
+
+        # 2. test training from checkpoint: resume
+        # now do it again, this time resuming from the checkpoint
+        with CaptureStdout() as cs:
+            execute_subprocess_async(cmd, env=self.get_env())
+
+        # test checkpoint loading
+        self.assertIn(f"successfully loaded checkpoint from {output_dir}/checkpoints", cs.out)
+
+        # test reports
+        self.assertIn("consumed samples", cs.out)
+
+        # test checkpoint saving
+        self.assertIn("successfully saved checkpoint at iteration", cs.out)
+
+        # test tensorboard (1 file from the first run, plus 1 now)
+        tensorboard_files = glob.glob(f"{output_dir}/tensorboard/events*")
+        self.assertEqual(len(tensorboard_files), 2, "tensorboard files")
+
     @parameterized.expand(["gpt", "prefix", "no_eval"])
     def test_mode2_dataloading(self, variation):
         src_dir = self.src_dir
-        data_dir = f"{self.data_dir}/gpt2"
+        data_dir = self.copy_data_to_temp(self.data_dir, "gpt2")
         output_dir = self.get_auto_remove_tmp_dir() # "./xxx", after=False)
         logs_dir = f"{output_dir}/logs"
         Path(logs_dir).mkdir(parents=True, exist_ok=True)

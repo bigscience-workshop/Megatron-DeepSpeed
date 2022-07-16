@@ -23,6 +23,7 @@ from megatron import get_timers
 from megatron import get_tokenizer
 from megatron import mpu
 from megatron.data.gpt_dataset import build_train_valid_test_datasets, build_dataset_group
+from megatron.enums import AttnMaskType
 from megatron.model import GPTModel, GPTModelPipe
 from megatron.training import pretrain
 from megatron.utils import get_ltor_masks_and_position_ids, get_prefix_indices, reweight_loss_mask_
@@ -49,7 +50,7 @@ def model_provider(pre_process=True, post_process=True):
             model = GPTModelPipe(
                 num_tokentypes=0,
                 parallel_output=True,
-                prefix_lm=True
+                attn_mask_type=AttnMaskType.prefix
             )
             # This is a hack to give us a reference to get_batch_pipe from within training.py
             # We need to call model.set_batch_fn after deepspeed.initialize
