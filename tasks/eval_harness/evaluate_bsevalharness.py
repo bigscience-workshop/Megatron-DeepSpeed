@@ -220,7 +220,6 @@ class EvalHarnessAdaptor:
 
         args = get_args()
 
-        prefix_lens = None
         if args.prefix:
             assert len(tokens) == 2
             tokens, prefix_lens = tokens
@@ -234,7 +233,7 @@ class EvalHarnessAdaptor:
             prefix_indices=None,
             loss_on_targets_only=False)
         
-        if prefix_lens is not None:
+        if args.prefix:
             assert len(prefix_lens) == attention_mask.shape[0]
             for i, prefix_len in enumerate(prefix_lens):
                 attention_mask[i, :, :prefix_len, :prefix_len] = 1
