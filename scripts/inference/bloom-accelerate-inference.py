@@ -17,9 +17,29 @@ def get_args():
 
     return parser.parse_args()
 
-def get_max_memory_per_gpu_dict():
-    max_memory_per_gpu =  torch.cuda.get_device_properties(0).total_memory // 2**30
-    return {i: f"{max_memory_per_gpu}GIB" for i in range(torch.cuda.device_count())}
+def get_max_memory_per_gpu_dict(dtype):
+    # figure out the memory map - the minimum per gpu required to load the model
+    n_gpus = torch.cuda.device_count()
+
+    # hardcode for now for bloom
+    params = 179 * 2**30
+    # XXX: how to figure out model size w/o having a model object yet?
+    #params = sum(dict((p.data_ptr(), p.numel()) for p in model.parameters()).values())
+
+    bytes = torch.finfo(dtype).bits / 8
+    param_memory_total_in_bytes = params * bytes
+    # add 10% since weights sizes aren't the same and some gpu may need more memory
+    param_memory_per_gpu_in_bytes = int(param_memory_total_in_bytes / n_gpus * 1.1)
+    print(f"Estimating {param_memory_per_gpu_in_bytes/2**30}GB per gpu for weights")
+
+    # check the real available memory
+    # load cuda kernels first and only measure the real free memory after loading (shorter by ~2GB)
+    torch.ones(1).cuda()
+    max_memory_per_gpu_in_bytes = torch.cuda.mem_get_info(0)[0]
+    if max_memory_per_gpu_in_bytes < param_memory_per_gpu_in_bytes:
+        raise ValueError(f"Unable to generate the memory map automatically as the needed estimated memory per gpu ({param_memory_per_gpu_in_bytes/2**30:0.2f}GB) is bigger than the available per gpu memory ({max_memory_per_gpu_in_bytes/2**30:0.2f}GB)")
+
+    return {i: param_memory_per_gpu_in_bytes for i in range(torch.cuda.device_count())}
 
 t_start = time.time()
 
@@ -42,10 +62,13 @@ tokenizer = AutoTokenizer.from_pretrained(model_name)
 # XXX: can't automatically derive dtype via config's `from_pretrained`
 dtype = torch.bfloat16 if model_name in ["bigscience/bloom", "bigscience/bigscience-small-testing"] else torch.float16
 
+#print(get_max_memory_per_gpu_dict())
+
+
 model = AutoModelForCausalLM.from_pretrained(
     model_name,
     device_map="auto",
-    max_memory=get_max_memory_per_gpu_dict(),
+    max_memory=get_max_memory_per_gpu_dict(dtype),
     torch_dtype=dtype,
 )
 
