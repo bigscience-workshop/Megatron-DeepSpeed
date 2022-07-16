@@ -1,30 +1,28 @@
 #!/bin/bash
-#SBATCH --job-name=run_bsevalharness-tr11-350M-ml
-#SBATCH --partition=gpu_p13
-#SBATCH --constraint=v100
-#SBATCH --nodes=2
+#SBATCH --job-name=run_evalharness-tr11b-2b5-ml
+#SBATCH --partition=gpu_p5
+#SBATCH --constraint=a100
+#SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1          # crucial - only 1 task per dist per node!
-#SBATCH --cpus-per-task=20           # number of cores per tasks
+#SBATCH --cpus-per-task=8           # number of cores per tasks
 #SBATCH --hint=nomultithread         # we get physical cores not logical
-#SBATCH --gres=gpu:2                 # number of gpus
-#SBATCH --time 5:00:00               # maximum execution time (HH:MM:SS)
+#SBATCH --gres=gpu:1                 # number of gpus
+#SBATCH --time 20:00:00              # maximum execution time (HH:MM:SS)
 #SBATCH --output=%x-%j.out           # output file name
-#SBATCH --account=six@v100
-#SBATCH -C v100-32g
-
+#SBATCH --account=six@a100
+#SBATCH --reservation=hug
 
 set -x -e
 
-source $six_ALL_CCFRWORK/start-muennighofflmeval
+source $six_ALL_CCFRWORK/start-py38-pt111
 
 echo "START TIME: $(date)"
 
 # a unique identifier for the current eval ideally correspnding to the modelname
-VARIANT="tr11-350M-ml-bsevalharness"
+VARIANT="tr11b-1b3-ml-evalharness"
 
 
-CHECKPOINT_PATH=$six_ALL_CCFRSCRATCH/checkpoints/tr11e-350M-ml/checkpoints/main/659500
-
+CHECKPOINT_PATH=$six_ALL_CCFRSCRATCH/checkpoints/tr11b-1B3-ml/checkpoints/main/global_step340500
 MEGATRON_DEEPSPEED_REPO=$six_ALL_CCFRSCRATCH/commun/experiments/muennighoff/megdsbslmeval/Megatron-DeepSpeed
 export HF_DATASETS_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
@@ -70,7 +68,7 @@ cat <<EOT > $config_json
     "stage": $ZERO_STAGE
   },
   "bf16": {
-    "enabled": true
+    "enabled": false
   },
   "steps_per_print": 2000,
   "wall_clock_breakdown": false
@@ -78,7 +76,7 @@ cat <<EOT > $config_json
 EOT
 
 
-CMD="./tasks/eval_harness/evaluate_bsevalharness.py  \
+CMD="./tasks/eval_harness/evaluate.py  \
     --load $CHECKPOINT_PATH \
     --results_path $VARIANT-results.json \
     --tensor-model-parallel-size $TP_SIZE  \
@@ -88,19 +86,19 @@ CMD="./tasks/eval_harness/evaluate_bsevalharness.py  \
     --micro-batch-size $EVAL_MICRO_BATCH_SIZE \
     --no-load-optim \
     --no-load-rng \
-    --bf16 \
+    --eval_fp32 \
     --inference \
     --seq-length $SEQ_LEN \
-    --task_list wnli \
+    --task_list arc_challenge,arc_easy,boolq,copa,headqa,hellaswag,lambada,logiqa,mathqa,mc_taco,mrpc,multirc,openbookqa,piqa,prost,pubmedqa,qnli,qqp,race,rte,sciq,sst,triviaqa,webqs,wic,winogrande,wnli,wsc \
     --deepspeed \
     --deepspeed_config ds_config.json \
     --intermed_results \
     --adaptive_seq_len \
-    --micro_bs_multiplier 4 \
+    --micro_bs_multiplier 8 \
     $MEGATRON_REQUIRED_ARGS \
     "
 
-GPUS_PER_NODE=2
+GPUS_PER_NODE=1
 NNODES=$SLURM_NNODES
 MASTER_ADDR=$(scontrol show hostnames $SLURM_JOB_NODELIST | head -n 1)
 MASTER_PORT=6000
