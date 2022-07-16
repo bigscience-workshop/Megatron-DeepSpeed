@@ -3,6 +3,7 @@ import time
 import os
 import gc
 import torch
+import math
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 def get_args():
