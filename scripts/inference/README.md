@@ -1,6 +1,35 @@
 # Inference scripts for BLOOM
 
+## BLOOM Inference solutions
 
+Here are some stats on JeanZay's 8x80GB A100 node w/ 512GB of CPU memory:
+
+All benchmarks are doing greedy generation of 100 token outputs:
+```
+Generate args {'min_length': 100, 'max_length': 100, 'do_sample': False}
+```
+The inputs are just a few tokens.
+
+Throughput in msecs:
+
+| project \ bs |      1 |     8 |    16 |    32 |    64 |  128 |
+| :----------- |  :---- | :---- | :---- | :---- | :---- | :--- |
+| accelerate   | 230.38 | 31.78 | 17.84 | 10.89 |  oom  | omm  |
+| ds-inference |  40.57 |  5.23 |       |       |  2.77 | 0.66 |
+| ds-zero      |    283 | 34.88 | oom   |  oom  |  oom  | oom  |
+
+
+Start to ready to generate in secs:
+
+| project \ bs |    1 |    8 |   16 |   32 |   64 |  128 |
+| :----------- | :--- | :--- | :--- | :--- | :--- | :--- |
+| accelerate   |  121 |  120 |  113 |  118 |      |      |
+| ds-inference |  662 |  673 |      |      |  685 |  654 |
+| ds-zero      |  462 |  463 |      |      |      |      |
+|              |      |      |      |      |      |      |
+
+
+DS-Inference load time (start to ready to generate) will become much faster soon. Once we stop relying on ds-zero to instantiate the model on gpu. The plan is to pre-shard the weights TP-wise for 8x and 16x gpus and load them directly on each gpu. Will probably be under 1min.
 
 
 ## Deepspeed-Inference
