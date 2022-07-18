@@ -29,9 +29,9 @@ def get_max_memory_per_gpu_dict(dtype):
 
     bytes = torch.finfo(dtype).bits / 8
     param_memory_total_in_bytes = params * bytes
-    # add 10% since weights sizes aren't the same and some gpu may need more memory
-    param_memory_per_gpu_in_bytes = int(param_memory_total_in_bytes / n_gpus * 1.1)
-    print(f"Estimating {param_memory_per_gpu_in_bytes/2**30}GB per gpu for weights")
+    # add 5% since weight sizes aren't the same and some GPU may need more memory
+    param_memory_per_gpu_in_bytes = int(param_memory_total_in_bytes / n_gpus * 1.05)
+    print(f"Estimating {param_memory_per_gpu_in_bytes/2**30:0.2f}GB per gpu for weights")
 
     # check the real available memory
     # load cuda kernels first and only measure the real free memory after loading (shorter by ~2GB)
