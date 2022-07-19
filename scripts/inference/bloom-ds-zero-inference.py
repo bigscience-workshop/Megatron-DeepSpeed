@@ -141,19 +141,22 @@ if rank == 0:
     print(f"Generate args {generate_kwargs}")
 inputs = input_sentences[:args.batch_size]
 def generate():
-    """ returns a list of pairs of inputs and outputs """
+    """ returns a list of zipped inputs, outputs and number of new tokens """
 
-    tokens = tokenizer.batch_encode_plus(inputs, return_tensors="pt", padding=True)
+    input_tokens = tokenizer.batch_encode_plus(inputs, return_tensors="pt", padding=True)
+    for t in input_tokens:
+        if torch.is_tensor(input_tokens[t]):
+            input_tokens[t] = input_tokens[t].to("cuda:0")
 
-    for t in tokens:
-        if torch.is_tensor(tokens[t]):
-            tokens[t] = tokens[t].to(torch.cuda.current_device())
+    outputs = model.generate(**input_tokens, **generate_kwargs)
 
-    greedy_output = model.generate(**tokens, **generate_kwargs)
+    input_tokens_lengths = [x.shape[0] for x in input_tokens.input_ids]
+    output_tokens_lengths = [x.shape[0] for x in outputs]
 
-    outputs = tokenizer.batch_decode(greedy_output, skip_special_tokens=True)
+    total_new_tokens = [o-i for i,o in zip(input_tokens_lengths, output_tokens_lengths)]
+    outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
-    return zip(inputs, outputs)
+    return zip(inputs, outputs, total_new_tokens)
 
 # XXX: this is currently doing world_size streams on world_size gpus, so we can feed it different inputs on each! and hence the time can be divided by world_size
 
@@ -165,7 +168,7 @@ t_generate_start = time.time()
 pairs = generate()
 t_generate_span = time.time() - t_generate_start
 if rank == 0:
-    for i,o in pairs:
+    for i,o,_ in pairs:
         print(f"{'-'*60}\nin={i}\nout={o}\n")
 
 
@@ -176,7 +179,6 @@ if args.benchmark:
 
 ### Benchmark
 
-# benchmark it!
 if args.benchmark:
     if rank == 0:
         print(f"*** Running benchmark")
@@ -192,14 +194,17 @@ if args.benchmark:
     for i in range(cycles):
         _ = generate()
     torch.cuda.synchronize()
+    total_new_tokens_generated = 0
     if rank == 0:
-        # note that dividing by world_size as well as we can have world_size streams
-        tokens_in_cycle = num_tokens * args.batch_size * world_size
-        througput = (time.time() - t0)/(cycles * tokens_in_cycle)
+        generated = generate()
+        total_new_tokens_generated += sum(new_tokens for _,_,new_tokens in generated)
+        # note that we actually generate world_size unique streams (though the benchmark feeds the same inputs)
+        total_new_tokens_generated *=  world_size
+        througput = (time.time() - t0)/(cycles * total_new_tokens_generated)
         print(f"""
 *** Performance stats:
 Throughput per token including tokenize: {througput*1000:.2f} msecs
 Start to ready to generate: {t_ready - t_start:.3f} secs
-Tokenize and generate {tokens_in_cycle} (bs={args.batch_size}) tokens: {t_generate_span:.3f} secs
+Tokenize and generate {total_new_tokens_generated} (bs={args.batch_size}) tokens: {t_generate_span:.3f} secs
 Start to finish: {t_ready - t_start + t_generate_span:.3f} secs
 """)
