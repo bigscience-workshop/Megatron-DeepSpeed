@@ -146,7 +146,7 @@ def generate():
     input_tokens = tokenizer.batch_encode_plus(inputs, return_tensors="pt", padding=True)
     for t in input_tokens:
         if torch.is_tensor(input_tokens[t]):
-            input_tokens[t] = input_tokens[t].to("cuda:0")
+            input_tokens[t] = input_tokens[t].to(device=rank)
 
     outputs = model.generate(**input_tokens, **generate_kwargs)
 
