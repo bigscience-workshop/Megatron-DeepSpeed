@@ -4,7 +4,7 @@ import os
 import gc
 import torch
 import math
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoConfig, AutoModelForCausalLM
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -18,28 +18,33 @@ def get_args():
 
     return parser.parse_args()
 
-def get_max_memory_per_gpu_dict(dtype):
-
-    # works with bs=40 9.48msec
-    # return {0: '12GIB', 1: '46GIB', 2: '46GIB', 3: '46GIB', 4: '46GIB', 5: '46GIB', 6: '46GIB', 7: '46GIB'}
-
-    # works with bs=40 9.47
-    #return {0: '0GIB', 1: '60GIB', 2: '60GIB', 3: '60GIB', 4: '60GIB', 5: '60GIB', 6: '60GIB', 7: '60GIB'}
-
-    #return {0: '0GIB', 1: '52GIB', 2: '52GIB', 3: '52GIB', 4: '52GIB', 5: '52GIB', 6: '52GIB', 7: '52GIB'}
-    return {0: '0GIB', 1: '51GIB', 2: '51GIB', 3: '51GIB', 4: '51GIB', 5: '51GIB', 6: '51GIB', 7: '51GIB'}
-    #return {0: '0GIB', 1: '49GIB', 2: '49GIB', 3: '49GIB', 4: '51GIB', 5: '51GIB', 6: '51GIB', 7: '51GIB'}
+def get_max_memory_per_gpu_dict(dtype, model_name):
+    """ try to generate the memory map based on what we know about the model and the available hardware """
 
     # figure out the memory map - the minimum per gpu required to load the model
     n_gpus = torch.cuda.device_count()
 
-    # hardcode for now for bloom
-    params = 179 * 2**30
-    # XXX: how to figure out model size w/o having a model object yet?
-    #params = sum(dict((p.data_ptr(), p.numel()) for p in model.parameters()).values())
+    if model_name == "bigscience/bloom" and n_gpus == 8 and torch.cuda.get_device_properties(0).total_memory > 79*2**30:
+        # hand crafted optimized memory map for 8x80 setup over BLOOM
+        # this works with bs=48
+        return {0: '0GIB', 1: '51GIB', 2: '51GIB', 3: '51GIB', 4: '51GIB', 5: '51GIB', 6: '51GIB', 7: '51GIB'}
+
+    try:
+        # model_params calculation, as we don't have a model yet to do:
+        #model_params = sum(dict((p.data_ptr(), p.numel()) for p in model.parameters()).values())
+
+        config = AutoConfig.from_pretrained(model_name)
+        h = config.n_embed
+        l = config.n_layer
+        v = config.vocab_size
+        # from https://github.com/bigscience-workshop/bigscience/tree/a3e451498ee8189d2a9dd47be19aa89b0e16cd89/math#model-sizing
+        model_params = l*(12*h**2 + 13*h) + v*h + 4*h
+    except:
+        print(f"The model {model_name} has a broken config file. Please notify the owner")
+        raise
 
     bytes = torch.finfo(dtype).bits / 8
-    param_memory_total_in_bytes = params * bytes
+    param_memory_total_in_bytes = model_params * bytes
     # add 5% since weight sizes aren't the same and some GPU may need more memory
     param_memory_per_gpu_in_bytes = int(param_memory_total_in_bytes / n_gpus * 1.05)
     print(f"Estimating {param_memory_per_gpu_in_bytes/2**30:0.2f}GB per gpu for weights")
@@ -80,7 +85,7 @@ dtype = torch.bfloat16 if model_name in ["bigscience/bloom", "bigscience/bigscie
 model = AutoModelForCausalLM.from_pretrained(
     model_name,
     device_map="auto",
-    max_memory=get_max_memory_per_gpu_dict(dtype),
+    max_memory=get_max_memory_per_gpu_dict(dtype, model_name),
     torch_dtype=dtype,
 )
 
