@@ -47,6 +47,8 @@ local_rank = int(os.getenv('LOCAL_RANK', '0'))
 world_size = int(os.getenv('WORLD_SIZE', '1'))
 
 deepspeed.init_distributed('nccl')
+rank = dist.get_rank()
+
 
 ### Model loading and instantiating on GPU (via ZeRO)
 
@@ -110,7 +112,7 @@ model_name = args.name
 
 #print(get_checkpoint_files(model_name))
 
-if local_rank == 0:
+if rank == 0:
     print(f"*** Loading the model {model_name}")
 
 tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -146,7 +148,6 @@ if args.benchmark:
 
 model = model.eval()
 
-rank = dist.get_rank()
 
 if args.benchmark:
     torch.cuda.empty_cache()
@@ -164,7 +165,7 @@ def write_checkponts_json():
         #checkpoint_files = glob.glob(f"{checkpoint_dir}/*bin")
         checkpoint_files = get_checkpoint_files(model_name)
 
-        print("Checkpoint files:", checkpoint_files)
+        #print("Checkpoint files:", checkpoint_files)
 
         data = {
             "type": "BLOOM-176B",
@@ -227,8 +228,8 @@ if args.batch_size > len(input_sentences):
     # dynamically extend to support larger bs by repetition
     input_sentences *= math.ceil(args.batch_size / len(input_sentences))
 
-generate_kwargs = dict(min_length=num_tokens, max_length=num_tokens, do_sample=False)
-#generate_kwargs = dict(min_length=num_tokens, max_length=num_tokens, do_sample=True)
+generate_kwargs = dict(max_new_tokens=num_tokens, do_sample=False)
+
 if rank == 0:
     print(f"Generate args {generate_kwargs}")
 inputs = input_sentences[:args.batch_size]

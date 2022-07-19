@@ -19,6 +19,17 @@ def get_args():
     return parser.parse_args()
 
 def get_max_memory_per_gpu_dict(dtype):
+
+    # works with bs=40 9.48msec
+    # return {0: '12GIB', 1: '46GIB', 2: '46GIB', 3: '46GIB', 4: '46GIB', 5: '46GIB', 6: '46GIB', 7: '46GIB'}
+
+    # works with bs=40 9.47
+    #return {0: '0GIB', 1: '60GIB', 2: '60GIB', 3: '60GIB', 4: '60GIB', 5: '60GIB', 6: '60GIB', 7: '60GIB'}
+
+    #return {0: '0GIB', 1: '52GIB', 2: '52GIB', 3: '52GIB', 4: '52GIB', 5: '52GIB', 6: '52GIB', 7: '52GIB'}
+    return {0: '0GIB', 1: '51GIB', 2: '51GIB', 3: '51GIB', 4: '51GIB', 5: '51GIB', 6: '51GIB', 7: '51GIB'}
+    #return {0: '0GIB', 1: '49GIB', 2: '49GIB', 3: '49GIB', 4: '51GIB', 5: '51GIB', 6: '51GIB', 7: '51GIB'}
+
     # figure out the memory map - the minimum per gpu required to load the model
     n_gpus = torch.cuda.device_count()
 
@@ -99,8 +110,7 @@ if args.batch_size > len(input_sentences):
     # dynamically extend to support larger bs by repetition
     input_sentences *= math.ceil(args.batch_size / len(input_sentences))
 
-generate_kwargs = dict(min_length=num_tokens, max_length=num_tokens, do_sample=False)
-#generate_kwargs = dict(min_length=num_tokens, max_length=num_tokens, do_sample=True)
+generate_kwargs = dict(max_new_tokens=num_tokens, do_sample=False)
 
 #top_k=None if greedy else top_k,
 #top_p=None if greedy else top_p
