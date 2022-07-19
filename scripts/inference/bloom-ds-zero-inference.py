@@ -200,7 +200,7 @@ if args.benchmark:
         total_new_tokens_generated += sum(new_tokens for _,_,new_tokens in generated)
         # note that we actually generate world_size unique streams (though the benchmark feeds the same inputs)
         total_new_tokens_generated *=  world_size
-        througput = (time.time() - t0)/(cycles * total_new_tokens_generated)
+        througput = (time.time() - t0)/(total_new_tokens_generated)
         print(f"""
 *** Performance stats:
 Throughput per token including tokenize: {througput*1000:.2f} msecs
