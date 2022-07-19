@@ -13,7 +13,6 @@ from tqdm import tqdm
 import torch.nn.functional as F
 
 from lm_eval.tasks import ALL_TASKS
-from pretrain_gpt import model_provider
 import numpy as np
 
 import torch
@@ -154,7 +153,9 @@ class EvalHarnessAdaptor(GPT2LM):
                     contlens.append(cont)
                     inplens.append(inplen)
 
-                logits = self._model_call(torch.cat(inps, dim=0))
+                # contlens stores contencs not contlens, but not changing the variable names for consistency
+                prefix_lens = torch.tensor([ilen - len(ctoks) for ilen, ctoks in zip(inplens, contlens)])[:, None]
+                logits = self._model_call(torch.cat(inps, dim=0), prefix_lens=prefix_lens)
                 res_len += len(chunk)
                 if logits is not None:
                     if self.args.offloadearly:
@@ -186,7 +187,12 @@ class EvalHarnessAdaptor(GPT2LM):
         return reord.get_original(res)
 
     def create_model_inputs(self, tokens):
+
         args = get_args()
+
+        if args.prefix:
+            assert len(tokens) == 2
+            tokens, prefix_lens = tokens
 
         attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
             tokens,
@@ -196,10 +202,19 @@ class EvalHarnessAdaptor(GPT2LM):
             args.eod_mask_loss,
             prefix_indices=None,
             loss_on_targets_only=False)
+        
+        if args.prefix:
+            assert len(prefix_lens) == attention_mask.shape[0] == tokens.shape[0]
+            for i, prefix_len in enumerate(prefix_lens):
+                assert prefix_len <= attention_mask.shape[-1]
+                # Attention is paid to False (True ones are masked out)
+                attention_mask[i, :, :prefix_len, :prefix_len] = False
+                
+
 
         return (tokens, position_ids, attention_mask), (tokens, loss_mask)
 
-    def _model_call(self, inps):
+    def _model_call(self, inps, prefix_lens=None):
         args = get_args()
 
         if args.deepspeed:
@@ -208,7 +223,15 @@ class EvalHarnessAdaptor(GPT2LM):
             new_size = ((len(inps) + args.micro_batch_size-1)  // args.micro_batch_size) * args.micro_batch_size
             padded = F.pad(inps, (0, 0, 0, new_size-len(inps)), value = 0)
             # dummy data iterator for pipelining.
-            data_iterator = list((torch.stack(inp) for inp in utils.chunks(padded, args.micro_batch_size)))
+            if args.prefix:
+                assert prefix_lens.shape == (padded.shape[0], 1)
+                data_iterator = [(torch.stack(inp), torch.stack(pfx)) for inp, pfx in zip(
+                            utils.chunks(padded, args.micro_batch_size),
+                            utils.chunks(prefix_lens, args.micro_batch_size), 
+                        )
+                ]
+            else:
+                data_iterator = list((torch.stack(inp) for inp in utils.chunks(padded, args.micro_batch_size)))
             self.model.micro_batches = len(data_iterator)
             
             if self.adaptive_seq_len:
@@ -348,6 +371,12 @@ def load_ds_checkpoint_and_setup_megatron(args):
 
     # print final arguments.
     _print_args(args)
+
+    if args.prefix:
+        from finetune_t0_non_causal_decoder import model_provider
+    else:
+        from pretrain_gpt import model_provider
+    
     if args.deepspeed:
 
         # Hack #3:
@@ -393,6 +422,7 @@ def tasks_args(parser):
     group.add_argument('--adaptive_seq_len',  default = False, action='store_true',
                        help='Should the sequence length be adapted to the batch during evaluation, if in fp16 the results will be slightly different due to numerical errors but greatly speed up evaluation.')
     group.add_argument('--eval_fp32',  default = False, action='store_true', help='Should the evaluation run in fp32')
+    group.add_argument('--prefix',  default=False, action='store_true', help='Prefix LM - Bidirectional att over input')
     group.add_argument('--intermed_results',  default = False, action='store_true', help='Whether to print & write intermediate results for each task')
     group.add_argument('--bootstrap_iters', type=int, default=100000, help='How many iterations to use for stderr estimation')
     group.add_argument('--micro_bs_multiplier', type=int, default=1, help='Increase the global batch size to remove bubble when pipeline parallel')
