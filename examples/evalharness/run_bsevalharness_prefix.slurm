@@ -22,7 +22,7 @@ echo "START TIME: $(date)"
 VARIANT="tr13f-prefix"
 
 
-CHECKPOINT_PATH=$six_ALL_CCFRSCRATCH/checkpoints/tr11c-2B5-ml/checkpoints/main/global_step337250
+CHECKPOINT_PATH=/gpfsscratch/rech/six/commun/checkpoints/tr13f-6B3-ml-t0/checkpoints/prefix/global_step3100
 MEGATRON_DEEPSPEED_REPO=$six_ALL_CCFRSCRATCH/commun/experiments/muennighoff/megdsbslmeval/Megatron-DeepSpeed
 export HF_DATASETS_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
