@@ -146,7 +146,7 @@ def generate():
     input_tokens = tokenizer.batch_encode_plus(inputs, return_tensors="pt", padding=True)
     for t in input_tokens:
         if torch.is_tensor(input_tokens[t]):
-            input_tokens[t] = input_tokens[t].to(device=rank)
+            input_tokens[t] = input_tokens[t].to(torch.cuda.current_device())
 
     outputs = model.generate(**input_tokens, **generate_kwargs)
 
@@ -191,13 +191,13 @@ if args.benchmark:
     # benchmark
     t0 = time.time()
     cycles = 5
-    for i in range(cycles):
-        _ = generate()
-    torch.cuda.synchronize()
     total_new_tokens_generated = 0
-    if rank == 0:
+    for i in range(cycles):
         generated = generate()
         total_new_tokens_generated += sum(new_tokens for _,_,new_tokens in generated)
+
+    torch.cuda.synchronize()
+    if rank == 0:
         # note that we actually generate world_size unique streams (though the benchmark feeds the same inputs)
         total_new_tokens_generated *=  world_size
         througput = (time.time() - t0)/(total_new_tokens_generated)
@@ -208,3 +208,4 @@ Start to ready to generate: {t_ready - t_start:.3f} secs
 Tokenize and generate {total_new_tokens_generated} (bs={args.batch_size}) tokens: {t_generate_span:.3f} secs
 Start to finish: {t_ready - t_start + t_generate_span:.3f} secs
 """)
+
