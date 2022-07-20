@@ -26,7 +26,7 @@ def get_max_memory_per_gpu_dict(dtype, model_name):
 
     if model_name == "bigscience/bloom" and n_gpus == 8 and torch.cuda.get_device_properties(0).total_memory > 79*2**30:
         # hand crafted optimized memory map for 8x80 setup over BLOOM
-        # this works with bs=48
+        # this works with bs=40
         return {0: '0GIB', 1: '51GIB', 2: '51GIB', 3: '51GIB', 4: '51GIB', 5: '51GIB', 6: '51GIB', 7: '51GIB'}
 
     try:
@@ -37,7 +37,7 @@ def get_max_memory_per_gpu_dict(dtype, model_name):
         h = config.n_embed
         l = config.n_layer
         v = config.vocab_size
-        # from https://github.com/bigscience-workshop/bigscience/tree/a3e451498ee8189d2a9dd47be19aa89b0e16cd89/math#model-sizing
+        # from https://github.com/bigscience-workshop/bigscience/tree/6917a3b5fefcf439d3485ca184b4d9f6ab605150/math#model-sizing
         model_params = l*(12*h**2 + 13*h) + v*h + 4*h
     except:
         print(f"The model {model_name} has a broken config file. Please notify the owner")
@@ -116,6 +116,8 @@ if args.batch_size > len(input_sentences):
     input_sentences *= math.ceil(args.batch_size / len(input_sentences))
 
 generate_kwargs = dict(max_new_tokens=num_tokens, do_sample=False)
+#generate_kwargs = dict(max_new_tokens=num_tokens, use_cache=False, do_sample=False)
+#generate_kwargs = dict(min_length=num_tokens, max_length=num_tokens, do_sample=False) 
 
 if rank == 0:
     print(f"Generate args {generate_kwargs}")
