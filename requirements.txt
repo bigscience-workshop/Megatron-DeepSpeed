@@ -8,8 +8,7 @@ six
 tensorboard
 torch>=1.7
 transformers
-# XXX: fixme to master once that DS branch is merged
-DeepSpeed @ git+https://github.com/microsoft/DeepSpeed.git@olruwase/elastic-ckpt-refresh
+DeepSpeed @ git+https://github.com/microsoft/DeepSpeed.git
 # versions from HF transformers
 black==21.4b0
 isort>=5.5.4
