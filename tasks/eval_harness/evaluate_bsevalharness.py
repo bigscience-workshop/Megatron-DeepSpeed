@@ -1,6 +1,17 @@
-from functools import reduce
-from logging import logMultiprocessing
+"""
+An evaluate function compatible with https://github.com/bigscience-workshop/lm-evaluation-harness
+at commit 2d968c60fc8bd808e5e475ca300781f774d234c1
+Env Setup:
+git clone https://github.com/bigscience-workshop/lm-evaluation-harness
+cd lm-evaluation-harness
+pip install   "promptsource @ git+https://github.com/bigscience-workshop/promptsource@eval-hackathon"
+pip install -e ".[dev]"
+& then: https://github.com/bigscience-workshop/bigscience/blob/12f06bd39221f2e3788524ea86139ac1ac2b1b1a/jz/envs/README.md#creating-production-conda-env
+"""
+
+import logging
 import os
+import random
 import sys
 import datetime
 
@@ -9,9 +20,9 @@ from megatron.checkpointing import load_checkpoint
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),
                                              os.path.pardir,os.path.pardir)))
 
-from lm_eval.models.gpt2 import GPT2LM
-from lm_eval import evaluator, tasks, utils
-from lm_eval.base import CacheHook
+from lm_eval import evaluator, tasks
+from lm_eval.api import utils
+from lm_eval.api.model import CacheHook
 from tqdm import tqdm
 import torch.nn.functional as F
 
@@ -29,7 +40,6 @@ from megatron.mpu.mappings import gather_from_tensor_model_parallel_region
 
 from megatron.utils import get_ltor_masks_and_position_ids, unwrap_model
 from megatron.p2p_communication import recv_forward, send_forward
-import pickle
 import json
 
 from torch.nn.parallel.distributed import DistributedDataParallel as torchDDP
@@ -37,7 +47,21 @@ from megatron.model.distributed import DistributedDataParallel as LocalDDP
 from megatron.model.module import Float16Module
 from deepspeed.runtime.pipe import schedule
 
-class EvalHarnessAdaptor(GPT2LM):
+
+def setup_example_logger(output_path):
+    """
+    Sets up a logger that will save each example and prediction.
+    Copied from https://github.com/bigscience-workshop/lm-evaluation-harness/blob/2d968c60fc8bd808e5e475ca300781f774d234c1/main.py#L74
+    """
+    example_logger = logging.getLogger("examples")
+    filename = f"{output_path}.jsonl"
+    formatter = logging.Formatter("%(message)s")
+    handler = logging.FileHandler(filename)
+    handler.setFormatter(formatter)
+    example_logger.addHandler(handler)
+    example_logger.setLevel(logging.INFO)
+
+class EvalHarnessAdaptor:
     def __init__(self, model, tokenizer):
         args = get_args()
         self.args = args
@@ -158,9 +182,13 @@ class EvalHarnessAdaptor(GPT2LM):
                     inplens.append(inplen)
 
                 logits = self._model_call(torch.cat(inps, dim=0))
+                torch.distributed.barrier()
                 res_len += len(chunk)
                 if logits is not None:
-                    multi_logits = F.log_softmax(logits, dim=-1).cpu()  # [batch, seq, vocab]
+                    if self.args.offloadearly:
+                        multi_logits = logits
+                    else:
+                        multi_logits = F.log_softmax(logits, dim=-1).cpu() # [batch, seq, vocab]
 
                     for (cache_key, _, _), logits, inp, inplen, cont_toks in zip(chunk, multi_logits, inps, inplens, contlens):
                         contlen = len(cont_toks)
@@ -181,7 +209,7 @@ class EvalHarnessAdaptor(GPT2LM):
         if not mpu.is_pipeline_last_stage():
             # @HACK: To make the eval harness happy on threads that don't have access to the results.
             #        We just randomly generate some data.
-            res = [(np.random.rand(), np.random.rand()>0.5) for _ in requests]
+            res = [(0.5, True) for _ in requests]
 
         return reord.get_original(res)
 
@@ -212,14 +240,13 @@ class EvalHarnessAdaptor(GPT2LM):
             # dummy data iterator for pipelining.
             data_iterator = list((torch.stack(inp) for inp in utils.chunks(padded, args.micro_batch_size)))
             self.model.micro_batches = len(data_iterator)
-            
+
             if self.adaptive_seq_len:
                 # Allow different shapes than the default seq_len to be communicated across pipes
                 # Without this Deepspeed will hang when trying to receive activations
                 self.model.reset_activation_shape()
-            
-            output = self.model.eval_batch(iter(data_iterator), compute_loss = False, reduce_output = None)
 
+            output = self.model.eval_batch(iter(data_iterator), compute_loss = False, reduce_output = None)
 
             if output is not None:
                 if self.args.offloadearly:
@@ -328,7 +355,8 @@ def load_ds_checkpoint_and_setup_megatron(args):
     else:
         model = get_model(model_provider)[0]
         # Initialize megatron model using the parsed state dict.
-        sd = _create_rank_checkpoint(ds_checkpoint, None, mpu.get_tensor_model_parallel_rank(), mpu.get_pipeline_model_parallel_rank(), True)
+        sd = _create_rank_checkpoint(ds_checkpoint, None, mpu.get_tensor_model_parallel_rank(),
+                                     mpu.get_pipeline_model_parallel_rank(), True)
 
         model.load_state_dict(sd['model'], strict=True)
 
@@ -361,6 +389,15 @@ def main():
     # parse the megatron args. But wait with initalizing megatron.
     # avoid printing the arguments, since they will later be overridden.
     args = _parse_args(tasks_args)
+
+    # TODO @thomasw21 If all the tasks require `greedy_until` then we early stop as this isn't implemented
+    task_list = ALL_TASKS if args.task_list == 'all' else args.task_list.split(',')
+    task_dict = tasks.get_task_dict_promptsource(task_list)
+    task_dict = {task_name: task for task_name, task in task_dict.items() if task.need_greedy_until is False}
+    if len(task_dict) == 0:
+        print_rank_0("Early stopping as `greedy_until` is not implemented yet.")
+        return
+
     load_path = args.load
     model = load_ds_checkpoint_and_setup_megatron(args)
 
@@ -371,27 +408,37 @@ def main():
         # and it also reshapes the attenion scores in attention_mask_func
         args.curriculum_learning = 1
 
-    task_list = ALL_TASKS if args.task_list == 'all' else args.task_list.split(',')
-    task_dict = tasks.get_task_dict(task_list)
-
     model.module.activation_checkpoint_interval = 0
     model._compute_loss = False
     model.fwd_outputs = []
 
     tokenizer = get_tokenizer()
     adaptor = EvalHarnessAdaptor(model, tokenizer)
-    
+
+    def add_config(results):
+        results["config"] = {
+            "adaptive_seq_len": args.adaptive_seq_len,
+            "num_fewshot": 0,
+            "bootstrap_iters": args.bootstrap_iters,
+        }
+        return results
+
+    random.seed(args.seed)
     if args.intermed_results:
-        global_results = {"results": {}, "versions": {}}
+        global_results = {"results": [], "versions": {}, "table_results": {}}
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
         iteration_id = load_path.split("/")[-1].replace("/", "")
         results_path = args.results_path.replace(".json", f"_lm-eval_{iteration_id}_{timestamp}.json")
         # Backup file in case of interruption during writing
         results_path_backup = args.results_path.replace(".json", f"_lm-eval_{iteration_id}_{timestamp}_backup.json")
+        examples_path = results_path.replace(".json", "_examples")
+        setup_example_logger(examples_path)
         for task_name, task in task_dict.items():
-            results = evaluator.evaluate(adaptor, {task_name: task}, False, 0, None, bootstrap_iters=args.bootstrap_iters)
-            global_results["results"] = {**global_results["results"], **results["results"]}
+            results = evaluator.evaluate(lm=adaptor, task_dict={task_name: task}, bootstrap_iters=args.bootstrap_iters, rng=np.random.default_rng(args.seed))
+            global_results["results"].extend(results["results"])
             global_results["versions"] = {**global_results["versions"], **results["versions"]}
+            global_results["table_results"] = {**global_results["table_results"], **results["table_results"]}
+            global_results = add_config(global_results)
             if mpu.is_pipeline_last_stage() and mpu.get_tensor_model_parallel_rank() == 0:
                 print(json.dumps(results, indent=2))
                 with open(results_path, 'w') as outfile:
@@ -399,7 +446,8 @@ def main():
                 with open(results_path_backup, 'w') as outfile:
                     json.dump(global_results, outfile, indent=4)
     else:
-        global_results = evaluator.evaluate(adaptor, task_dict, False, 0, None, bootstrap_iters=args.bootstrap_iters)
+        global_results = evaluator.evaluate(lm=adaptor, task_dict=task_dict, bootstrap_iters=args.bootstrap_iters, rng=np.random.default_rng(args.seed))
+        global_results = add_config(global_results)
         if mpu.is_pipeline_last_stage() and mpu.get_tensor_model_parallel_rank() == 0:
             print(json.dumps(global_results, indent=2))
             with open(args.results_path, 'w') as outfile:

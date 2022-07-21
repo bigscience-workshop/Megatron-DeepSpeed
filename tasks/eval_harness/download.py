@@ -14,7 +14,20 @@ args = parser.parse_args()
 
 def main():
     task_list = ALL_TASKS if args.task_list == 'all' else args.task_list.split(',')
-    tasks.get_task_dict(task_list)
+    task_and_exceptions = []
+    for task in task_list:
+        print("--------")
+        print(f"Downloading dataset for task: {task}")
+        try:
+            tasks.get_task_dict([task])
+        except Exception as e:
+            task_and_exceptions.append((task, e))
+
+    for task, exception in task_and_exceptions:
+        print("=======================================")
+        print(task)
+        print(exception)
+
 
 if __name__ == '__main__':
     main()
