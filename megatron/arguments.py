@@ -538,6 +538,8 @@ def _add_training_args(parser):
                        help='Exit the program after this many minutes.')
     group.add_argument('--tensorboard-dir', type=str, default=None,
                        help='Write TensorBoard logs to this directory.')
+    group.add_argument('--tensorboard-debug-dir', type=str, default=None,
+                       help='Write TensorBoard debug logs to this directory.')
     group.add_argument('--no-masked-softmax-fusion',
                        action='store_false',
                        help='Disable fusion of query_key_value scaling, '
