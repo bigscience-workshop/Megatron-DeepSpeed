@@ -42,7 +42,6 @@ https://www.deepspeed.ai/tutorials/inference-tutorial/
 ```
 git clone https://github.com/microsoft/DeepSpeed
 cd DeepSpeed
-git checkout ds-inference/bloom-support
 pip install .
 ```
 
