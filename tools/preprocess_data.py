@@ -82,13 +82,18 @@ class Encoder(object):
         ids = {}
         for key in self.args.json_keys:
             text = data[key]
+            if self.args.prepend_space:
+                text = f" {text}"
             doc_ids = []
             for sentence in Encoder.splitter.tokenize(text):
                 sentence_ids = Encoder.tokenizer.tokenize(sentence)
                 if len(sentence_ids) > 0:
                     doc_ids.append(sentence_ids)
-            if len(doc_ids) > 0 and self.args.append_eod:
-                doc_ids[-1].append(Encoder.tokenizer.eod)
+            if len(doc_ids) > 0:
+                if self.args.append_eod:
+                    doc_ids[-1].append(Encoder.tokenizer.eod)
+                elif self.args.append_bos:
+                    doc_ids[-1].append(Encoder.tokenizer.bos)
             ids[key] = doc_ids
         return ids, len(json_line)
 
@@ -117,6 +122,10 @@ def get_args():
                        help='Path to the BPE merge file (if necessary).')
     group.add_argument('--append-eod', action='store_true',
                        help='Append an <eod> token to the end of a document.')
+    group.add_argument('--append-bos', action='store_true',
+                       help='Append a bos token to the end of a document.')
+    group.add_argument('--prepend-space', action='store_true',
+                    help='Prepends a space to the beginning of a document')
     group.add_argument("--tokenizer-name-or-path", type=str, default=None,
                        help="Name or path of the huggingface tokenizer.")
     group.add_argument('--make-vocab-size-divisible-by', type=int, default=128,

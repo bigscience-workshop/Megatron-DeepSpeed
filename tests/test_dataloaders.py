@@ -7,7 +7,7 @@ from unittest.mock import patch
 import deepspeed
 import torch
 
-import finetune_t0_non_causal_decoder
+import finetune_t0
 from megatron import global_vars, get_tokenizer, initialize_megatron, get_args
 from megatron.data import mlm_dataset, mtf_dataset, decoder_packed_mtf_dataset
 from megatron.data.data_samplers import build_pretraining_data_loader
@@ -241,7 +241,7 @@ class TestDataLoading(TestCasePlus):
                     last_padding_size = len([None for segment_id in items["decoder_segment_ids"][micro_batch_size - 1] if segment_id == 0])
 
 
-    def test_finetune_t0_non_causal_decoder_get_batch_pipe(self):
+    def test_finetune_t0_get_batch_pipe(self):
         command_args = get_default_args()
         command_args["--position-embedding-type"] = "alibi"
 
@@ -263,7 +263,7 @@ class TestDataLoading(TestCasePlus):
                     special_tokens_ids={tokenizer.pad}
                 )
 
-                (tokens, position_ids, attention_mask), (labels, loss_mask) = finetune_t0_non_causal_decoder.get_batch_pipe(data)
+                (tokens, position_ids, attention_mask), (labels, loss_mask) = finetune_t0.get_batch_pipe(data)
 
                 tokens = tokens.cpu()
                 position_ids = position_ids.cpu()

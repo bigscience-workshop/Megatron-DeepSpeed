@@ -358,7 +358,7 @@ class DecoderPackedMTFDataset(torch.utils.data.Dataset):
             decoder_tokens[cur_len: cur_len + input_token_len] = token_dict["input_tokens"]
             decoder_tokens[cur_len + input_token_len: cur_len + total_len] = token_dict["target_tokens"]
             decoder_segment_ids[cur_len: cur_len + total_len] = item_num
-            decoder_is_inputs[cur_len: cur_len + input_token_len] = 1  # inputs
+            decoder_is_inputs[cur_len: cur_len + input_token_len] = True  # inputs
             # targets are already 0 at init, no need to update `decoder_is_inputs`
 
             item_num += 1
@@ -399,7 +399,7 @@ def _build_index_mappings(
     shuffle_idx_filename = _filename + '_decoder_packed_shuffle_idx.npy'
 
     # Build the indexed mapping if not exist.
-    if torch.distributed.get_rank() == 0:
+    if not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0:
         if (not os.path.isfile(sample_idx_filename)) or \
            (not os.path.isfile(shuffle_idx_filename)):
 
@@ -437,15 +437,16 @@ def _build_index_mappings(
             print_rank_0(' > elasped time to build and save shuffle-idx and sample-idx mapping'
                          ' (seconds): {:4f}'.format(time.time() - start_time))
 
-    # This should be a barrier but nccl barrier assumes
-    # device_index=rank which is not the case for model
-    # parallel case
-    counts = torch.cuda.LongTensor([1])
-    torch.distributed.all_reduce(counts, group=mpu.get_data_parallel_group())
-    torch.distributed.all_reduce(counts, group=mpu.get_pipeline_model_parallel_group())
-    assert counts[0].item() == (
-        torch.distributed.get_world_size() //
-        torch.distributed.get_world_size(group=mpu.get_tensor_model_parallel_group()))
+    if torch.distributed.is_initialized():
+        # This should be a barrier but nccl barrier assumes
+        # device_index=rank which is not the case for model
+        # parallel case
+        counts = torch.cuda.LongTensor([1])
+        torch.distributed.all_reduce(counts, group=mpu.get_data_parallel_group())
+        torch.distributed.all_reduce(counts, group=mpu.get_pipeline_model_parallel_group())
+        assert counts[0].item() == (
+            torch.distributed.get_world_size() //
+            torch.distributed.get_world_size(group=mpu.get_tensor_model_parallel_group()))
 
     # Load mappings.
     start_time = time.time()

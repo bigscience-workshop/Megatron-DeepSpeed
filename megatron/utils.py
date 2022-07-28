@@ -261,11 +261,18 @@ def get_packed_attention_mask(is_causal: bool, causal_mask: torch.Tensor, decode
         - segment_ids: torch.IntTensor [batch_size, sequence_length]
     Returns:
         - attention_mask: torch.BoolTensor [batch_size, 1, sequence_length, sequence_length]
+
+    Input example for the mask examples:
+        att_mask_batch = 1
+        seq_length = 7
+        decoder_is_inputs = torch.tensor([[1, 1, 0, 1, 1, 0, 0]])
+        segment_ids = torch.tensor([[1, 1, 1, 2, 2, 2, 0]])
+        causal_mask = torch.tril(torch.ones(att_mask_batch, seq_length, seq_length)).view(att_mask_batch, 1, seq_length, seq_length)
     """
 
     """Causal Inputs Mask:
-    mask = [[[[1, 1, 0, 0, 0, 0, 0],
-            [1, 1, 0, 0, 0, 0, 0],
+    mask = [[[[1, 1, 0, 1, 1, 0, 0],
+            [1, 1, 0, 1, 1, 0, 0],
             [1, 1, 1, 0, 0, 0, 0],
             [1, 1, 1, 1, 1, 0, 0],
             [1, 1, 1, 1, 1, 0, 0],
@@ -299,7 +306,7 @@ def get_packed_attention_mask(is_causal: bool, causal_mask: torch.Tensor, decode
             [0, 0, 0, 1, 1, 1, 0],
             [0, 0, 0, 1, 1, 1, 0],
             [0, 0, 0, 1, 1, 1, 0],
-            [0, 0, 0, 0, 0, 0, 0]]]]
+            [0, 0, 0, 0, 0, 0, 1]]]]
     """
     segment_mask = segment_ids[:, None, :, None] == segment_ids[:, None, None, :]
 
@@ -311,13 +318,22 @@ def get_packed_attention_mask(is_causal: bool, causal_mask: torch.Tensor, decode
             [0, 0, 0, 1, 1, 0, 0],
             [0, 0, 0, 1, 1, 1, 0],
             [0, 0, 0, 0, 0, 0, 0]]]]
+    
+    If is_causal=True:
+    mask = [[[[1, 0, 0, 0, 0, 0, 0],
+            [1, 1, 0, 0, 0, 0, 0],
+            [1, 1, 1, 0, 0, 0, 0],
+            [0, 0, 0, 1, 0, 0, 0],
+            [0, 0, 0, 1, 1, 0, 0],
+            [0, 0, 0, 1, 1, 1, 0],
+            [0, 0, 0, 0, 0, 0, 0]]]]
+    
     """
+
     attention_mask = causal_inputs_mask * padding_mask * segment_mask
 
-    # Convert attention mask to binary:
-    attention_mask = (attention_mask < 0.5)
-
-    return attention_mask
+    # True for places we do not want to attend to
+    return ~attention_mask
 
 def param_size(parameter):
     return parameter.ds_numel if hasattr(parameter, 'ds_id') else parameter.nelement()

@@ -47,6 +47,7 @@ def model_provider(pre_process=True, post_process=True):
     see_memory_usage(f"After Building Model", force=True)
     return model
 
+
 def get_batch_pipe(data):
     """
     Modification of `get_batch` to work on `next(data_iterator)` instead of `data_iterator` & in packed fashion
@@ -83,13 +84,13 @@ def get_batch_pipe(data):
     )
     # Only compute loss over causal target tokens, i.e. ignore input_tokens & padding
     loss_on_targets_only = ~data_c["decoder_is_inputs"][:, 1:]
-    loss_on_non_pad_only = (tokens != tokenizer.pad)
+    loss_on_non_pad_only = (labels != tokenizer.pad)
     loss_mask *= loss_on_targets_only * loss_on_non_pad_only
 
     attention_mask = get_packed_attention_mask(
         # Run non-causal decoder
-        is_causal=False,
-        causal_mask=~(causal_mask.bool()),
+        is_causal=not(args.prefixlm),
+        causal_mask=~(causal_mask.bool()), # Turn back into tril being ones
         decoder_is_inputs=decoder_is_inputs.bool(),
         segment_ids=segment_ids.long(),
     )

@@ -20,7 +20,7 @@ from megatron.testing_utils import TestCasePlus, mockenv_context, flatten_argume
 from megatron.training import setup_model_and_optimizer
 import pretrain_gpt
 import pretrain_prefix_lm
-import finetune_t0_non_causal_decoder
+import finetune_t0
 
 
 def get_default_args(test_file_dir: str):
@@ -456,7 +456,7 @@ class MyTestCase(TestCasePlus):
                     vocab_size=args.padded_vocab_size,
                     special_tokens_ids={tokenizer.pad}
                 )
-                model, _, _ = setup_model_and_optimizer(finetune_t0_non_causal_decoder.model_provider)
+                model, _, _ = setup_model_and_optimizer(finetune_t0.model_provider)
                 model = model[0]
                 model._config.train_micro_batch_size_per_gpu = args.micro_batch_size
                 model.set_train_batch_size(args.micro_batch_size)
