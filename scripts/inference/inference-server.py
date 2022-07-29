@@ -11,6 +11,7 @@ from typing import Tuple
 import torch
 import torch.distributed as dist
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
+import deepspeed
 
 from flask import Flask, request
 from waitress import serve
@@ -251,7 +252,8 @@ class Model:
                  top_p: float,
                  temperature: float,
                  min_length: int,
-                 max_new_tokens: int) -> Tuple[str, int]:
+                 max_new_tokens: int,
+                 remove_input_from_output: bool = False) -> Tuple[str, int]:
         x = self.tokenizer([text])
 
         input_ids = torch.tensor(x["input_ids"]).to(self.input_device)
@@ -270,9 +272,16 @@ class Model:
             )
 
         output_tokens = output[0]
+
+        if (remove_input_from_output):
+            output_tokens = output_tokens[len(input_ids[0]):]
+            num_output_tokens = len(output_tokens)
+        else:
+            num_output_tokens = len(output_tokens) - len(input_ids[0])
+
         output_text = self.tokenizer.decode(output_tokens)
 
-        return output_text, len(output_tokens)
+        return output_text, num_output_tokens
 
 
 ####################################################################################
@@ -321,6 +330,7 @@ def generate() -> str:
         temperature = float(json_obj["temperature"])
         min_length = int(json_obj["min_length"])
         max_new_tokens = int(json_obj["max_new_tokens"])
+        remove_input_from_output = json_obj["return_type"] == "output_only"
 
         if (max_new_tokens > args.max_allowed_tokens):
             raise MaxTokensError(max_new_tokens, args.max_allowed_tokens)
@@ -331,7 +341,8 @@ def generate() -> str:
             top_p,
             temperature,
             min_length,
-            max_new_tokens
+            max_new_tokens,
+            remove_input_from_output
         )
 
         total_time_taken = time.time() - start_time
