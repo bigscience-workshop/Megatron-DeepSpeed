@@ -1,5 +1,7 @@
 import argparse
+import json
 import logging
+import os
 import subprocess
 import sys
 import time
@@ -7,6 +9,7 @@ import traceback
 from typing import Tuple
 
 import torch
+import torch.distributed as dist
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
 from flask import Flask, request
@@ -19,7 +22,82 @@ class MaxTokensError(Exception):
             max_new_tokens, max_allowed_tokens)
 
 
-# TODO remove when bloom-oinference is merged into main
+# TODO remove when bloom-inference is merged into main
+def get_checkpoint_files(pretrained_model_name_or_path):
+    # XXX: I just hacked this one together to automatically handle the fetching of the model file or
+    # shards into cache and returning the cached entries - note that I removed most arguments
+
+    from transformers.modeling_utils import get_checkpoint_shard_files
+    from transformers.utils import WEIGHTS_INDEX_NAME, WEIGHTS_NAME, cached_path, hf_bucket_url, is_offline_mode
+    from transformers.utils.hub import EntryNotFoundError
+
+    cache_dir = None
+    is_sharded = False
+
+    # XXX: preparation for revision branches if needed
+    revision = None
+    #revision = "sharded"
+
+    # this supports nodes with no network (so you need to pre-cache the model and the tokenizer with
+    # python -c "from transformers import AutoModel; AutoModel.from_pretrained('bigscience/bloom')"
+    if is_offline_mode():
+        print("Offline mode: forcing local_files_only=True")
+        local_files_only = True
+    else:
+        local_files_only = False
+
+    filename = WEIGHTS_NAME
+    archive_file = hf_bucket_url(
+        pretrained_model_name_or_path, filename=filename, revision=revision)
+
+    try:
+        resolved_archive_file = cached_path(
+            archive_file, cache_dir=cache_dir, local_files_only=local_files_only,)
+        return [resolved_archive_file]
+
+    except (EntryNotFoundError, FileNotFoundError):
+        if filename == WEIGHTS_NAME:
+            # Maybe the checkpoint is sharded, we try to grab the index name in this case.
+            archive_file = hf_bucket_url(
+                pretrained_model_name_or_path,
+                filename=WEIGHTS_INDEX_NAME,
+                revision=revision,
+            )
+            resolved_archive_file = cached_path(
+                archive_file,
+                cache_dir=cache_dir,
+                local_files_only=local_files_only,
+            )
+            is_sharded = True
+
+    if is_sharded:
+        # resolved_archive_file becomes a list of files that point to the different checkpoint shards in this case.
+        resolved_archive_file, sharded_metadata = get_checkpoint_shard_files(
+            pretrained_model_name_or_path,
+            resolved_archive_file,
+            cache_dir=cache_dir,
+            revision=revision
+        )
+
+        return resolved_archive_file
+
+
+def write_checkponts_json(args: argparse.Namespace):
+    #checkpoint_dir = "/gpfsscratch/rech/six/commun/uan68tv-model-conversion/bloom"
+    #checkpoint_files = glob.glob(f"{checkpoint_dir}/*bin")
+    checkpoint_files = get_checkpoint_files(args.model_name)
+
+    #print("Checkpoint files:", checkpoint_files)
+
+    data = {
+        "type": "BLOOM-176B",
+        "checkpoints": checkpoint_files,
+        "version": 1.0
+    }
+    json.dump(data, open(args.checkpoints_json, "w", encoding="utf-8"))
+
+
+# TODO remove when bloom-inference is merged into main
 def get_max_memory_per_gpu_dict(dtype, model_name):
     """ try to generate the memory map based on what we know about the model and the available hardware """
 
@@ -74,9 +152,12 @@ def ParseArgs():
     group.add_argument("--log_file", type=str, help="log data")
     group.add_argument("--host", type=str, required=True, help="host address")
     group.add_argument("--port", type=int, required=True, help="port number")
-    group.add_argument("--dtype", type=str, required=True, help="port number")
+    group.add_argument("--dtype", type=str, required=True,
+                       choices=["bf16", "fp16"], help="dtype for model")
     group.add_argument("--max_allowed_tokens", type=int,
                        default=100, help="max allowed tokens")
+    group.add_argument("--inference_method", type=str, required=True,
+                       choices=["hf_accelerate", "deepspeed"], help="inference method to use")
 
     args = parser.parse_args()
 
@@ -84,8 +165,9 @@ def ParseArgs():
         args.dtype = torch.bfloat16
     elif (args.dtype == "fp16"):
         args.dtype = torch.float16
-    elif (args.dtype == "fp32"):
-        args.dtype = torch.float32
+
+    if (args.inference_method == "deepspeed"):
+        args.checkpoints_json = "checkpoints.json"
 
     return args
 
@@ -104,15 +186,62 @@ def GetStackTrace(e_stack_trace):
 
 class Model:
     def __init__(self, args: argparse.Namespace) -> None:
+        print("Loading model...")
+
         self.tokenizer = AutoTokenizer.from_pretrained(args.model_name)
-        self.model = AutoModelForCausalLM.from_pretrained(
-            args.model_name,
-            device_map="auto",
-            max_memory=get_max_memory_per_gpu_dict(
-                args.dtype, args.model_name),
-            torch_dtype=args.dtype
-        )
+
+        if (args.inference_method == "hf_accelerate"):
+            self.model = AutoModelForCausalLM.from_pretrained(
+                args.model_name,
+                device_map="auto",
+                max_memory=get_max_memory_per_gpu_dict(
+                    args.dtype, args.model_name),
+                torch_dtype=args.dtype
+            )
+        elif (args.inference_method == "deepspeed"):
+            self.config = AutoConfig.from_pretrained(args.model_name)
+
+            with deepspeed.OnDevice(dtype=args.dtype, device="meta"):
+                self.model = AutoModelForCausalLM.from_config(
+                    self.config, torch_dtype=args.dtype)
+
         self.model.eval()
+
+        if (args.inference_method == "deepspeed"):
+            world_size = int(os.getenv("WORLD_SIZE", "1"))
+
+            if (args.dtype == torch.float16):
+                self.model = deepspeed.init_inference(
+                    self.model,
+                    mp_size=world_size,
+                    dtype=args.dtype,
+                    checkpoint=args.checkpoints_json,
+                    replace_with_kernel_inject=True
+                )
+            elif (args.dtype == torch.bfloat16):
+                raise NotImplementedError("This is not yet finished")
+                # self.model = deepspeed.init_inference(
+                #     self.model,
+                #     mp_size=world_size,
+                #     dtype=args.dtype,
+                #     checkpoint=args.checkpoints_json,
+                #     injection_policy={
+                #         BloomBlock: (
+                #             'self_attention.dense',
+                #             'mlp.dense_4h_to_h'
+                #         )
+                #     }
+                # )
+
+            self.model = self.model.module
+
+        if (args.inference_method == "hf_accelerate"):
+            self.input_device = "cuda:0"
+        elif (args.inference_method == "deepspeed"):
+            self.input_device = torch.cuda.current_device()
+
+        # optimize model by generating once (optimization happens on the first run)
+        self.Generate("Hi, I'm a model", 5, 0.9, 0.7, 1, 40)
 
         print("Model loaded")
 
@@ -125,8 +254,9 @@ class Model:
                  max_new_tokens: int) -> Tuple[str, int]:
         x = self.tokenizer([text])
 
-        input_ids = torch.tensor(x["input_ids"])
-        attention_mask = torch.tensor(x["attention_mask"])
+        input_ids = torch.tensor(x["input_ids"]).to(self.input_device)
+        attention_mask = torch.tensor(
+            x["attention_mask"]).to(self.input_device)
 
         with torch.no_grad():
             output = self.model.generate(
@@ -157,6 +287,14 @@ logging.basicConfig(
     filename=args.log_file
 )
 logger = logging.getLogger(__name__)
+
+if (args.inference_method == "deepspeed"):
+    deepspeed.init_distributed("nccl")
+    args.rank = dist.get_rank()
+    if (args.rank == 0):
+        write_checkponts_json(args)
+    dist.barrier()
+
 model = Model(args)
 ####################################################################################
 
@@ -168,7 +306,7 @@ def gpu() -> str:
         info = info.decode("utf8")
     except Exception as e:
         info = "Executing nvidia-smi failed: " + str(e)
-    return info.strip()
+    return info
 
 
 @app.route("/generate/", methods=["POST"])
