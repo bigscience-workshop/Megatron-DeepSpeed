@@ -150,13 +150,16 @@ def ParseArgs():
     group = parser.add_argument_group(title="model")
     group.add_argument("--model_name", type=str,
                        required=True, help="model to use")
-    group.add_argument("--log_file", type=str, help="log data")
-    group.add_argument("--host", type=str, required=True, help="host address")
-    group.add_argument("--port", type=int, required=True, help="port number")
     group.add_argument("--dtype", type=str, required=True,
                        choices=["bf16", "fp16"], help="dtype for model")
     group.add_argument("--inference_method", type=str, required=True,
                        choices=["hf_accelerate", "deepspeed"], help="inference method to use")
+
+    group = parser.add_argument_group(title="launch config")
+    group.add_argument("--log_file", type=str, help="log data")
+    group.add_argument("--host", type=str, required=True, help="host address")
+    group.add_argument("--port", type=int, required=True, help="port number")
+    group.add_argument("--local_rank", required=False, type=int, help="used by dist launchers")
 
     group = parser.add_argument_group(title="limitting values")
     group.add_argument("--allowed_max_new_tokens", type=int,
