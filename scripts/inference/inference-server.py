@@ -19,8 +19,8 @@ from waitress import serve
 
 class MaxTokensError(Exception):
     def __init__(self, max_new_tokens: int, allowed_max_new_tokens: int) -> None:
-        self.message = "max_new_tokens ({}) > {} is not supported.".format(
-            max_new_tokens, allowed_max_new_tokens)
+        super().__init__("max_new_tokens = {} > {} is not supported.".format(
+            max_new_tokens, allowed_max_new_tokens))
 
 
 # TODO remove when bloom-inference is merged into main
