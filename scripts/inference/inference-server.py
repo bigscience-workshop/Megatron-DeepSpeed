@@ -169,7 +169,7 @@ def ParseArgs():
                        default=1, help="default temperature")
     group.add_argument("--min_length", type=int, default=1, help="min length")
     group.add_argument("--max_new_tokens", type=int,
-                       default=100, help="max new tokens")
+                       default=40, help="max new tokens")
     group.add_argument("--return_type", type=str, default="both_input_output",
                        choices=["both_input_output", "output_only"], help="return type")
 
@@ -329,6 +329,35 @@ def gpu() -> str:
     except Exception as e:
         info = "Executing nvidia-smi failed: " + str(e)
     return info
+
+
+@app.route("/about/", methods=["GET"])
+def about() -> str:
+    if (args.log_file):
+        description = "Please don't send any personal information to this endpoint. We are logging your data.\n\n"
+    else:
+        description = ""
+    description += '''Usage:
+A request object should look like:
+{
+    input_text: "Hello, I'm a model",
+    "top_k": 5,
+    "top_p": 0.9,
+    "temperature": 0.7,
+    "min_length": 1,
+    "max_new_tokens": 40,
+    "return_type": "output_only",
+}
+
+Dafault values (use if not provided in request object):
+top_k = 50
+top_p = 1
+temperature = 1
+min_length = 1
+max_new_tokens = 40
+return_type = "both_input_output"
+'''
+    return description
 
 
 @app.route("/generate/", methods=["POST"])
