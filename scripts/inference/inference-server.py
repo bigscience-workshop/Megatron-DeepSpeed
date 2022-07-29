@@ -4,6 +4,7 @@ import subprocess
 import sys
 import time
 import traceback
+from typing import Tuple
 
 import torch
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
@@ -121,7 +122,7 @@ class Model:
                  top_p: float,
                  temperature: float,
                  min_length: int,
-                 max_new_tokens: int) -> str:
+                 max_new_tokens: int) -> Tuple[str, int]:
         x = self.tokenizer([text])
 
         input_ids = torch.tensor(x["input_ids"])
@@ -141,7 +142,7 @@ class Model:
         output_tokens = output[0]
         output_text = self.tokenizer.decode(output_tokens)
 
-        return output_text
+        return output_text, len(output_tokens)
 
 
 ####################################################################################
@@ -186,7 +187,7 @@ def generate() -> str:
         if (max_new_tokens > args.max_allowed_tokens):
             raise MaxTokensError(max_new_tokens, args.max_allowed_tokens)
 
-        output_text = model.Generate(
+        output_text, num_output_tokens = model.Generate(
             input_text,
             top_k,
             top_p,
@@ -195,9 +196,12 @@ def generate() -> str:
             max_new_tokens
         )
 
+        total_time_taken = time.time() - start_time
         output = {
             "output_text": output_text,
-            "time_taken": "{} s".format(str(time.time() - start_time))
+            "num_output_tokens": num_output_tokens,
+            "total_time_taken": "{:.3f} s".format(total_time_taken),
+            "throughput": "{:.3f} tokens/s".format(num_output_tokens / total_time_taken)
         }
         if (args.log_file):
             logger.info(json_obj)
