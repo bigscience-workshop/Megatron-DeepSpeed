@@ -318,6 +318,7 @@ if (args.inference_method == "deepspeed"):
     dist.barrier()
 
 model = Model(args)
+query_id = 0
 ####################################################################################
 
 
@@ -346,10 +347,10 @@ A request object should look like:
     "temperature": 0.7,
     "min_length": 1,
     "max_new_tokens": 40,
-    "return_type": "output_only",
+    "return_type": "output_only"
 }
 
-Dafault values (use if not provided in request object):
+Default values (use if not provided in request object):
 top_k = 50
 top_p = 1
 temperature = 1
@@ -362,6 +363,9 @@ return_type = "both_input_output"
 
 @app.route("/generate/", methods=["POST"])
 def generate() -> str:
+    # needs to be global since it is updated
+    global query_id
+
     try:
         start_time = time.time()
         json_obj = request.get_json()
@@ -387,13 +391,15 @@ def generate() -> str:
             max_new_tokens,
             remove_input_from_output=(return_type == "output_only")
         )
+        json_obj["query_id"] = query_id
 
         total_time_taken = time.time() - start_time
         output = {
             "output_text": output_text,
             "num_output_tokens": num_output_tokens,
             "total_time_taken": "{:.3f} s".format(total_time_taken),
-            "throughput": "{:.3f} tokens/s".format(num_output_tokens / total_time_taken)
+            "throughput": "{:.3f} tokens/s".format(num_output_tokens / total_time_taken),
+            "query_id": query_id
         }
         if (args.log_file):
             logger.info(json_obj)
@@ -406,12 +412,15 @@ def generate() -> str:
                 "message": str(e_message),
                 "stack_trace": GetStackTrace(e_stack_trace)
             },
-            "time_taken": "{} s".format(str(time.time() - start_time))
+            "time_taken": "{} s".format(str(time.time() - start_time)),
+            "query_id": query_id
         }
         if (args.log_file):
             logger.info(json_obj)
             logger.error(output)
         del output["error"]["stack_trace"]
+
+    query_id += 1
 
     return output
 
