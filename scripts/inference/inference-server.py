@@ -18,9 +18,9 @@ from waitress import serve
 
 
 class MaxTokensError(Exception):
-    def __init__(self, max_new_tokens: int, max_allowed_tokens: int) -> None:
+    def __init__(self, max_new_tokens: int, allowed_max_new_tokens: int) -> None:
         self.message = "max_new_tokens ({}) > {} is not supported.".format(
-            max_new_tokens, max_allowed_tokens)
+            max_new_tokens, allowed_max_new_tokens)
 
 
 # TODO remove when bloom-inference is merged into main
@@ -155,10 +155,23 @@ def ParseArgs():
     group.add_argument("--port", type=int, required=True, help="port number")
     group.add_argument("--dtype", type=str, required=True,
                        choices=["bf16", "fp16"], help="dtype for model")
-    group.add_argument("--max_allowed_tokens", type=int,
-                       default=100, help="max allowed tokens")
     group.add_argument("--inference_method", type=str, required=True,
                        choices=["hf_accelerate", "deepspeed"], help="inference method to use")
+
+    group = parser.add_argument_group(title="limitting values")
+    group.add_argument("--allowed_max_new_tokens", type=int,
+                       default=100, help="max allowed tokens")
+
+    group = parser.add_argument_group(title="default values")
+    group.add_argument("--top_k", type=int, default=50, help="default top_k")
+    group.add_argument("--top_p", type=float, default=1, help="default top_p")
+    group.add_argument("--temperature", type=float,
+                       default=1, help="default temperature")
+    group.add_argument("--min_length", type=int, default=1, help="min length")
+    group.add_argument("--max_new_tokens", type=int,
+                       default=100, help="max new tokens")
+    group.add_argument("--return_type", type=str, default="both_input_output",
+                       choices=["both_input_output", "output_only"], help="return type")
 
     args = parser.parse_args()
 
@@ -325,15 +338,16 @@ def generate() -> str:
         json_obj = request.get_json()
 
         input_text = str(json_obj["input_text"])
-        top_k = int(json_obj["top_k"])
-        top_p = float(json_obj["top_p"])
-        temperature = float(json_obj["temperature"])
-        min_length = int(json_obj["min_length"])
-        max_new_tokens = int(json_obj["max_new_tokens"])
-        remove_input_from_output = json_obj["return_type"] == "output_only"
+        top_k = int(json_obj.get("top_k", args.top_k))
+        top_p = float(json_obj.get("top_p", args.top_p))
+        temperature = float(json_obj.get("temperature", args.temperature))
+        min_length = int(json_obj.get("min_length", args.min_length))
+        max_new_tokens = int(json_obj.get(
+            "max_new_tokens", args.max_new_tokens))
+        return_type = str(json_obj.get("return_type", args.return_type))
 
-        if (max_new_tokens > args.max_allowed_tokens):
-            raise MaxTokensError(max_new_tokens, args.max_allowed_tokens)
+        if (max_new_tokens > args.allowed_max_new_tokens):
+            raise MaxTokensError(max_new_tokens, args.allowed_max_new_tokens)
 
         output_text, num_output_tokens = model.Generate(
             input_text,
@@ -342,7 +356,7 @@ def generate() -> str:
             temperature,
             min_length,
             max_new_tokens,
-            remove_input_from_output
+            remove_input_from_output=(return_type == "output_only")
         )
 
         total_time_taken = time.time() - start_time
