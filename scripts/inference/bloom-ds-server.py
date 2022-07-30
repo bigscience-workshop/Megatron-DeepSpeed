@@ -98,52 +98,6 @@ def write_checkponts_json(args: argparse.Namespace):
     json.dump(data, open(args.checkpoints_json, "w", encoding="utf-8"))
 
 
-# TODO remove when bloom-inference is merged into main
-def get_max_memory_per_gpu_dict(dtype, model_name):
-    """ try to generate the memory map based on what we know about the model and the available hardware """
-
-    # figure out the memory map - the minimum per gpu required to load the model
-    n_gpus = torch.cuda.device_count()
-
-    if model_name == "bigscience/bloom" and n_gpus == 8 and torch.cuda.get_device_properties(0).total_memory > 79*2**30:
-        # hand crafted optimized memory map for 8x80 setup over BLOOM
-        # this works with bs=40
-        return {0: '0GIB', 1: '51GIB', 2: '51GIB', 3: '51GIB', 4: '51GIB', 5: '51GIB', 6: '51GIB', 7: '51GIB'}
-
-    try:
-        # model_params calculation, as we don't have a model yet to do:
-        #model_params = sum(dict((p.data_ptr(), p.numel()) for p in model.parameters()).values())
-
-        config = AutoConfig.from_pretrained(model_name)
-        h = config.n_embed
-        l = config.n_layer
-        v = config.vocab_size
-        # from https://github.com/bigscience-workshop/bigscience/tree/6917a3b5fefcf439d3485ca184b4d9f6ab605150/math#model-sizing
-        model_params = l*(12*h**2 + 13*h) + v*h + 4*h
-    except:
-        print(
-            f"The model {model_name} has a broken config file. Please notify the owner")
-        raise
-
-    bytes = torch.finfo(dtype).bits / 8
-    param_memory_total_in_bytes = model_params * bytes
-    # add 5% since weight sizes aren't the same and some GPU may need more memory
-    param_memory_per_gpu_in_bytes = int(
-        param_memory_total_in_bytes / n_gpus * 1.05)
-    print(
-        f"Estimating {param_memory_per_gpu_in_bytes/2**30:0.2f}GB per gpu for weights")
-
-    # check the real available memory
-    # load cuda kernels first and only measure the real free memory after loading (shorter by ~2GB)
-    torch.ones(1).cuda()
-    max_memory_per_gpu_in_bytes = torch.cuda.mem_get_info(0)[0]
-    if max_memory_per_gpu_in_bytes < param_memory_per_gpu_in_bytes:
-        raise ValueError(
-            f"Unable to generate the memory map automatically as the needed estimated memory per gpu ({param_memory_per_gpu_in_bytes/2**30:0.2f}GB) is bigger than the available per gpu memory ({max_memory_per_gpu_in_bytes/2**30:0.2f}GB)")
-
-    return {i: param_memory_per_gpu_in_bytes for i in range(torch.cuda.device_count())}
-
-
 def ParseArgs():
     parser = argparse.ArgumentParser(description="Text generation server")
 
@@ -152,8 +106,6 @@ def ParseArgs():
                        required=True, help="model to use")
     group.add_argument("--dtype", type=str, required=True,
                        choices=["bf16", "fp16"], help="dtype for model")
-    group.add_argument("--inference_method", type=str, required=True,
-                       choices=["hf_accelerate", "deepspeed"], help="inference method to use")
 
     group = parser.add_argument_group(title="launch config")
     group.add_argument("--log_file", type=str, help="log data")
@@ -206,56 +158,41 @@ class Model:
         print("Loading model...")
 
         self.tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+        self.config = AutoConfig.from_pretrained(args.model_name)
 
-        if (args.inference_method == "hf_accelerate"):
-            self.model = AutoModelForCausalLM.from_pretrained(
-                args.model_name,
-                device_map="auto",
-                max_memory=get_max_memory_per_gpu_dict(
-                    args.dtype, args.model_name),
-                torch_dtype=args.dtype
-            )
-        elif (args.inference_method == "deepspeed"):
-            self.config = AutoConfig.from_pretrained(args.model_name)
-
-            with deepspeed.OnDevice(dtype=args.dtype, device="meta"):
-                self.model = AutoModelForCausalLM.from_config(
-                    self.config, torch_dtype=args.dtype)
+        with deepspeed.OnDevice(dtype=args.dtype, device="meta"):
+            self.model = AutoModelForCausalLM.from_config(
+                self.config, torch_dtype=args.dtype)
 
         self.model.eval()
 
-        if (args.inference_method == "deepspeed"):
-            world_size = int(os.getenv("WORLD_SIZE", "1"))
+        world_size = int(os.getenv("WORLD_SIZE", "1"))
 
-            if (args.dtype == torch.float16):
-                self.model = deepspeed.init_inference(
-                    self.model,
-                    mp_size=world_size,
-                    dtype=args.dtype,
-                    checkpoint=args.checkpoints_json,
-                    replace_with_kernel_inject=True
-                )
-            elif (args.dtype == torch.bfloat16):
-                raise NotImplementedError("This is not yet finished")
-                # self.model = deepspeed.init_inference(
-                #     self.model,
-                #     mp_size=world_size,
-                #     dtype=args.dtype,
-                #     checkpoint=args.checkpoints_json,
-                #     injection_policy={
-                #         BloomBlock: (
-                #             'self_attention.dense',
-                #             'mlp.dense_4h_to_h'
-                #         )
-                #     }
-                # )
+        if (args.dtype == torch.float16):
+            self.model = deepspeed.init_inference(
+                self.model,
+                mp_size=world_size,
+                dtype=args.dtype,
+                checkpoint=args.checkpoints_json,
+                replace_with_kernel_inject=True
+            )
+        elif (args.dtype == torch.bfloat16):
+            raise NotImplementedError("This is not yet finished")
+            # self.model = deepspeed.init_inference(
+            #     self.model,
+            #     mp_size=world_size,
+            #     dtype=args.dtype,
+            #     checkpoint=args.checkpoints_json,
+            #     injection_policy={
+            #         BloomBlock: (
+            #             'self_attention.dense',
+            #             'mlp.dense_4h_to_h'
+            #         )
+            #     }
+            # )
 
-            self.model = self.model.module
-
-        if (args.inference_method == "hf_accelerate"):
-            self.input_device = "cuda:0"
-        elif (args.inference_method == "deepspeed"):
-            self.input_device = torch.cuda.current_device()
+        self.model = self.model.module
+        self.input_device = torch.cuda.current_device()
 
         # optimize model by generating once (optimization happens on the first run)
         self.Generate("Hi, I'm a model", 5, 0.9, 0.7, 1, 40)
