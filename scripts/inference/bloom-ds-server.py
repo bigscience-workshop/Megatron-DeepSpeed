@@ -135,8 +135,7 @@ def ParseArgs():
     elif (args.dtype == "fp16"):
         args.dtype = torch.float16
 
-    if (args.inference_method == "deepspeed"):
-        args.checkpoints_json = "checkpoints.json"
+    args.checkpoints_json = "checkpoints.json"
 
     return args
 
@@ -250,12 +249,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-if (args.inference_method == "deepspeed"):
-    deepspeed.init_distributed("nccl")
-    args.rank = dist.get_rank()
-    if (args.rank == 0):
-        write_checkponts_json(args)
-    dist.barrier()
+deepspeed.init_distributed("nccl")
+args.rank = dist.get_rank()
+if (args.rank == 0):
+    write_checkponts_json(args)
+dist.barrier()
 
 model = Model(args)
 query_id = 0
