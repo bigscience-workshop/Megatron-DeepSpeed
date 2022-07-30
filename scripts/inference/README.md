@@ -2,19 +2,19 @@
 
 To run a server using HuggingFace (requires accelerate to be installed):
 ```
-python scripts/inference/inference-server.py --model_name bigscience/bloom --dtype bf16 --log_file data.log --host 127.0.0.1 --port 5000 --inference_method hf_accelerate
+python scripts/inference/bloom-accelerate-server.py --model_name bigscience/bloom --dtype bf16 --log_file data.log --host $ADDRESS --port $PORT
 ```
 
 To run a server using deepspeed:
 ```
-deepspeed --num_gpus 8 scripts/inference/inference-server.py --model_name bigscience/bloom --dtype fp16 --log_file data.log --host 127.0.0.1 --port 5000 --inference_method deepspeed
+deepspeed --num_gpus 8 scripts/inference/bloom-ds-server.py --model_name bigscience/bloom --dtype fp16 --log_file data.log --host $ADDRESS --port $PORT
 ```
 
 Usage:
 Currently, the script supports 3 method:
 1. The main generate method
 ```
-curl -H "Content-Type: application/json" -X POST -d '{ "input_text": "India is a country of", "top_k": "5", "top_p": "0.9", "temperature": "0.7", "min_length": "1", "max_new_tokens": "40", "return_type": "output_only" }' http://127.0.0.1:5000/generate/
+curl -H "Content-Type: application/json" -X POST -d '{ "input_text": "India is a country of", "top_k": "5", "top_p": "0.9", "temperature": "0.7", "min_length": "1", "max_new_tokens": "40", "return_type": "output_only" }' http://$ADDRESS:$PORT/generate/
 ```
 returns
 ```
@@ -22,7 +22,7 @@ returns
 ```
 2. Method that returns the model description
 ```
-curl -H "Content-Type: application/json" -X GET http://127.0.0.1:5000/about/
+curl -H "Content-Type: application/json" -X GET http://$ADDRESS:$PORT/about/
 ```
 returns
 ```
@@ -50,6 +50,6 @@ return_type = "both_input_output"
 ```
 3. Method to check GPU usage
 ```
-curl -H "Content-Type: application/json" -X GET http://127.0.0.1:5000/gpu/
+curl -H "Content-Type: application/json" -X GET http://$ADDRESS:$PORT/gpu/
 ```
 returns the nvidia-smi output
