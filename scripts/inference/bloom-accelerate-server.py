@@ -132,12 +132,12 @@ query_id = 0
 
 @app.route("/gpu/", methods=["GET"])
 def gpu() -> str:
-    utils.gpu()
+    return utils.gpu()
 
 
 @app.route("/about/", methods=["GET"])
 def about() -> str:
-    utils.about(args.log_file)
+    return utils.about(args.log_file)
 
 
 @app.route("/generate/", methods=["POST"])
