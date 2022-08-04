@@ -21,15 +21,13 @@ from transformers.deepspeed import HfDeepSpeedConfig
 from transformers.models.bloom.modeling_bloom import BloomBlock as BloomBlock
 import deepspeed
 import gc
-import glob
-import io
-import json
 import math
 import os
-import sys
 import time
 import torch
 import torch.distributed as dist
+from utils import generate_
+
 
 t_start = time.time()
 
@@ -140,32 +138,27 @@ generate_kwargs = dict(max_new_tokens=num_tokens, do_sample=False)
 if rank == 0:
     print(f"Generate args {generate_kwargs}")
 inputs = input_sentences[:args.batch_size]
-def generate():
-    """ returns a list of zipped inputs, outputs and number of new tokens """
-
-    input_tokens = tokenizer.batch_encode_plus(inputs, return_tensors="pt", padding=True)
-    for t in input_tokens:
-        if torch.is_tensor(input_tokens[t]):
-            input_tokens[t] = input_tokens[t].to(torch.cuda.current_device())
-
-    outputs = model.generate(**input_tokens, **generate_kwargs)
-
-    input_tokens_lengths = [x.shape[0] for x in input_tokens.input_ids]
-    output_tokens_lengths = [x.shape[0] for x in outputs]
-
-    total_new_tokens = [o-i for i,o in zip(input_tokens_lengths, output_tokens_lengths)]
-    outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-
-    return zip(inputs, outputs, total_new_tokens)
 
 # XXX: this is currently doing world_size streams on world_size gpus, so we can feed it different inputs on each! and hence the time can be divided by world_size
 
 # warmup is a must if measuring speed as it's when all the optimizations are performed
 # e.g. on 8x80 a100 the first pass of 100 tokens takes 23sec, and the next one is 4secs
-_ = generate()
+_ = generate_(
+    inputs,
+    model,
+    tokenizer,
+    generate_kwargs,
+    torch.cuda.current_device()
+)
 
 t_generate_start = time.time()
-pairs = generate()
+pairs = generate_(
+    inputs,
+    model,
+    tokenizer,
+    generate_kwargs,
+    torch.cuda.current_device()
+)
 t_generate_span = time.time() - t_generate_start
 if rank == 0:
     for i,o,_ in pairs:
@@ -185,7 +178,13 @@ if args.benchmark:
 
     # warm up
     for i in range(1):
-        _ = generate()
+        _ = generate_(
+            inputs,
+            model,
+            tokenizer,
+            generate_kwargs,
+            torch.cuda.current_device()
+        )
     torch.cuda.synchronize()
 
     # benchmark
@@ -193,7 +192,13 @@ if args.benchmark:
     cycles = 5
     total_new_tokens_generated = 0
     for i in range(cycles):
-        generated = generate()
+        generated = generate_(
+            inputs,
+            model,
+            tokenizer,
+            generate_kwargs,
+            torch.cuda.current_device()
+        )
         total_new_tokens_generated += sum(new_tokens for _,_,new_tokens in generated)
 
     torch.cuda.synchronize()
@@ -208,4 +213,3 @@ Start to ready to generate: {t_ready - t_start:.3f} secs
 Tokenize and generate {total_new_tokens_generated} (bs={args.batch_size}) tokens: {t_generate_span:.3f} secs
 Start to finish: {t_ready - t_start + t_generate_span:.3f} secs
 """)
-
