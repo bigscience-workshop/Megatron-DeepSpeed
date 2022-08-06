@@ -3,12 +3,15 @@ import logging
 import os
 import sys
 import time
-from typing import Any, Tuple
+from multiprocessing.dummy import Pool
+from typing import Tuple
 
 import deepspeed
 import torch
+import torch.distributed as dist
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
+import requests
 import utils
 from flask import Flask, request
 from utils import MaxTokensError, get_stack_trace, print_rank_n, run_rank_n, write_checkponts_json
@@ -199,6 +202,14 @@ deepspeed.init_distributed("nccl")
 
 model = Model(args)
 query_id = 0
+
+pool = run_rank_n(
+    Pool,
+    {
+        "processes": int(os.getenv("WORLD_SIZE", "1")) - 1
+    },
+    rank=0
+)
 ####################################################################################
 
 
@@ -220,6 +231,17 @@ def generate() -> str:
     try:
         start_time = time.time()
         json_obj = request.get_json()
+
+        if (dist.get_rank() == 0):
+            for i in range(1, dist.get_world_size()):
+                pool.apply_async(
+                    requests.post,
+                    args=["http://127.0.0.1:" + str(args.port + i) + "/generate/"],
+                    kwds={
+                        "json": json_obj,
+                        "verify": False
+                    }
+                )
 
         input_text = str(json_obj["input_text"])
         top_k = int(json_obj.get("top_k", args.top_k))
@@ -253,8 +275,8 @@ def generate() -> str:
             "query_id": query_id
         }
         if (args.log_file):
-            logger.info(json_obj)
-            logger.info(output)
+            run_rank_n(logger.info, {"msg": json_obj}, rank=0)
+            run_rank_n(logger.info, {"msg": output}, rank=0)
     except Exception:
         e_type, e_message, e_stack_trace = sys.exc_info()
         output = {
@@ -267,8 +289,8 @@ def generate() -> str:
             "query_id": query_id
         }
         if (args.log_file):
-            logger.info(json_obj)
-            logger.error(output)
+            run_rank_n(logger.info, {"msg": json_obj}, rank=0)
+            run_rank_n(logger.error, {"msg": output}, rank=0)
         del output["error"]["stack_trace"]
 
     query_id += 1
@@ -277,7 +299,28 @@ def generate() -> str:
 
 
 def main():
-    serve(app, host=args.host, port=args.port)
+    # create main server on rank 0
+    run_rank_n(
+        serve,
+        {
+            "app": app,
+            "host": args.host,
+            "port": args.port
+        },
+        rank=0
+    )
+
+    # create child servers on rank 1-7
+    if (dist.get_rank() != 0):
+        run_rank_n(
+            serve,
+            {
+                "app": app,
+                "host": "127.0.0.1",
+                "port": args.port + dist.get_rank()
+            },
+            rank=dist.get_rank()
+        )
 
 
 if (__name__ == "__main__"):
