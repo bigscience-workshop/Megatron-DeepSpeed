@@ -9,7 +9,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 import utils
 from flask import Flask, request
-from utils import MaxTokensError, get_max_memory_per_gpu_dict, get_stack_trace
+from utils import MaxTokensError, get_max_memory_per_gpu_dict, get_stack_trace, get_torch_dtype
 from waitress import serve
 
 
@@ -44,10 +44,7 @@ def ParseArgs():
 
     args = parser.parse_args()
 
-    if (args.dtype == "bf16"):
-        args.dtype = torch.bfloat16
-    elif (args.dtype == "fp16"):
-        args.dtype = torch.float16
+    args.dtype = get_torch_dtype(args.dtype)
 
     return args
 
@@ -130,9 +127,9 @@ query_id = 0
 ####################################################################################
 
 
-@app.route("/gpu/", methods=["GET"])
-def gpu() -> str:
-    return utils.gpu()
+@app.route("/gpu_status/", methods=["GET"])
+def gpu_status() -> str:
+    return utils.gpu_status()
 
 
 @app.route("/about/", methods=["GET"])

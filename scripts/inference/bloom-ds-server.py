@@ -3,18 +3,14 @@ import logging
 import os
 import sys
 import time
-from multiprocessing.dummy import Pool
 from typing import Tuple
 
-import deepspeed
-import torch
-import torch.distributed as dist
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoTokenizer
 
-import requests
+import mii
 import utils
 from flask import Flask, request
-from utils import MaxTokensError, get_stack_trace, print_rank_n, run_rank_n, write_checkponts_json
+from utils import MaxTokensError, get_stack_trace
 from waitress import serve
 
 
@@ -26,8 +22,6 @@ def ParseArgs():
                        required=True, help="model to use")
     group.add_argument("--dtype", type=str, required=True,
                        choices=["bf16", "fp16"], help="dtype for model")
-    group.add_argument("--mp_cached_model_path", type=str,
-                       help="path where mp cached model is stored for deepspeed inference")
 
     group = parser.add_argument_group(title="launch config")
     group.add_argument("--log_file", type=str, help="log data")
@@ -52,100 +46,36 @@ def ParseArgs():
                        choices=["both_input_output", "output_only"], help="return type")
 
     args = parser.parse_args()
-
-    if (args.dtype == "bf16"):
-        args.dtype = torch.bfloat16
-    elif (args.dtype == "fp16"):
-        args.dtype = torch.float16
+    args.deployment_name = args.model_name + "_deployment"
 
     return args
 
 
 class Model:
     def __init__(self, args: argparse.Namespace) -> None:
-        print_rank_n("Loading model...")
-
-        self.tokenizer = AutoTokenizer.from_pretrained(args.model_name)
-        self.config = AutoConfig.from_pretrained(args.model_name)
-
-        with deepspeed.OnDevice(dtype=args.dtype, device="meta"):
-            self.model = AutoModelForCausalLM.from_config(
-                self.config, torch_dtype=args.dtype)
-
-        self.model.eval()
-
-        world_size = int(os.getenv("WORLD_SIZE", "1"))
-
-        if (args.dtype == torch.float16):
-            if (args.mp_cached_model_path == None):
-                checkpoints_json = "checkpoints.json"
-
-                run_rank_n(
-                    write_checkponts_json,
-                    {
-                        "model_name": args.model_name,
-                        "checkpoints_json": checkpoints_json
-                    },
-                    True
-                )
-
-                self.model = deepspeed.init_inference(
-                    self.model,
-                    mp_size=world_size,
-                    dtype=args.dtype,
-                    checkpoint=checkpoints_json,
-                    replace_with_kernel_inject=True
-                )
-            else:
-                if (os.path.isdir(args.mp_cached_model_path)):
-                    checkpoints_json = os.path.join(
-                        args.mp_cached_model_path, "BLOOM-176B_ds-inference_config.json")
-
-                    self.model = deepspeed.init_inference(
-                        self.model,
-                        mp_size=world_size,
-                        dtype=args.dtype,
-                        checkpoint=checkpoints_json,
-                        replace_with_kernel_inject=True
-                    )
-                else:
-                    checkpoints_json = "checkpoints.json"
-
-                    run_rank_n(
-                        write_checkponts_json,
-                        {
-                            "model_name": args.model_name,
-                            "checkpoints_json": checkpoints_json
-                        },
-                        True
-                    )
-
-                    run_rank_n(
-                        os.makedirs,
-                        {
-                            "name": args.mp_cached_model_path
-                        },
-                        True
-                    )
-
-                    self.model = deepspeed.init_inference(
-                        self.model,
-                        mp_size=world_size,
-                        dtype=args.dtype,
-                        checkpoint=checkpoints_json,
-                        replace_with_kernel_inject=True,
-                        save_mp_checkpoint_path=args.mp_cached_model_path
-                    )
-        elif (args.dtype == torch.bfloat16):
+        if (args.dtype == "fp16"):
+            mii.deploy(
+                task="text-generation",
+                model=args.model_name,
+                deployment_name=args.deployment_name,
+                mii_config={
+                    "dtype": args.dtype,
+                    "tensor_parallel": 8,
+                    "port_number": 50950,
+                    "checkpoint_dict": {
+                        "checkpoints": ["BLOOM-176B-non-tp.pt"] * 8 + [f'BLOOM-176B-tp_0{i}.pt' for i in range(8)],
+                        "parallelization": "tp",
+                        "version": 1.0,
+                        "type": "BLOOM"
+                    }
+                },
+                model_path=os.getenv("DS_CACHE")
+            )
+        else:
             raise NotImplementedError("This is not yet supported")
 
-        self.model = self.model.module
-        self.input_device = torch.cuda.current_device()
-
-        # optimize model by generating once (optimization happens on the first run)
-        self.Generate("Hi, I'm a model", 5, 0.9, 0.7, 1, 40)
-
-        print_rank_n("Model loaded")
+        self.tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+        self.model = mii.mii_query_handle(args.deployment_name)
 
     def Generate(self,
                  text: str,
@@ -155,32 +85,30 @@ class Model:
                  min_length: int,
                  max_new_tokens: int,
                  remove_input_from_output: bool = False) -> Tuple[str, int]:
-        x = self.tokenizer([text])
+        output = self.model.query(
+            {
+                "query": [
+                    text
+                ]
+            },
+            top_k=top_k,
+            top_p=top_p,
+            temperature=temperature,
+            min_length=min_length,
+            max_new_tokens=max_new_tokens
+        ).response
 
-        input_ids = torch.tensor(x["input_ids"]).to(self.input_device)
-        attention_mask = torch.tensor(
-            x["attention_mask"]).to(self.input_device)
+        output = [_ for _ in output]
 
-        with torch.no_grad():
-            output = self.model.generate(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                top_k=top_k,
-                top_p=top_p,
-                temperature=temperature,
-                min_length=min_length,
-                max_new_tokens=max_new_tokens
-            )
-
-        output_tokens = output[0]
-
+        input_ids = self.tokenizer([text])["input_ids"]
+        y = self.tokenizer(output_text)["input_ids"][0]
         if (remove_input_from_output):
-            output_tokens = output_tokens[len(input_ids[0]):]
-            num_output_tokens = len(output_tokens)
+            output_tokens = y[len(input_ids[0]):]
+            num_output_tokens = len(y)
+            output_text = self.tokenizer.decode(output_tokens)
         else:
-            num_output_tokens = len(output_tokens) - len(input_ids[0])
-
-        output_text = self.tokenizer.decode(output_tokens)
+            output_text = output[0]
+            num_output_tokens = len(y) - len(input_ids[0])
 
         return output_text, num_output_tokens
 
@@ -198,24 +126,20 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-deepspeed.init_distributed("nccl")
-
 model = Model(args)
 query_id = 0
-
-pool = run_rank_n(
-    Pool,
-    {
-        "processes": int(os.getenv("WORLD_SIZE", "1")) - 1
-    },
-    rank=0
-)
 ####################################################################################
 
 
-@app.route("/gpu/", methods=["GET"])
-def gpu() -> str:
-    return utils.gpu()
+@app.route("/shutdown/", methods=["GET"])
+def shutdown() -> str:
+    mii.terminate(args.deployment_name)
+    exit()
+
+
+@app.route("/gpu_status/", methods=["GET"])
+def gpu_status() -> str:
+    return utils.gpu_status()
 
 
 @app.route("/about/", methods=["GET"])
@@ -231,17 +155,6 @@ def generate() -> str:
     try:
         start_time = time.time()
         json_obj = request.get_json()
-
-        if (dist.get_rank() == 0):
-            for i in range(1, dist.get_world_size()):
-                pool.apply_async(
-                    requests.post,
-                    args=["http://127.0.0.1:" + str(args.port + i) + "/generate/"],
-                    kwds={
-                        "json": json_obj,
-                        "verify": False
-                    }
-                )
 
         input_text = str(json_obj["input_text"])
         top_k = int(json_obj.get("top_k", args.top_k))
@@ -275,8 +188,8 @@ def generate() -> str:
             "query_id": query_id
         }
         if (args.log_file):
-            run_rank_n(logger.info, {"msg": json_obj}, rank=0)
-            run_rank_n(logger.info, {"msg": output}, rank=0)
+            logger.info(json_obj)
+            logger.info(output)
     except Exception:
         e_type, e_message, e_stack_trace = sys.exc_info()
         output = {
@@ -289,8 +202,8 @@ def generate() -> str:
             "query_id": query_id
         }
         if (args.log_file):
-            run_rank_n(logger.info, {"msg": json_obj}, rank=0)
-            run_rank_n(logger.error, {"msg": output}, rank=0)
+            logger.info(json_obj)
+            logger.error(output)
         del output["error"]["stack_trace"]
 
     query_id += 1
@@ -299,28 +212,7 @@ def generate() -> str:
 
 
 def main():
-    # create main server on rank 0
-    run_rank_n(
-        serve,
-        {
-            "app": app,
-            "host": args.host,
-            "port": args.port
-        },
-        rank=0
-    )
-
-    # create child servers on rank 1-7
-    if (dist.get_rank() != 0):
-        run_rank_n(
-            serve,
-            {
-                "app": app,
-                "host": "127.0.0.1",
-                "port": args.port + dist.get_rank()
-            },
-            rank=dist.get_rank()
-        )
+    serve(app, host=args.host, port=args.port)
 
 
 if (__name__ == "__main__"):

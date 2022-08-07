@@ -9,7 +9,7 @@ import torch.distributed as dist
 from transformers import AutoConfig
 
 
-def gpu():
+def gpu_status():
     try:
         info = subprocess.check_output(["nvidia-smi"])
         info = info.decode("utf8")
@@ -232,3 +232,17 @@ def generate_(inputs,
     outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
     return zip(inputs, outputs, total_new_tokens)
+
+
+def get_torch_dtype(dtype_str: str):
+    if (dtype_str == "bf16"):
+        return torch.bfloat16
+    elif (dtype_str == "fp16"):
+        return torch.float16
+
+
+def get_str_dtype(dtype_str: str):
+    if (dtype_str == torch.bfloat16):
+        return "bf16"
+    elif (dtype_str == torch.float16):
+        return "fp16"
