@@ -2,7 +2,7 @@ import argparse
 import logging
 import sys
 import time
-from typing import List, Tuple, Union
+from typing import List, Union
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -77,8 +77,7 @@ class Model:
                  top_p: float,
                  temperature: float,
                  min_length: int,
-                 max_new_tokens: int,
-                 remove_input_from_output: bool = False) -> Tuple[str, int]:
+                 max_new_tokens: int) -> Union[str, List[str]]:
         return_format = type(text)
         if (return_format == str):
             text = [text]
@@ -98,11 +97,6 @@ class Model:
                 min_length=min_length,
                 max_new_tokens=max_new_tokens
             )
-
-        output = output.cpu().tolist()
-        if (remove_input_from_output):
-            for i in range(len(output)):
-                output[i] = output[i][len(input_ids[i]):]
 
         output_text = self.tokenizer.batch_decode(
             output, skip_special_tokens=True)
@@ -154,8 +148,7 @@ def generate() -> dict:
          top_p,
          temperature,
          min_length,
-         max_new_tokens,
-         return_type) = parse_input(json_obj)
+         max_new_tokens) = parse_input(json_obj)
 
         if (max_new_tokens > args.allowed_max_new_tokens):
             raise MaxTokensError(max_new_tokens, args.allowed_max_new_tokens)
@@ -166,8 +159,7 @@ def generate() -> dict:
             top_p,
             temperature,
             min_length,
-            max_new_tokens,
-            remove_input_from_output=(return_type == "output_only")
+            max_new_tokens
         )
         json_obj["query_id"] = query_id
 

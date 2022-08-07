@@ -3,18 +3,18 @@ import logging
 import os
 import sys
 import time
-from typing import Tuple
+from typing import List, Union
 
 from transformers import AutoTokenizer
 
 import mii
 import utils
 from flask import Flask, request
-from utils import MaxTokensError, get_stack_trace
+from utils import MaxTokensError, get_stack_trace, parse_input
 from waitress import serve
 
 
-def ParseArgs():
+def get_args():
     parser = argparse.ArgumentParser(description="Text generation server")
 
     group = parser.add_argument_group(title="model")
@@ -77,19 +77,20 @@ class Model:
         self.tokenizer = AutoTokenizer.from_pretrained(args.model_name)
         self.model = mii.mii_query_handle(args.deployment_name)
 
-    def Generate(self,
-                 text: str,
+    def generate(self,
+                 text: Union[str, List[str]],
                  top_k: int,
                  top_p: float,
                  temperature: float,
                  min_length: int,
-                 max_new_tokens: int,
-                 remove_input_from_output: bool = False) -> Tuple[str, int]:
-        output = self.model.query(
+                 max_new_tokens: int) -> Union[str, List[str]]:
+        return_format = type(text)
+        if (return_format == str):
+            text = [text]
+
+        output_text = self.model.query(
             {
-                "query": [
-                    text
-                ]
+                "query": text
             },
             top_k=top_k,
             top_p=top_p,
@@ -98,23 +99,15 @@ class Model:
             max_new_tokens=max_new_tokens
         ).response
 
-        output = [_ for _ in output]
+        output_text = [_ for _ in output_text]
 
-        input_ids = self.tokenizer([text])["input_ids"]
-        y = self.tokenizer(output)["input_ids"][0]
-        if (remove_input_from_output):
-            output_tokens = y[len(input_ids[0]):]
-            output_text = self.tokenizer.decode(output_tokens)
-            num_output_tokens = len(y)
-        else:
-            output_text = output[0]
-            num_output_tokens = len(y) - len(input_ids[0])
-
-        return output_text, num_output_tokens
+        if (return_format == str):
+            return output_text[0]
+        return output_text
 
 
 ####################################################################################
-args = ParseArgs()
+args = get_args()
 app = Flask(__name__)
 
 # Setup logging
@@ -150,26 +143,23 @@ def generate() -> dict:
         start_time = time.time()
         json_obj = request.get_json()
 
-        input_text = str(json_obj["input_text"])
-        top_k = int(json_obj.get("top_k", args.top_k))
-        top_p = float(json_obj.get("top_p", args.top_p))
-        temperature = float(json_obj.get("temperature", args.temperature))
-        min_length = int(json_obj.get("min_length", args.min_length))
-        max_new_tokens = int(json_obj.get(
-            "max_new_tokens", args.max_new_tokens))
-        return_type = str(json_obj.get("return_type", args.return_type))
+        (input_text,
+         top_k,
+         top_p,
+         temperature,
+         min_length,
+         max_new_tokens) = parse_input(json_obj)
 
         if (max_new_tokens > args.allowed_max_new_tokens):
             raise MaxTokensError(max_new_tokens, args.allowed_max_new_tokens)
 
-        output_text, num_output_tokens = model.Generate(
+        output_text, num_output_tokens = model.generate(
             input_text,
             top_k,
             top_p,
             temperature,
             min_length,
-            max_new_tokens,
-            remove_input_from_output=(return_type == "output_only")
+            max_new_tokens
         )
         json_obj["query_id"] = query_id
 

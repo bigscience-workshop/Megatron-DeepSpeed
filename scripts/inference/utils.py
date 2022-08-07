@@ -264,7 +264,6 @@ def parse_input(json_obj: dict,
     min_length = int(json_obj.get("min_length", args.min_length))
     max_new_tokens = int(json_obj.get(
         "max_new_tokens", args.max_new_tokens))
-    return_type = str(json_obj.get("return_type", args.return_type))
 
     return (
         input_text,
@@ -272,6 +271,5 @@ def parse_input(json_obj: dict,
         top_p,
         temperature,
         min_length,
-        max_new_tokens,
-        return_type
+        max_new_tokens
     )
