@@ -2,7 +2,8 @@ import io
 import json
 import subprocess
 import traceback
-from typing import Any
+from argparse import Namespace
+from typing import Any, List, Tuple
 
 import torch
 import torch.distributed as dist
@@ -246,3 +247,31 @@ def get_str_dtype(dtype_str: str):
         return "bf16"
     elif (dtype_str == torch.float16):
         return "fp16"
+
+
+def parse_input(json_obj: dict,
+                args: Namespace) -> Tuple[List[str],
+                                          int,
+                                          float,
+                                          float,
+                                          int,
+                                          int,
+                                          str]:
+    input_text = json_obj["input_text"]
+    top_k = int(json_obj.get("top_k", args.top_k))
+    top_p = float(json_obj.get("top_p", args.top_p))
+    temperature = float(json_obj.get("temperature", args.temperature))
+    min_length = int(json_obj.get("min_length", args.min_length))
+    max_new_tokens = int(json_obj.get(
+        "max_new_tokens", args.max_new_tokens))
+    return_type = str(json_obj.get("return_type", args.return_type))
+
+    return (
+        input_text,
+        top_k,
+        top_p,
+        temperature,
+        min_length,
+        max_new_tokens,
+        return_type
+    )

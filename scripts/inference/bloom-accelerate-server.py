@@ -9,11 +9,11 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 import utils
 from flask import Flask, request
-from utils import MaxTokensError, get_max_memory_per_gpu_dict, get_stack_trace, get_torch_dtype
+from utils import MaxTokensError, get_max_memory_per_gpu_dict, get_stack_trace, get_torch_dtype, parse_input
 from waitress import serve
 
 
-def ParseArgs():
+def get_args():
     parser = argparse.ArgumentParser(description="Text generation server")
 
     group = parser.add_argument_group(title="model")
@@ -67,11 +67,11 @@ class Model:
         self.input_device = "cuda:0"
 
         # optimize model by generating once (optimization happens on the first run)
-        self.Generate("Hi, I'm a model", 5, 0.9, 0.7, 1, 40)
+        self.generate("Hi, I'm a model", 5, 0.9, 0.7, 1, 40)
 
         print("Model loaded")
 
-    def Generate(self,
+    def generate(self,
                  text: Union[str, List[str]],
                  top_k: int,
                  top_p: float,
@@ -113,7 +113,7 @@ class Model:
 
 
 ####################################################################################
-args = ParseArgs()
+args = get_args()
 app = Flask(__name__)
 
 # Setup logging
@@ -149,19 +149,18 @@ def generate() -> dict:
         start_time = time.time()
         json_obj = request.get_json()
 
-        input_text = json_obj["input_text"]
-        top_k = int(json_obj.get("top_k", args.top_k))
-        top_p = float(json_obj.get("top_p", args.top_p))
-        temperature = float(json_obj.get("temperature", args.temperature))
-        min_length = int(json_obj.get("min_length", args.min_length))
-        max_new_tokens = int(json_obj.get(
-            "max_new_tokens", args.max_new_tokens))
-        return_type = str(json_obj.get("return_type", args.return_type))
+        (input_text,
+         top_k,
+         top_p,
+         temperature,
+         min_length,
+         max_new_tokens,
+         return_type) = parse_input(json_obj)
 
         if (max_new_tokens > args.allowed_max_new_tokens):
             raise MaxTokensError(max_new_tokens, args.allowed_max_new_tokens)
 
-        output_text = model.Generate(
+        output_text = model.generate(
             input_text,
             top_k,
             top_p,
