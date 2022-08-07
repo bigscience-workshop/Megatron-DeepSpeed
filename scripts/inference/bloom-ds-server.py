@@ -148,12 +148,12 @@ def generate() -> dict:
          top_p,
          temperature,
          min_length,
-         max_new_tokens) = parse_input(json_obj)
+         max_new_tokens) = parse_input(json_obj, args)
 
         if (max_new_tokens > args.allowed_max_new_tokens):
             raise MaxTokensError(max_new_tokens, args.allowed_max_new_tokens)
 
-        output_text, num_output_tokens = model.generate(
+        output_text = model.generate(
             input_text,
             top_k,
             top_p,
@@ -166,9 +166,7 @@ def generate() -> dict:
         total_time_taken = time.time() - start_time
         output = {
             "output_text": output_text,
-            "num_output_tokens": num_output_tokens,
             "total_time_taken": "{:.3f} s".format(total_time_taken),
-            "throughput": "{:.3f} tokens/s".format(num_output_tokens / total_time_taken),
             "query_id": query_id
         }
         if (args.log_file):

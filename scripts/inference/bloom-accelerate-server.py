@@ -148,7 +148,7 @@ def generate() -> dict:
          top_p,
          temperature,
          min_length,
-         max_new_tokens) = parse_input(json_obj)
+         max_new_tokens) = parse_input(json_obj, args)
 
         if (max_new_tokens > args.allowed_max_new_tokens):
             raise MaxTokensError(max_new_tokens, args.allowed_max_new_tokens)
