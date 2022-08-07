@@ -32,8 +32,7 @@ A request object should look like:
     "top_p": 0.9,
     "temperature": 0.7,
     "min_length": 1,
-    "max_new_tokens": 40,
-    "return_type": "output_only"
+    "max_new_tokens": 40
 }
 Default values (use if not provided in request object):
 top_k = 50
@@ -41,7 +40,6 @@ top_p = 1
 temperature = 1
 min_length = 1
 max_new_tokens = 40
-return_type = "both_input_output"
 '''
     return description
 

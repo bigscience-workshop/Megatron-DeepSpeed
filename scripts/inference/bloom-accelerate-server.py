@@ -39,8 +39,6 @@ def get_args():
     group.add_argument("--min_length", type=int, default=1, help="min length")
     group.add_argument("--max_new_tokens", type=int,
                        default=40, help="max new tokens")
-    group.add_argument("--return_type", type=str, default="both_input_output",
-                       choices=["both_input_output", "output_only"], help="return type")
 
     args = parser.parse_args()
 
