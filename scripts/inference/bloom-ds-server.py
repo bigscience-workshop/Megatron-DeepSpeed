@@ -101,11 +101,11 @@ class Model:
         output = [_ for _ in output]
 
         input_ids = self.tokenizer([text])["input_ids"]
-        y = self.tokenizer(output_text)["input_ids"][0]
+        y = self.tokenizer(output)["input_ids"][0]
         if (remove_input_from_output):
             output_tokens = y[len(input_ids[0]):]
-            num_output_tokens = len(y)
             output_text = self.tokenizer.decode(output_tokens)
+            num_output_tokens = len(y)
         else:
             output_text = output[0]
             num_output_tokens = len(y) - len(input_ids[0])
