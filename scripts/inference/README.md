@@ -1,13 +1,17 @@
 # Inference scripts for BLOOM
 
-To run a server using HuggingFace (requires accelerate to be installed):
+To run a server using HuggingFace (requires [accelerate](https://github.com/huggingface/accelerate) to be installed):
 ```
 python scripts/inference/bloom-accelerate-server.py --model_name bigscience/bloom --dtype bf16 --log_file data.log --host $ADDRESS --port $PORT
 ```
 
-To run a server using deepspeed:
+To run a server using deepspeed (requires [DeepSpeed MII](https://github.com/microsoft/DeepSpeed-mii) to be installed):
 ```
-deepspeed --num_gpus 8 scripts/inference/bloom-ds-server.py --model_name bigscience/bloom --dtype fp16 --log_file data.log --host $ADDRESS --port $PORT
+export DS_CACHE=<path where to dump pre-sharded 8-TP checkpoints>
+
+deepspeed --num_gpus 8 scripts/inference/cache-ds-model.py --model_name bigscience/bloom --dtype fp16
+
+python scripts/inference/bloom-ds-server.py --model_name bigscience/bloom --dtype fp16 --log_file data.log --host $ADDRESS --port $PORT
 ```
 
 Usage:
