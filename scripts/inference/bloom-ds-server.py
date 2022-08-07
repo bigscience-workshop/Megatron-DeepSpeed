@@ -131,12 +131,6 @@ query_id = 0
 ####################################################################################
 
 
-@app.route("/shutdown/", methods=["GET"])
-def shutdown() -> str:
-    mii.terminate(args.deployment_name)
-    exit()
-
-
 @app.route("/gpu_status/", methods=["GET"])
 def gpu_status() -> str:
     return utils.gpu_status()
@@ -148,7 +142,7 @@ def about() -> str:
 
 
 @app.route("/generate/", methods=["POST"])
-def generate() -> str:
+def generate() -> dict:
     # needs to be global since it is updated
     global query_id
 

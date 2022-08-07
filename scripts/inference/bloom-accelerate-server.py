@@ -2,7 +2,7 @@ import argparse
 import logging
 import sys
 import time
-from typing import Tuple
+from typing import List, Tuple, Union
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -72,18 +72,21 @@ class Model:
         print("Model loaded")
 
     def Generate(self,
-                 text: str,
+                 text: Union[str, List[str]],
                  top_k: int,
                  top_p: float,
                  temperature: float,
                  min_length: int,
                  max_new_tokens: int,
                  remove_input_from_output: bool = False) -> Tuple[str, int]:
-        x = self.tokenizer([text])
+        return_format = type(text)
+        if (return_format == str):
+            text = [text]
 
-        input_ids = torch.tensor(x["input_ids"]).to(self.input_device)
-        attention_mask = torch.tensor(
-            x["attention_mask"]).to(self.input_device)
+        x = self.tokenizer(text, return_tensors="pt", padding=True)
+
+        input_ids = x["input_ids"].to(self.input_device)
+        attention_mask = x["attention_mask"].to(self.input_device)
 
         with torch.no_grad():
             output = self.model.generate(
@@ -96,17 +99,17 @@ class Model:
                 max_new_tokens=max_new_tokens
             )
 
-        output_tokens = output[0]
-
+        output = output.cpu().tolist()
         if (remove_input_from_output):
-            output_tokens = output_tokens[len(input_ids[0]):]
-            num_output_tokens = len(output_tokens)
-        else:
-            num_output_tokens = len(output_tokens) - len(input_ids[0])
+            for i in range(len(output)):
+                output[i] = output[i][len(input_ids[i]):]
 
-        output_text = self.tokenizer.decode(output_tokens)
+        output_text = self.tokenizer.batch_decode(
+            output, skip_special_tokens=True)
 
-        return output_text, num_output_tokens
+        if (return_format == str):
+            return output_text[0]
+        return output_text
 
 
 ####################################################################################
@@ -138,7 +141,7 @@ def about() -> str:
 
 
 @app.route("/generate/", methods=["POST"])
-def generate() -> str:
+def generate() -> dict:
     # needs to be global since it is updated
     global query_id
 
@@ -146,7 +149,7 @@ def generate() -> str:
         start_time = time.time()
         json_obj = request.get_json()
 
-        input_text = str(json_obj["input_text"])
+        input_text = json_obj["input_text"]
         top_k = int(json_obj.get("top_k", args.top_k))
         top_p = float(json_obj.get("top_p", args.top_p))
         temperature = float(json_obj.get("temperature", args.temperature))
@@ -158,7 +161,7 @@ def generate() -> str:
         if (max_new_tokens > args.allowed_max_new_tokens):
             raise MaxTokensError(max_new_tokens, args.allowed_max_new_tokens)
 
-        output_text, num_output_tokens = model.Generate(
+        output_text = model.Generate(
             input_text,
             top_k,
             top_p,
@@ -172,9 +175,7 @@ def generate() -> str:
         total_time_taken = time.time() - start_time
         output = {
             "output_text": output_text,
-            "num_output_tokens": num_output_tokens,
             "total_time_taken": "{:.3f} s".format(total_time_taken),
-            "throughput": "{:.3f} tokens/s".format(num_output_tokens / total_time_taken),
             "query_id": query_id
         }
         if (args.log_file):
