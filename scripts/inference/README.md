@@ -69,7 +69,7 @@ Throughput in msecs:
 
 | project \ bs |      1 |     8 |    16 |    32 |    64 |  128 |
 | :----------- |  :---- | :---- | :---- | :---- | :---- | :--- |
-| accelerate   | 230.38 | 31.78 | 17.84 | 10.89 |  oom  | omm  |
+| accelerate   | 230.38 | 31.78 | 17.84 | 10.89 |  oom  | oom  |
 | ds-inference |  40.57 |  5.23 |       |       |  2.77 | 0.66 |
 | ds-zero      |    283 | 34.88 | oom   |  oom  |  oom  | oom  |
 
