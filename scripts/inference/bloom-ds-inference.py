@@ -17,19 +17,16 @@
 
 from argparse import ArgumentParser
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
-from transformers.deepspeed import HfDeepSpeedConfig
 from transformers.models.bloom.modeling_bloom import BloomBlock as BloomBlock
 import deepspeed
 import gc
-import glob
-import io
-import json
 import math
 import os
-import sys
 import time
 import torch
 import torch.distributed as dist
+from utils import generate_, write_checkponts_json
+
 
 t_start = time.time()
 
@@ -51,62 +48,6 @@ rank = dist.get_rank()
 
 
 ### Model loading and instantiating on GPU (via ZeRO)
-
-def get_checkpoint_files(pretrained_model_name_or_path):
-    # XXX: I just hacked this one together to automatically handle the fetching of the model file or
-    # shards into cache and returning the cached entries - note that I removed most arguments
-
-    from transformers.utils import WEIGHTS_NAME, WEIGHTS_INDEX_NAME, cached_path, hf_bucket_url, is_offline_mode
-    from transformers.utils.hub import EntryNotFoundError
-    from transformers.modeling_utils import get_checkpoint_shard_files
-
-    cache_dir = None
-    is_sharded = False
-
-    # XXX: preparation for revision branches if needed
-    revision = None
-    #revision = "sharded"
-
-    # this supports nodes with no network (so you need to pre-cache the model and the tokenizer with
-    # python -c "from transformers import AutoModel; AutoModel.from_pretrained('bigscience/bloom')"
-    if is_offline_mode():
-        print("Offline mode: forcing local_files_only=True")
-        local_files_only = True
-    else:
-        local_files_only = False
-
-    filename = WEIGHTS_NAME
-    archive_file = hf_bucket_url(pretrained_model_name_or_path, filename=filename, revision=revision)
-
-    try:
-        resolved_archive_file = cached_path(archive_file, cache_dir=cache_dir, local_files_only=local_files_only,)
-        return [resolved_archive_file]
-
-    except (EntryNotFoundError, FileNotFoundError):
-        if filename == WEIGHTS_NAME:
-            # Maybe the checkpoint is sharded, we try to grab the index name in this case.
-            archive_file = hf_bucket_url(
-                pretrained_model_name_or_path,
-                filename=WEIGHTS_INDEX_NAME,
-                revision=revision,
-            )
-            resolved_archive_file = cached_path(
-                archive_file,
-                cache_dir=cache_dir,
-                local_files_only=local_files_only,
-            )
-            is_sharded = True
-
-    if is_sharded:
-        # resolved_archive_file becomes a list of files that point to the different checkpoint shards in this case.
-        resolved_archive_file, sharded_metadata = get_checkpoint_shard_files(
-            pretrained_model_name_or_path,
-            resolved_archive_file,
-            cache_dir=cache_dir,
-            revision=revision
-        )
-
-        return resolved_archive_file
 
 model_name = args.name
 
@@ -157,25 +98,9 @@ if args.benchmark:
 ### Deepspeed-Inference Loading
 
 checkpoints_json = "checkpoints.json"
-def write_checkponts_json():
-
-    with io.open(checkpoints_json, 'w', encoding='utf-8') as f:
-
-        #checkpoint_dir = "/gpfsscratch/rech/six/commun/uan68tv-model-conversion/bloom"
-        #checkpoint_files = glob.glob(f"{checkpoint_dir}/*bin")
-        checkpoint_files = get_checkpoint_files(model_name)
-
-        #print("Checkpoint files:", checkpoint_files)
-
-        data = {
-            "type": "BLOOM-176B",
-            "checkpoints": checkpoint_files,
-            "version": 1.0
-        }
-        json.dump(data, f)
 
 if rank == 0:
-    write_checkponts_json()
+    write_checkponts_json(model_name, checkpoints_json)
 dist.barrier()
 
 if args.benchmark:
@@ -233,31 +158,26 @@ generate_kwargs = dict(max_new_tokens=num_tokens, do_sample=False)
 if rank == 0:
     print(f"Generate args {generate_kwargs}")
 inputs = input_sentences[:args.batch_size]
-def generate():
-    """ returns a list of zipped inputs, outputs and number of new tokens """
-
-    input_tokens = tokenizer.batch_encode_plus(inputs, return_tensors="pt", padding=True)
-    for t in input_tokens:
-        if torch.is_tensor(input_tokens[t]):
-            input_tokens[t] = input_tokens[t].to(torch.cuda.current_device())
-
-    outputs = model.generate(**input_tokens, **generate_kwargs)
-
-    input_tokens_lengths = [x.shape[0] for x in input_tokens.input_ids]
-    output_tokens_lengths = [x.shape[0] for x in outputs]
-
-    total_new_tokens = [o-i for i,o in zip(input_tokens_lengths, output_tokens_lengths)]
-    outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-
-    return zip(inputs, outputs, total_new_tokens)
 
 
 # warmup is a must if measuring speed as it's when all the optimizations are performed
 # e.g. on 8x80 a100 the first pass of 100 tokens takes 23sec, and the next one is 4secs
-_ = generate()
+_ = generate_(
+    inputs,
+    model,
+    tokenizer,
+    generate_kwargs,
+    torch.cuda.current_device()
+)
 
 t_generate_start = time.time()
-generated = generate()
+generated = generate_(
+    inputs,
+    model,
+    tokenizer,
+    generate_kwargs,
+    torch.cuda.current_device()
+)
 t_generate_span = time.time() - t_generate_start
 if rank == 0:
     for i,o,_ in generated:
@@ -277,7 +197,13 @@ if args.benchmark:
 
     # warm up
     for i in range(1):
-        _ = generate()
+        _ = generate_(
+            inputs,
+            model,
+            tokenizer,
+            generate_kwargs,
+            torch.cuda.current_device()
+        )
     torch.cuda.synchronize()
 
     # benchmark
@@ -285,7 +211,13 @@ if args.benchmark:
     cycles = 5
     total_new_tokens_generated = 0
     for i in range(cycles):
-        generated = generate()
+        generated = generate_(
+            inputs,
+            model,
+            tokenizer,
+            generate_kwargs,
+            torch.cuda.current_device()
+        )
         total_new_tokens_generated += sum(new_tokens for _,_,new_tokens in generated)
     torch.cuda.synchronize()
     if rank == 0:
