@@ -50,7 +50,7 @@ deepspeed.init_distributed('nccl')
 rank = dist.get_rank()
 
 
-### Model loading and instantiating on GPU (via ZeRO)
+### Model loading and instantiating on GPUs
 
 def get_checkpoint_files(pretrained_model_name_or_path):
     # XXX: I just hacked this one together to automatically handle the fetching of the model file or
