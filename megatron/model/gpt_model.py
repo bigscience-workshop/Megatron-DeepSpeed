@@ -190,7 +190,28 @@ def get_cross_entropy(is_prefix: bool):
             expected_number_of_tokens = loss_mask.sum()
 
         loss_mask = loss_mask.view(-1)
-        loss = torch.sum(losses.view(-1) * loss_mask) / expected_number_of_tokens
+
+        # Turn loss_mask from [0,0,0,1,1,0,0,1,0,0,1,1,1] > [0,0,0,0.5,0.5,0,0,1,0,0,0.3,0.3,0.3]
+        loss_mask = loss_mask.float()
+        sequence = 0
+        for idx,num in enumerate(loss_mask.tolist()):
+            if (num == 0) and (sequence == 0):
+                continue
+            elif (num == 0) and (sequence > 0):
+                # Sequence just finished
+                start_idx = idx - sequence
+                loss_mask[start_idx:idx] /= sequence
+                # Reset
+                sequence = 0
+            else:
+                sequence += 1
+        if sequence > 0:
+            start_idx = idx - sequence
+            loss_mask[start_idx:] /= sequence
+        
+        expected_num_of_target_seqs = loss_mask.sum()
+
+        loss = torch.sum(losses.view(-1) * loss_mask) / expected_num_of_target_seqs#expected_number_of_tokens
         return loss
     return CrossEntropy
 
