@@ -159,6 +159,17 @@ class GPTModel(MegatronModule):
         self.language_model.load_state_dict(state_dict, strict=strict)
 
 
+def fast_normalize(loss_mask: torch.Tensor):
+    """
+    Turn loss_mask from [0,0,0,1,1,0,0,1,0,0,1,1,1] > [0,0,0,0.5,0.5,0,0,1,0,0,0.3,0.3,0.3]
+
+    Credits to @thomasw21 for this efficient implementation!
+    """
+    loss_mask = loss_mask.float()
+    _, inverse_indices, counts = torch.unique_consecutive(loss_mask, return_inverse=True, return_counts=True)
+    l = torch.gather(dim=0, index=inverse_indices, input=1./counts)
+    return loss_mask * l
+
 def get_cross_entropy(is_prefix: bool):
     def CrossEntropy(output, labels):
         labels, loss_mask = labels[0], labels[1]
@@ -191,27 +202,10 @@ def get_cross_entropy(is_prefix: bool):
 
         loss_mask = loss_mask.view(-1)
 
-        # Turn loss_mask from [0,0,0,1,1,0,0,1,0,0,1,1,1] > [0,0,0,0.5,0.5,0,0,1,0,0,0.3,0.3,0.3]
-        loss_mask = loss_mask.float()
-        sequence = 0
-        for idx,num in enumerate(loss_mask.tolist()):
-            if (num == 0) and (sequence == 0):
-                continue
-            elif (num == 0) and (sequence > 0):
-                # Sequence just finished
-                start_idx = idx - sequence
-                loss_mask[start_idx:idx] /= sequence
-                # Reset
-                sequence = 0
-            else:
-                sequence += 1
-        if sequence > 0:
-            start_idx = idx - sequence
-            loss_mask[start_idx:] /= sequence
-        
+        loss_mask = fast_normalize(loss_mask)
         expected_num_of_target_seqs = loss_mask.sum()
 
-        loss = torch.sum(losses.view(-1) * loss_mask) / expected_num_of_target_seqs#expected_number_of_tokens
+        loss = torch.sum(losses.view(-1) * loss_mask) / expected_num_of_target_seqs
         return loss
     return CrossEntropy
 
