@@ -47,7 +47,7 @@ deepspeed.init_distributed('nccl')
 rank = dist.get_rank()
 
 
-### Model loading and instantiating on GPU (via ZeRO)
+### Model loading and instantiating on GPUs
 
 model_name = args.name
 
