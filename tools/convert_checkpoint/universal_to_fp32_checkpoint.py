@@ -122,19 +122,4 @@ config.update(dict(
 config.save_pretrained(hf_fp32_path)
 
 
-# tiny_model = AutoForConditionalGeneration(config)
-# print(f"num of params {tiny_model.num_parameters()}")
-
-# # Test
-# model_inputs = tokenizer("Making tiny model", return_tensors="pt")
-# gen_tokens = tiny_model.generate(**model_inputs, forced_bos_token_id=tokenizer.get_lang_id("fr"))
-# print(tokenizer.batch_decode(gen_tokens, skip_special_tokens=True))
-# #
-
-# # Save
-# mname_tiny = "tiny-m2m_100"
-# tiny_model.half() # makes it smaller
-# tiny_model.save_pretrained(mname_tiny)
-# tokenizer.save_pretrained(mname_tiny)
-
-# print(f"Generated {mname_tiny}")
+print("Done")
