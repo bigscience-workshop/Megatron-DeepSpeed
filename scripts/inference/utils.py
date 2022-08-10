@@ -44,7 +44,7 @@ max_new_tokens = 40
     return description
 
 
-# TODO remove when bloom-inference is merged into main
+### Model loading and instantiating on GPUs
 def get_checkpoint_files(pretrained_model_name_or_path):
     # XXX: I just hacked this one together to automatically handle the fetching of the model file or
     # shards into cache and returning the cached entries - note that I removed most arguments

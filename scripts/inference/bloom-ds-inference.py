@@ -46,9 +46,6 @@ world_size = int(os.getenv('WORLD_SIZE', '1'))
 deepspeed.init_distributed('nccl')
 rank = dist.get_rank()
 
-
-### Model loading and instantiating on GPUs
-
 model_name = args.name
 
 #print(get_checkpoint_files(model_name))
