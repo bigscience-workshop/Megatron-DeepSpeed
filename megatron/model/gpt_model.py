@@ -167,8 +167,8 @@ def fast_normalize(loss_mask: torch.Tensor):
     """
     loss_mask = loss_mask.float()
     _, inverse_indices, counts = torch.unique_consecutive(loss_mask, return_inverse=True, return_counts=True)
-    l = torch.gather(dim=0, index=inverse_indices, input=1./counts)
-    return loss_mask * l
+    counts = torch.gather(dim=0, index=inverse_indices, input=1./counts)
+    return loss_mask * counts
 
 def get_cross_entropy(is_prefix: bool):
     def CrossEntropy(output, labels):
