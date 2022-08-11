@@ -30,7 +30,7 @@
 
 from argparse import ArgumentParser
 from pathlib import Path
-from pprint import pprint
+import pprint
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 import glob
 import os
@@ -56,10 +56,11 @@ def layer_name_mapping(key):
         "tied_modules.embed.word_embeddings.weight":      "word_embeddings.weight",
         "tied_modules.embed.word_embeddings.norm.weight": "word_embeddings_layernorm.weight",
         "tied_modules.embed.word_embeddings.norm.bias":   "word_embeddings_layernorm.bias",
-        "tied_modules.embed.position_embeddings.weight":   "word_embeddings_layernorm.bias",
         "weight": "ln_f.weight",
         "bias":   "ln_f.bias",
     }
+
+    # we ignore "tied_modules.embed.position_embeddings.weight" as it's deterministic
 
     if key in layer_rename_map:
         return layer_rename_map[key]
@@ -83,27 +84,26 @@ def layer_name_mapping(key):
 
 # universal checkpoint name remap
 ds_layer_names = sorted(os.listdir(f"{universal_path}/zero"))
-#ds_layer_names = glob.glob(f"{universal_path}/zero/*", root_dir=f"{universal_path}/zero")
-pprint(ds_layer_names)
+#pprint.pprint(ds_layer_names)
 
 key_map = {layer_name_mapping(key):key for key in ds_layer_names}
-pprint(key_map)
+print("remap", pprint.pformat(key_map))
 
 # copy non-weight files
 Path(hf_fp32_path).mkdir(parents=True, exist_ok=True)
 hf_files = [x for x in os.listdir(hf_half_path) if not x.endswith("bin") and os.path.isfile(x)]
-pprint(hf_files)
+print("HF Checkpoint non-bin files", pprint.pformat(hf_files))
 for f in hf_files:
     shutil.copy2(f"{hf_half_path}/{f}", f"{hf_fp32_path}/{f}")
 
 # replace half precision with fp32 weights
 hf_checkpoint_files = glob.glob(f"{hf_half_path}/*bin")
-pprint(hf_checkpoint_files)
+print("HF Checkpoint bin files", pprint.pformat(hf_checkpoint_files))
 for f in hf_checkpoint_files:
     sd = torch.load(f, map_location="cpu")
     for k in sd.keys():
         fp32_path = f"{universal_path}/zero/{key_map[k]}/fp32.pt"
-        print(k, fp32_path)
+        print(f"{k} from {fp32_path}")
         new_value = torch.load(fp32_path, map_location="cpu")
         sd[k] = new_value
     f = f.replace(hf_half_path, hf_fp32_path)
