@@ -45,16 +45,8 @@ def get_argument_parser():
     group.add_argument("--dtype", type=str, required=True,
                        choices=["bf16", "fp16"], help="dtype for model")
     group.add_argument("--batch_size", default=1, type=int, help="batch size")
-
-    group = parser.add_argument_group(title="default values")
-    group.add_argument("--greedy", action="store_true")
-    group.add_argument("--top_k", type=int, default=0, help="default top_k")
-    group.add_argument("--top_p", type=float, default=0, help="default top_p")
-    group.add_argument("--temperature", type=float,
-                       default=1, help="default temperature")
-    group.add_argument("--min_length", type=int, default=1, help="min length")
-    group.add_argument("--max_new_tokens", type=int,
-                       default=100, help="max new tokens")
+    group.add_argument("--generate_kwargs", type=dict, default={},
+                       help="generate parameters. look at https://huggingface.co/docs/transformers/v4.21.1/en/main_classes/text_generation#transformers.generation_utils.GenerationMixin.generate to see the supported parameters")
 
     return parser
 
@@ -108,31 +100,6 @@ def get_dummy_batch(batch_size: int, input_sentences: List[str] = None) -> List[
     return input_sentences
 
 
-def generate(inputs: List[str],
-             model: AutoModelForCausalLM,
-             tokenizer: AutoTokenizer,
-             generate_kwargs: dict,
-             input_device) -> Tuple[List[str], List[int]]:
-    """ returns a list of zipped outputs and number of new tokens """
-
-    input_tokens = tokenizer(
-        inputs, return_tensors="pt", padding=True)
-    for t in input_tokens:
-        if torch.is_tensor(input_tokens[t]):
-            input_tokens[t] = input_tokens[t].to(input_device)
-
-    outputs = model.generate(**input_tokens, **generate_kwargs)
-
-    input_tokens_lengths = [x.shape[0] for x in input_tokens.input_ids]
-    output_tokens_lengths = [x.shape[0] for x in outputs]
-
-    total_new_tokens = [o-i for i,
-                        o in zip(input_tokens_lengths, output_tokens_lengths)]
-    outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-
-    return zip(outputs, total_new_tokens)
-
-
 def run_and_log_time(execs: Union[List[Execute], Execute]) -> Union[List[Any], float]:
     """
     runs a list of Execute objects and returns a list of outputs and the time taken
@@ -152,21 +119,16 @@ def run_and_log_time(execs: Union[List[Execute], Execute]) -> Union[List[Any], f
 
 def benchmark_generation(input_sentences,
                          model,
-                         tokenizer,
                          generate_kwargs,
-                         input_device,
                          cycles: int = 5):
     total_new_tokens_generated = 0
     for _ in range(cycles):
-        generated = generate(
+        _, num_generated_tokens = model.generate(
             input_sentences,
-            model,
-            tokenizer,
-            generate_kwargs,
-            input_device
+            generate_kwargs
         )
-        total_new_tokens_generated += sum(new_tokens for _,
-                                          new_tokens in generated)
+        total_new_tokens_generated += sum(
+            new_tokens for new_tokens in num_generated_tokens)
     return total_new_tokens_generated
 
 
