@@ -1,4 +1,4 @@
-import gc
+from argparse import Namespace
 from typing import List, Union
 
 import torch
@@ -6,28 +6,25 @@ from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
 import utils
 from utils import (
-    Execute,
-    benchmark_generation,
+    Model,
+    benchmark_end_to_end,
     get_argument_parser,
-    get_benchmark_results,
-    get_dummy_batch,
-    print_rank_n,
-    run_and_log_time,
+    print_rank_n
 )
 
 
-class HFAccelerateModel:
-    def __init__(self, model_name: str, dtype: torch.dtype) -> None:
+class HFAccelerateModel(Model):
+    def __init__(self, args: Namespace) -> None:
         print_rank_n("Loading model...")
 
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(args.model_name)
 
         self.model = AutoModelForCausalLM.from_pretrained(
-            model_name,
+            args.model_name,
             device_map="auto",
             max_memory=get_max_memory_per_gpu_dict(
-                dtype, model_name),
-            torch_dtype=dtype
+                args.dtype, args.model_name),
+            torch_dtype=args.dtype
         )
 
         self.model.eval()
@@ -126,84 +123,5 @@ def get_max_memory_per_gpu_dict(dtype, model_name):
     return {i: param_memory_per_gpu_in_bytes for i in range(torch.cuda.device_count())}
 
 
-def main():
-    args = get_args()
-
-    model, initialization_time = run_and_log_time(
-        Execute(
-            HFAccelerateModel,
-            {
-                "model_name": args.model_name,
-                "dtype": args.dtype,
-            }
-        )
-    )
-
-    if (args.generate_kwargs):
-        generate_kwargs = args.generate_kwargs
-    else:
-        generate_kwargs = {
-            "max_new_tokens": 100,
-            "do_sample": False
-        }
-
-    print_rank_n(
-        f"*** Starting to generate {generate_kwargs['max_new_tokens']} tokens with bs={args.batch_size}")
-
-    input_sentences = get_dummy_batch(args.batch_size)
-
-    print_rank_n(f"Generate args {generate_kwargs}")
-
-    # warmup is a must if measuring speed as it's when all the optimizations are performed
-    # e.g. on 8x80 a100 the first pass of 100 tokens takes 23sec, and the next one is 4secs
-    model.generate(
-        input_sentences,
-        generate_kwargs
-    )
-
-    (output_text, num_generated_tokens), generation_time = run_and_log_time(
-        Execute(
-            model.generate,
-            {
-                "text": input_sentences,
-                "generate_kwargs": generate_kwargs
-            }
-        )
-    )
-    for i, (o, _) in zip(input_sentences, zip(output_text, num_generated_tokens)):
-        print_rank_n(f"{'-' * 60}\nin = {i}\nout = {o}\n")
-
-    if (args.benchmark_cycles > 0):
-        print_rank_n(f"*** Running benchmark")
-
-        torch.cuda.empty_cache()
-        gc.collect()
-
-        # warm up
-        model.generate(input_sentences, generate_kwargs)
-        torch.cuda.synchronize()
-
-        # benchmark
-        total_new_tokens_generated, benchmark_time = run_and_log_time(
-            Execute(
-                benchmark_generation,
-                {
-                    "input_sentences": input_sentences,
-                    "model": model,
-                    "generate_kwargs": generate_kwargs
-                }
-            )
-        )
-        print_rank_n(
-            get_benchmark_results(
-                benchmark_time,
-                initialization_time,
-                generation_time,
-                total_new_tokens_generated,
-                args.batch_size
-            )
-        )
-
-
 if (__name__ == "__main__"):
-    main()
+    benchmark_end_to_end(get_args(), HFAccelerateModel)
