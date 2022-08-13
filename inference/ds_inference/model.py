@@ -12,8 +12,7 @@ from transformers.modeling_utils import get_checkpoint_shard_files
 from transformers.utils import WEIGHTS_INDEX_NAME, WEIGHTS_NAME, cached_path, hf_bucket_url, is_offline_mode
 from transformers.utils.hub import EntryNotFoundError
 
-import utils
-from utils import Model, benchmark_end_to_end, get_argument_parser, print_rank_n, run_rank_n
+from utils import Model, print_rank_n, run_rank_n
 
 
 class DSInferenceModel(Model):
@@ -150,22 +149,6 @@ class DSInferenceModel(Model):
         return output_text, generated_tokens
 
 
-def get_args():
-    parser = get_argument_parser()
-
-    group = parser.add_argument_group(title="launch config")
-    group.add_argument("--benchmark_cycles", type=int,
-                       default=0, help="additionally run benchmark")
-    group.add_argument("--local_rank", required=False,
-                       type=int, help="used by dist launchers")
-    group.add_argument("--save_mp_checkpoint_path", required=False,
-                       type=str, help="MP checkpoints path")
-
-    args = utils.get_args(parser)
-
-    return args
-
-
 def get_checkpoint_files(pretrained_model_name_or_path):
     # XXX: I just hacked this one together to automatically handle the fetching of the model file or
     # shards into cache and returning the cached entries - note that I removed most arguments
@@ -230,8 +213,3 @@ def write_checkponts_json(checkpoints_json: str, model_name: str) -> None:
             "version": 1.0
         }
         json.dump(data, f)
-
-
-if (__name__ == "__main__"):
-    deepspeed.init_distributed('nccl')
-    benchmark_end_to_end(get_args(), DSInferenceModel)

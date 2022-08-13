@@ -1,67 +1,30 @@
-import os
 from argparse import Namespace
 from typing import List, Union
 
-import deepspeed
 import torch
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
-from transformers.deepspeed import HfDeepSpeedConfig
 
-import utils
-from utils import Model, benchmark_end_to_end, get_argument_parser, print_rank_n
+from utils import Model, print_rank_n
 
 
-class DSZeroModel(Model):
+class HFAccelerateModel(Model):
     def __init__(self, args: Namespace) -> None:
-        if (args.local_rank == 0):
-            print("Loading model...")
-
-        config = AutoConfig.from_pretrained(args.model_name)
-
-        world_size = int(os.getenv('WORLD_SIZE', '1'))
-        train_batch_size = 1 * world_size
-
-        ds_config = {
-            "fp16": {
-                "enabled": args.dtype == torch.float16,
-            },
-            "bf16": {
-                "enabled": args.dtype == torch.bfloat16,
-            },
-            "zero_optimization": {
-                "stage": 3,
-                "overlap_comm": True,
-                "contiguous_gradients": True,
-                "reduce_bucket_size": config.hidden_size * config.hidden_size,
-                "stage3_prefetch_bucket_size": 0.9 * config.hidden_size * config.hidden_size,
-                "stage3_param_persistence_threshold": 0
-            },
-            "steps_per_print": 2000,
-            "train_batch_size": train_batch_size,
-            "train_micro_batch_size_per_gpu": 1,
-            "wall_clock_breakdown": False
-        }
-
-        if (args.cpu_offload):
-            ds_config["zero_optimization"]["offload_param"] = {
-                "device": "cpu",
-                "pin_memory": True
-            }
-
-        # this tells from_pretrained to instantiate directly on gpus
-        dschf = HfDeepSpeedConfig(ds_config)
+        print_rank_n("Loading model...")
 
         self.tokenizer = AutoTokenizer.from_pretrained(args.model_name)
 
         self.model = AutoModelForCausalLM.from_pretrained(
-            args.model_name, torch_dtype=args.dtype)
-        self.model = self.model.eval()
-        self.model = deepspeed.initialize(
-            model=self.model, config_params=ds_config)[0]
-        self.model.module.eval()
-        self.model = self.model.module
+            args.model_name,
+            device_map="auto",
+            max_memory=get_max_memory_per_gpu_dict(
+                args.dtype, args.model_name),
+            torch_dtype=args.dtype
+        )
 
-        self.input_device = torch.cuda.current_device()
+        self.model.eval()
+        self.input_device = "cuda:0"
+
+        print_rank_n("Model loaded")
 
     def generate(self,
                  text: Union[str, List[str]],
@@ -95,22 +58,6 @@ class DSZeroModel(Model):
             output_tokens, skip_special_tokens=True)
 
         return output_text, generated_tokens
-
-
-def get_args():
-    parser = get_argument_parser()
-
-    group = parser.add_argument_group(title="launch config")
-    group.add_argument("--benchmark_cycles", type=int,
-                       default=0, help="additionally run benchmark")
-    group.add_argument("--local_rank", required=False,
-                       type=int, help="used by dist launchers")
-    group.add_argument("--cpu_offload", action="store_true",
-                       help="whether to activate CPU offload")
-
-    args = utils.get_args(parser)
-
-    return args
 
 
 def get_max_memory_per_gpu_dict(dtype, model_name):
@@ -156,7 +103,3 @@ def get_max_memory_per_gpu_dict(dtype, model_name):
             f"Unable to generate the memory map automatically as the needed estimated memory per gpu ({param_memory_per_gpu_in_bytes/2**30:0.2f}GB) is bigger than the available per gpu memory ({max_memory_per_gpu_in_bytes/2**30:0.2f}GB)")
 
     return {i: param_memory_per_gpu_in_bytes for i in range(torch.cuda.device_count())}
-
-
-if (__name__ == "__main__"):
-    benchmark_end_to_end(get_args(), DSZeroModel, zero_activated=True)
