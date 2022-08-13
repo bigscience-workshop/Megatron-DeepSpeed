@@ -2,6 +2,7 @@ import argparse
 import copy
 import gc
 import math
+import os
 import time
 from typing import Any, List, Union
 
@@ -160,7 +161,9 @@ Model loading time + generation time per batch = {initialization_time + generati
 """
 
 
-def benchmark_end_to_end(args: argparse.Namespace, model_class: Model) -> None:
+def benchmark_end_to_end(args: argparse.Namespace,
+                         model_class: Model,
+                         zero_activated: bool = False) -> None:
     model, initialization_time = run_and_log_time(
         Execute(model_class, {"args": args})
     )
@@ -216,10 +219,17 @@ def benchmark_end_to_end(args: argparse.Namespace, model_class: Model) -> None:
                 {
                     "input_sentences": input_sentences,
                     "model": model,
-                    "generate_kwargs": generate_kwargs
+                    "generate_kwargs": generate_kwargs,
+                    "cycles": args.benchmark_cycles
                 }
             )
         )
+
+        # with ZeRO every GPU is generating batch_size * sequence_length tokens
+        if (zero_activated):
+            world_size = int(os.getenv('WORLD_SIZE', '1'))
+            total_new_tokens_generated *= world_size
+
         print_rank_n(
             get_benchmark_results(
                 benchmark_time,
