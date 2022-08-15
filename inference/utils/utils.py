@@ -42,7 +42,6 @@ def get_argument_parser() -> argparse.ArgumentParser:
                        required=True, help="model to use")
     group.add_argument("--dtype", type=str, required=True,
                        choices=["bf16", "fp16"], help="dtype for model")
-    group.add_argument("--batch_size", default=1, type=int, help="batch size")
     group.add_argument(
         "--generate_kwargs",
         type=dict,
@@ -114,15 +113,22 @@ def get_dummy_batch(batch_size: int, input_sentences: List[str] = None) -> List[
     return input_sentences
 
 
+def parse_bool(value: str) -> bool:
+    if (value.lower() == "true"):
+        return True
+    elif (value.lower() == "false"):
+        return False
+    else:
+        raise ValueError("{} is not a valid boolean value".format(value))
+
+
 def parse_generate_kwargs(kwargs: dict) -> dict:
-    if ("max_length" in kwargs):
-        kwargs["max_length"] = int(kwargs["max_length"])
     if ("min_length" in kwargs):
         kwargs["min_length"] = int(kwargs["min_length"])
     if ("do_sample" in kwargs):
-        kwargs["do_sample"] = bool(kwargs["do_sample"])
+        kwargs["do_sample"] = parse_bool(kwargs["do_sample"])
     if ("early_stopping" in kwargs):
-        kwargs["early_stopping"] = bool(kwargs["early_stopping"])
+        kwargs["early_stopping"] = parse_bool(kwargs["early_stopping"])
     if ("num_beams" in kwargs):
         kwargs["num_beams"] = int(kwargs["num_beams"])
     if ("temperature" in kwargs):
@@ -182,6 +188,8 @@ def parse_generate_kwargs(kwargs: dict) -> dict:
         del kwargs["remove_invalid_values"]
     if ("synced_gpus" in kwargs):
         del kwargs["synced_gpus"]
+    if ("max_length" in kwargs):
+        del kwargs["max_length"]
 
     # no idea how to support this in a server setting
     if ("prefix_allowed_tokens_fn" in kwargs):
@@ -203,4 +211,8 @@ def parse_generate_kwargs(kwargs: dict) -> dict:
     if ("return_dict_in_generate" in kwargs):
         del kwargs["return_dict_in_generate"]
 
-    return kwargs
+    remove_input_from_output = False
+    if ("remove_input_from_output" in kwargs):
+        remove_input_from_output = parse_bool(kwargs["remove_input_from_output"])
+
+    return kwargs, remove_input_from_output

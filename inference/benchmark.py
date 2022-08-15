@@ -154,6 +154,7 @@ def get_args() -> argparse.Namespace:
                        default=0, help="additionally run benchmark")
     group.add_argument("--local_rank", required=False,
                        type=int, help="used by dist launchers")
+    group.add_argument("--batch_size", default=1, type=int, help="batch size")
     group.add_argument("--save_mp_checkpoint_path", required=False,
                        type=str, help="MP checkpoints path for DS inference")
     group.add_argument("--cpu_offload", action="store_true",

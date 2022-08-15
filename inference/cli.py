@@ -62,13 +62,14 @@ def main() -> None:
         if (input("change generate_kwargs? [y/n] ") == "y"):
             generate_kwargs = input("Generate kwargs: ")
             generate_kwargs = json.loads(generate_kwargs)
-            generate_kwargs = parse_generate_kwargs(generate_kwargs)
+            generate_kwargs, remove_input_from_output = parse_generate_kwargs(
+                generate_kwargs)
         print_rank_n("generate_kwargs:", generate_kwargs)
 
         output_text, num_generated_tokens = model.generate(
             input_text,
             generate_kwargs,
-            remove_input_from_output=True
+            remove_input_from_output=remove_input_from_output
         )
 
         print_rank_n("Output text:", output_text)
