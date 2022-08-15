@@ -1,10 +1,7 @@
 import argparse
 import copy
-import gc
 import math
-import os
-import time
-from typing import Any, List, Union
+from typing import Any, List
 
 import torch
 import torch.distributed as dist
@@ -37,18 +34,7 @@ class Execute:
         return self.func(**self.kwargs)
 
 
-class Model:
-    def __init__(self, args: argparse.Namespace) -> None:
-        raise NotImplementedError("This is a dummy class")
-
-    def generate(self,
-                 text: Union[str, List[str]],
-                 generate_kwargs: dict,
-                 remove_input_from_output: bool = False) -> Union[str, List[str]]:
-        raise NotImplementedError("This is a dummy class")
-
-
-def get_argument_parser():
+def get_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
 
     group = parser.add_argument_group(title="model")
@@ -57,13 +43,20 @@ def get_argument_parser():
     group.add_argument("--dtype", type=str, required=True,
                        choices=["bf16", "fp16"], help="dtype for model")
     group.add_argument("--batch_size", default=1, type=int, help="batch size")
-    group.add_argument("--generate_kwargs", type=dict, default={},
-                       help="generate parameters. look at https://huggingface.co/docs/transformers/v4.21.1/en/main_classes/text_generation#transformers.generation_utils.GenerationMixin.generate to see the supported parameters")
+    group.add_argument(
+        "--generate_kwargs",
+        type=dict,
+        default={
+            "max_new_tokens": 100,
+            "do_sample": False
+        },
+        help="generate parameters. look at https://huggingface.co/docs/transformers/v4.21.1/en/main_classes/text_generation#transformers.generation_utils.GenerationMixin.generate to see the supported parameters"
+    )
 
     return parser
 
 
-def get_args(parser: argparse.ArgumentParser):
+def get_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
     args = parser.parse_args()
     args.dtype = get_torch_dtype(args.dtype)
     return args
@@ -72,7 +65,8 @@ def get_args(parser: argparse.ArgumentParser):
 def run_rank_n(func: callable,
                kwargs: dict,
                barrier: bool = False,
-               rank: int = 0) -> Any:
+               rank: int = 0,
+               other_rank_output: Any = None) -> Any:
     if (dist.is_initialized()):
         if (dist.get_rank() == rank):
             output = func(**kwargs)
@@ -82,6 +76,7 @@ def run_rank_n(func: callable,
         else:
             if (barrier):
                 dist.barrier()
+            return other_rank_output
     else:
         return func(**kwargs)
 
@@ -101,6 +96,13 @@ def get_torch_dtype(dtype_str: str) -> torch.dtype:
         return torch.float16
 
 
+def get_str_dtype(dtype_str: str) -> torch.dtype:
+    if (dtype_str == torch.bfloat16):
+        return "bf16"
+    elif (dtype_str == torch.float16):
+        return "fp16"
+
+
 def get_dummy_batch(batch_size: int, input_sentences: List[str] = None) -> List[str]:
     if (input_sentences == None):
         input_sentences = copy.deepcopy(dummy_input_sentences)
@@ -112,130 +114,93 @@ def get_dummy_batch(batch_size: int, input_sentences: List[str] = None) -> List[
     return input_sentences
 
 
-def run_and_log_time(execs: Union[List[Execute], Execute]) -> Union[List[Any], float]:
-    """
-    runs a list of Execute objects and returns a list of outputs and the time taken
-    """
-    start_time = time.time()
+def parse_generate_kwargs(kwargs: dict) -> dict:
+    if ("max_length" in kwargs):
+        kwargs["max_length"] = int(kwargs["max_length"])
+    if ("min_length" in kwargs):
+        kwargs["min_length"] = int(kwargs["min_length"])
+    if ("do_sample" in kwargs):
+        kwargs["do_sample"] = bool(kwargs["do_sample"])
+    if ("early_stopping" in kwargs):
+        kwargs["early_stopping"] = bool(kwargs["early_stopping"])
+    if ("num_beams" in kwargs):
+        kwargs["num_beams"] = int(kwargs["num_beams"])
+    if ("temperature" in kwargs):
+        kwargs["temperature"] = float(kwargs["temperature"])
+    if ("top_k" in kwargs):
+        kwargs["top_k"] = int(kwargs["top_k"])
+    if ("top_p" in kwargs):
+        kwargs["top_p"] = float(kwargs["top_p"])
+    if ("typical_p" in kwargs):
+        kwargs["typical_p"] = float(kwargs["typical_p"])
+    if ("repitition_penalty" in kwargs):
+        kwargs["repitition_penalty"] = float(kwargs["repitition_penalty"])
+    if ("bos_token_id" in kwargs):
+        kwargs["bos_token_id"] = int(kwargs["bos_token_id"])
+    if ("pad_token_id" in kwargs):
+        kwargs["pad_token_id"] = int(kwargs["pad_token_id"])
+    if ("eos_token_id" in kwargs):
+        kwargs["eos_token_id"] = int(kwargs["eos_token_id"])
+    if ("length_penalty" in kwargs):
+        kwargs["length_penalty"] = float(kwargs["length_penalty"])
+    if ("no_repeat_ngram_size" in kwargs):
+        kwargs["no_repeat_ngram_size"] = int(kwargs["no_repeat_ngram_size"])
+    if ("encoder_no_repeat_ngram_size" in kwargs):
+        kwargs["encoder_no_repeat_ngram_size"] = int(
+            kwargs["encoder_no_repeat_ngram_size"])
+    if ("num_return_sequences" in kwargs):
+        kwargs["num_return_sequences"] = int(kwargs["num_return_sequences"])
+    if ("max_time" in kwargs):
+        kwargs["max_time"] = float(kwargs["max_time"])
+    if ("max_new_tokens" in kwargs):
+        kwargs["max_new_tokens"] = int(kwargs["max_new_tokens"])
+    if ("decoder_start_token_id" in kwargs):
+        kwargs["decoder_start_token_id"] = int(
+            kwargs["decoder_start_token_id"])
+    if ("num_beam_groups" in kwargs):
+        kwargs["num_beam_groups"] = int(kwargs["num_beam_groups"])
+    if ("diversity_penalty" in kwargs):
+        kwargs["diversity_penalty"] = float(kwargs["diversity_penalty"])
+    if ("forced_bos_token_id" in kwargs):
+        kwargs["forced_bos_token_id"] = int(kwargs["forced_bos_token_id"])
+    if ("forced_eos_token_id" in kwargs):
+        kwargs["forced_eos_token_id"] = int(kwargs["forced_eos_token_id"])
+    if ("exponential_decay_length_penalty" in kwargs):
+        kwargs["exponential_decay_length_penalty"] = float(
+            kwargs["exponential_decay_length_penalty"])
 
-    if (type(execs) == list):
-        results = []
-        for e in execs:
-            results.append(e())
-    else:
-        results = execs()
+    # i was being lazy :)
+    if ("bad_words_ids" in kwargs):
+        del kwargs["bad_words_ids"]
+    if ("force_words_ids" in kwargs):
+        del kwargs["force_words_ids"]
 
-    time_elapsed = time.time() - start_time
-    return results, time_elapsed
+    # so people don't slow down the server
+    if ("use_cache" in kwargs):
+        del kwargs["use_cache"]
+    if ("remove_invalid_values" in kwargs):
+        del kwargs["remove_invalid_values"]
+    if ("synced_gpus" in kwargs):
+        del kwargs["synced_gpus"]
 
+    # no idea how to support this in a server setting
+    if ("prefix_allowed_tokens_fn" in kwargs):
+        del kwargs["prefix_allowed_tokens_fn"]
+    if ("logits_processor" in kwargs):
+        del kwargs["logits_processor"]
+    if ("renormalize_logits" in kwargs):
+        del kwargs["renormalize_logits"]
+    if ("stopping_criteria" in kwargs):
+        del kwargs["stopping_criteria"]
+    if ("constraints" in kwargs):
+        del kwargs["constraints"]
+    if ("output_attentions" in kwargs):
+        del kwargs["output_attentions"]
+    if ("output_hidden_states" in kwargs):
+        del kwargs["output_hidden_states"]
+    if ("output_scores" in kwargs):
+        del kwargs["output_scores"]
+    if ("return_dict_in_generate" in kwargs):
+        del kwargs["return_dict_in_generate"]
 
-def benchmark_generation(input_sentences,
-                         model,
-                         generate_kwargs,
-                         cycles: int = 5):
-    total_new_tokens_generated = 0
-    for _ in range(cycles):
-        _, num_generated_tokens = model.generate(
-            input_sentences,
-            generate_kwargs
-        )
-        total_new_tokens_generated += sum(
-            new_tokens for new_tokens in num_generated_tokens)
-    return total_new_tokens_generated
-
-
-def get_benchmark_results(benchmark_time: float,
-                          initialization_time: float,
-                          generation_time: float,
-                          total_new_tokens_generated: int,
-                          batch_size: int) -> str:
-    throughput = total_new_tokens_generated / benchmark_time
-    return f"""
-*** Performance stats:
-Throughput (including tokenization) = {throughput:.2f} tokens/sec
-Throughput (including tokenization) = {1000 / throughput:.2f} msecs/token
-Model loading time = {initialization_time:.2f} secs
-Total tokens generated = {total_new_tokens_generated} with batch size = {batch_size}
-Generation time per batch = {generation_time:.2f} secs
-Model loading time + generation time per batch = {initialization_time + generation_time:.2f} secs
-"""
-
-
-def benchmark_end_to_end(args: argparse.Namespace,
-                         model_class: Model,
-                         zero_activated: bool = False) -> None:
-    model, initialization_time = run_and_log_time(
-        Execute(model_class, {"args": args})
-    )
-
-    if (args.generate_kwargs):
-        generate_kwargs = args.generate_kwargs
-    else:
-        generate_kwargs = {
-            "max_new_tokens": 100,
-            "do_sample": False
-        }
-
-    print_rank_n(
-        f"*** Starting to generate {generate_kwargs['max_new_tokens']} tokens with bs={args.batch_size}")
-
-    input_sentences = get_dummy_batch(args.batch_size)
-
-    print_rank_n(f"Generate args {generate_kwargs}")
-
-    # warmup is a must if measuring speed as it's when all the optimizations are performed
-    # e.g. on 8x80 a100 the first pass of 100 tokens takes 23sec, and the next one is 4secs
-    model.generate(
-        input_sentences,
-        generate_kwargs
-    )
-
-    (output_text, num_generated_tokens), generation_time = run_and_log_time(
-        Execute(
-            model.generate,
-            {
-                "text": input_sentences,
-                "generate_kwargs": generate_kwargs
-            }
-        )
-    )
-    for i, (o, _) in zip(input_sentences, zip(output_text, num_generated_tokens)):
-        print_rank_n(f"{'-' * 60}\nin = {i}\nout = {o}\n")
-
-    if (args.benchmark_cycles > 0):
-        print_rank_n(f"*** Running benchmark")
-
-        torch.cuda.empty_cache()
-        gc.collect()
-
-        # warm up
-        model.generate(input_sentences, generate_kwargs)
-        torch.cuda.synchronize()
-
-        # benchmark
-        total_new_tokens_generated, benchmark_time = run_and_log_time(
-            Execute(
-                benchmark_generation,
-                {
-                    "input_sentences": input_sentences,
-                    "model": model,
-                    "generate_kwargs": generate_kwargs,
-                    "cycles": args.benchmark_cycles
-                }
-            )
-        )
-
-        # with ZeRO every GPU is generating batch_size * sequence_length tokens
-        if (zero_activated):
-            world_size = int(os.getenv('WORLD_SIZE', '1'))
-            total_new_tokens_generated *= world_size
-
-        print_rank_n(
-            get_benchmark_results(
-                benchmark_time,
-                initialization_time,
-                generation_time,
-                total_new_tokens_generated,
-                args.batch_size
-            )
-        )
+    return kwargs

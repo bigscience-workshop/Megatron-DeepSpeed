@@ -3,7 +3,6 @@ import json
 import os
 import shutil
 from argparse import Namespace
-from typing import List, Union
 
 import deepspeed
 import torch
@@ -18,14 +17,9 @@ from utils import Model, print_rank_n, run_rank_n
 class DSInferenceModel(Model):
     def __init__(self, args: Namespace) -> None:
         print_rank_n("Loading model...")
+        world_size = int(os.getenv("WORLD_SIZE", "1"))
 
         self.tokenizer = AutoTokenizer.from_pretrained(args.model_name)
-
-        use_hf_checkpoints = not args.save_mp_checkpoint_path
-        cache_ds_checkpoints = args.save_mp_checkpoint_path and not os.path.isdir(
-            args.save_mp_checkpoint_path)
-
-        world_size = int(os.getenv("WORLD_SIZE", "1"))
 
         # Load model
         with deepspeed.OnDevice(dtype=args.dtype, device="meta"):
@@ -54,59 +48,20 @@ class DSInferenceModel(Model):
             barrier=True
         )
 
-        # init inference
-        if (use_hf_checkpoints):
-            print_rank_n("Loading HF checkpoints")
-
-            if (args.dtype == torch.float16):
-                self.model = deepspeed.init_inference(
-                    self.model,
-                    mp_size=world_size,
-                    dtype=args.dtype,
-                    checkpoint=checkpoints_json,
-                    replace_with_kernel_inject=True
-                )
-            else:
-                raise NotImplementedError("bfloat16 is not yet supported")
-        elif (cache_ds_checkpoints):
-            print_rank_n("Caching DS checkpoints and loading model")
-
-            run_rank_n(
-                os.makedirs,
-                {
-                    "name": args.save_mp_checkpoint_path,
-                    "exist_ok": True
-                },
-                barrier=True
-            )
-
-            if (args.dtype == torch.float16):
-                self.model = deepspeed.init_inference(
-                    self.model,
-                    mp_size=world_size,
-                    dtype=args.dtype,
-                    checkpoint=checkpoints_json,
-                    replace_with_kernel_inject=True,
-                    save_mp_checkpoint_path=args.save_mp_checkpoint_path
-                )
-            else:
-                raise NotImplementedError("bfloat16 is not yet supported")
-        else:
-            print_rank_n("Loading DS cached checkpoints")
-
+        if (args.save_mp_checkpoint_path):
             checkpoints_json = os.path.join(
                 args.save_mp_checkpoint_path, "BLOOM-176B_ds-inference_config.json")
 
-            if (args.dtype == torch.float16):
-                self.model = deepspeed.init_inference(
-                    self.model,
-                    mp_size=world_size,
-                    dtype=args.dtype,
-                    checkpoint=checkpoints_json,
-                    replace_with_kernel_inject=True
-                )
-            else:
-                raise NotImplementedError("bfloat16 is not yet supported")
+        if (args.dtype == torch.float16):
+            self.model = deepspeed.init_inference(
+                self.model,
+                mp_size=world_size,
+                dtype=args.dtype,
+                checkpoint=checkpoints_json,
+                replace_with_kernel_inject=True
+            )
+        elif (args.dtype == torch.bfloat16):
+            raise NotImplementedError("bfloat16 is not yet supported")
 
         run_rank_n(shutil.rmtree, {"path": tmp_directory})
 
@@ -114,39 +69,6 @@ class DSInferenceModel(Model):
         self.input_device = torch.cuda.current_device()
 
         print_rank_n("Model loaded")
-
-    def generate(self,
-                 text: Union[str, List[str]],
-                 generate_kwargs: dict,
-                 remove_input_from_output: bool = False) -> Union[str, List[str]]:
-        if (type(text) == str):
-            text = [text]
-
-        input_tokens = self.tokenizer(text, return_tensors="pt", padding=True)
-
-        for t in input_tokens:
-            if torch.is_tensor(input_tokens[t]):
-                input_tokens[t] = input_tokens[t].to(self.input_device)
-
-        with torch.no_grad():
-            output_tokens = self.model.generate(
-                **input_tokens,
-                **generate_kwargs
-            )
-
-        input_token_lengths = [x.shape[0] for x in input_tokens.input_ids]
-        output_token_lengths = [x.shape[0] for x in output_tokens]
-        generated_tokens = [
-            o - i for i, o in zip(input_token_lengths, output_token_lengths)]
-
-        if (remove_input_from_output):
-            output_tokens = [x[-i:]
-                             for x, i in zip(output_tokens, generated_tokens)]
-
-        output_text = self.tokenizer.batch_decode(
-            output_tokens, skip_special_tokens=True)
-
-        return output_text, generated_tokens
 
 
 def get_checkpoint_files(pretrained_model_name_or_path):

@@ -1,5 +1,4 @@
 from argparse import Namespace
-from typing import List, Union
 
 import torch
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
@@ -25,39 +24,6 @@ class HFAccelerateModel(Model):
         self.input_device = "cuda:0"
 
         print_rank_n("Model loaded")
-
-    def generate(self,
-                 text: Union[str, List[str]],
-                 generate_kwargs: dict,
-                 remove_input_from_output: bool = False) -> Union[str, List[str]]:
-        if (type(text) == str):
-            text = [text]
-
-        input_tokens = self.tokenizer(text, return_tensors="pt", padding=True)
-
-        for t in input_tokens:
-            if torch.is_tensor(input_tokens[t]):
-                input_tokens[t] = input_tokens[t].to(self.input_device)
-
-        with torch.no_grad():
-            output_tokens = self.model.generate(
-                **input_tokens,
-                **generate_kwargs
-            )
-
-        input_token_lengths = [x.shape[0] for x in input_tokens.input_ids]
-        output_token_lengths = [x.shape[0] for x in output_tokens]
-        generated_tokens = [
-            o - i for i, o in zip(input_token_lengths, output_token_lengths)]
-
-        if (remove_input_from_output):
-            output_tokens = [x[-i:]
-                             for x, i in zip(output_tokens, generated_tokens)]
-
-        output_text = self.tokenizer.batch_decode(
-            output_tokens, skip_special_tokens=True)
-
-        return output_text, generated_tokens
 
 
 def get_max_memory_per_gpu_dict(dtype, model_name):
