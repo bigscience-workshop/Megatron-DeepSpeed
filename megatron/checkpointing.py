@@ -27,7 +27,8 @@ from megatron import (get_args,
                       mpu,
                       print_rank_0,
                       update_num_microbatches,
-                      utils)
+                      utils,
+                      get_tokenizer)
 from megatron.enums import PositionEmbeddingType
 
 _CHECKPOINT_VERSION = None
@@ -131,6 +132,7 @@ def save_checkpoint(iteration, model, optimizer, lr_scheduler):
         state_dict['checkpoint_version'] = 3.0
         state_dict['iteration'] = iteration
         state_dict['tokens'] = args.consumed_train_tokens
+        state_dict['checkpoint_info'] = _checkpoint_info()
 
         # DeepSpeed saves the model/optimizer/scheduler
         if not args.deepspeed:
@@ -361,7 +363,8 @@ def load_checkpoint(model, optimizer, lr_scheduler, load_arg='load', strict=True
     assert args.consumed_valid_samples == 0
     if 'args' in state_dict:
         checkpoint_args = state_dict['args']
-        check_checkpoint_args(checkpoint_args)
+        if not args.universal_checkpoint:
+            check_checkpoint_args(checkpoint_args)
         args.consumed_train_samples = getattr(checkpoint_args,
                                               'consumed_train_samples', 0)
         update_num_microbatches(consumed_samples=args.consumed_train_samples)
@@ -468,3 +471,13 @@ def load_biencoder_checkpoint(model, only_query_model=False,
         print(' successfully loaded {}'.format(checkpoint_name))
 
     return model
+
+
+def _checkpoint_info():
+    args = get_args()
+    tokenizer = get_tokenizer()
+
+    return {
+        "padded_vocab_size": args.padded_vocab_size,
+        "original_vocab_size": tokenizer.vocab_size,
+    }
