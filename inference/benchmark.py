@@ -12,7 +12,7 @@ import utils
 from ds_inference import DSInferenceModel
 from ds_zero import DSZeROModel
 from hf_accelerate import HFAccelerateModel
-from utils import Execute, Model, get_argument_parser, get_dummy_batch, print_rank_n
+from utils import Execute, Model, get_argument_parser, get_dummy_batch, print_rank_n, GenerateRequest
 
 
 def run_and_log_time(execs: Union[List[Execute], Execute]) -> Union[List[Any], float]:
@@ -32,18 +32,14 @@ def run_and_log_time(execs: Union[List[Execute], Execute]) -> Union[List[Any], f
     return results, time_elapsed
 
 
-def benchmark_generation(input_sentences,
-                         model,
-                         generate_kwargs,
+def benchmark_generation(model: Model,
+                         request: GenerateRequest,
                          cycles: int = 5):
     total_new_tokens_generated = 0
     for _ in range(cycles):
-        _, num_generated_tokens = model.generate(
-            input_sentences,
-            generate_kwargs
-        )
+        response = model.generate(request)
         total_new_tokens_generated += sum(
-            new_tokens for new_tokens in num_generated_tokens)
+            new_tokens for new_tokens in response.num_generated_tokens)
     return total_new_tokens_generated
 
 
@@ -80,21 +76,12 @@ def benchmark_end_to_end(args: argparse.Namespace,
 
     # warmup is a must if measuring speed as it's when all the optimizations are performed
     # e.g. on 8x80 a100 the first pass of 100 tokens takes 23sec, and the next one is 4secs
-    model.generate(
-        input_sentences,
-        args.generate_kwargs
-    )
+    request = GenerateRequest(input_sentences, args.generate_kwargs)
 
-    (output_text, num_generated_tokens), generation_time = run_and_log_time(
-        Execute(
-            model.generate,
-            {
-                "text": input_sentences,
-                "generate_kwargs": args.generate_kwargs
-            }
-        )
-    )
-    for i, (o, _) in zip(input_sentences, zip(output_text, num_generated_tokens)):
+    response, generation_time = run_and_log_time(
+        Execute(model.generate, {"request": request}))
+
+    for i, (o, _) in zip(request.text, zip(response.text, response.num_generated_tokens)):
         print_rank_n(f"{'-' * 60}\nin = {i}\nout = {o}\n")
 
     if (args.benchmark_cycles > 0):
@@ -104,7 +91,7 @@ def benchmark_end_to_end(args: argparse.Namespace,
         gc.collect()
 
         # warm up
-        model.generate(input_sentences, args.generate_kwargs)
+        model.generate(request)
         torch.cuda.synchronize()
 
         # benchmark
@@ -112,9 +99,8 @@ def benchmark_end_to_end(args: argparse.Namespace,
             Execute(
                 benchmark_generation,
                 {
-                    "input_sentences": input_sentences,
                     "model": model,
-                    "generate_kwargs": args.generate_kwargs,
+                    "request": request,
                     "cycles": args.benchmark_cycles
                 }
             )

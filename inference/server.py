@@ -1,28 +1,14 @@
 import argparse
 import logging
 import time
-from typing import List, Union
 
 import constants
 import utils
 from ds_inference import DSInferenceGRPCServer
 from fastapi import FastAPI, HTTPException
 from hf_accelerate import HFAccelerateModel
-from pydantic import BaseModel
-from utils import MaxTokensError, get_argument_parser, parse_generate_kwargs
+from utils import GenerateRequest, MaxTokensError, get_argument_parser
 from uvicorn import run
-
-
-class GenerateRequest(BaseModel):
-    text: Union[List[str], str]
-    generate_kwargs: dict
-
-
-class GenerateResponse(BaseModel):
-    text: Union[List[str], str]
-    num_generated_tokens: Union[List[int], int]
-    query_id: int
-    total_time_taken: float
 
 
 def get_args() -> argparse.Namespace:
@@ -83,33 +69,18 @@ def generate(request: GenerateRequest) -> dict:
     try:
         start_time = time.time()
 
-        text = request.text
-        generate_kwargs = args.generate_kwargs
-        remove_input_from_output = False
-        if (request.generate_kwargs):
-            generate_kwargs, remove_input_from_output = parse_generate_kwargs(
-                request.generate_kwargs)
-
-        if (generate_kwargs["max_new_tokens"] > args.allowed_max_new_tokens):
+        if (request.max_new_tokens > args.allowed_max_new_tokens):
             raise MaxTokensError(
-                generate_kwargs["max_new_tokens"], args.allowed_max_new_tokens)
+                request.max_new_tokens,
+                args.allowed_max_new_tokens
+            )
 
-        output_text, num_generated_tokens = model.generate(
-            text,
-            generate_kwargs,
-            remove_input_from_output=remove_input_from_output
-        )
+        response = model.generate(request)
+        response.query_id = query_id
+        response.total_time_taken = time.time() - start_time
 
-        total_time_taken = time.time() - start_time
-
-        output = GenerateResponse(
-            text=output_text,
-            num_generated_tokens=num_generated_tokens,
-            query_id=query_id,
-            total_time_taken=total_time_taken
-        )
         query_id += 1
-        return output
+        return response
     except Exception as e:
         query_id += 1
         raise HTTPException(500, {"error": str(e)})

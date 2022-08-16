@@ -1,13 +1,12 @@
 import argparse
 import json
 import os
-from typing import List, Tuple, Union
 
 import torch
 from transformers import AutoTokenizer
 
 import mii
-from utils import Model, get_str_dtype
+from utils import GenerateRequest, GenerateResponse, Model, get_str_dtype
 
 
 class DSInferenceGRPCServer(Model):
@@ -19,8 +18,10 @@ class DSInferenceGRPCServer(Model):
             if (file.endswith(".json")):
                 checkpoints_json = json.load(
                     open(os.path.join(args.save_mp_checkpoint_path, file), "r"))
-                del checkpoints_json["base_dir"]
                 break
+
+        if ("base_dir" in checkpoints_json):
+            del checkpoints_json["base_dir"]
 
         if (args.dtype == torch.float16):
             mii.deploy(
@@ -41,20 +42,41 @@ class DSInferenceGRPCServer(Model):
         self.tokenizer = AutoTokenizer.from_pretrained(args.model_name)
         self.model = mii.mii_query_handle(self.deployment_name)
 
-    def generate(self,
-                 text: Union[str, List[str]],
-                 generate_kwargs: dict,
-                 remove_input_from_output: bool = False) -> Union[Tuple[str, int],
-                                                                  Tuple[List[str], List[int]]]:
-        return_format = type(text)
-        if (return_format == str):
+    def generate(self, request: GenerateRequest) -> GenerateResponse:
+        text = request.text
+
+        return_type = type(text)
+        if (return_type == str):
             text = [text]
 
         output_text = self.model.query(
-            {
-                "query": text
-            },
-            **generate_kwargs
+            {"query": text},
+            min_length=request.min_length,
+            do_sample=request.do_sample,
+            early_stopping=request.early_stopping,
+            num_beams=request.num_beams,
+            temperature=request.temperature,
+            top_k=request.top_k,
+            top_p=request.top_p,
+            typical_p=request.typical_p,
+            repitition_penalty=request.repitition_penalty,
+            bos_token_id=request.bos_token_id,
+            pad_token_id=request.pad_token_id,
+            eos_token_id=request.eos_token_id,
+            length_penalty=request.length_penalty,
+            no_repeat_ngram_size=request.no_repeat_ngram_size,
+            encoder_no_repeat_ngram_size=request.encoder_no_repeat_ngram_size,
+            num_return_sequences=request.num_return_sequences,
+            max_time=request.max_time,
+            max_new_tokens=request.max_new_tokens,
+            decoder_start_token_id=request.decoder_start_token_id,
+            num_beam_groups=request.num_beam_groups,
+            diversity_penalty=request.diversity_penalty,
+            forced_bos_token_id=request.forced_bos_token_id,
+            forced_eos_token_id=request.forced_eos_token_id,
+            exponential_decay_length_penalty=request.exponential_decay_length_penalty,
+            bad_words_ids=request.bad_words_ids,
+            force_words_ids=request.force_words_ids
         ).response
 
         output_text = [_ for _ in output_text]
@@ -65,18 +87,23 @@ class DSInferenceGRPCServer(Model):
 
         input_token_lengths = [len(x) for x in input_tokens]
         output_token_lengths = [len(x) for x in output_tokens]
-        generated_tokens = [
+        num_generated_tokens = [
             o - i for i, o in zip(input_token_lengths, output_token_lengths)]
 
-        if (remove_input_from_output):
+        if (request.remove_input_from_output):
             output_tokens = [x[-i:]
-                             for x, i in zip(output_tokens, generated_tokens)]
+                             for x, i in zip(output_tokens, num_generated_tokens)]
             output_text = self.tokenizer.batch_decode(
                 output_tokens, skip_special_tokens=True)
 
-        if (return_format == str):
-            return output_text[0], generated_tokens[0]
-        return output_text, generated_tokens
+        if (return_type == str):
+            output_text = output_text[0]
+            num_generated_tokens = num_generated_tokens[0]
+
+        return GenerateResponse(
+            text=output_text,
+            num_generated_tokens=num_generated_tokens
+        )
 
     def shutdown(self) -> None:
         mii.terminate(self.deployment_name)

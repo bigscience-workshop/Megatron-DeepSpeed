@@ -48,6 +48,7 @@ def main() -> None:
             f"Unknown deployment framework {args.deployment_framework}")
 
     generate_kwargs = args.generate_kwargs
+    request = parse_generate_kwargs(generate_kwargs)
 
     while (True):
         # currently only 1 process is running so its
@@ -62,18 +63,13 @@ def main() -> None:
         if (input("change generate_kwargs? [y/n] ") == "y"):
             generate_kwargs = input("Generate kwargs: ")
             generate_kwargs = json.loads(generate_kwargs)
-            generate_kwargs, remove_input_from_output = parse_generate_kwargs(
-                generate_kwargs)
-        print_rank_n("generate_kwargs:", generate_kwargs)
+            request = parse_generate_kwargs(generate_kwargs)
 
-        output_text, num_generated_tokens = model.generate(
-            input_text,
-            generate_kwargs,
-            remove_input_from_output=remove_input_from_output
-        )
+        request.text = input_text
+        response = model.generate(request)
 
-        print_rank_n("Output text:", output_text)
-        print_rank_n("Generated tokens:", num_generated_tokens)
+        print_rank_n("Output text:", response.text)
+        print_rank_n("Generated tokens:", response.num_generated_tokens)
 
 
 if (__name__ == "__main__"):

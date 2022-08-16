@@ -1,4 +1,5 @@
 from .model import Model
+from .requests import GenerateRequest, GenerateResponse
 from .utils import (
     Execute,
     MaxTokensError,
