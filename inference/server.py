@@ -7,7 +7,7 @@ import utils
 from ds_inference import DSInferenceGRPCServer
 from fastapi import FastAPI, HTTPException
 from hf_accelerate import HFAccelerateModel
-from utils import GenerateRequest, MaxTokensError, get_argument_parser
+from utils import GenerateRequest, get_argument_parser, get_num_tokens_to_generate
 from uvicorn import run
 
 
@@ -69,11 +69,8 @@ def generate(request: GenerateRequest) -> dict:
     try:
         start_time = time.time()
 
-        if (request.max_new_tokens > args.allowed_max_new_tokens):
-            raise MaxTokensError(
-                request.max_new_tokens,
-                args.allowed_max_new_tokens
-            )
+        request.max_new_tokens = get_num_tokens_to_generate(
+            request.max_new_tokens, args.allowed_max_new_tokens)
 
         response = model.generate(request)
         response.query_id = query_id

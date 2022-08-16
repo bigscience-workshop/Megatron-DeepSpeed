@@ -12,7 +12,15 @@ import utils
 from ds_inference import DSInferenceModel
 from ds_zero import DSZeROModel
 from hf_accelerate import HFAccelerateModel
-from utils import Execute, Model, get_argument_parser, get_dummy_batch, print_rank_n, GenerateRequest
+from utils import (
+    Execute,
+    GenerateRequest,
+    Model,
+    get_argument_parser,
+    get_dummy_batch,
+    parse_generate_kwargs,
+    print_rank_n
+)
 
 
 def run_and_log_time(execs: Union[List[Execute], Execute]) -> Union[List[Any], float]:
@@ -67,17 +75,16 @@ def benchmark_end_to_end(args: argparse.Namespace,
         Execute(model_class, {"args": args})
     )
 
-    print_rank_n(
-        f"*** Starting to generate {args.generate_kwargs['max_new_tokens']} tokens with bs={args.batch_size}")
+    request = parse_generate_kwargs(
+        get_dummy_batch(args.batch_size),
+        args.generate_kwargs
+    )
 
-    input_sentences = get_dummy_batch(args.batch_size)
-
-    print_rank_n(f"Generate args {args.generate_kwargs}")
+    print_rank_n(f"generate_kwargs = {request}")
+    print_rank_n(f"batch_size = {args.batch_size}")
 
     # warmup is a must if measuring speed as it's when all the optimizations are performed
     # e.g. on 8x80 a100 the first pass of 100 tokens takes 23sec, and the next one is 4secs
-    request = GenerateRequest(input_sentences, args.generate_kwargs)
-
     response, generation_time = run_and_log_time(
         Execute(model.generate, {"request": request}))
 

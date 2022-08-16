@@ -1,8 +1,6 @@
 import argparse
 import json
 
-import deepspeed
-
 import constants
 import utils
 from ds_inference import DSInferenceGRPCServer
@@ -48,7 +46,6 @@ def main() -> None:
             f"Unknown deployment framework {args.deployment_framework}")
 
     generate_kwargs = args.generate_kwargs
-    request = parse_generate_kwargs(generate_kwargs)
 
     while (True):
         # currently only 1 process is running so its
@@ -61,11 +58,9 @@ def main() -> None:
             model.shutdown()
 
         if (input("change generate_kwargs? [y/n] ") == "y"):
-            generate_kwargs = input("Generate kwargs: ")
-            generate_kwargs = json.loads(generate_kwargs)
-            request = parse_generate_kwargs(generate_kwargs)
+            generate_kwargs = json.loads(input("generate_kwargs: "))
 
-        request.text = input_text
+        request = parse_generate_kwargs(input_text, generate_kwargs)
         response = model.generate(request)
 
         print_rank_n("Output text:", response.text)

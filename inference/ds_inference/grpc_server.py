@@ -6,7 +6,7 @@ import torch
 from transformers import AutoTokenizer
 
 import mii
-from utils import GenerateRequest, GenerateResponse, Model, get_str_dtype
+from utils import GenerateRequest, GenerateResponse, Model, get_filter_dict, get_str_dtype
 
 
 class DSInferenceGRPCServer(Model):
@@ -51,32 +51,7 @@ class DSInferenceGRPCServer(Model):
 
         output_text = self.model.query(
             {"query": text},
-            min_length=request.min_length,
-            do_sample=request.do_sample,
-            early_stopping=request.early_stopping,
-            num_beams=request.num_beams,
-            temperature=request.temperature,
-            top_k=request.top_k,
-            top_p=request.top_p,
-            typical_p=request.typical_p,
-            repitition_penalty=request.repitition_penalty,
-            bos_token_id=request.bos_token_id,
-            pad_token_id=request.pad_token_id,
-            eos_token_id=request.eos_token_id,
-            length_penalty=request.length_penalty,
-            no_repeat_ngram_size=request.no_repeat_ngram_size,
-            encoder_no_repeat_ngram_size=request.encoder_no_repeat_ngram_size,
-            num_return_sequences=request.num_return_sequences,
-            max_time=request.max_time,
-            max_new_tokens=request.max_new_tokens,
-            decoder_start_token_id=request.decoder_start_token_id,
-            num_beam_groups=request.num_beam_groups,
-            diversity_penalty=request.diversity_penalty,
-            forced_bos_token_id=request.forced_bos_token_id,
-            forced_eos_token_id=request.forced_eos_token_id,
-            exponential_decay_length_penalty=request.exponential_decay_length_penalty,
-            bad_words_ids=request.bad_words_ids,
-            force_words_ids=request.force_words_ids
+            **get_filter_dict(request)
         ).response
 
         output_text = [_ for _ in output_text]

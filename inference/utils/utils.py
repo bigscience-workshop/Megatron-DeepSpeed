@@ -21,12 +21,6 @@ dummy_input_sentences = [
 ]
 
 
-class MaxTokensError(Exception):
-    def __init__(self, max_new_tokens: int, allowed_max_new_tokens: int) -> None:
-        super().__init__("max_new_tokens = {} > {} is not supported.".format(
-            max_new_tokens, allowed_max_new_tokens))
-
-
 class Execute:
     def __init__(self, func: callable, kwargs: dict) -> None:
         self.func = func
@@ -113,3 +107,11 @@ def get_dummy_batch(batch_size: int, input_sentences: List[str] = None) -> List[
     input_sentences = input_sentences[:batch_size]
 
     return input_sentences
+
+
+def get_num_tokens_to_generate(max_new_tokens: int,
+                               allowed_max_new_tokens: int) -> int:
+    if (max_new_tokens == None):
+        return allowed_max_new_tokens
+    else:
+        return min(max_new_tokens, allowed_max_new_tokens)
