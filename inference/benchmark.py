@@ -57,14 +57,15 @@ def get_benchmark_results(benchmark_time: float,
                           batch_size: int,
                           cycles: int) -> str:
     throughput = total_new_tokens_generated / benchmark_time
+    latency = benchmark_time / cycles
     return f"""
 *** Performance stats:
 Throughput (including tokenization) = {throughput:.2f} tokens/sec
 Throughput (including tokenization) = {1000 / throughput:.2f} msecs/token
 Model loading time = {initialization_time:.2f} secs
 Total tokens generated = {total_new_tokens_generated} with batch size = {batch_size}
-Latency = {benchmark_time / cycles:.2f} secs
-Model loading time + generation time per batch = {initialization_time + generation_time:.2f} secs
+Latency = {latency:.2f} secs
+Model loading time + generation time per batch = {initialization_time + latency:.2f} secs
 """
 
 
