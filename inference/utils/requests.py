@@ -106,4 +106,5 @@ def get_filter_dict(d: BaseModel) -> dict:
     for i in d:
         if (d[i] != None):
             q[i] = d[i]
+    del q["text"]
     return q

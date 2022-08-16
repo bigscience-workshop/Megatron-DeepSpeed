@@ -58,7 +58,7 @@ def main() -> None:
             model.shutdown()
 
         if (input("change generate_kwargs? [y/n] ") == "y"):
-            generate_kwargs = json.loads(input("generate_kwargs: "))
+            generate_kwargs = json.loads(input("Generate kwargs: "))
 
         request = parse_generate_kwargs(input_text, generate_kwargs)
         response = model.generate(request)

@@ -1,6 +1,8 @@
 import argparse
 import logging
+import sys
 import time
+import traceback
 
 import constants
 import utils
@@ -33,6 +35,8 @@ def get_args() -> argparse.Namespace:
                        help="number of http workers")
     group.add_argument("--allowed_max_new_tokens", type=int,
                        default=100, help="max allowed tokens")
+    group.add_argument("--debug", action="store_true",
+                       help="launch in debug mode")
 
     args = utils.get_args(parser)
 
@@ -61,6 +65,18 @@ query_id = 0
 ####################################################################################
 
 
+def get_stack_trace(e_stack_trace):
+    trace_back = traceback.extract_tb(e_stack_trace)
+
+    # Format stacktrace
+    stack_trace = []
+    for trace in trace_back:
+        stack_trace.append("File : {}, Line : {}, Func.Name : {}, Message : {}".format(
+            trace[0], trace[1], trace[2], trace[3]))
+
+    return stack_trace
+
+
 @app.post("/generate/")
 def generate(request: GenerateRequest) -> dict:
     # needs to be global since it is updated
@@ -78,9 +94,19 @@ def generate(request: GenerateRequest) -> dict:
 
         query_id += 1
         return response
-    except Exception as e:
+    except Exception:
+        e_type, e_message, e_stack_trace = sys.exc_info()
+        response = {
+            "error": str(e_type.__name__),
+            "message": str(e_message),
+            "query_id": query_id
+        }
+
+        if (args.debug):
+            response["stack_trace"] = get_stack_trace(e_stack_trace),
+
         query_id += 1
-        raise HTTPException(500, {"error": str(e)})
+        raise HTTPException(500, response)
 
 
 run(app, host=args.host, port=args.port, workers=args.workers)
