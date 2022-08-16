@@ -2,7 +2,7 @@ import argparse
 import gc
 import os
 import time
-from typing import Any, List, Union
+from typing import Any, List, Tuple, Union
 
 import deepspeed
 import torch
@@ -23,7 +23,7 @@ from utils import (
 )
 
 
-def run_and_log_time(execs: Union[List[Execute], Execute]) -> Union[List[Any], float]:
+def run_and_log_time(execs: Union[List[Execute], Execute]) -> Tuple[Union[List[Any], Any], float]:
     """
     runs a list of Execute objects and returns a list of outputs and the time taken
     """
