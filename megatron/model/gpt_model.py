@@ -161,15 +161,13 @@ class GPTModel(MegatronModule):
 def fast_normalize(loss_mask: torch.Tensor):
     """
     Turn loss_mask from [0,0,0,1,1,0,0,1,0,0,1,1,1] > [0,0,0,0.5,0.5,0,0,1,0,0,0.3,0.3,0.3]
-
-    Credits to @thomasw21 for this efficient implementation!
     """
     loss_mask = loss_mask.float()
     _, inverse_indices, counts = torch.unique_consecutive(loss_mask, return_inverse=True, return_counts=True)
     counts = torch.gather(dim=0, index=inverse_indices, input=counts)
     return loss_mask / counts
 
-def get_cross_entropy(is_prefix: bool, norm_target_loss: bool):
+def get_cross_entropy(is_prefix: bool):
     def CrossEntropy(output, labels):
         labels, loss_mask = labels[0], labels[1]
 
@@ -196,7 +194,7 @@ def get_cross_entropy(is_prefix: bool, norm_target_loss: bool):
             else:
                 average_tokens_per_sample = sequence_length
             expected_number_of_tokens = average_tokens_per_sample * micro_batch_size
-        elif norm_target_loss:
+        elif args.norm_target_loss:
             loss_mask = loss_mask.view(-1)
             loss_mask = fast_normalize(loss_mask)
             expected_num_of_target_seqs = loss_mask.sum()
@@ -329,7 +327,7 @@ class GPTModelPipe(PipelineModule,MegatronModule):
             partition_method = 'type:transformer'
 
         super().__init__(layers=self.specs,
-                         loss_fn=get_cross_entropy(is_prefix=attn_mask_type is AttnMaskType.prefix, norm_target_loss=args.norm_target_loss),
+                         loss_fn=get_cross_entropy(is_prefix=attn_mask_type is AttnMaskType.prefix),
                          topology=topo,
                          activation_checkpoint_interval=interval,
                          partition_method=partition_method)
