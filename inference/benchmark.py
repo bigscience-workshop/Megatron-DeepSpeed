@@ -53,9 +53,9 @@ def benchmark_generation(model: Model,
 
 def get_benchmark_results(benchmark_time: float,
                           initialization_time: float,
-                          generation_time: float,
                           total_new_tokens_generated: int,
-                          batch_size: int) -> str:
+                          batch_size: int,
+                          cycles: int) -> str:
     throughput = total_new_tokens_generated / benchmark_time
     return f"""
 *** Performance stats:
@@ -63,7 +63,7 @@ Throughput (including tokenization) = {throughput:.2f} tokens/sec
 Throughput (including tokenization) = {1000 / throughput:.2f} msecs/token
 Model loading time = {initialization_time:.2f} secs
 Total tokens generated = {total_new_tokens_generated} with batch size = {batch_size}
-Generation time per batch = {generation_time:.2f} secs
+Latency = {benchmark_time / cycles:.2f} secs
 Model loading time + generation time per batch = {initialization_time + generation_time:.2f} secs
 """
 
@@ -85,8 +85,7 @@ def benchmark_end_to_end(args: argparse.Namespace,
 
     # warmup is a must if measuring speed as it's when all the optimizations are performed
     # e.g. on 8x80 a100 the first pass of 100 tokens takes 23sec, and the next one is 4secs
-    response, generation_time = run_and_log_time(
-        Execute(model.generate, {"request": request}))
+    response = model.generate(request)
 
     for i, (o, _) in zip(request.text, zip(response.text, response.num_generated_tokens)):
         print_rank_n(f"{'-' * 60}\nin = {i}\nout = {o}\n")
@@ -122,9 +121,9 @@ def benchmark_end_to_end(args: argparse.Namespace,
             get_benchmark_results(
                 benchmark_time,
                 initialization_time,
-                generation_time,
                 total_new_tokens_generated,
-                args.batch_size
+                args.batch_size,
+                args.benchmark_cycles
             )
         )
 
