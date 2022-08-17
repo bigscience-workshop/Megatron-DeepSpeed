@@ -162,7 +162,6 @@ def fast_normalize(loss_mask: torch.Tensor):
     """
     Turn loss_mask from [0,0,0,1,1,0,0,1,0,0,1,1,1] > [0,0,0,0.5,0.5,0,0,1,0,0,0.3,0.3,0.3]
     """
-    loss_mask = loss_mask.float()
     _, inverse_indices, counts = torch.unique_consecutive(loss_mask, return_inverse=True, return_counts=True)
     counts = torch.gather(dim=0, index=inverse_indices, input=counts)
     return loss_mask / counts
