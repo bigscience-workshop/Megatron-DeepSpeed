@@ -42,6 +42,7 @@ def get_argument_parser() -> argparse.ArgumentParser:
         "--generate_kwargs",
         type=dict,
         default={
+            "min_length": 100,
             "max_new_tokens": 100,
             "do_sample": False
         },
