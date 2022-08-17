@@ -42,7 +42,7 @@ def get_argument_parser() -> argparse.ArgumentParser:
     group.add_argument(
         "--generate_kwargs",
         type=str,
-        default='{"min_length": 100, "max_new_tokens": 100, "do_sample": False}',
+        default='{"min_length": 100, "max_new_tokens": 100, "do_sample": false}',
         help="generate parameters. look at https://huggingface.co/docs/transformers/v4.21.1/en/main_classes/text_generation#transformers.generation_utils.GenerationMixin.generate to see the supported parameters"
     )
 
