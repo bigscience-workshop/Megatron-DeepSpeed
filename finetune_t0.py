@@ -48,6 +48,14 @@ def model_provider(pre_process=True, post_process=True):
     return model
 
 
+def fast_normalize(loss_mask: torch.Tensor):
+    """
+    Turn loss_mask from [0,0,0,1,1,0,0,1,0,0,1,1,1] > [0,0,0,0.5,0.5,0,0,1,0,0,0.3,0.3,0.3]
+    """
+    _, inverse_indices, counts = torch.unique_consecutive(loss_mask, return_inverse=True, return_counts=True)
+    counts = torch.gather(dim=0, index=inverse_indices, input=counts)
+    return loss_mask / counts
+
 def get_batch_pipe(data):
     """
     Modification of `get_batch` to work on `next(data_iterator)` instead of `data_iterator` & in packed fashion
@@ -94,6 +102,10 @@ def get_batch_pipe(data):
         decoder_is_inputs=decoder_is_inputs.bool(),
         segment_ids=segment_ids.long(),
     )
+
+    if args.norm_target_loss:
+        loss_mask = loss_mask.view(-1)
+        loss_mask = fast_normalize(loss_mask)
 
     if args.position_embedding_type not in [PositionEmbeddingType.alibi, PositionEmbeddingType.rotary]:
         raise NotImplementedError("absolute positional embeddings require us to reset position_ids accordingly.")

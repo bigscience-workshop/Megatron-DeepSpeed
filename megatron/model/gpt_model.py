@@ -158,14 +158,6 @@ class GPTModel(MegatronModule):
         self.language_model.load_state_dict(state_dict, strict=strict)
 
 
-def fast_normalize(loss_mask: torch.Tensor):
-    """
-    Turn loss_mask from [0,0,0,1,1,0,0,1,0,0,1,1,1] > [0,0,0,0.5,0.5,0,0,1,0,0,0.3,0.3,0.3]
-    """
-    _, inverse_indices, counts = torch.unique_consecutive(loss_mask, return_inverse=True, return_counts=True)
-    counts = torch.gather(dim=0, index=inverse_indices, input=counts)
-    return loss_mask / counts
-
 def get_cross_entropy(is_prefix: bool):
     def CrossEntropy(output, labels):
         labels, loss_mask = labels[0], labels[1]
@@ -194,8 +186,6 @@ def get_cross_entropy(is_prefix: bool):
                 average_tokens_per_sample = sequence_length
             expected_number_of_tokens = average_tokens_per_sample * micro_batch_size
         elif args.norm_target_loss:
-            loss_mask = loss_mask.view(-1)
-            loss_mask = fast_normalize(loss_mask)
             expected_num_of_target_seqs = loss_mask.sum()
             loss = torch.sum(losses.view(-1) * loss_mask) / expected_num_of_target_seqs
             return loss
