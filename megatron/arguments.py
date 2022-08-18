@@ -665,6 +665,8 @@ def _add_checkpointing_args(parser):
                        help='Do not load optimizer when loading checkpoint.')
     group.add_argument('--no-load-rng', action='store_true', default=None,
                        help='Do not load rng state when loading checkpoint.')
+    group.add_argument('--reset-progress', action='store_true', default=None,
+                       help='Reset iteration to 0 & do not load args.')
     group.add_argument('--finetune', action='store_true',
                        help='Load model for finetuning. Do not load optimizer '
                        'or rng state from checkpoint and set iteration to 0. '
@@ -936,6 +938,7 @@ def _add_data_args(parser):
                        'This is mostly used for prefix_lm training')
     group.add_argument("--noise-density", type=float, default=None, help="Span corruption noise density")
     group.add_argument("--mean-noise-span-length", type=int, default=None, help="Span corruption mean noise span length")
+    group.add_argument("--prefixlm",  action='store_true', help="Whether to train a PrefixLM - To be used with finetune t0")
 
 
     return parser
