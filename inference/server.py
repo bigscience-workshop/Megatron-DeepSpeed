@@ -103,7 +103,7 @@ def generate(request: GenerateRequest) -> dict:
         }
 
         if (args.debug):
-            response["stack_trace"] = get_stack_trace(e_stack_trace),
+            response["stack_trace"] = get_stack_trace(e_stack_trace)
 
         query_id += 1
         raise HTTPException(500, response)
