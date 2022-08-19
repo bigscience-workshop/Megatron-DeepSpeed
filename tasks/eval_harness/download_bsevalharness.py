@@ -14,7 +14,7 @@ args = parser.parse_args()
 
 def main():
     task_list = ALL_TASKS if args.task_list == 'all' else args.task_list.split(',')
-    tasks.get_task_dict(task_list)
+    tasks.get_task_dict_promptsource(task_list)
 
 if __name__ == '__main__':
     main()

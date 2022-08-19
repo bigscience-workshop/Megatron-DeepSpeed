@@ -1,16 +1,16 @@
 #!/bin/bash
-#SBATCH --job-name=run_evalharness-tr11-176b-ml
+#SBATCH --job-name=run_evalharness-tr11b-2b5-ml
 #SBATCH --partition=gpu_p5
 #SBATCH --constraint=a100
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1          # crucial - only 1 task per dist per node!
-#SBATCH --cpus-per-task=64           # number of cores per tasks
+#SBATCH --cpus-per-task=8           # number of cores per tasks
 #SBATCH --hint=nomultithread         # we get physical cores not logical
-#SBATCH --gres=gpu:8                 # number of gpus
+#SBATCH --gres=gpu:1                 # number of gpus
 #SBATCH --time 20:00:00              # maximum execution time (HH:MM:SS)
 #SBATCH --output=%x-%j.out           # output file name
 #SBATCH --account=six@a100
-
+#SBATCH --reservation=hug
 
 set -x -e
 
@@ -19,11 +19,11 @@ source $six_ALL_CCFRWORK/start-py38-pt111
 echo "START TIME: $(date)"
 
 # a unique identifier for the current eval ideally correspnding to the modelname
-VARIANT="tr11-176b-ml"
+VARIANT="tr11b-1b3-ml-evalharness"
 
 
-CHECKPOINT_PATH=$six_ALL_CCFRSCRATCH/checkpoints/tr11-176B-ml/checkpoints/main/global_step50000
-MEGATRON_DEEPSPEED_REPO=/gpfsssd/worksf/projects/rech/six/commun/code/eval/Megatron-DeepSpeed
+CHECKPOINT_PATH=$six_ALL_CCFRSCRATCH/checkpoints/tr11b-1B3-ml/checkpoints/main/global_step340500
+MEGATRON_DEEPSPEED_REPO=$six_ALL_CCFRSCRATCH/commun/experiments/muennighoff/megdsbslmeval/Megatron-DeepSpeed
 export HF_DATASETS_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 
@@ -36,7 +36,7 @@ cd $MEGATRON_DEEPSPEED_REPO
 
 TOKENIZER_NAME_OR_PATH=bigscience-catalogue-data-dev/byte-level-bpe-tokenizer-no-norm-250k-whitespace-and-eos-regex-alpha-v3-dedup-lines-articles
 
-PP_SIZE=8
+PP_SIZE=1
 TP_SIZE=1
 SEQ_LEN=2048
 
@@ -68,7 +68,7 @@ cat <<EOT > $config_json
     "stage": $ZERO_STAGE
   },
   "bf16": {
-    "enabled": true
+    "enabled": false
   },
   "steps_per_print": 2000,
   "wall_clock_breakdown": false
@@ -86,20 +86,19 @@ CMD="./tasks/eval_harness/evaluate.py  \
     --micro-batch-size $EVAL_MICRO_BATCH_SIZE \
     --no-load-optim \
     --no-load-rng \
-    --bf16 \
+    --eval_fp32 \
     --inference \
     --seq-length $SEQ_LEN \
     --task_list arc_challenge,arc_easy,boolq,copa,headqa,hellaswag,lambada,logiqa,mathqa,mc_taco,mrpc,multirc,openbookqa,piqa,prost,pubmedqa,qnli,qqp,race,rte,sciq,sst,triviaqa,webqs,wic,winogrande,wnli,wsc \
     --deepspeed \
     --deepspeed_config ds_config.json \
-    --bootstrap_iters 2 \
     --intermed_results \
     --adaptive_seq_len \
-    --micro_bs_multiplier 4 \
+    --micro_bs_multiplier 8 \
     $MEGATRON_REQUIRED_ARGS \
     "
 
-GPUS_PER_NODE=8
+GPUS_PER_NODE=1
 NNODES=$SLURM_NNODES
 MASTER_ADDR=$(scontrol show hostnames $SLURM_JOB_NODELIST | head -n 1)
 MASTER_PORT=6000

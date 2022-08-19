@@ -59,6 +59,8 @@ now edit `run_evalharness-variant.slurm`
 
 Note that the eval code knows to pull the original training args from the checkpoint, so we don't need to pass any of those. And we just need to setup the evaluation args.
 
+Note that for the bigscience lm-eval-harness fork (https://github.com/bigscience-workshop/lm-evaluation-harness), the corresponding scripts are `evaluate_bsevalharness.py` & `run_bsevalharness_tr11-176b-ml.slurm`.
+
 1. Edit:
 
 ```
