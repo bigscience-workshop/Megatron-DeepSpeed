@@ -166,8 +166,6 @@ def get_cross_entropy(is_prefix: bool):
 
         losses = mpu.vocab_parallel_cross_entropy(output.contiguous().float(), labels)
 
-        loss_mask = loss_mask.view(-1)
-        
         if is_prefix:
             micro_batch_size, sequence_length = loss_mask.shape
             average_tokens_per_sample: torch.Tensor
@@ -194,6 +192,7 @@ def get_cross_entropy(is_prefix: bool):
         else:
             expected_number_of_tokens = loss_mask.sum()
 
+        loss_mask = loss_mask.view(-1)
         loss = torch.sum(losses.view(-1) * loss_mask) / expected_number_of_tokens
         return loss
     return CrossEntropy
