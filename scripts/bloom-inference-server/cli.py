@@ -1,5 +1,6 @@
 import argparse
 import json
+import sys
 
 import constants
 import utils
@@ -58,7 +59,15 @@ def main() -> None:
             model.shutdown()
 
         if (input("change generate_kwargs? [y/n] ") == "y"):
-            generate_kwargs = json.loads(input("Generate kwargs: "))
+            while (True):
+                try:
+                    generate_kwargs = json.loads(input("Generate kwargs: "))
+                    break
+                except Exception as e:
+                    e_type, e_message, _ = sys.exc_info()
+                    print("error =", e_type.__name__)
+                    print("message =", e_message)
+                    continue
 
         request = parse_generate_kwargs(input_text, generate_kwargs)
         response = model.generate(request)

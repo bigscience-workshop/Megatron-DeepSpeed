@@ -6,6 +6,7 @@ from .utils import (
     get_argument_parser,
     get_dummy_batch,
     get_num_tokens_to_generate,
+    get_stack_trace,
     get_str_dtype,
     print_rank_n,
     run_rank_n

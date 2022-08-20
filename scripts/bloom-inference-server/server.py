@@ -2,14 +2,13 @@ import argparse
 import logging
 import sys
 import time
-import traceback
 
 import constants
 import utils
 from ds_inference import DSInferenceGRPCServer
 from fastapi import FastAPI, HTTPException
 from hf_accelerate import HFAccelerateModel
-from utils import GenerateRequest, get_argument_parser, get_num_tokens_to_generate
+from utils import GenerateRequest, get_argument_parser, get_num_tokens_to_generate, get_stack_trace
 from uvicorn import run
 
 
@@ -58,18 +57,6 @@ elif (args.deployment_framework == constants.DS_INFERENCE):
 
 query_id = 0
 ####################################################################################
-
-
-def get_stack_trace(e_stack_trace):
-    trace_back = traceback.extract_tb(e_stack_trace)
-
-    # Format stacktrace
-    stack_trace = []
-    for trace in trace_back:
-        stack_trace.append("File : {}, Line : {}, Func.Name : {}, Message : {}".format(
-            trace[0], trace[1], trace[2], trace[3]))
-
-    return stack_trace
 
 
 @app.post("/generate/")

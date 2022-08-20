@@ -1,195 +1,84 @@
-# Inference scripts for BLOOM
+## Inference solutions for BLOOM 176B
+We support HuggingFace accelerate and DeepSpeed Inference for generation.
 
-## BLOOM Inference solutions
+Required packages:
+1. [DeepSpeed](https://github.com/microsoft/DeepSpeed)
+1. [DeepSpeed MII](https://github.com/microsoft/DeepSpeed-MII)
+1. [HuggingFace accelerate](https://github.com/huggingface/accelerate)
 
-Here are some stats on JeanZay's 8x80GB A100 node w/ 512GB of CPU memory:
+All the provided scripts are tested on 8 A100 80GB GPUs for BLOOM 176B. These scripts might not work for other models or a different number of GPUs.
+DS inference only supports fp16 for cli and server application. However, for benchmarking, it supports both fp16 and bf16. bf16 support will be added once DeepSpeed adds suitable CUDA kernels for these.
 
-All benchmarks are doing greedy generation of 100 token outputs:
+DS inference is deployed using the DeepSpeed MII library which requires the resharded checkpoints for 8 x Tensor Parallel. The HuggingFace checkpoints can be resharded and cached using the following command:
 ```
-Generate args {'min_length': 100, 'max_length': 100, 'do_sample': False}
+deepspeed --num_gpus 8 scripts/bloom-inference-server/cache_ds_checkpoints.py --model_name bigscience/bloom --dtype fp16 --save_mp_checkpoint_path <PATH TO DS CACHED MODEL>
 ```
-The inputs are just a few tokens.
+Note: Running the above script will consume ~350 GB of disk space and will take some time (~30 minutes), depending on both the speed of your GPUs and storage.
 
-Throughput in msecs:
-
-| project \ bs |      1 |     8 |    16 |    32 |    64 |  128 |
-| :----------- |  :---- | :---- | :---- | :---- | :---- | :--- |
-| accelerate   | 230.38 | 31.78 | 17.84 | 10.89 |  oom  | omm  |
-| ds-inference |  40.57 |  5.23 |       |       |  2.77 | 0.66 |
-| ds-zero      |    283 | 34.88 | oom   |  oom  |  oom  | oom  |
-
-
-Start to ready to generate in secs:
-
-| project \ bs |    1 |    8 |   16 |   32 |   64 |  128 |
-| :----------- | :--- | :--- | :--- | :--- | :--- | :--- |
-| accelerate   |  121 |  120 |  113 |  118 |      |      |
-| ds-inference |  662 |  673 |      |      |  685 |  654 |
-| ds-zero      |  462 |  463 |      |      |      |      |
-|              |      |      |      |      |      |      |
-
-
-DS-Inference load time (start to ready to generate) will become much faster soon. Once we stop relying on ds-zero to instantiate the model on gpu. The plan is to pre-shard the weights TP-wise for 8x and 16x gpus and load them directly on each gpu. Will probably be under 1min.
-
-
-## Deepspeed-Inference
-
-Tensor-Parallelism and efficient fused CUDA kernels:
-https://www.deepspeed.ai/tutorials/inference-tutorial/
-
-### Setup
-
+#### BLOOM inference via command-line
+This asks for generate_kwargs everytime.
+Example: generate_kwargs =
 ```
-git clone https://github.com/microsoft/DeepSpeed
-cd DeepSpeed
-pip install .
+{"min_length": 100, "max_new_tokens": 100, "do_sample": false}
 ```
 
-### Run
-
+1. using HF accelerate
 ```
-deepspeed --num_gpus 8 scripts/inference/bloom-ds-inference.py --name bigscience/bloom
-```
-
-Performance on a single node of 8x80GB A100 w/ 512GB CPU RAM (JeanZay) - just a batch of 1 (would be more efficient to run a larger batch)
-
-Adding `--benchmark` to activate the benchmarks
-
-
-BS=1
-```
-$ deepspeed --num_gpus 8 scripts/inference/bloom-ds-inference.py --name bigscience/bloom --batch_size 1 --benchmark 2>&1 | tee bloom-ds-inference_bs=1.txt
-[...]
-
+python scripts/bloom-inference-server/cli.py --model_name bigscience/bloom --dtype bf16 --deployment_framework hf_accelerate --generate_kwargs '{"min_length": 100, "max_new_tokens": 100, "do_sample": false}'
 ```
 
-While processing memory per process:
-
--  GPU: ~50GB
--  CPU: ~10GB
-
-
-BS=8
+2. using DS inference
 ```
-$ deepspeed --num_gpus 8 scripts/inference/bloom-ds-inference.py --name bigscience/bloom --batch_size 8 --benchmark 2>&1 | tee bloom-ds-inference_bs=8.txt
-[...]
-*** Performance stats:
-Throughput per token including tokenize: 5.23 msecs
-Start to ready to generate: 683.397 secs
-Tokenize and generate 800 (bs=8) tokens: 4.241 secs
-Start to finish: 687.638 secs
+python scripts/bloom-inference-server/cli.py --model_name bigscience/bloom --dtype fp16 --deployment_framework ds_inference --save_mp_checkpoint_path <PATH TO DS CACHED MODEL> --generate_kwargs '{"min_length": 100, "max_new_tokens": 100, "do_sample": false}'
 ```
 
-BS=64
-
+#### BLOOM server deployment
+1. using HF accelerate
 ```
-$ deepspeed --num_gpus 8 scripts/inference/bloom-ds-inference.py --name bigscience/bloom --batch_size 64 --benchmark 2>&1 | tee bloom-ds-inference_bs=64.txt
-
-
-
-
+python scripts/bloom-inference-server/server.py --model_name bigscience/bloom --dtype bf16 --deployment_framework hf_accelerate --host <HOST ADDRESS> --port <PORT> --allowed_max_new_tokens 100
 ```
 
-BS=128
-
+2. using DS inference
 ```
-$ deepspeed --num_gpus 8 scripts/inference/bloom-ds-inference.py --name bigscience/bloom --batch_size 128 --benchmark 2>&1 | tee bloom-ds-inference_bs=128.txt
-
-
-
-
+python scripts/bloom-inference-server/server.py --model_name bigscience/bloom --dtype fp16 --deployment_framework ds_inference --save_mp_checkpoint_path <PATH TO DS CACHED MODEL> --host <HOST ADDRESS> --port <PORT> --allowed_max_new_tokens 100
 ```
 
-## Deepspeed ZeRO-Inference
+We provide an example [script](examples/server_request.py) to query the BLOOM server is provided.
 
-https://www.deepspeed.ai/tutorials/zero/
-
-### Setup
-
+#### Benchmark system for BLOOM inference
+1. using HF accelerate
 ```
-pip install deepspeed
+python scripts/bloom-inference-server/benchmark.py --model_name bigscience/bloom --dtype bf16 --deployment_framework hf_accelerate --benchmark_cycles 5
 ```
 
-
-### Run
-
-Note that the script currently runs the same inputs on all GPUs, but you can run a different stream on each GPU, and get `n_gpu` times faster throughput. You can't do that with Deepspeed-Inference.
-
-
-BS=1
-
+2. using DS inference
 ```
-$ deepspeed --num_gpus 8 scripts/inference/bloom-ds-zero-inference.py --name bigscience/bloom --batch_size 1 --benchmark 2>&1 | tee bloom-ds-zero-inference_bs=1.txt
-[...]
-*** Performance stats:
-Throughput per token including tokenize: 282.93 msecs
-Start to ready to generate: 501.871 secs
-Tokenize and generate 800 (bs=1) tokens: 226.188 secs
-Start to finish: 728.060 secs
+deepspeed --num_gpus 8 scripts/bloom-inference-server/benchmark.py --model_name bigscience/bloom --dtype fp16 --deployment_framework ds_inference --save_mp_checkpoint_path <PATH TO DS CACHED MODEL> --benchmark_cycles 5
 ```
 
-
-BS=8
-
+3. using DS ZeRO
 ```
-$ deepspeed --num_gpus 8 scripts/inference/bloom-ds-zero-inference.py --name bigscience/bloom --batch_size 8 --benchmark 2>&1 | tee bloom-ds-zero-inference_bs=8.txt
-[...]
-
-*** Performance stats:
-Throughput per token including tokenize: 34.57 msecs
-Start to ready to generate: 482.132 secs
-Tokenize and generate 6400 (bs=8) tokens: 221.236 secs
-Start to finish: 703.368 secs
+deepspeed --num_gpus 8 scripts/bloom-inference-server/benchmark.py --model_name bigscience/bloom --dtype bf16 --deployment_framework ds_zero --benchmark_cycles 5
 ```
 
-BS=16 and higher OOMs
-
+Alternatively, the following shell script will benchmark different batch sizes for the model.
 ```
-$ deepspeed --num_gpus 8 scripts/inference/bloom-ds-zero-inference.py --name bigscience/bloom --batch_size 16 --benchmark 2>&1 | tee bloom-ds-zero-inference_bs=16.txt
-[...]
-OOM
+mkdir -p logs
 
-```
+for bs in {1,2,4,8,16,32,64,128}
+do
+    python scripts/bloom-inference-server/benchmark.py --model_name bigscience/bloom --dtype bf16 --deployment_framework hf_accelerate --benchmark_cycles 5 --batch_size $bs 2>&1 | tee logs/hf-$bs.log
 
+    deepspeed --num_gpus 8 scripts/bloom-inference-server/benchmark.py --model_name bigscience/bloom --dtype fp16 --deployment_framework ds_inference --save_mp_checkpoint_path <PATH TO DS CACHED MODEL> --benchmark_cycles 5 --batch_size $bs 2>&1 | tee logs/ds-$bs.log
 
-
-## HF Accelerate
-
-https://github.com/huggingface/accelerate
-
-### Setup
-
-```
-pip install transformers
+    deepspeed --num_gpus 8 scripts/bloom-inference-server/benchmark.py --model_name bigscience/bloom --dtype bf16 --deployment_framework ds_zero --benchmark_cycles 5 --batch_size $bs 2>&1 | tee logs/ds-zero-$bs.log
+done
 ```
 
-
-
-### Run
-
-
-
-
-BS=1
+The following will benchmark sequence length for batch size = 1 on DS inference.
 ```
-$ python scripts/inference/bloom-accelerate-inference.py --name bigscience/bloom --batch_size 1 --benchmark 2>&1 | tee bloom-ds-zero-inference_bs=1.txt
-[...]
-
-
-```
-
-BS=8
-```
-$ python scripts/inference/bloom-accelerate-inference.py --name bigscience/bloom --batch_size 8 --benchmark 2>&1 | tee bloom-ds-zero-inference_bs=8.txt
-[...]
-
-
-```
-
-BS=16
-```
-$ python scripts/inference/bloom-accelerate-inference.py --name bigscience/bloom --batch_size 16 --benchmark 2>&1 | tee bloom-ds-zero-inference_bs=16.txt
-[...]
-
-
+for sq in {1,10,50,100,200,300,400,500,600,700,800,900,1000,1500,2000,2500,3000,3500,4000,4500,5000}
+do
+    deepspeed --num_gpus 8 scripts/bloom-inference-server/benchmark.py --model_name bigscience/bloom --dtype fp16 --batch_size 1 --benchmark_cycles 5 --deployment_framework ds_inference --generate_kwargs '{"do_sample": false, "min_length": '$sq', "max_new_tokens": '$sq'}' 2>&1 | tee logs/ds_$sq.log
+done
 ```

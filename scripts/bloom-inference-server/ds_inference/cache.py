@@ -12,7 +12,8 @@ from .model import write_checkponts_json
 
 
 def cache_ds_checkpoints(args: argparse.Namespace) -> None:
-    print_rank_n("Loading model...")
+    if (args.local_rank == 0):
+        print_rank_n("Loading model...")
     world_size = int(os.getenv("WORLD_SIZE", "1"))
 
     # Load model

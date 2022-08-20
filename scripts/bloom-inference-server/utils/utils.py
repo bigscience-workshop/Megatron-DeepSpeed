@@ -2,12 +2,11 @@ import argparse
 import copy
 import json
 import math
+import traceback
 from typing import Any, List
 
 import torch
 import torch.distributed as dist
-
-from .requests import GenerateRequest
 
 
 dummy_input_sentences = [
@@ -114,3 +113,15 @@ def get_num_tokens_to_generate(max_new_tokens: int,
         return allowed_max_new_tokens
     else:
         return min(max_new_tokens, allowed_max_new_tokens)
+
+
+def get_stack_trace(e_stack_trace):
+    trace_back = traceback.extract_tb(e_stack_trace)
+
+    # Format stacktrace
+    stack_trace = []
+    for trace in trace_back:
+        stack_trace.append("File : {}, Line : {}, Func.Name : {}, Message : {}".format(
+            trace[0], trace[1], trace[2], trace[3]))
+
+    return stack_trace
