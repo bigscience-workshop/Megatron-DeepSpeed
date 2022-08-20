@@ -28,7 +28,6 @@ def get_args() -> argparse.Namespace:
     )
     group.add_argument("--save_mp_checkpoint_path", required=False,
                        type=str, help="MP checkpoints path for DS inference")
-    group.add_argument("--log_file", type=str, help="log data")
     group.add_argument("--host", type=str, required=True, help="host address")
     group.add_argument("--port", type=int, required=True, help="port number")
     group.add_argument("--workers", type=int, default=1,
@@ -40,6 +39,9 @@ def get_args() -> argparse.Namespace:
 
     args = utils.get_args(parser)
 
+    if (args.save_mp_checkpoint_path):
+        assert args.deployment_framework == constants.DS_INFERENCE, "save_mp_checkpoint_path only works with DS inference"
+
     return args
 
 
@@ -47,13 +49,6 @@ def get_args() -> argparse.Namespace:
 args = get_args()
 app = FastAPI()
 
-# Setup logging
-logging.basicConfig(
-    format="%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d : %(message)s",
-    datefmt="%m/%d/%Y %H:%M:%S",
-    level=logging.INFO,
-    filename=args.log_file
-)
 logger = logging.getLogger(__name__)
 
 if (args.deployment_framework == constants.HF_ACCELERATE):
