@@ -176,7 +176,6 @@ def main() -> None:
     if (args.deployment_framework == constants.HF_ACCELERATE):
         benchmark_end_to_end(args, HFAccelerateModel)
     elif (args.deployment_framework == constants.DS_INFERENCE):
-        deepspeed.init_distributed("nccl")
         benchmark_end_to_end(args, DSInferenceModel)
     elif (args.deployment_framework == constants.DS_ZERO):
         benchmark_end_to_end(args, DSZeROModel, zero_activated=True)

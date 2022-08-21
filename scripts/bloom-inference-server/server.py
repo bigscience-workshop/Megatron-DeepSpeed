@@ -54,6 +54,9 @@ if (args.deployment_framework == constants.HF_ACCELERATE):
     model = HFAccelerateModel(args)
 elif (args.deployment_framework == constants.DS_INFERENCE):
     model = DSInferenceGRPCServer(args)
+else:
+    raise ValueError(
+        f"Unknown deployment framework {args.deployment_framework}")
 
 query_id = 0
 ####################################################################################
