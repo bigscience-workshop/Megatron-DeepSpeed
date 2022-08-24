@@ -82,5 +82,8 @@ class DSInferenceGRPCServer(Model):
         )
 
     def shutdown(self) -> None:
-        mii.terminate(self.deployment_name)
-        exit()
+        # MII is buggy and sometimes spits out an error in terminate
+        try:
+            mii.terminate(self.deployment_name)
+        except Exception:
+            exit()

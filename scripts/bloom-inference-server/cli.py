@@ -53,27 +53,32 @@ def main() -> None:
         # fine but might need to run_rank_n for this
         # if running a deployment_framework with
         # multiple processes
-        input_text = input("Input text: ")
+        try:
+            input_text = input("Input text: ")
 
-        if (input_text == args.shutdown_command):
+            if (input_text == args.shutdown_command):
+                model.shutdown()
+
+            if (input("change generate_kwargs? [y/n] ") == "y"):
+                while (True):
+                    try:
+                        generate_kwargs = json.loads(input("Generate kwargs: "))
+                        break
+                    except KeyboardInterrupt:
+                        model.shutdown()
+                    except Exception as e:
+                        e_type, e_message, _ = sys.exc_info()
+                        print("error =", e_type.__name__)
+                        print("message =", e_message)
+                        continue
+
+            request = parse_generate_kwargs(input_text, generate_kwargs)
+            response = model.generate(request)
+
+            print_rank_n("Output text:", response.text)
+            print_rank_n("Generated tokens:", response.num_generated_tokens)
+        except KeyboardInterrupt:
             model.shutdown()
-
-        if (input("change generate_kwargs? [y/n] ") == "y"):
-            while (True):
-                try:
-                    generate_kwargs = json.loads(input("Generate kwargs: "))
-                    break
-                except Exception as e:
-                    e_type, e_message, _ = sys.exc_info()
-                    print("error =", e_type.__name__)
-                    print("message =", e_message)
-                    continue
-
-        request = parse_generate_kwargs(input_text, generate_kwargs)
-        response = model.generate(request)
-
-        print_rank_n("Output text:", response.text)
-        print_rank_n("Generated tokens:", response.num_generated_tokens)
 
 
 if (__name__ == "__main__"):

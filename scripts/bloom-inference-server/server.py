@@ -1,5 +1,6 @@
 import argparse
 import logging
+import os
 import sys
 import traceback
 
@@ -58,28 +59,6 @@ def get_args() -> argparse.Namespace:
     return args
 
 
-def get_exception_response(query_id: int):
-    e_type, e_message, e_stack_trace = sys.exc_info()
-    response = {
-        "error": str(e_type.__name__),
-        "message": str(e_message),
-        "query_id": query_id
-    }
-
-    if (args.debug):
-        trace_back = traceback.extract_tb(e_stack_trace)
-
-        # Format stacktrace
-        stack_trace = []
-        for trace in trace_back:
-            stack_trace.append("File : {}, Line : {}, Func.Name : {}, Message : {}".format(
-                trace[0], trace[1], trace[2], trace[3]))
-
-        response["stack_trace"] = stack_trace
-
-    return response
-
-
 ####################################################################################
 args = get_args()
 app = FastAPI()
@@ -98,6 +77,29 @@ query_ids = QueryID()
 ####################################################################################
 
 
+def get_exception_response(query_id: int, method: str):
+    e_type, e_message, e_stack_trace = sys.exc_info()
+    response = {
+        "error": str(e_type.__name__),
+        "message": str(e_message),
+        "query_id": query_id,
+        "method": method
+    }
+
+    if (args.debug):
+        trace_back = traceback.extract_tb(e_stack_trace)
+
+        # Format stacktrace
+        stack_trace = []
+        for trace in trace_back:
+            stack_trace.append("File : {}, Line : {}, Func.Name : {}, Message : {}".format(
+                trace[0], trace[1], trace[2], trace[3]))
+
+        response["stack_trace"] = stack_trace
+
+    return response
+
+
 @app.post("/generate/")
 def generate(request: GenerateRequest) -> GenerateResponse:
     try:
@@ -114,7 +116,8 @@ def generate(request: GenerateRequest) -> GenerateResponse:
 
         return response
     except Exception:
-        response = get_exception_response(query_ids.generate_query_id)
+        response = get_exception_response(
+            query_ids.generate_query_id, request.method)
         query_ids.generate_query_id += 1
         raise HTTPException(500, response)
 
@@ -133,7 +136,8 @@ def tokenize(request: TokenizeRequest) -> TokenizeResponse:
 
         return response
     except Exception:
-        response = get_exception_response(query_ids.tokenize_query_id)
+        response = get_exception_response(
+            query_ids.tokenize_query_id, request.method)
         query_ids.tokenize_query_id += 1
         raise HTTPException(500, response)
 
@@ -143,4 +147,7 @@ def query_id() -> QueryID:
     return query_ids
 
 
-run(app, host=args.host, port=args.port, workers=args.workers)
+try:
+    run(app, host=args.host, port=args.port, workers=args.workers)
+except KeyboardInterrupt:
+    model.shutdown()

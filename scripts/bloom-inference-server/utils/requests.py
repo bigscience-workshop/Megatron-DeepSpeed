@@ -3,8 +3,13 @@ from typing import Any, List
 from pydantic import BaseModel
 
 
+class BaseResponse(BaseModel):
+    query_id: int = None
+    total_time_taken: str = None
+
+
 class GenerateRequest(BaseModel):
-    text: List[str]
+    text: List[str] = None
     min_length: int = None
     do_sample: bool = None
     early_stopping: bool = None
@@ -30,25 +35,25 @@ class GenerateRequest(BaseModel):
     forced_eos_token_id: int = None
     exponential_decay_length_penalty: float = None
     remove_input_from_output: bool = False
+    method: str = "generate"
 
 
-class GenerateResponse(BaseModel):
+class GenerateResponse(BaseResponse):
     text: List[str] = None
     num_generated_tokens: List[int] = None
-    query_id: int = None
-    total_time_taken: str = None
+    method: str = "generate"
 
 
 class TokenizeRequest(BaseModel):
-    text: List[str]
+    text: List[str] = None
     padding: bool = False
+    method: str = "tokenize"
 
 
-class TokenizeResponse(BaseModel):
+class TokenizeResponse(BaseResponse):
     token_ids: List[List[int]] = None
     attention_mask: List[List[int]] = None
-    query_id: int = None
-    total_time_taken: str = None
+    method: str = "tokenize"
 
 
 def parse_bool(value: str) -> bool:
