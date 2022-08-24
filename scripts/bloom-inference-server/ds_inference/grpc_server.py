@@ -6,13 +6,7 @@ import torch
 from transformers import AutoTokenizer
 
 import mii
-from utils import (
-    GenerateRequest,
-    GenerateResponse,
-    Model,
-    get_filter_dict,
-    get_str_dtype
-)
+from utils import GenerateRequest, GenerateResponse, Model, get_filter_dict, get_str_dtype
 
 
 class DSInferenceGRPCServer(Model):

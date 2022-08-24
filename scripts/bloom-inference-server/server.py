@@ -110,7 +110,7 @@ def generate(request: GenerateRequest) -> GenerateResponse:
 
         response.query_id = query_ids.generate_query_id
         query_ids.generate_query_id += 1
-        response.total_time_taken = total_time_taken
+        response.total_time_taken = "{:.2f} secs".format(total_time_taken)
 
         return response
     except Exception:
@@ -128,7 +128,8 @@ def tokenize(request: TokenizeRequest) -> TokenizeResponse:
 
         response.query_id = query_ids.tokenize_query_id
         query_ids.tokenize_query_id += 1
-        response.total_time_taken = total_time_taken
+        response.total_time_taken = "{:.2f} msecs".format(
+            total_time_taken * 1000)
 
         return response
     except Exception:

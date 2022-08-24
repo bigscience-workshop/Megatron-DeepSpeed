@@ -36,7 +36,7 @@ class GenerateResponse(BaseModel):
     text: List[str] = None
     num_generated_tokens: List[int] = None
     query_id: int = None
-    total_time_taken: float = None
+    total_time_taken: str = None
 
 
 class TokenizeRequest(BaseModel):
@@ -48,7 +48,7 @@ class TokenizeResponse(BaseModel):
     token_ids: List[List[int]] = None
     attention_mask: List[List[int]] = None
     query_id: int = None
-    total_time_taken: float = None
+    total_time_taken: str = None
 
 
 def parse_bool(value: str) -> bool:
