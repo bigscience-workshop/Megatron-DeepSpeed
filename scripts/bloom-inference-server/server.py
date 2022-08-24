@@ -1,15 +1,29 @@
 import argparse
 import logging
 import sys
-import time
+import traceback
 
 import constants
 import utils
 from ds_inference import DSInferenceGRPCServer
 from fastapi import FastAPI, HTTPException
 from hf_accelerate import HFAccelerateModel
-from utils import GenerateRequest, get_argument_parser, get_num_tokens_to_generate, get_stack_trace
+from pydantic import BaseModel
+from utils import (
+    GenerateRequest,
+    GenerateResponse,
+    TokenizeRequest,
+    TokenizeResponse,
+    get_argument_parser,
+    get_num_tokens_to_generate,
+    run_and_log_time
+)
 from uvicorn import run
+
+
+class QueryID(BaseModel):
+    generate_query_id: int = 0
+    tokenize_query_id: int = 0
 
 
 def get_args() -> argparse.Namespace:
@@ -44,6 +58,28 @@ def get_args() -> argparse.Namespace:
     return args
 
 
+def get_exception_response(query_id: int):
+    e_type, e_message, e_stack_trace = sys.exc_info()
+    response = {
+        "error": str(e_type.__name__),
+        "message": str(e_message),
+        "query_id": query_id
+    }
+
+    if (args.debug):
+        trace_back = traceback.extract_tb(e_stack_trace)
+
+        # Format stacktrace
+        stack_trace = []
+        for trace in trace_back:
+            stack_trace.append("File : {}, Line : {}, Func.Name : {}, Message : {}".format(
+                trace[0], trace[1], trace[2], trace[3]))
+
+        response["stack_trace"] = stack_trace
+
+    return response
+
+
 ####################################################################################
 args = get_args()
 app = FastAPI()
@@ -58,40 +94,52 @@ else:
     raise ValueError(
         f"Unknown deployment framework {args.deployment_framework}")
 
-query_id = 0
+query_ids = QueryID()
 ####################################################################################
 
 
 @app.post("/generate/")
-def generate(request: GenerateRequest) -> dict:
-    # needs to be global since it is updated
-    global query_id
-
+def generate(request: GenerateRequest) -> GenerateResponse:
     try:
-        start_time = time.time()
-
         request.max_new_tokens = get_num_tokens_to_generate(
             request.max_new_tokens, args.allowed_max_new_tokens)
 
-        response = model.generate(request)
-        response.query_id = query_id
-        response.total_time_taken = time.time() - start_time
+        response, total_time_taken = run_and_log_time(
+            (model.generate, {"request": request})
+        )
 
-        query_id += 1
+        response.query_id = query_ids.generate_query_id
+        query_ids.generate_query_id += 1
+        response.total_time_taken = total_time_taken
+
         return response
     except Exception:
-        e_type, e_message, e_stack_trace = sys.exc_info()
-        response = {
-            "error": str(e_type.__name__),
-            "message": str(e_message),
-            "query_id": query_id
-        }
-
-        if (args.debug):
-            response["stack_trace"] = get_stack_trace(e_stack_trace)
-
-        query_id += 1
+        response = get_exception_response(query_ids.generate_query_id)
+        query_ids.generate_query_id += 1
         raise HTTPException(500, response)
+
+
+@app.post("/tokenize/")
+def tokenize(request: TokenizeRequest) -> TokenizeResponse:
+    try:
+        response, total_time_taken = run_and_log_time(
+            (model.tokenize, {"request": request})
+        )
+
+        response.query_id = query_ids.tokenize_query_id
+        query_ids.tokenize_query_id += 1
+        response.total_time_taken = total_time_taken
+
+        return response
+    except Exception:
+        response = get_exception_response(query_ids.tokenize_query_id)
+        query_ids.tokenize_query_id += 1
+        raise HTTPException(500, response)
+
+
+@app.get("/query_id/")
+def query_id() -> QueryID:
+    return query_ids
 
 
 run(app, host=args.host, port=args.port, workers=args.workers)

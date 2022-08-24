@@ -2,31 +2,27 @@ import argparse
 
 import torch
 
-from .requests import GenerateRequest, GenerateResponse
+from .requests import GenerateRequest, GenerateResponse, TokenizeRequest, TokenizeResponse
 
 
 class Model:
     def __init__(self, args: argparse.Namespace) -> None:
         self.tokenizer = None
+        self.pad = None
         self.model = None
         self.input_device = None
         raise NotImplementedError("This is a dummy class")
 
     def generate(self, request: GenerateRequest) -> GenerateResponse:
-        text = request.text
-
-        return_type = type(text)
-        if (return_type == str):
-            text = [text]
-
-        input_tokens = self.tokenizer(text, return_tensors="pt", padding=True)
+        input_tokens = self.tokenizer(
+            request.text, return_tensors="pt", padding=True)
 
         for t in input_tokens:
             if torch.is_tensor(input_tokens[t]):
                 input_tokens[t] = input_tokens[t].to(self.input_device)
 
         with torch.no_grad():
-            output_tokens = self.model.generate(
+            output = self.model.generate(
                 **input_tokens,
                 min_length=request.min_length,
                 do_sample=request.do_sample,
@@ -52,9 +48,10 @@ class Model:
                 forced_bos_token_id=request.forced_bos_token_id,
                 forced_eos_token_id=request.forced_eos_token_id,
                 exponential_decay_length_penalty=request.exponential_decay_length_penalty,
-                bad_words_ids=request.bad_words_ids,
-                force_words_ids=request.force_words_ids
+                return_dict_in_generate=True
             )
+
+        output_tokens = output.sequences
 
         input_token_lengths = [x.shape[0] for x in input_tokens.input_ids]
         output_token_lengths = [x.shape[0] for x in output_tokens]
@@ -68,13 +65,19 @@ class Model:
         output_text = self.tokenizer.batch_decode(
             output_tokens, skip_special_tokens=True)
 
-        if (return_type == str):
-            output_text = output_text[0]
-            generated_tokens = generated_tokens[0]
-
         return GenerateResponse(
             text=output_text,
             num_generated_tokens=generated_tokens
+        )
+
+    def tokenize(self, request: TokenizeRequest) -> TokenizeResponse:
+        output = self.tokenizer(
+            request.text,
+            padding=request.padding
+        )
+        return TokenizeResponse(
+            token_ids=output.input_ids,
+            attention_mask=output.attention_mask
         )
 
     def shutdown(self) -> None:

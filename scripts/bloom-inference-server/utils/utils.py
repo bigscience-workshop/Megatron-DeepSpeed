@@ -2,11 +2,13 @@ import argparse
 import copy
 import json
 import math
-import traceback
-from typing import Any, List
+import time
+from typing import Any, List, Tuple, Union
 
 import torch
 import torch.distributed as dist
+
+from pydantic import BaseModel
 
 
 dummy_input_sentences = [
@@ -19,15 +21,6 @@ dummy_input_sentences = [
     "In the far far distance from our galaxy,",
     "Peace is the only way"
 ]
-
-
-class Execute:
-    def __init__(self, func: callable, kwargs: dict) -> None:
-        self.func = func
-        self.kwargs = kwargs
-
-    def __call__(self) -> Any:
-        return self.func(**self.kwargs)
 
 
 def get_argument_parser() -> argparse.ArgumentParser:
@@ -115,13 +108,26 @@ def get_num_tokens_to_generate(max_new_tokens: int,
         return min(max_new_tokens, allowed_max_new_tokens)
 
 
-def get_stack_trace(e_stack_trace):
-    trace_back = traceback.extract_tb(e_stack_trace)
+def run_and_log_time(execs: Union[List[Tuple[callable, dict]],
+                                  Tuple[callable, dict]]) -> Tuple[Union[List[Any], Any], float]:
+    start_time = time.time()
 
-    # Format stacktrace
-    stack_trace = []
-    for trace in trace_back:
-        stack_trace.append("File : {}, Line : {}, Func.Name : {}, Message : {}".format(
-            trace[0], trace[1], trace[2], trace[3]))
+    if (type(execs) == list):
+        results = []
+        for f, k in execs:
+            results.append(f(**k))
+    else:
+        results = execs[0](**execs[1])
 
-    return stack_trace
+    time_elapsed = time.time() - start_time
+    return results, time_elapsed
+
+
+def pad_ids(arrays, padding, max_length=-1):
+    if (max_length < 0):
+        max_length = max(list(map(len, arrays)))
+
+    arrays = [[padding] * (max_length - len(array)) +
+              array for array in arrays]
+
+    return arrays

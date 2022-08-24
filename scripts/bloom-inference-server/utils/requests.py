@@ -1,10 +1,10 @@
-from typing import Any, List, Union
+from typing import Any, List
 
 from pydantic import BaseModel
 
 
 class GenerateRequest(BaseModel):
-    text: Union[List[str], str]
+    text: List[str]
     min_length: int = None
     do_sample: bool = None
     early_stopping: bool = None
@@ -29,14 +29,24 @@ class GenerateRequest(BaseModel):
     forced_bos_token_id: int = None
     forced_eos_token_id: int = None
     exponential_decay_length_penalty: float = None
-    bad_words_ids: List[int] = None
-    force_words_ids: Union[List[int], List[List[int]]] = None
     remove_input_from_output: bool = False
 
 
 class GenerateResponse(BaseModel):
-    text: Union[List[str], str] = None
-    num_generated_tokens: Union[List[int], int] = None
+    text: List[str] = None
+    num_generated_tokens: List[int] = None
+    query_id: int = None
+    total_time_taken: float = None
+
+
+class TokenizeRequest(BaseModel):
+    text: List[str]
+    padding: bool = False
+
+
+class TokenizeResponse(BaseModel):
+    token_ids: List[List[int]] = None
+    attention_mask: List[List[int]] = None
     query_id: int = None
     total_time_taken: float = None
 
@@ -65,7 +75,7 @@ def parse_field(kwargs: dict,
         return default_value
 
 
-def parse_generate_kwargs(text: Union[List[str], str], kwargs: dict) -> GenerateRequest:
+def parse_generate_kwargs(text: List[str], kwargs: dict) -> GenerateRequest:
     return GenerateRequest(
         text=text,
         min_length=parse_field(kwargs, "min_length", int),

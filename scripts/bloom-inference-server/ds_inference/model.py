@@ -16,10 +16,13 @@ from utils import Model, print_rank_n, run_rank_n
 
 class DSInferenceModel(Model):
     def __init__(self, args: Namespace) -> None:
-        print_rank_n("Loading model...")
+        if (args.local_rank == 0):
+            # print_rank_n won't work here since deepspeed is not initialized yet
+            print_rank_n("Loading model...")
         world_size = int(os.getenv("WORLD_SIZE", "1"))
 
         self.tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+        self.pad = self.tokenizer.pad_token_id
 
         # Load model
         with deepspeed.OnDevice(dtype=args.dtype, device="meta"):

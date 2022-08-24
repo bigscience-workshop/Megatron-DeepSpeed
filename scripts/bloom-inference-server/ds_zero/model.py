@@ -50,6 +50,7 @@ class DSZeROModel(Model):
         dschf = HfDeepSpeedConfig(ds_config)
 
         self.tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+        self.pad = self.tokenizer.pad_token_id
 
         self.model = AutoModelForCausalLM.from_pretrained(
             args.model_name, torch_dtype=args.dtype)

@@ -6,7 +6,13 @@ import torch
 from transformers import AutoTokenizer
 
 import mii
-from utils import GenerateRequest, GenerateResponse, Model, get_filter_dict, get_str_dtype
+from utils import (
+    GenerateRequest,
+    GenerateResponse,
+    Model,
+    get_filter_dict,
+    get_str_dtype
+)
 
 
 class DSInferenceGRPCServer(Model):
@@ -40,6 +46,7 @@ class DSInferenceGRPCServer(Model):
             raise NotImplementedError("This is not yet supported")
 
         self.tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+        self.pad = self.tokenizer.pad_token_id
         self.model = mii.mii_query_handle(self.deployment_name)
 
     def generate(self, request: GenerateRequest) -> GenerateResponse:

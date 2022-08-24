@@ -11,6 +11,7 @@ class HFAccelerateModel(Model):
         print_rank_n("Loading model...")
 
         self.tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+        self.pad = self.tokenizer.pad_token_id
 
         self.model = AutoModelForCausalLM.from_pretrained(
             args.model_name,

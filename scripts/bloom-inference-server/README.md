@@ -1,10 +1,23 @@
 ## Inference solutions for BLOOM 176B
 We support HuggingFace accelerate and DeepSpeed Inference for generation.
 
-Required packages:
-1. [DeepSpeed](https://github.com/microsoft/DeepSpeed)
-1. [DeepSpeed MII](https://github.com/microsoft/DeepSpeed-MII)
-1. [HuggingFace accelerate](https://github.com/huggingface/accelerate)
+Install required packages:
+
+```shell
+pip install fastapi uvicorn accelerate huggingface_hub>=0.9.0
+```
+To install [DeepSpeed](https://github.com/microsoft/DeepSpeed):
+```shell
+git clone https://github.com/microsoft/DeepSpeed
+cd DeepSpeed
+CFLAGS="-I$CONDA_PREFIX/include/" LDFLAGS="-L$CONDA_PREFIX/lib/" TORCH_CUDA_ARCH_LIST="7.0" DS_BUILD_CPU_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 pip install -e . --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
+```
+To install [DeepSpeed-MII](https://github.com/microsoft/DeepSpeed-MII):
+```shell
+git clone https://github.com/microsoft/DeepSpeed-MII
+cd DeepSpeed-MII
+pip install .
+```
 
 All the provided scripts are tested on 8 A100 80GB GPUs for BLOOM 176B. These scripts might not work for other models or a different number of GPUs.
 DS inference only supports fp16 for cli and server application. However, for benchmarking, it supports both fp16 and bf16. bf16 support will be added once DeepSpeed adds suitable CUDA kernels for these.
@@ -50,7 +63,10 @@ python scripts/bloom-inference-server/server.py --model_name bigscience/bloom --
 python scripts/bloom-inference-server/server.py --model_name bigscience/bloom --dtype fp16 --deployment_framework ds_inference --save_mp_checkpoint_path <PATH TO DS CACHED MODEL> --host <HOST ADDRESS> --port <PORT> --allowed_max_new_tokens 100
 ```
 
-We provide an example [script](examples/server_request.py) to query the BLOOM server is provided.
+We provide an example [script](examples/server_request.py) to query the BLOOM server is provided. To run this script:
+```shell
+python scripts/bloom-inference-server/examples/server_request.py --host <HOST ADDRESS> --port <PORT>
+```
 
 #### Benchmark system for BLOOM inference
 1. using HF accelerate

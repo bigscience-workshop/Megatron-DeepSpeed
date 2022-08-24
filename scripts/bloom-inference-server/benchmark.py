@@ -1,10 +1,7 @@
 import argparse
 import gc
 import os
-import time
-from typing import Any, List, Tuple, Union
 
-import deepspeed
 import torch
 
 import constants
@@ -13,31 +10,14 @@ from ds_inference import DSInferenceModel
 from ds_zero import DSZeROModel
 from hf_accelerate import HFAccelerateModel
 from utils import (
-    Execute,
     GenerateRequest,
     Model,
     get_argument_parser,
     get_dummy_batch,
     parse_generate_kwargs,
-    print_rank_n
+    print_rank_n,
+    run_and_log_time
 )
-
-
-def run_and_log_time(execs: Union[List[Execute], Execute]) -> Tuple[Union[List[Any], Any], float]:
-    """
-    runs a list of Execute objects and returns a list of outputs and the time taken
-    """
-    start_time = time.time()
-
-    if (type(execs) == list):
-        results = []
-        for e in execs:
-            results.append(e())
-    else:
-        results = execs()
-
-    time_elapsed = time.time() - start_time
-    return results, time_elapsed
 
 
 def benchmark_generation(model: Model,
@@ -73,7 +53,7 @@ def benchmark_end_to_end(args: argparse.Namespace,
                          model_class: Model,
                          zero_activated: bool = False) -> None:
     model, initialization_time = run_and_log_time(
-        Execute(model_class, {"args": args})
+        (model_class, {"args": args})
     )
 
     request = parse_generate_kwargs(
@@ -103,7 +83,7 @@ def benchmark_end_to_end(args: argparse.Namespace,
 
         # benchmark
         total_new_tokens_generated, benchmark_time = run_and_log_time(
-            Execute(
+            (
                 benchmark_generation,
                 {
                     "model": model,
