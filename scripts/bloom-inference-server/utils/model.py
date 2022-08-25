@@ -3,6 +3,7 @@ import argparse
 import torch
 
 from .requests import GenerateRequest, GenerateResponse, TokenizeRequest, TokenizeResponse
+from .utils import print_rank_n
 
 
 class Model:
@@ -81,4 +82,5 @@ class Model:
         )
 
     def shutdown(self) -> None:
+        print_rank_n("shutting down")
         exit()

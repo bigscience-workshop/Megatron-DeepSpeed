@@ -6,7 +6,7 @@ import torch
 from transformers import AutoTokenizer
 
 import mii
-from utils import GenerateRequest, GenerateResponse, Model, get_filter_dict, get_str_dtype
+from utils import GenerateRequest, GenerateResponse, Model, get_filter_dict, get_str_dtype, print_rank_n
 
 
 class DSInferenceGRPCServer(Model):
@@ -82,6 +82,7 @@ class DSInferenceGRPCServer(Model):
         )
 
     def shutdown(self) -> None:
+        print_rank_n("shutting down")
         # MII is buggy and sometimes spits out an error in terminate
         try:
             mii.terminate(self.deployment_name)

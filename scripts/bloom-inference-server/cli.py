@@ -62,7 +62,8 @@ def main() -> None:
             if (input("change generate_kwargs? [y/n] ") == "y"):
                 while (True):
                     try:
-                        generate_kwargs = json.loads(input("Generate kwargs: "))
+                        generate_kwargs = json.loads(
+                            input("Generate kwargs: "))
                         break
                     except KeyboardInterrupt:
                         model.shutdown()
@@ -72,11 +73,11 @@ def main() -> None:
                         print("message =", e_message)
                         continue
 
-            request = parse_generate_kwargs(input_text, generate_kwargs)
+            request = parse_generate_kwargs([input_text], generate_kwargs)
             response = model.generate(request)
 
-            print_rank_n("Output text:", response.text)
-            print_rank_n("Generated tokens:", response.num_generated_tokens)
+            print_rank_n("Output text:", response.text[0])
+            print_rank_n("Generated tokens:", response.num_generated_tokens[0])
         except KeyboardInterrupt:
             model.shutdown()
 
