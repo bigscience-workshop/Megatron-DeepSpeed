@@ -1,3 +1,4 @@
+from .constants import DS_INFERENCE, DS_ZERO, HF_ACCELERATE
 from .model import Model
 from .requests import (
     GenerateRequest,

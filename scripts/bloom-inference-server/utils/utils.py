@@ -10,6 +10,13 @@ import torch.distributed as dist
 
 from pydantic import BaseModel
 
+from .constants import (
+    BIGSCIENCE_BLOOM,
+    DS_INFERENCE_BLOOM_FP16,
+    DS_INFERENCE_BLOOM_INT8,
+    FRAMEWORK_MODEL_DTYPE_ALLOWED,
+)
+
 
 dummy_input_sentences = [
     "DeepSpeed is a machine learning framework",
@@ -27,10 +34,19 @@ def get_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
 
     group = parser.add_argument_group(title="model")
-    group.add_argument("--model_name", type=str,
-                       required=True, help="model to use")
+    group.add_argument(
+        "--model_name",
+        type=str,
+        required=True,
+        choices=[
+            BIGSCIENCE_BLOOM,
+            DS_INFERENCE_BLOOM_FP16,
+            DS_INFERENCE_BLOOM_INT8
+        ],
+        help="model to use"
+    )
     group.add_argument("--dtype", type=str, required=True,
-                       choices=["bf16", "fp16"], help="dtype for model")
+                       choices=["bf16", "fp16", "int8"], help="dtype for model")
     group.add_argument(
         "--generate_kwargs",
         type=str,
@@ -43,8 +59,17 @@ def get_argument_parser() -> argparse.ArgumentParser:
 
 def get_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
     args = parser.parse_args()
+
+    assert is_framework_model_dtype_allowed(
+        args.deployment_framework,
+        args.model_name,
+        args.dtype
+    ), "unsupported deployment_framework, model_name and dtype"
+
     args.dtype = get_torch_dtype(args.dtype)
     args.generate_kwargs = json.loads(args.generate_kwargs)
+    args.use_pre_sharded_checkpoints = args.model_name in [
+        DS_INFERENCE_BLOOM_FP16, DS_INFERENCE_BLOOM_INT8]
     return args
 
 
@@ -75,11 +100,22 @@ def print_rank_n(*values, rank: int = 0) -> None:
         print(*values)
 
 
+def get_dtype_from_model_name(model_name: str) -> str:
+    if (model_name == BIGSCIENCE_BLOOM):
+        return "bf16"
+    elif (model_name == DS_INFERENCE_BLOOM_FP16):
+        return "fp16"
+    elif (model_name == DS_INFERENCE_BLOOM_INT8):
+        return "int8"
+
+
 def get_torch_dtype(dtype_str: str) -> torch.dtype:
     if (dtype_str == "bf16"):
         return torch.bfloat16
     elif (dtype_str == "fp16"):
         return torch.float16
+    elif (dtype_str == "int8"):
+        return torch.int8
 
 
 def get_str_dtype(dtype_str: str) -> torch.dtype:
@@ -87,6 +123,8 @@ def get_str_dtype(dtype_str: str) -> torch.dtype:
         return "bf16"
     elif (dtype_str == torch.float16):
         return "fp16"
+    elif (dtype_str == torch.int8):
+        return "int8"
 
 
 def get_dummy_batch(batch_size: int, input_sentences: List[str] = None) -> List[str]:
@@ -131,3 +169,11 @@ def pad_ids(arrays, padding, max_length=-1):
               array for array in arrays]
 
     return arrays
+
+
+def is_framework_model_dtype_allowed(deployment_framework: str, model_name: str, dtype: str) -> bool:
+    if (deployment_framework in FRAMEWORK_MODEL_DTYPE_ALLOWED):
+        if (model_name in FRAMEWORK_MODEL_DTYPE_ALLOWED[deployment_framework]):
+            if (dtype in FRAMEWORK_MODEL_DTYPE_ALLOWED[deployment_framework][model_name]):
+                return True
+    return False

@@ -2,11 +2,10 @@ import argparse
 import json
 import sys
 
-import constants
 import utils
 from ds_inference import DSInferenceGRPCServer
 from hf_accelerate import HFAccelerateModel
-from utils import get_argument_parser, parse_generate_kwargs, print_rank_n
+from utils import DS_INFERENCE, HF_ACCELERATE, get_argument_parser, parse_generate_kwargs, print_rank_n
 
 
 def get_args() -> argparse.Namespace:
@@ -17,20 +16,15 @@ def get_args() -> argparse.Namespace:
         "--deployment_framework",
         type=str,
         choices=[
-            constants.HF_ACCELERATE,
-            constants.DS_INFERENCE
+            HF_ACCELERATE,
+            DS_INFERENCE
         ],
-        default=constants.HF_ACCELERATE
+        default=HF_ACCELERATE
     )
-    group.add_argument("--save_mp_checkpoint_path", required=False,
-                       type=str, help="MP checkpoints path for DS inference")
     group.add_argument("--shutdown_command", required=False,
                        type=str, default="__shutdown__", help="This string will exit the script")
 
     args = utils.get_args(parser)
-
-    if (args.save_mp_checkpoint_path):
-        assert args.deployment_framework == constants.DS_INFERENCE, "save_mp_checkpoint_path only works with DS inference"
 
     return args
 
@@ -38,9 +32,9 @@ def get_args() -> argparse.Namespace:
 def main() -> None:
     args = get_args()
 
-    if (args.deployment_framework == constants.HF_ACCELERATE):
+    if (args.deployment_framework == HF_ACCELERATE):
         model = HFAccelerateModel(args)
-    elif (args.deployment_framework == constants.DS_INFERENCE):
+    elif (args.deployment_framework == DS_INFERENCE):
         model = DSInferenceGRPCServer(args)
     else:
         raise ValueError(

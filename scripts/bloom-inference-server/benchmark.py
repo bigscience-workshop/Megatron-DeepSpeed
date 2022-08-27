@@ -4,12 +4,14 @@ import os
 
 import torch
 
-import constants
 import utils
 from ds_inference import DSInferenceModel
 from ds_zero import DSZeROModel
 from hf_accelerate import HFAccelerateModel
 from utils import (
+    DS_INFERENCE,
+    DS_ZERO,
+    HF_ACCELERATE,
     GenerateRequest,
     Model,
     get_argument_parser,
@@ -61,7 +63,7 @@ def benchmark_end_to_end(args: argparse.Namespace,
         args.generate_kwargs
     )
 
-    print_rank_n(f"generate_kwargs = {request}")
+    print_rank_n(f"generate_kwargs = {args.generate_kwargs}")
     print_rank_n(f"batch_size = {args.batch_size}")
 
     # warmup is a must if measuring speed as it's when all the optimizations are performed
@@ -117,35 +119,30 @@ def get_args() -> argparse.Namespace:
         "--deployment_framework",
         type=str,
         choices=[
-            constants.HF_ACCELERATE,
-            constants.DS_INFERENCE,
-            constants.DS_ZERO
+            HF_ACCELERATE,
+            DS_INFERENCE,
+            DS_ZERO
         ],
-        default=constants.HF_ACCELERATE
+        default=HF_ACCELERATE
     )
     group.add_argument("--benchmark_cycles", type=int,
                        default=0, help="additionally run benchmark")
     group.add_argument("--local_rank", required=False,
                        type=int, help="used by dist launchers")
     group.add_argument("--batch_size", default=1, type=int, help="batch size")
-    group.add_argument("--save_mp_checkpoint_path", required=False,
-                       type=str, help="MP checkpoints path for DS inference")
     group.add_argument("--cpu_offload", action="store_true",
                        help="whether to activate CPU offload for DS ZeRO")
 
     args = utils.get_args(parser)
 
     launched_with_deepspeed = args.deployment_framework in [
-        constants.DS_INFERENCE, constants.DS_ZERO]
+        DS_INFERENCE, DS_ZERO]
 
     if (not launched_with_deepspeed):
         assert args.local_rank == None, "local_rank must be None if not launched with DeepSpeed"
 
-    if (args.save_mp_checkpoint_path):
-        assert args.deployment_framework == constants.DS_INFERENCE, "save_mp_checkpoint_path only works with DS inference"
-
     if (args.cpu_offload):
-        assert args.deployment_framework == constants.DS_ZERO, "cpu_offload only works with DS_ZeRO"
+        assert args.deployment_framework == DS_ZERO, "cpu_offload only works with DS_ZeRO"
 
     return args
 
@@ -153,11 +150,11 @@ def get_args() -> argparse.Namespace:
 def main() -> None:
     args = get_args()
 
-    if (args.deployment_framework == constants.HF_ACCELERATE):
+    if (args.deployment_framework == HF_ACCELERATE):
         benchmark_end_to_end(args, HFAccelerateModel)
-    elif (args.deployment_framework == constants.DS_INFERENCE):
+    elif (args.deployment_framework == DS_INFERENCE):
         benchmark_end_to_end(args, DSInferenceModel)
-    elif (args.deployment_framework == constants.DS_ZERO):
+    elif (args.deployment_framework == DS_ZERO):
         benchmark_end_to_end(args, DSZeROModel, zero_activated=True)
     else:
         raise ValueError(

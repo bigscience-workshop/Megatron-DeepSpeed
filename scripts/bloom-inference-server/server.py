@@ -1,16 +1,17 @@
 import argparse
-import logging
-import os
 import sys
 import traceback
 
-import constants
 import utils
 from ds_inference import DSInferenceGRPCServer
 from fastapi import FastAPI, HTTPException
 from hf_accelerate import HFAccelerateModel
 from pydantic import BaseModel
 from utils import (
+    DS_INFERENCE,
+    HF_ACCELERATE,
+    ForwardRequest,
+    ForwardResponse,
     GenerateRequest,
     GenerateResponse,
     TokenizeRequest,
@@ -35,13 +36,11 @@ def get_args() -> argparse.Namespace:
         "--deployment_framework",
         type=str,
         choices=[
-            constants.HF_ACCELERATE,
-            constants.DS_INFERENCE,
+            HF_ACCELERATE,
+            DS_INFERENCE,
         ],
-        default=constants.HF_ACCELERATE
+        default=HF_ACCELERATE
     )
-    group.add_argument("--save_mp_checkpoint_path", required=False,
-                       type=str, help="MP checkpoints path for DS inference")
     group.add_argument("--host", type=str, required=True, help="host address")
     group.add_argument("--port", type=int, required=True, help="port number")
     group.add_argument("--workers", type=int, default=1,
@@ -53,9 +52,6 @@ def get_args() -> argparse.Namespace:
 
     args = utils.get_args(parser)
 
-    if (args.save_mp_checkpoint_path):
-        assert args.deployment_framework == constants.DS_INFERENCE, "save_mp_checkpoint_path only works with DS inference"
-
     return args
 
 
@@ -63,11 +59,9 @@ def get_args() -> argparse.Namespace:
 args = get_args()
 app = FastAPI()
 
-logger = logging.getLogger(__name__)
-
-if (args.deployment_framework == constants.HF_ACCELERATE):
+if (args.deployment_framework == HF_ACCELERATE):
     model = HFAccelerateModel(args)
-elif (args.deployment_framework == constants.DS_INFERENCE):
+elif (args.deployment_framework == DS_INFERENCE):
     model = DSInferenceGRPCServer(args)
 else:
     raise ValueError(
