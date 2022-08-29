@@ -1,5 +1,6 @@
-from pickle import TRUE
-
+BENCHMARK = "benchmark"
+CLI = "cli"
+SERVER = "server"
 
 HF_ACCELERATE = "hf_accelerate"
 DS_INFERENCE = "ds_inference"
@@ -13,28 +14,63 @@ BF16 = "bf16"
 FP16 = "fp16"
 INT8 = "int8"
 
-FRAMEWORK_MODEL_DTYPE_ALLOWED = {
-    HF_ACCELERATE: {
-        BIGSCIENCE_BLOOM: {
-            BF16,
-            FP16
+
+SCRIPT_FRAMEWORK_MODEL_DTYPE_ALLOWED = {
+    BENCHMARK: {
+        HF_ACCELERATE: {
+            BIGSCIENCE_BLOOM: {
+                BF16,
+                FP16
+            }
+        },
+        DS_INFERENCE: {
+            BIGSCIENCE_BLOOM: {
+                FP16
+            },
+            DS_INFERENCE_BLOOM_FP16: {
+                FP16
+            },
+            DS_INFERENCE_BLOOM_INT8: {
+                INT8
+            }
+        },
+        DS_ZERO: {
+            BIGSCIENCE_BLOOM: {
+                BF16,
+                FP16
+            }
         }
     },
-    DS_INFERENCE: {
-        BIGSCIENCE_BLOOM: {
-            FP16
+    CLI: {
+        HF_ACCELERATE: {
+            BIGSCIENCE_BLOOM: {
+                BF16,
+                FP16
+            }
         },
-        DS_INFERENCE_BLOOM_FP16: {
-            FP16
-        },
-        DS_INFERENCE_BLOOM_INT8: {
-            INT8
+        DS_INFERENCE: {
+            DS_INFERENCE_BLOOM_FP16: {
+                FP16
+            },
+            DS_INFERENCE_BLOOM_INT8: {
+                INT8
+            }
         }
     },
-    DS_ZERO: {
-        BIGSCIENCE_BLOOM: {
-            BF16,
-            FP16
+    SERVER: {
+        HF_ACCELERATE: {
+            BIGSCIENCE_BLOOM: {
+                BF16,
+                FP16
+            }
+        },
+        DS_INFERENCE: {
+            DS_INFERENCE_BLOOM_FP16: {
+                FP16
+            },
+            DS_INFERENCE_BLOOM_INT8: {
+                INT8
+            }
         }
     }
 }

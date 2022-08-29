@@ -10,8 +10,7 @@ from pydantic import BaseModel
 from utils import (
     DS_INFERENCE,
     HF_ACCELERATE,
-    ForwardRequest,
-    ForwardResponse,
+    SERVER,
     GenerateRequest,
     GenerateResponse,
     TokenizeRequest,
@@ -32,15 +31,6 @@ def get_args() -> argparse.Namespace:
     parser = get_argument_parser()
 
     group = parser.add_argument_group(title="launch config")
-    group.add_argument(
-        "--deployment_framework",
-        type=str,
-        choices=[
-            HF_ACCELERATE,
-            DS_INFERENCE,
-        ],
-        default=HF_ACCELERATE
-    )
     group.add_argument("--host", type=str, required=True, help="host address")
     group.add_argument("--port", type=int, required=True, help="port number")
     group.add_argument("--workers", type=int, default=1,
@@ -50,7 +40,7 @@ def get_args() -> argparse.Namespace:
     group.add_argument("--debug", action="store_true",
                        help="launch in debug mode")
 
-    args = utils.get_args(parser)
+    args = utils.get_args(parser, SERVER)
 
     return args
 

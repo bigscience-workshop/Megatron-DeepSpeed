@@ -6,7 +6,7 @@ import torch
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 from transformers.deepspeed import HfDeepSpeedConfig
 
-from utils import Model
+from utils import Model, get_downloaded_model_path
 
 
 class DSZeROModel(Model):
@@ -14,7 +14,9 @@ class DSZeROModel(Model):
         if (args.local_rank == 0):
             print("Loading model...")
 
-        config = AutoConfig.from_pretrained(args.model_name)
+        downloaded_model_path = get_downloaded_model_path(args.model_name)
+
+        config = AutoConfig.from_pretrained(downloaded_model_path)
 
         world_size = int(os.getenv('WORLD_SIZE', '1'))
         train_batch_size = 1 * world_size
@@ -49,11 +51,11 @@ class DSZeROModel(Model):
         # this tells from_pretrained to instantiate directly on gpus
         dschf = HfDeepSpeedConfig(ds_config)
 
-        self.tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(downloaded_model_path)
         self.pad = self.tokenizer.pad_token_id
 
         self.model = AutoModelForCausalLM.from_pretrained(
-            args.model_name, torch_dtype=args.dtype)
+            downloaded_model_path, torch_dtype=args.dtype)
         self.model = self.model.eval()
         self.model = deepspeed.initialize(
             model=self.model, config_params=ds_config)[0]

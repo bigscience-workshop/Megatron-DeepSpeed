@@ -9,6 +9,7 @@ from ds_inference import DSInferenceModel
 from ds_zero import DSZeROModel
 from hf_accelerate import HFAccelerateModel
 from utils import (
+    BENCHMARK,
     DS_INFERENCE,
     DS_ZERO,
     HF_ACCELERATE,
@@ -115,16 +116,6 @@ def get_args() -> argparse.Namespace:
     parser = get_argument_parser()
 
     group = parser.add_argument_group(title="launch config")
-    group.add_argument(
-        "--deployment_framework",
-        type=str,
-        choices=[
-            HF_ACCELERATE,
-            DS_INFERENCE,
-            DS_ZERO
-        ],
-        default=HF_ACCELERATE
-    )
     group.add_argument("--benchmark_cycles", type=int,
                        default=0, help="additionally run benchmark")
     group.add_argument("--local_rank", required=False,
@@ -133,7 +124,7 @@ def get_args() -> argparse.Namespace:
     group.add_argument("--cpu_offload", action="store_true",
                        help="whether to activate CPU offload for DS ZeRO")
 
-    args = utils.get_args(parser)
+    args = utils.get_args(parser, BENCHMARK)
 
     launched_with_deepspeed = args.deployment_framework in [
         DS_INFERENCE, DS_ZERO]

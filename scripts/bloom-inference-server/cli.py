@@ -5,26 +5,17 @@ import sys
 import utils
 from ds_inference import DSInferenceGRPCServer
 from hf_accelerate import HFAccelerateModel
-from utils import DS_INFERENCE, HF_ACCELERATE, get_argument_parser, parse_generate_kwargs, print_rank_n
+from utils import CLI, DS_INFERENCE, HF_ACCELERATE, get_argument_parser, parse_generate_kwargs, print_rank_n
 
 
 def get_args() -> argparse.Namespace:
     parser = get_argument_parser()
 
     group = parser.add_argument_group(title="launch config")
-    group.add_argument(
-        "--deployment_framework",
-        type=str,
-        choices=[
-            HF_ACCELERATE,
-            DS_INFERENCE
-        ],
-        default=HF_ACCELERATE
-    )
     group.add_argument("--shutdown_command", required=False,
                        type=str, default="__shutdown__", help="This string will exit the script")
 
-    args = utils.get_args(parser)
+    args = utils.get_args(parser, CLI)
 
     return args
 
@@ -43,10 +34,6 @@ def main() -> None:
     generate_kwargs = args.generate_kwargs
 
     while (True):
-        # currently only 1 process is running so its
-        # fine but might need to run_rank_n for this
-        # if running a deployment_framework with
-        # multiple processes
         try:
             input_text = input("Input text: ")
 

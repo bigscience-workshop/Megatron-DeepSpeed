@@ -3,24 +3,27 @@ from argparse import Namespace
 import torch
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
-from utils import Model, print_rank_n
+from utils import Model, get_downloaded_model_path, print_rank_n
 
 
 class HFAccelerateModel(Model):
     def __init__(self, args: Namespace) -> None:
         print_rank_n("Loading model...")
 
-        self.tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+        downloaded_model_path = get_downloaded_model_path(args.model_name)
+
+        self.tokenizer = AutoTokenizer.from_pretrained(downloaded_model_path)
         self.pad = self.tokenizer.pad_token_id
 
         self.model = AutoModelForCausalLM.from_pretrained(
-            args.model_name,
+            downloaded_model_path,
             device_map="auto",
             max_memory=get_max_memory_per_gpu_dict(
                 args.dtype, args.model_name),
             torch_dtype=args.dtype
         )
 
+        self.model.requires_grad_(False)
         self.model.eval()
         self.input_device = "cuda:0"
 

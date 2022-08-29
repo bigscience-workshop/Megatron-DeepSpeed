@@ -1,17 +1,15 @@
+import glob
 import io
 import json
 import os
 import shutil
 from argparse import Namespace
-from pathlib import Path
 
 import deepspeed
 import torch
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
-from transformers.utils import is_offline_mode
 
-from huggingface_hub import snapshot_download
-from utils import Model, print_rank_n, run_rank_n
+from utils import Model, get_downloaded_model_path, print_rank_n, run_rank_n
 
 
 class DSInferenceModel(Model):
@@ -21,66 +19,41 @@ class DSInferenceModel(Model):
             print_rank_n("Loading model...")
         world_size = int(os.getenv("WORLD_SIZE", "1"))
 
-        self.tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+        downloaded_model_path = get_downloaded_model_path(args.model_name)
+
+        self.tokenizer = AutoTokenizer.from_pretrained(downloaded_model_path)
         self.pad = self.tokenizer.pad_token_id
 
         # Load model
         with deepspeed.OnDevice(dtype=torch.float16, device="meta"):
             self.model = AutoModelForCausalLM.from_config(
-                AutoConfig.from_pretrained(args.model_name),
+                AutoConfig.from_pretrained(downloaded_model_path),
                 torch_dtype=torch.bfloat16
             )
         self.model = self.model.eval()
 
         if (args.dtype in [torch.float16, torch.int8]):
             if (args.use_pre_sharded_checkpoints):
-                model_path = snapshot_download(
-                    args.model_name,
-                    allow_patterns=["*"],
-                    local_files_only=is_offline_mode(),
-                    revision=None
-                )
                 checkpoints_json = os.path.join(
-                    model_path, "BLOOM_ds-inference_config.json")
+                    downloaded_model_path, "BLOOM_ds-inference_config.json")
 
                 self.model = deepspeed.init_inference(
                     self.model,
                     mp_size=world_size,
-                    base_dir=model_path,
+                    base_dir=downloaded_model_path,
                     dtype=args.dtype,
                     checkpoint=checkpoints_json,
                     replace_with_kernel_inject=True
                 )
             else:
-                # Write checkpoints.json
-                tmp_directory = "tmp"
-                run_rank_n(
-                    os.makedirs,
-                    {
-                        "name": tmp_directory,
-                        "exist_ok": True
-                    }
-                )
-                checkpoints_json = os.path.join(
-                    tmp_directory, "checkpoints.json")
-                run_rank_n(
-                    write_checkponts_json,
-                    {
-                        "checkpoints_json": checkpoints_json,
-                        "model_name": args.model_name
-                    },
-                    barrier=True
-                )
-
-                self.model = deepspeed.init_inference(
-                    self.model,
-                    mp_size=world_size,
-                    dtype=args.dtype,
-                    checkpoint=checkpoints_json,
-                    replace_with_kernel_inject=True
-                )
-
-                run_rank_n(shutil.rmtree, {"path": tmp_directory})
+                with TemporaryCheckpointsJSON(downloaded_model_path) as checkpoints_json:
+                    self.model = deepspeed.init_inference(
+                        self.model,
+                        mp_size=world_size,
+                        dtype=args.dtype,
+                        checkpoint=checkpoints_json,
+                        replace_with_kernel_inject=True
+                    )
         elif (args.dtype == torch.bfloat16):
             raise NotImplementedError("bfloat16 is not yet supported")
 
@@ -90,27 +63,38 @@ class DSInferenceModel(Model):
         print_rank_n("Model loaded")
 
 
-def get_checkpoint_files(model_name_or_path, revision=None):
-    # loads files from hub
-    cached_repo_dir = snapshot_download(
-        model_name_or_path,
-        allow_patterns=["*"],
-        local_files_only=is_offline_mode(),
-        revision=revision
-    )
+class TemporaryCheckpointsJSON:
+    def __init__(self, model_path: str):
+        self.tmp_directory = "tmp"
+        self.tmp_file = os.path.join(self.tmp_directory, "checkpoints.json")
+        self.model_path = model_path
 
-    # creates a list of paths from all downloaded files in cache dir, matching the regex *.pt
-    file_list = [str(entry) for entry in Path(
-        cached_repo_dir).rglob('*.pt') if entry.is_file()]
-    return file_list
+    def write_checkpoints_json(self, model_path: str) -> None:
+        with io.open(self.tmp_file, "w", encoding="utf-8") as f:
+            data = {
+                "type": "BLOOM",
+                "checkpoints": glob.glob(f"{model_path}/*.bin"),
+                "version": 1.0
+            }
+            json.dump(data, f)
 
+    def __enter__(self):
+        run_rank_n(
+            os.makedirs,
+            {
+                "name": self.tmp_directory,
+                "exist_ok": True
+            }
+        )
+        run_rank_n(
+            self.write_checkpoints_json,
+            {
+                "model_path": self.model_path
+            },
+            barrier=True
+        )
+        return self.tmp_file
 
-def write_checkponts_json(checkpoints_json: str, model_name: str) -> None:
-    with io.open(checkpoints_json, "w", encoding="utf-8") as f:
-        checkpoint_files = get_checkpoint_files(model_name)
-        data = {
-            "type": "BLOOM",
-            "checkpoints": checkpoint_files,
-            "version": 1.0
-        }
-        json.dump(data, f)
+    def __exit__(self, type, value, traceback):
+        # run_rank_n(shutil.rmtree, {"path": self.tmp_directory})
+        return

@@ -1,6 +1,10 @@
 import argparse
+import os
 
 import torch
+from transformers.utils import is_offline_mode
+
+from huggingface_hub import snapshot_download
 
 from .requests import GenerateRequest, GenerateResponse, TokenizeRequest, TokenizeResponse
 from .utils import print_rank_n
@@ -84,3 +88,12 @@ class Model:
     def shutdown(self) -> None:
         print_rank_n("shutting down")
         exit()
+
+
+def get_downloaded_model_path(model_name: str):
+    return snapshot_download(
+        model_name,
+        allow_patterns=["*"],
+        local_files_only=is_offline_mode(),
+        cache_dir=os.getenv("TRANSFORMERS_CACHE", None)
+    )

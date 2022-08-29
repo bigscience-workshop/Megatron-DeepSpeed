@@ -8,13 +8,14 @@ from typing import Any, List, Tuple, Union
 import torch
 import torch.distributed as dist
 
-from pydantic import BaseModel
-
 from .constants import (
     BIGSCIENCE_BLOOM,
+    DS_INFERENCE,
     DS_INFERENCE_BLOOM_FP16,
     DS_INFERENCE_BLOOM_INT8,
-    FRAMEWORK_MODEL_DTYPE_ALLOWED,
+    DS_ZERO,
+    HF_ACCELERATE,
+    SCRIPT_FRAMEWORK_MODEL_DTYPE_ALLOWED
 )
 
 
@@ -34,6 +35,16 @@ def get_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
 
     group = parser.add_argument_group(title="model")
+    group.add_argument(
+        "--deployment_framework",
+        type=str,
+        choices=[
+            HF_ACCELERATE,
+            DS_INFERENCE,
+            DS_ZERO
+        ],
+        default=HF_ACCELERATE
+    )
     group.add_argument(
         "--model_name",
         type=str,
@@ -57,14 +68,15 @@ def get_argument_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def get_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
+def get_args(parser: argparse.ArgumentParser, script: str) -> argparse.Namespace:
     args = parser.parse_args()
 
-    assert is_framework_model_dtype_allowed(
+    assert is_script_framework_model_dtype_allowed(
+        script,
         args.deployment_framework,
         args.model_name,
         args.dtype
-    ), "unsupported deployment_framework, model_name and dtype"
+    ), f"{script} is not supported with {args.deployment_framework}, {args.model_name} and {args.dtype} dtype"
 
     args.dtype = get_torch_dtype(args.dtype)
     args.generate_kwargs = json.loads(args.generate_kwargs)
@@ -171,9 +183,13 @@ def pad_ids(arrays, padding, max_length=-1):
     return arrays
 
 
-def is_framework_model_dtype_allowed(deployment_framework: str, model_name: str, dtype: str) -> bool:
-    if (deployment_framework in FRAMEWORK_MODEL_DTYPE_ALLOWED):
-        if (model_name in FRAMEWORK_MODEL_DTYPE_ALLOWED[deployment_framework]):
-            if (dtype in FRAMEWORK_MODEL_DTYPE_ALLOWED[deployment_framework][model_name]):
-                return True
+def is_script_framework_model_dtype_allowed(script: str,
+                                            deployment_framework: str,
+                                            model_name: str,
+                                            dtype: str) -> bool:
+    if (script in SCRIPT_FRAMEWORK_MODEL_DTYPE_ALLOWED):
+        if (deployment_framework in SCRIPT_FRAMEWORK_MODEL_DTYPE_ALLOWED[script]):
+            if (model_name in SCRIPT_FRAMEWORK_MODEL_DTYPE_ALLOWED[script][deployment_framework]):
+                if (dtype in SCRIPT_FRAMEWORK_MODEL_DTYPE_ALLOWED[script][deployment_framework][model_name]):
+                    return True
     return False

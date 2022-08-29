@@ -1,5 +1,5 @@
-from .constants import DS_INFERENCE, DS_ZERO, HF_ACCELERATE
-from .model import Model
+from .constants import BENCHMARK, CLI, DS_INFERENCE, DS_ZERO, HF_ACCELERATE, SERVER
+from .model import Model, get_downloaded_model_path
 from .requests import (
     GenerateRequest,
     GenerateResponse,
