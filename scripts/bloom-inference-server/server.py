@@ -5,6 +5,7 @@ import traceback
 import utils
 from ds_inference import DSInferenceGRPCServer
 from fastapi import FastAPI, HTTPException
+from fastapi.routing import APIRoute
 from hf_accelerate import HFAccelerateModel
 from pydantic import BaseModel
 from utils import (
@@ -45,93 +46,128 @@ def get_args() -> argparse.Namespace:
     return args
 
 
-####################################################################################
-args = get_args()
-app = FastAPI()
+class Server:
+    def __init__(self, args: argparse.Namespace):
+        self.host = args.host
+        self.port = args.port
+        self.workers = args.workers
+        self.debug = args.debug
 
-if (args.deployment_framework == HF_ACCELERATE):
-    model = HFAccelerateModel(args)
-elif (args.deployment_framework == DS_INFERENCE):
-    model = DSInferenceGRPCServer(args)
-else:
-    raise ValueError(
-        f"Unknown deployment framework {args.deployment_framework}")
+        self.allowed_max_new_tokens = args.allowed_max_new_tokens
+        self.query_ids = QueryID()
 
-query_ids = QueryID()
-####################################################################################
+        if (args.deployment_framework == HF_ACCELERATE):
+            self.model = HFAccelerateModel(args)
+        elif (args.deployment_framework == DS_INFERENCE):
+            self.model = DSInferenceGRPCServer(args)
+        else:
+            raise ValueError(
+                f"Unknown deployment framework {args.deployment_framework}")
 
-
-def get_exception_response(query_id: int, method: str):
-    e_type, e_message, e_stack_trace = sys.exc_info()
-    response = {
-        "error": str(e_type.__name__),
-        "message": str(e_message),
-        "query_id": query_id,
-        "method": method
-    }
-
-    if (args.debug):
-        trace_back = traceback.extract_tb(e_stack_trace)
-
-        # Format stacktrace
-        stack_trace = []
-        for trace in trace_back:
-            stack_trace.append("File : {}, Line : {}, Func.Name : {}, Message : {}".format(
-                trace[0], trace[1], trace[2], trace[3]))
-
-        response["stack_trace"] = stack_trace
-
-    return response
-
-
-@app.post("/generate/")
-def generate(request: GenerateRequest) -> GenerateResponse:
-    try:
-        request.max_new_tokens = get_num_tokens_to_generate(
-            request.max_new_tokens, args.allowed_max_new_tokens)
-
-        response, total_time_taken = run_and_log_time(
-            (model.generate, {"request": request})
+        self.app = FastAPI(
+            routes=[
+                APIRoute(
+                    "/generate/",
+                    self.generate,
+                    methods=["POST"],
+                ),
+                APIRoute(
+                    "/tokenize/",
+                    self.tokenize,
+                    methods=["POST"],
+                ),
+                APIRoute(
+                    "/query_id/",
+                    self.query_id,
+                    methods=["GET"],
+                )
+            ],
+            timeout=600,
         )
 
-        response.query_id = query_ids.generate_query_id
-        query_ids.generate_query_id += 1
-        response.total_time_taken = "{:.2f} secs".format(total_time_taken)
+    def get_exception_response(self, query_id: int, method: str):
+        e_type, e_message, e_stack_trace = sys.exc_info()
+        response = {
+            "error": str(e_type.__name__),
+            "message": str(e_message),
+            "query_id": query_id,
+            "method": method
+        }
+
+        if (self.debug):
+            trace_back = traceback.extract_tb(e_stack_trace)
+
+            # Format stacktrace
+            stack_trace = []
+            for trace in trace_back:
+                stack_trace.append("File : {}, Line : {}, Func.Name : {}, Message : {}".format(
+                    trace[0], trace[1], trace[2], trace[3]))
+
+            response["stack_trace"] = stack_trace
 
         return response
-    except Exception:
-        response = get_exception_response(
-            query_ids.generate_query_id, request.method)
-        query_ids.generate_query_id += 1
-        raise HTTPException(500, response)
 
+    def generate(self, request: GenerateRequest) -> GenerateResponse:
+        try:
+            request.max_new_tokens = get_num_tokens_to_generate(
+                request.max_new_tokens, self.allowed_max_new_tokens)
 
-@app.post("/tokenize/")
-def tokenize(request: TokenizeRequest) -> TokenizeResponse:
-    try:
-        response, total_time_taken = run_and_log_time(
-            (model.tokenize, {"request": request})
+            response, total_time_taken = run_and_log_time(
+                (self.model.generate, {"request": request})
+            )
+
+            response.query_id = self.query_ids.generate_query_id
+            self.query_ids.generate_query_id += 1
+            response.total_time_taken = "{:.2f} secs".format(total_time_taken)
+
+            return response
+        except Exception:
+            response = self.get_exception_response(
+                self.query_ids.generate_query_id, request.method)
+            self.query_ids.generate_query_id += 1
+            raise HTTPException(500, response)
+
+    def tokenize(self, request: TokenizeRequest) -> TokenizeResponse:
+        try:
+            response, total_time_taken = run_and_log_time(
+                (self.model.tokenize, {"request": request})
+            )
+
+            response.query_id = self.query_ids.tokenize_query_id
+            self.query_ids.tokenize_query_id += 1
+            response.total_time_taken = "{:.2f} msecs".format(
+                total_time_taken * 1000)
+
+            return response
+        except Exception:
+            response = self.get_exception_response(
+                self.query_ids.tokenize_query_id, request.method)
+            self.query_ids.tokenize_query_id += 1
+            raise HTTPException(500, response)
+
+    def query_id(self) -> QueryID:
+        return self.query_ids
+
+    def run(self):
+        run(
+            self.app,
+            host=self.host,
+            port=self.port,
+            workers=self.workers
         )
 
-        response.query_id = query_ids.tokenize_query_id
-        query_ids.tokenize_query_id += 1
-        response.total_time_taken = "{:.2f} msecs".format(
-            total_time_taken * 1000)
-
-        return response
-    except Exception:
-        response = get_exception_response(
-            query_ids.tokenize_query_id, request.method)
-        query_ids.tokenize_query_id += 1
-        raise HTTPException(500, response)
+    def shutdown(self):
+        self.model.shutdown()
 
 
-@app.get("/query_id/")
-def query_id() -> QueryID:
-    return query_ids
+def main() -> None:
+    args = get_args()
+    server = Server(args)
+    try:
+        server.run()
+    except KeyboardInterrupt:
+        server.shutdown()
 
 
-try:
-    run(app, host=args.host, port=args.port, workers=args.workers)
-except KeyboardInterrupt:
-    model.shutdown()
+if (__name__ == "__main__"):
+    main()
