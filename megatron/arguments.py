@@ -641,6 +641,8 @@ def _add_learning_rate_args(parser):
                        '(learning rate, warmup iterations, minimum learning '
                        'rate, maximum number of iterations, and decay style '
                        'from checkpoint and ignore input arguments.')
+    group.add_argument('--universal-checkpoint', action='store_true',
+                        help='Loading a universal format checkpoint.')
 
     return parser
 
@@ -662,6 +664,8 @@ def _add_checkpointing_args(parser):
                        help='Do not load optimizer when loading checkpoint.')
     group.add_argument('--no-load-rng', action='store_true', default=None,
                        help='Do not load rng state when loading checkpoint.')
+    group.add_argument('--reset-progress', action='store_true', default=None,
+                       help='Reset iteration to 0 & do not load args.')
     group.add_argument('--finetune', action='store_true',
                        help='Load model for finetuning. Do not load optimizer '
                        'or rng state from checkpoint and set iteration to 0. '
