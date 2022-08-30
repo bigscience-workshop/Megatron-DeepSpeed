@@ -185,7 +185,7 @@ def get_cross_entropy(is_prefix: bool):
             else:
                 average_tokens_per_sample = sequence_length
             expected_number_of_tokens = average_tokens_per_sample * micro_batch_size
-        elif args.norm_target_loss:
+        elif args.norm_target_loss and (loss_mask.dim() == 1):
             expected_num_of_target_seqs = loss_mask.sum()
             loss = torch.sum(losses.view(-1) * loss_mask) / expected_num_of_target_seqs
             return loss
