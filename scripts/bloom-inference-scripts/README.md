@@ -6,7 +6,7 @@ Here are some stats on JeanZay's 8x80GB A100 node w/ 512GB of CPU memory:
 
 All benchmarks are doing greedy generation of 100 token outputs:
 ```
-Generate args {'min_length': 100, 'max_length': 100, 'do_sample': False}
+Generate args {'max_length': 100, 'do_sample': False}
 ```
 The inputs are just a few tokens.
 

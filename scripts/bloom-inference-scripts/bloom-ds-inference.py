@@ -56,6 +56,10 @@ world_size = int(os.getenv('WORLD_SIZE', '1'))
 deepspeed.init_distributed('nccl')
 rank = dist.get_rank()
 
+def print_rank0(*msg):
+    if rank != 0: return
+    print(*msg)
+
 
 ### Model loading and instantiating on GPUs
 
@@ -64,7 +68,8 @@ rank = dist.get_rank()
 def get_repo_root(model_name_or_path, revision=None):
     # checks if online or not
     if is_offline_mode():
-        print("Offline mode: forcing local_files_only=True")
+
+        print_rank0("Offline mode: forcing local_files_only=True")
         local_files_only = True
     else:
         local_files_only = False
@@ -77,7 +82,7 @@ def get_repo_root(model_name_or_path, revision=None):
 def get_checkpoint_files(model_name_or_path, revision=None):
     # checks if online or not
     if is_offline_mode():
-        print("Offline mode: forcing local_files_only=True")
+        print_rank0("Offline mode: forcing local_files_only=True")
         local_files_only = True
     else:
         local_files_only = False
@@ -97,8 +102,7 @@ tp_presharded_mode = True if model_name in tp_presharded_models else False
 
 #print(get_checkpoint_files(model_name))
 
-if rank == 0:
-    print(f"*** Loading the model {model_name}")
+print_rank0("*** Loading the model {model_name}")
 
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 config = AutoConfig.from_pretrained(model_name)
@@ -206,8 +210,8 @@ if args.benchmark:
 
 ### Generate
 
-if rank == 0:
-    print(f"*** Starting to generate {num_tokens} tokens with bs={args.batch_size}")
+
+print_rank0(f"*** Starting to generate {num_tokens} tokens with bs={args.batch_size}")
 
 input_sentences = [
     "DeepSpeed is a machine learning framework",
@@ -226,8 +230,9 @@ if args.batch_size > len(input_sentences):
 
 generate_kwargs = dict(max_new_tokens=num_tokens, do_sample=False)
 
-if rank == 0:
-    print(f"Generate args {generate_kwargs}")
+
+print_rank0(f"Generate args {generate_kwargs}")
+
 inputs = input_sentences[:args.batch_size]
 def generate():
     """ returns a list of zipped inputs, outputs and number of new tokens """
@@ -255,9 +260,8 @@ _ = generate()
 t_generate_start = time.time()
 generated = generate()
 t_generate_span = time.time() - t_generate_start
-if rank == 0:
-    for i,o,_ in generated:
-        print(f"{'-'*60}\nin={i}\nout={o}\n")
+for i,o,_ in generated:
+    print_rank0(f"{'-'*60}\nin={i}\nout={o}\n")
 
 if args.benchmark:
     torch.cuda.empty_cache()
@@ -268,8 +272,7 @@ if args.benchmark:
 
 # benchmark it!
 if args.benchmark:
-    if rank == 0:
-        print(f"*** Running benchmark")
+    print_rank0(f"*** Running benchmark")
 
     # warm up
     for i in range(1):
@@ -284,9 +287,8 @@ if args.benchmark:
         generated = generate()
         total_new_tokens_generated += sum(new_tokens for _,_,new_tokens in generated)
     torch.cuda.synchronize()
-    if rank == 0:
-        througput = (time.time() - t0)/(total_new_tokens_generated)
-        print(f"""
+    througput = (time.time() - t0)/(total_new_tokens_generated)
+    print_rank0(f"""
 *** Performance stats:
 Throughput per token including tokenize: {througput*1000:.2f} msecs
 Start to ready to generate: {t_ready - t_start:.3f} secs
