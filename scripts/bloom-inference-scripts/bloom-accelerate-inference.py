@@ -16,6 +16,7 @@ def get_args():
     parser.add_argument("--greedy", action="store_true")
     parser.add_argument("--top-k", type=int, default=0)
     parser.add_argument("--top-p", type=float, default=0.)
+    parser.add_argument("--dtype", type=str, help="float16 or int8", choices=["int8", "float16"], default="float16")
 
     return parser.parse_args()
 
@@ -35,7 +36,7 @@ def get_max_memory_per_gpu_dict(dtype, model_name):
         #model_params = sum(dict((p.data_ptr(), p.numel()) for p in model.parameters()).values())
 
         config = AutoConfig.from_pretrained(model_name)
-        h = config.n_embed
+        h = config.hidden_size
         l = config.n_layer
         v = config.vocab_size
         # from https://github.com/bigscience-workshop/bigscience/tree/6917a3b5fefcf439d3485ca184b4d9f6ab605150/math#model-sizing
@@ -85,13 +86,18 @@ dtype = torch.bfloat16 if model_name in ["bigscience/bloom", "bigscience/bigscie
 
 #print(get_max_memory_per_gpu_dict())
 
+infer_dtype = args.dtype
 
-model = AutoModelForCausalLM.from_pretrained(
-    model_name,
+kwargs = dict(
     device_map="auto",
     max_memory=get_max_memory_per_gpu_dict(dtype, model_name),
     torch_dtype=dtype,
 )
+
+if dtype == "int8":
+    kwargs['load_in_8bit'] = True
+
+model = AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
 
 
 if args.benchmark:

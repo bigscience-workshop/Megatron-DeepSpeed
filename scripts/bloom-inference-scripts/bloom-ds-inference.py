@@ -44,7 +44,7 @@ num_tokens = 100
 parser = ArgumentParser()
 
 parser.add_argument("--name", required=True, type=str, help="model_name")
-parser.add_argument("--dtype", type=str, help="fp16 or int8", choices=["int8", "float16"], default="float16")
+parser.add_argument("--dtype", type=str, help="float16 or int8", choices=["int8", "float16"], default="float16")
 parser.add_argument("--local_rank", required=False, type=int, help="used by dist launchers")
 parser.add_argument("--batch_size", default=1, type=int, help="batch size")
 parser.add_argument("--benchmark", action="store_true", help="additionally run benchmark")
