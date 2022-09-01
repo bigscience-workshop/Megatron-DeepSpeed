@@ -34,6 +34,7 @@ import time
 import torch
 import torch.distributed as dist
 
+# the Deepspeed team made these so it's super fast to load (~1 minute), rather than wait 10-20min loading time.
 tp_presharded_models = ["microsoft/bloom-deepspeed-inference-int8", "microsoft/bloom-deepspeed-inference-fp16"]
 
 t_start = time.time()
@@ -43,7 +44,7 @@ num_tokens = 100
 parser = ArgumentParser()
 
 parser.add_argument("--name", required=True, type=str, help="model_name")
-parser.add_argument("--dtype", required=True, type=str, help="fp16 or int8", choices=["int8", "float16"], default="float16")
+parser.add_argument("--dtype", type=str, help="fp16 or int8", choices=["int8", "float16"], default="float16")
 parser.add_argument("--local_rank", required=False, type=int, help="used by dist launchers")
 parser.add_argument("--batch_size", default=1, type=int, help="batch size")
 parser.add_argument("--benchmark", action="store_true", help="additionally run benchmark")
