@@ -26,7 +26,7 @@ def get_max_memory_per_gpu_dict(dtype, model_name):
     # figure out the memory map - the minimum per gpu required to load the model
     n_gpus = torch.cuda.device_count()
 
-    if model_name == "bigscience/bloom" and n_gpus == 8 and torch.cuda.get_device_properties(0).total_memory > 79*2**30:
+    if model_name == "bigscience/bloom" and n_gpus == 8 and dtype != torch.int8 and torch.cuda.get_device_properties(0).total_memory > 79*2**30:
         # hand crafted optimized memory map for 8x80 setup over BLOOM
         # this works with bs=40
         return {0: '0GIB', 1: '51GIB', 2: '51GIB', 3: '51GIB', 4: '51GIB', 5: '51GIB', 6: '51GIB', 7: '51GIB'}
@@ -45,7 +45,10 @@ def get_max_memory_per_gpu_dict(dtype, model_name):
         print_rank0(f"The model {model_name} has a broken config file. Please notify the owner")
         raise
 
-    bytes = torch.finfo(dtype).bits / 8
+    if dtype == torch.int8:
+        bytes = 1
+    else:
+        bytes = torch.finfo(dtype).bits / 8
     param_memory_total_in_bytes = model_params * bytes
     # add 5% since weight sizes aren't the same and some GPU may need more memory
     param_memory_per_gpu_in_bytes = int(param_memory_total_in_bytes / n_gpus * 1.05)
@@ -67,7 +70,7 @@ num_tokens = 100
 args = get_args()
 
 local_rank = int(os.getenv('LOCAL_RANK', '0'))
-world_size = int(os.getenv('WORLD_SIZE', '1'))
+world_size = torch.cuda.device_count()
 
 rank = local_rank
 
@@ -87,6 +90,8 @@ dtype = torch.bfloat16 if model_name in ["bigscience/bloom", "bigscience/bigscie
 #print(get_max_memory_per_gpu_dict())
 
 infer_dtype = args.dtype
+if infer_dtype == "int8":
+    dtype = torch.int8
 
 kwargs = dict(
     device_map="auto",
