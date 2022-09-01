@@ -82,9 +82,9 @@ def print_rank0(*msg):
     if rank != 0: return
     print(*msg)
 
+print_rank0(f"Using {world_size} gpus")
 model_name = args.name
 print_rank0(f"Loading model {model_name}")
-
 
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
