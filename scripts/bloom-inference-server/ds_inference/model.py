@@ -2,7 +2,6 @@ import glob
 import io
 import json
 import os
-import shutil
 from argparse import Namespace
 
 import deepspeed
@@ -14,9 +13,7 @@ from utils import Model, get_downloaded_model_path, print_rank_n, run_rank_n
 
 class DSInferenceModel(Model):
     def __init__(self, args: Namespace) -> None:
-        if (args.local_rank == 0):
-            # print_rank_n won't work here since deepspeed is not initialized yet
-            print_rank_n("Loading model...")
+        print_rank_n("Loading model...")
         world_size = int(os.getenv("WORLD_SIZE", "1"))
 
         downloaded_model_path = get_downloaded_model_path(args.model_name)
@@ -35,7 +32,7 @@ class DSInferenceModel(Model):
         if (args.dtype in [torch.float16, torch.int8]):
             if (args.use_pre_sharded_checkpoints):
                 checkpoints_json = os.path.join(
-                    downloaded_model_path, "BLOOM_ds-inference_config.json")
+                    downloaded_model_path, "ds_inference_config.json")
 
                 self.model = deepspeed.init_inference(
                     self.model,
@@ -96,5 +93,4 @@ class TemporaryCheckpointsJSON:
         return self.tmp_file
 
     def __exit__(self, type, value, traceback):
-        # run_rank_n(shutil.rmtree, {"path": self.tmp_directory})
         return

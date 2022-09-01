@@ -6,13 +6,12 @@ import torch
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 from transformers.deepspeed import HfDeepSpeedConfig
 
-from utils import Model, get_downloaded_model_path
+from utils import Model, get_downloaded_model_path, print_rank_n
 
 
 class DSZeROModel(Model):
     def __init__(self, args: Namespace) -> None:
-        if (args.local_rank == 0):
-            print("Loading model...")
+        print_rank_n("Loading model...")
 
         downloaded_model_path = get_downloaded_model_path(args.model_name)
 
@@ -63,3 +62,5 @@ class DSZeROModel(Model):
         self.model = self.model.module
 
         self.input_device = torch.cuda.current_device()
+
+        print_rank_n("Model loaded")

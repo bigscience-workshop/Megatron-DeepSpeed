@@ -7,7 +7,7 @@ from transformers.utils import is_offline_mode
 from huggingface_hub import snapshot_download
 
 from .requests import GenerateRequest, GenerateResponse, TokenizeRequest, TokenizeResponse
-from .utils import print_rank_n
+from .utils import print_rank_n, run_rank_n
 
 
 class Model:
@@ -91,9 +91,19 @@ class Model:
 
 
 def get_downloaded_model_path(model_name: str):
-    return snapshot_download(
-        model_name,
-        allow_patterns=["*"],
-        local_files_only=is_offline_mode(),
-        cache_dir=os.getenv("TRANSFORMERS_CACHE", None)
+    kwargs = {
+        "repo_id": model_name,
+        "allow_patterns": ["*"],
+        "local_files_only": is_offline_mode(),
+        "cache_dir": os.getenv("TRANSFORMERS_CACHE", None)
+    }
+    # download only on 1 process
+    run_rank_n(
+        snapshot_download,
+        kwargs,
+        barrier=True
     )
+    # now since the snapshot is downloaded, pass the
+    # model_path to all processes
+    model_path = snapshot_download(**kwargs)
+    return model_path
