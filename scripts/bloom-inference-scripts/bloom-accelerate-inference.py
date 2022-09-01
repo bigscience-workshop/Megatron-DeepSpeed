@@ -91,11 +91,14 @@ infer_dtype = args.dtype
 kwargs = dict(
     device_map="auto",
     max_memory=get_max_memory_per_gpu_dict(dtype, model_name),
-    torch_dtype=dtype,
 )
 
-if dtype == "int8":
+if infer_dtype == "int8":
+    print_rank0("Using `load_in_8bit=True` to use quanitized model")
     kwargs['load_in_8bit'] = True
+else:
+    kwargs["torch_dtype"] = dtype
+
 
 model = AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
 
