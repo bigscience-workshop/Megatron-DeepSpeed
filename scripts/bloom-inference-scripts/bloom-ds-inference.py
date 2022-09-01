@@ -64,7 +64,6 @@ def print_rank0(*msg):
 ### Model loading and instantiating on GPUs
 
 
-
 def get_repo_root(model_name_or_path, revision=None):
     # checks if online or not
     if is_offline_mode():
@@ -90,8 +89,9 @@ def get_checkpoint_files(model_name_or_path, revision=None):
     # loads files from hub
     cached_repo_dir = snapshot_download(model_name_or_path, allow_patterns=["*"], local_files_only=local_files_only, revision=revision)
 
+    # extensions: .bin | .pt
     # creates a list of paths from all downloaded files in cache dir
-    file_list = [str(entry) for entry in Path(cached_repo_dir).rglob('*.pt') if entry.is_file()]
+    file_list = [str(entry) for entry in Path(cached_repo_dir).rglob('*.[bp][it][n]') if entry.is_file()]
     return file_list
 
 
@@ -159,9 +159,11 @@ def write_checkponts_json():
         data = {
             "type": "BLOOM",
             "checkpoints": checkpoint_files,
-            "parallelization": "tp",
             "version": 1.0
         }
+        if world_size > 1:
+            data["parallelization"] = "tp"
+
         json.dump(data, f)
 
 
