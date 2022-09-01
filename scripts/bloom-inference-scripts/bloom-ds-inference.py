@@ -34,6 +34,8 @@ import time
 import torch
 import torch.distributed as dist
 
+tp_presharded_models = ["microsoft/bloom-deepspeed-inference-int8", "microsoft/bloom-deepspeed-inference-fp16"]
+
 t_start = time.time()
 
 num_tokens = 100
