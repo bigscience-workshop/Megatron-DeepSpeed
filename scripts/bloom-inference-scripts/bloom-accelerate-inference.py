@@ -29,7 +29,9 @@ def get_max_memory_per_gpu_dict(dtype, model_name):
     if model_name == "bigscience/bloom" and n_gpus == 8 and dtype != torch.int8 and torch.cuda.get_device_properties(0).total_memory > 79*2**30:
         # hand crafted optimized memory map for 8x80 setup over BLOOM
         # this works with bs=40
-        return {0: '0GIB', 1: '51GIB', 2: '51GIB', 3: '51GIB', 4: '51GIB', 5: '51GIB', 6: '51GIB', 7: '51GIB'}
+        max_memory_per_gpu = {0: '0GIB', 1: '51GIB', 2: '51GIB', 3: '51GIB', 4: '51GIB', 5: '51GIB', 6: '51GIB', 7: '51GIB'}
+        print("Max memory per gpu:", max_memory_per_gpu)
+        return max_memory_per_gpu
 
     try:
         # model_params calculation, as we don't have a model yet to do:
@@ -61,7 +63,9 @@ def get_max_memory_per_gpu_dict(dtype, model_name):
     if max_memory_per_gpu_in_bytes < param_memory_per_gpu_in_bytes:
         raise ValueError(f"Unable to generate the memory map automatically as the needed estimated memory per gpu ({param_memory_per_gpu_in_bytes/2**30:0.2f}GB) is bigger than the available per gpu memory ({max_memory_per_gpu_in_bytes/2**30:0.2f}GB)")
 
-    return {i: param_memory_per_gpu_in_bytes for i in range(torch.cuda.device_count())}
+    max_memory_per_gpu = {i: param_memory_per_gpu_in_bytes for i in range(torch.cuda.device_count())}
+    print("Max memory per gpu:", max_memory_per_gpu)
+    return max_memory_per_gpu
 
 t_start = time.time()
 
