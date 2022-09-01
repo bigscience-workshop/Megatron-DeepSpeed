@@ -174,7 +174,7 @@ repo_root = get_repo_root(model_name)
 if tp_presharded_mode:
     # tp presharded repos come with their own checkpoints config file
     checkpoints_json = os.path.join(repo_root, "ds_inference_config.json")
- else:
+else:
      # for normal bloom repo we need to write the checkpoints config file
     if rank == 0:
         write_checkponts_json()
