@@ -137,7 +137,6 @@ if args.benchmark:
 
 model = model.eval()
 
-
 if args.benchmark:
     torch.cuda.empty_cache()
     gc.collect()
@@ -150,7 +149,6 @@ def write_checkponts_json():
 
     with io.open(checkpoints_json, 'w', encoding='utf-8') as f:
 
-        #checkpoint_dir = "/gpfsscratch/rech/six/commun/uan68tv-model-conversion/bloom"
         #checkpoint_files = glob.glob(f"{checkpoint_dir}/*bin")
         checkpoint_files = get_checkpoint_files(model_name)
 
@@ -161,12 +159,8 @@ def write_checkponts_json():
             "checkpoints": checkpoint_files,
             "version": 1.0
         }
-        if world_size > 1:
-            data["parallelization"] = "tp"
 
         json.dump(data, f)
-
-
 
 
 if args.benchmark:
