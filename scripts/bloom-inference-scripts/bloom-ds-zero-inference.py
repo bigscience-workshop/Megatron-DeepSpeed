@@ -98,7 +98,7 @@ if args.cpu_offload:
     ds_config["zero_optimization"]["offload_param"] = dict(device="cpu", pin_memory=True)
 
 if args.nvme_offload_path:
-    ds_config["zero_optimization"]["offload_param"] = dict(device="nvme", pin_memory=True, nvme_path=args.nvme_offload_path)
+    ds_config["zero_optimization"]["offload_param"] = dict(device="nvme", pin_memory=True, nvme_path=args.nvme_offload_path, buffer_size=6e8)
 
 dschf = HfDeepSpeedConfig(ds_config) # this tells from_pretrained to instantiate directly on gpus
 
