@@ -2,15 +2,15 @@
 
 ## BLOOM Inference solutions
 
-Here are some stats on JeanZay's 8x80GB A100 node w/ 512GB of CPU memory:
+Here are some benchmark resuls on JeanZay's 8x80GB A100 node w/ 512GB of CPU memory:
 
 All benchmarks are doing greedy generation of 100 token outputs:
 ```
 Generate args {'max_length': 100, 'do_sample': False}
 ```
-The inputs are just a few tokens.
+The input prompt is comprised of just a few tokens.
 
-Throughput in msecs 8x80GB gpus:
+Throughput in msecs on 8x80GB gpus:
 
 | project      \ bs |      1 |     8 |    16 |    32 |   64 |  128 |  256 | 512  |
 | :---------------- | :----- | :---- | :---- | :---- | :--- | :--- | :--- | :--- |
@@ -31,7 +31,7 @@ Start to ready to generate in secs (mainly loading and data preparation time):
 | ds-inference unsharded  |  662 |
 | ds-zero                 |  462 |
 
-Now let's look at the actual power of int8, as it requires only half the original GPU memory.
+Now let's look at the power of quantized int8-based models provided by Deepspeed-Inference and BitsNBytes, as it requires only half the original GPU memory of inference in bfloat16 or float16.
 
 Throughput in msecs 4x80GB A100:
 
@@ -41,19 +41,18 @@ Throughput in msecs 4x80GB A100:
 | ds-inference int8 | 156.51 | 20.11 | 10.38 |  5.50 | 2.96 | oom  |
 |                   |        |       |       |       |      |      |
 
+To get the benchmark results simply add `--benchmark` to any of these 3 scripts discussed below.
 
 
 ## Deepspeed-Inference
 
-Tensor-Parallelism and efficient fused CUDA kernels:
+Deepspeed-Inference uses Tensor-Parallelism and efficient fused CUDA kernels:
 https://www.deepspeed.ai/tutorials/inference-tutorial/
 
 ### Setup
 
 ```
-git clone https://github.com/microsoft/DeepSpeed
-cd DeepSpeed
-pip install .
+pip install deepspeed>=0.7.3
 ```
 
 ### Run
@@ -64,14 +63,15 @@ pip install .
 ```
 deepspeed --num_gpus 8 scripts/bloom-inference-scripts/bloom-ds-inference.py --name microsoft/bloom-deepspeed-inference-fp16
 ```
+
 1a.
-if you want to run the original bloom checkpoint, which will run at the same througput once loaded, but the loading will take 10-20min:
+if you want to run the original bloom checkpoint, which once loaded will run at the same throughput as the previous solution, but the loading will take 10-20min:
 
 ```
 deepspeed --num_gpus 8 scripts/bloom-inference-scripts/bloom-ds-inference.py --name bigscience/bloom
 ```
 
-2a. The quantized version requires you to have only half the GPU memory of the normal version:
+2a. The 8bit quantized version requires you to have only half the GPU memory of the normal half precision version:
 
 
 ```
@@ -88,98 +88,41 @@ deepspeed --num_gpus 4 scripts/bloom-inference-scripts/bloom-ds-inference.py --n
 
 
 
-
-Performance on a single node of 8x80GB A100 w/ 512GB CPU RAM (JeanZay) - just a batch of 1 (would be more efficient to run a larger batch)
-
-Adding `--benchmark` to activate the benchmarks
-
-
-BS=1
-```
-$ deepspeed --num_gpus 8 scripts/bloom-inference-scripts/bloom-ds-inference.py --name bigscience/bloom --batch_size 1 --benchmark 2>&1 | tee bloom-ds-inference_bs=1.txt
-[...]
-
-```
-
-While processing memory per process:
-
--  GPU: ~50GB
--  CPU: ~10GB
-
-
-BS=8
-```
-$ deepspeed --num_gpus 8 scripts/bloom-inference-scripts/bloom-ds-inference.py --name bigscience/bloom --batch_size 8 --benchmark 2>&1 | tee bloom-ds-inference_bs=8.txt
-[...]
-*** Performance stats:
-Throughput per token including tokenize: 5.23 msecs
-Start to ready to generate: 683.397 secs
-Tokenize and generate 800 (bs=8) tokens: 4.241 secs
-Start to finish: 687.638 secs
-```
-
-BS=64
-
-```
-$ deepspeed --num_gpus 8 scripts/bloom-inference-scripts/bloom-ds-inference.py --name bigscience/bloom --batch_size 64 --benchmark 2>&1 | tee bloom-ds-inference_bs=64.txt
-
-
-
-
-```
-
-BS=128
-
-```
-$ deepspeed --num_gpus 8 scripts/bloom-inference-scripts/bloom-ds-inference.py --name bigscience/bloom --batch_size 128 --benchmark 2>&1 | tee bloom-ds-inference_bs=128.txt
-
-
-
-
-```
-
-
 ## HF Accelerate
 
+HF Accelerate can use naive Pipeline Parallelism to load a huge model over multiple GPUs:
 https://github.com/huggingface/accelerate
 
 ### Setup
 
 ```
-pip install transformers
+pip install transformers>=4.21.3 accelerate>=0.12.0
 ```
-
 
 
 ### Run
 
 
-
-
-BS=1
 ```
-$ python scripts/bloom-inference-scripts/bloom-accelerate-inference.py --name bigscience/bloom --batch_size 1 --benchmark 2>&1 | tee bloom-ds-zero-inference_bs=1.txt
-[...]
-
-
+python scripts/bloom-inference-scripts/bloom-accelerate-inference.py --name bigscience/bloom --batch_size 1 --benchmark 2>&1 | tee bloom-ds-zero-inference_bs=1.txt
 ```
 
-BS=8
-```
-$ python scripts/bloom-inference-scripts/bloom-accelerate-inference.py --name bigscience/bloom --batch_size 8 --benchmark 2>&1 | tee bloom-ds-zero-inference_bs=8.txt
-[...]
-
+To activate the 8bit quantized solution first install `bitsnbytes`:
 
 ```
-
-BS=16
-```
-$ python scripts/bloom-inference-scripts/bloom-accelerate-inference.py --name bigscience/bloom --batch_size 16 --benchmark 2>&1 | tee bloom-ds-zero-inference_bs=16.txt
-[...]
-
-
+pip install bitsandbytes
 ```
 
+and then add `--dtype int8` to the previous command line:
+
+```
+python scripts/bloom-inference-scripts/bloom-accelerate-inference.py --name bigscience/bloom --dtype int8 --batch_size 1 --benchmark 2>&1 | tee bloom-int8-accelerate-inference_bs=4.txt
+```
+
+if you have more that 4 GPUs you can tell it to use only 4 with:
+```
+CUDA_VISIBLE_DEVICES=0,1,2,3 python scripts/bloom-inference-scripts/bloom-accelerate-inference.py --name bigscience/bloom --dtype int8 --batch_size 1 --benchmark 2>&1 | tee bloom-int8-accelerate-inference_bs=4.txt
+```
 
 
 ## Deepspeed ZeRO-Inference
@@ -198,37 +141,21 @@ pip install deepspeed
 Note that the script currently runs the same inputs on all GPUs, but you can run a different stream on each GPU, and get `n_gpu` times faster throughput. You can't do that with Deepspeed-Inference.
 
 
-BS=1
-
 ```
-$ deepspeed --num_gpus 8 scripts/bloom-inference-scripts/bloom-ds-zero-inference.py --name bigscience/bloom --batch_size 1 --benchmark 2>&1 | tee bloom-ds-zero-inference_bs=1.txt
-[...]
-*** Performance stats:
-Throughput per token including tokenize: 282.93 msecs
-Start to ready to generate: 501.871 secs
-Tokenize and generate 800 (bs=1) tokens: 226.188 secs
-Start to finish: 728.060 secs
+deepspeed --num_gpus 8 scripts/bloom-inference-scripts/bloom-ds-zero-inference.py --name bigscience/bloom --batch_size 1 --benchmark 2>&1 | tee bloom-ds-zero-inference_bs=1.txt
 ```
 
+You can also try the offloading solutions with just one small GPU, which will take a long time to run, but if you don't have 8 huge GPUs this is as good as it gets.
 
-BS=8
 
+CPU-Offload (1x gpus):
 ```
-$ deepspeed --num_gpus 8 scripts/bloom-inference-scripts/bloom-ds-zero-inference.py --name bigscience/bloom --batch_size 8 --benchmark 2>&1 | tee bloom-ds-zero-inference_bs=8.txt
-[...]
-
-*** Performance stats:
-Throughput per token including tokenize: 34.57 msecs
-Start to ready to generate: 482.132 secs
-Tokenize and generate 6400 (bs=8) tokens: 221.236 secs
-Start to finish: 703.368 secs
+deepspeed --num_gpus 1 scripts/bloom-inference-scripts/bloom-ds-zero-inference.py --name bigscience/bloom --batch_size 8 --cpu_offload --benchmark 2>&1 | tee bloom-ds-zero-inference-cpu_offload_bs=8.txt
 ```
 
-BS=16 and higher OOMs
-
+NVMe-Offload (1x gpus):
 ```
-$ deepspeed --num_gpus 8 scripts/bloom-inference-scripts/bloom-ds-zero-inference.py --name bigscience/bloom --batch_size 16 --benchmark 2>&1 | tee bloom-ds-zero-inference_bs=16.txt
-[...]
-OOM
-
+deepspeed --num_gpus 1 scripts/bloom-inference-scripts/bloom-ds-zero-inference.py --name bigscience/bloom --batch_size 8 --nvme_offload_path=/path/to/nvme_offload --benchmark 2>&1 | tee bloom-ds-zero-inference-nvme_offload_bs=8.txt
 ```
+
+make sure to adjust `/path/to/nvme_offload` to somewhere you have ~400GB of free memory on a fast NVMe drive.
