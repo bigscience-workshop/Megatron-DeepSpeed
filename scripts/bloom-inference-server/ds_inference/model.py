@@ -3,6 +3,7 @@ import io
 import json
 import os
 from argparse import Namespace
+from functools import partial
 
 import deepspeed
 import torch
@@ -77,17 +78,10 @@ class TemporaryCheckpointsJSON:
 
     def __enter__(self):
         run_rank_n(
-            os.makedirs,
-            {
-                "name": self.tmp_directory,
-                "exist_ok": True
-            }
+            partial(os.makedirs, name=self.tmp_directory, exist_ok=True)
         )
         run_rank_n(
-            self.write_checkpoints_json,
-            {
-                "model_path": self.model_path
-            },
+            partial(self.write_checkpoints_json, model_path=self.model_path),
             barrier=True
         )
         return self.tmp_file

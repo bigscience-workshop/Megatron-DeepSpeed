@@ -1,5 +1,6 @@
 import argparse
 import os
+from functools import partial
 
 import torch
 from transformers.utils import is_offline_mode
@@ -91,19 +92,16 @@ class Model:
 
 
 def get_downloaded_model_path(model_name: str):
-    kwargs = {
-        "repo_id": model_name,
-        "allow_patterns": ["*"],
-        "local_files_only": is_offline_mode(),
-        "cache_dir": os.getenv("TRANSFORMERS_CACHE", None)
-    }
-    # download only on 1 process
-    run_rank_n(
+    f = partial(
         snapshot_download,
-        kwargs,
-        barrier=True
+        repo_id=model_name,
+        allow_patterns=["*"],
+        local_files_only=is_offline_mode(),
+        cache_dir=os.getenv("TRANSFORMERS_CACHE", None)
     )
+    # download only on 1 process
+    run_rank_n(f)
     # now since the snapshot is downloaded, pass the
     # model_path to all processes
-    model_path = snapshot_download(**kwargs)
-    return model_path
+    return f()
+

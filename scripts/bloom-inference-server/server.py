@@ -1,6 +1,7 @@
 import argparse
 import sys
 import traceback
+from functools import partial
 
 import utils
 from ds_inference import DSInferenceGRPCServer
@@ -113,7 +114,7 @@ class Server:
                 request.max_new_tokens, self.allowed_max_new_tokens)
 
             response, total_time_taken = run_and_log_time(
-                (self.model.generate, {"request": request})
+                partial(self.model.generate, request=request)
             )
 
             response.query_id = self.query_ids.generate_query_id
@@ -130,7 +131,7 @@ class Server:
     def tokenize(self, request: TokenizeRequest) -> TokenizeResponse:
         try:
             response, total_time_taken = run_and_log_time(
-                (self.model.tokenize, {"request": request})
+                partial(self.model.tokenize, request=request)
             )
 
             response.query_id = self.query_ids.tokenize_query_id

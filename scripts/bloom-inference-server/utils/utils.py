@@ -3,6 +3,7 @@ import copy
 import json
 import math
 import time
+from functools import partial
 from typing import Any, List, Tuple, Union
 
 import torch
@@ -85,14 +86,13 @@ def get_args(parser: argparse.ArgumentParser, script: str) -> argparse.Namespace
     return args
 
 
-def run_rank_n(func: callable,
-               kwargs: dict,
+def run_rank_n(func: partial,
                barrier: bool = False,
                rank: int = 0,
                other_rank_output: Any = None) -> Any:
     if (dist.is_initialized()):
         if (dist.get_rank() == rank):
-            output = func(**kwargs)
+            output = func()
             if (barrier):
                 dist.barrier()
             return output
@@ -101,7 +101,7 @@ def run_rank_n(func: callable,
                 dist.barrier()
             return other_rank_output
     else:
-        return func(**kwargs)
+        return func()
 
 
 def print_rank_n(*values, rank: int = 0) -> None:
@@ -158,16 +158,15 @@ def get_num_tokens_to_generate(max_new_tokens: int,
         return min(max_new_tokens, allowed_max_new_tokens)
 
 
-def run_and_log_time(execs: Union[List[Tuple[callable, dict]],
-                                  Tuple[callable, dict]]) -> Tuple[Union[List[Any], Any], float]:
+def run_and_log_time(execs: Union[List[partial], partial]) -> Tuple[Union[List[Any], Any], float]:
     start_time = time.time()
 
     if (type(execs) == list):
         results = []
-        for f, k in execs:
-            results.append(f(**k))
+        for f in execs:
+            results.append(f())
     else:
-        results = execs[0](**execs[1])
+        results = execs()
 
     time_elapsed = time.time() - start_time
     return results, time_elapsed
