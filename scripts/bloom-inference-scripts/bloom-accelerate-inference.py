@@ -53,7 +53,7 @@ def get_max_memory_per_gpu_dict(dtype, model_name):
         bytes = torch.finfo(dtype).bits / 8
     param_memory_total_in_bytes = model_params * bytes
     # add 5% since weight sizes aren't the same and some GPU may need more memory
-    param_memory_per_gpu_in_bytes = int(param_memory_total_in_bytes / n_gpus * 1.05)
+    param_memory_per_gpu_in_bytes = int(param_memory_total_in_bytes / n_gpus * 1.10)
     print_rank0(f"Estimating {param_memory_per_gpu_in_bytes/2**30:0.2f}GB per gpu for weights")
 
     # check the real available memory

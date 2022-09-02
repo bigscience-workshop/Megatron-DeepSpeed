@@ -10,16 +10,16 @@ Generate args {'max_length': 100, 'do_sample': False}
 ```
 The inputs are just a few tokens.
 
-Throughput in msecs:
+Throughput in msecs 8x80GB gpus:
 
-| project \ bs      |      1 |     8 |    16 |    32 |   64 |  128 |  256 | 512  |
-| :-----------      |  :---- | :---- | :---- | :---- | :--- | :--- | :--- | :--- |
-| accelerate        | 230.38 | 31.78 | 17.84 | 10.89 |  oom |      |      |      |
+| project      \ bs |      1 |     8 |    16 |    32 |   64 |  128 |  256 | 512  |
+| :---------------- | :----- | :---- | :---- | :---- | :--- | :--- | :--- | :--- |
+| accelerate   bf16 | 230.38 | 31.78 | 17.84 | 10.89 |  oom |      |      |      |
+| accelerate   int8 |        |       |       |       |      |      |      |      |
 | ds-inference fp16 |  44.02 |  5.70 |  3.01 |  1.68 | 1.00 | 0.69 |  oom |      |
 | ds-inference int8 |  89.09 | 11.44 |  5.88 |  3.09 | 1.71 | 1.02 | 0.71 | oom  |
 | ds-zero           |    283 | 34.88 |   oom |       |      |      |      |      |
 |                   |        |       |       |       |      |      |      |      |
-
 
 Start to ready to generate in secs (mainly loading and data preparation time):
 
@@ -30,10 +30,17 @@ Start to ready to generate in secs (mainly loading and data preparation time):
 | ds-inference shard-fp16 |   60 |
 | ds-inference unsharded  |  662 |
 | ds-zero                 |  462 |
-|                         |      |
 
+Now let's look at the actual power of int8, as it requires only half the original GPU memory.
 
-DS-Inference load time (start to ready to generate) will become much faster soon. Once we stop relying on ds-zero to instantiate the model on gpu. The plan is to pre-shard the weights TP-wise for 8x and 16x gpus and load them directly on each gpu. Will probably be under 1min.
+Throughput in msecs 4x80GB A100:
+
+| project      \ bs |      1 |     8 |    16 |    32 |   64 | 128  |
+| :---------------- | :----- | :---- | :---- | :---- | :--- | :--- |
+| accelerate   int8 | 284.15 | 40.14 | 21.97 |  oom  |      |      |
+| ds-inference int8 | 156.51 | 20.11 | 10.38 |  5.50 | 2.96 | oom  |
+|                   |        |       |       |       |      |      |
+
 
 
 ## Deepspeed-Inference
