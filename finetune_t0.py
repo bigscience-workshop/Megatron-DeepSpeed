@@ -2,7 +2,9 @@
 
 import torch
 
+from pretrain_gpt import get_batch_pipe as get_batch_pipe_gpt
 from megatron import get_args, get_tokenizer, print_rank_0, mpu
+from megatron.data.gpt_dataset import build_dataset_group as build_dataset_group_gpt
 from megatron.data.decoder_packed_mtf_dataset import build_train_valid_test_datasets, build_dataset_group
 from megatron.enums import PositionEmbeddingType, AttnMaskType
 from megatron.model import GPTModelPipe
@@ -65,6 +67,9 @@ def get_batch_pipe(data):
     decoder_segment_ids = [[1, 1, 1, 2, 2, 2, 0]]
     decoder_is_inputs = [[1, 1, 0, 1, 1, 0, 0]]
     """
+    if 'text' in data:
+        return get_batch_pipe_gpt(data)
+    
     args = get_args()
     tokenizer = get_tokenizer()
 
@@ -154,20 +159,34 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
                               eval(f"args.{s}_weighted_split_splits"),
                               eval(f"args.{s}_weighted_split_names"))
             for paths, weights, splits, name in data_groups:
-                d = build_dataset_group(
-                    dataset_group_name=name,
-                    paths=paths,
-                    weights=weights,
-                    splits=splits,
-                    data_impl=args.data_impl,
-                    train_valid_test_num_samples=train_val_test_num_samples,
-                    seq_length=args.seq_length + 1,
-                    pad_token=tokenizer.pad,
-                    eos_token=tokenizer.eos,
-                    seed=args.seed,
-                    skip_warmup=(not args.mmap_warmup),
-                    train_valid_test=s
-                )
+                if "merged-meg-ds_v3_pii" in paths[0]:
+                    d = build_dataset_group_gpt(
+                        dataset_group_name=name,
+                        paths=paths,
+                        weights=weights,
+                        splits=splits,
+                        data_impl=args.data_impl,
+                        train_valid_test_num_samples=train_val_test_num_samples,
+                        seq_length=args.seq_length,
+                        seed=args.seed,
+                        skip_warmup=(not args.mmap_warmup),
+                        train_valid_test=s
+                    )
+                else:
+                    d = build_dataset_group(
+                        dataset_group_name=name,
+                        paths=paths,
+                        weights=weights,
+                        splits=splits,
+                        data_impl=args.data_impl,
+                        train_valid_test_num_samples=train_val_test_num_samples,
+                        seq_length=args.seq_length + 1,
+                        pad_token=tokenizer.pad,
+                        eos_token=tokenizer.eos,
+                        seed=args.seed,
+                        skip_warmup=(not args.mmap_warmup),
+                        train_valid_test=s
+                    )
                 eval(f"{s}_ds").append(d)
     else:
         raise NotImplementedError("No dataloading argument passed")
