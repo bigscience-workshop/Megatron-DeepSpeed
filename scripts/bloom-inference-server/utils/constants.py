@@ -20,7 +20,8 @@ SCRIPT_FRAMEWORK_MODEL_DTYPE_ALLOWED = {
         HF_ACCELERATE: {
             BIGSCIENCE_BLOOM: {
                 BF16,
-                FP16
+                FP16,
+                # INT8
             }
         },
         DS_INFERENCE: {
@@ -45,7 +46,8 @@ SCRIPT_FRAMEWORK_MODEL_DTYPE_ALLOWED = {
         HF_ACCELERATE: {
             BIGSCIENCE_BLOOM: {
                 BF16,
-                FP16
+                FP16,
+                # INT8
             }
         },
         DS_INFERENCE: {
@@ -61,7 +63,8 @@ SCRIPT_FRAMEWORK_MODEL_DTYPE_ALLOWED = {
         HF_ACCELERATE: {
             BIGSCIENCE_BLOOM: {
                 BF16,
-                FP16
+                FP16,
+                # INT8
             }
         },
         DS_INFERENCE: {
