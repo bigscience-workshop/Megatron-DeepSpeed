@@ -100,8 +100,7 @@ def get_downloaded_model_path(model_name: str):
         cache_dir=os.getenv("TRANSFORMERS_CACHE", None)
     )
     # download only on 1 process
-    run_rank_n(f)
+    run_rank_n(f, barrier=True)
     # now since the snapshot is downloaded, pass the
     # model_path to all processes
     return f()
-

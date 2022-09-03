@@ -28,11 +28,13 @@ class DSInferenceGRPCServer(Model):
 
         if (args.dtype in [torch.float16, torch.int8]):
             checkpoints_json = os.path.join(
-                downloaded_model_path, "BLOOM_ds-inference_config.json")
+                downloaded_model_path, "ds_inference_config.json")
 
             mii.deploy(
                 task="text-generation",
-                model=args.model_name,
+                # should pass args.model_name but can't since the new
+                # weights are not supported yet. So, this is a hack
+                model="bigscience/bloom",
                 deployment_name=self.deployment_name,
                 model_path=downloaded_model_path,
                 mii_config={

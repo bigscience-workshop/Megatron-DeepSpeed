@@ -7,6 +7,7 @@ from functools import partial
 
 import deepspeed
 import torch
+import torch.distributed as dist
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
 from utils import Model, get_downloaded_model_path, print_rank_n, run_rank_n
@@ -59,6 +60,7 @@ class DSInferenceModel(Model):
         self.input_device = torch.cuda.current_device()
 
         print_rank_n("Model loaded")
+        dist.barrier()
 
 
 class TemporaryCheckpointsJSON:
