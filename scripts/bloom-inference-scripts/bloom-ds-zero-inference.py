@@ -42,18 +42,24 @@ parser.add_argument("--local_rank", required=False, type=int, help="used by dist
 parser.add_argument("--batch_size", default=1, type=int, help="batch size")
 parser.add_argument("--benchmark", action="store_true", help="additionally run benchmark")
 parser.add_argument("--cpu_offload", action="store_true", help="whether to activate CPU offload")
+parser.add_argument("--nvme_offload_path", help="whether to activate NVME offload and the path on nvme")
 args = parser.parse_args()
 
 local_rank = int(os.getenv('LOCAL_RANK', '0'))
 world_size = int(os.getenv('WORLD_SIZE', '1'))
 
+deepspeed.init_distributed('nccl')
+rank = dist.get_rank()
+
+def print_rank0(*msg):
+    if rank != 0: return
+    print(*msg)
 
 ### Model loading and instantiating on GPU (via ZeRO)
 
 model_name = args.name
 
-if local_rank == 0:
-    print(f"*** Loading the model {model_name}")
+print_rank0(f"*** Loading the model {model_name}")
 
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 config = AutoConfig.from_pretrained(model_name)
@@ -85,8 +91,22 @@ ds_config = {
     "wall_clock_breakdown": False
 }
 
+if args.cpu_offload and args.nvme_offload_path:
+    raise ValueError("Use one of --cpu_offload or --nvme_offload_path and not both")
+
 if args.cpu_offload:
-    ds_config["zero_optimization"]["offload_param"] = dict(device="cpu", pin_memory=True)
+    ds_config["zero_optimization"]["offload_param"] = dict(
+        device="cpu",
+        pin_memory=True
+    )
+
+if args.nvme_offload_path:
+    ds_config["zero_optimization"]["offload_param"] = dict(
+        device="nvme",
+        pin_memory=True,
+        nvme_path=args.nvme_offload_path,
+        buffer_size=6e8
+    )
 
 dschf = HfDeepSpeedConfig(ds_config) # this tells from_pretrained to instantiate directly on gpus
 
@@ -102,10 +122,7 @@ if args.benchmark:
 
 model = model.eval()
 
-rank = dist.get_rank()
-
-if rank == 0:
-    print(ds_config)
+print_rank0(ds_config)
 
 ds_engine = deepspeed.initialize(model=model, config_params=ds_config)[0]
 ds_engine.module.eval()
@@ -117,8 +134,7 @@ if args.benchmark:
 
 ### Generate
 
-if rank == 0:
-    print(f"*** Starting to generate {num_tokens} tokens with bs={args.batch_size}")
+print_rank0(f"*** Starting to generate {num_tokens} tokens with bs={args.batch_size}")
 
 input_sentences = [
     "DeepSpeed is a machine learning framework",
@@ -137,8 +153,7 @@ if args.batch_size > len(input_sentences):
 
 generate_kwargs = dict(max_new_tokens=num_tokens, do_sample=False)
 
-if rank == 0:
-    print(f"Generate args {generate_kwargs}")
+print_rank0(f"Generate args {generate_kwargs}")
 inputs = input_sentences[:args.batch_size]
 def generate():
     """ returns a list of zipped inputs, outputs and number of new tokens """
@@ -167,9 +182,8 @@ _ = generate()
 t_generate_start = time.time()
 pairs = generate()
 t_generate_span = time.time() - t_generate_start
-if rank == 0:
-    for i,o,_ in pairs:
-        print(f"{'-'*60}\nin={i}\nout={o}\n")
+for i,o,_ in pairs:
+    print_rank0(f"{'-'*60}\nin={i}\nout={o}\n")
 
 
 if args.benchmark:
@@ -180,8 +194,7 @@ if args.benchmark:
 ### Benchmark
 
 if args.benchmark:
-    if rank == 0:
-        print(f"*** Running benchmark")
+    print_rank0(f"*** Running benchmark")
 
     # warm up
     for i in range(1):
@@ -197,15 +210,13 @@ if args.benchmark:
         total_new_tokens_generated += sum(new_tokens for _,_,new_tokens in generated)
 
     torch.cuda.synchronize()
-    if rank == 0:
-        # note that we actually generate world_size unique streams (though the benchmark feeds the same inputs)
-        total_new_tokens_generated *=  world_size
-        througput = (time.time() - t0)/(total_new_tokens_generated)
-        print(f"""
+    # note that we actually generate world_size unique streams (though the benchmark feeds the same inputs)
+    total_new_tokens_generated *=  world_size
+    througput = (time.time() - t0)/(total_new_tokens_generated)
+    print_rank0(f"""
 *** Performance stats:
 Throughput per token including tokenize: {througput*1000:.2f} msecs
 Start to ready to generate: {t_ready - t_start:.3f} secs
 Tokenize and generate {total_new_tokens_generated} (bs={args.batch_size}) tokens: {t_generate_span:.3f} secs
 Start to finish: {t_ready - t_start + t_generate_span:.3f} secs
 """)
-
