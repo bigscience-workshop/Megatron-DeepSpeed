@@ -251,8 +251,10 @@ def generate():
 
 # warmup is a must if measuring speed as it's when all the optimizations are performed
 # e.g. on 8x80 a100 the first pass of 100 tokens takes 23sec, and the next one is 4secs
+print_rank0(f"*** Running generate warmup")
 _ = generate()
 
+print_rank0(f"*** Running generate")
 t_generate_start = time.time()
 generated = generate()
 t_generate_span = time.time() - t_generate_start

@@ -19,7 +19,6 @@ Throughput in msecs on 8x80GB gpus:
 | ds-inference fp16 |  44.02 |  5.70 |  3.01 |  1.68 | 1.00 | 0.69 |  oom |      |
 | ds-inference int8 |  89.09 | 11.44 |  5.88 |  3.09 | 1.71 | 1.02 | 0.71 | oom  |
 | ds-zero      bf16 |    283 | 34.88 |   oom |       |      |      |      |      |
-|                   |        |       |       |       |      |      |      |      |
 
 note: Since Deepspeed-ZeRO can process multiple generate streams in parallel its throughput can be further divided by 8 or 16, depending on whether 8 or 16 gpus were used during the generate. and, of course, it means that it can process a bs of 64 in the case of 8x80 A100 (the table above).
 
@@ -41,7 +40,6 @@ Throughput in msecs 4x80GB A100:
 | :---------------- | :----- | :---- | :---- | :---- | :--- | :--- |
 | accelerate   int8 | 284.15 | 40.14 | 21.97 |  oom  |      |      |
 | ds-inference int8 | 156.51 | 20.11 | 10.38 |  5.50 | 2.96 | oom  |
-|                   |        |       |       |       |      |      |
 
 To get the benchmark results simply add `--benchmark` to any of these 3 scripts discussed below.
 
