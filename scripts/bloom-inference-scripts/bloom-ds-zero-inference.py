@@ -105,7 +105,7 @@ if args.nvme_offload_path:
         device="nvme",
         pin_memory=True,
         nvme_path=args.nvme_offload_path,
-        buffer_size=6e8
+        buffer_size=4e9,
     )
 
 dschf = HfDeepSpeedConfig(ds_config) # this tells from_pretrained to instantiate directly on gpus
@@ -130,6 +130,7 @@ model = ds_engine.module
 
 if args.benchmark:
     t_ready = time.time()
+    deepspeed.runtime.utils.see_memory_usage('start-of-generate', force=True)
 
 
 ### Generate
@@ -175,10 +176,7 @@ def generate():
 
 # XXX: this is currently doing world_size streams on world_size gpus, so we can feed it different inputs on each! and hence the time can be divided by world_size
 
-# warmup is a must if measuring speed as it's when all the optimizations are performed
-# e.g. on 8x80 a100 the first pass of 100 tokens takes 23sec, and the next one is 4secs
-_ = generate()
-
+print_rank0(f"*** Running generate")
 t_generate_start = time.time()
 pairs = generate()
 t_generate_span = time.time() - t_generate_start
@@ -186,14 +184,14 @@ for i,o,_ in pairs:
     print_rank0(f"{'-'*60}\nin={i}\nout={o}\n")
 
 
-if args.benchmark:
-    torch.cuda.empty_cache()
-    gc.collect()
-    deepspeed.runtime.utils.see_memory_usage('end-of-run', force=True)
-
 ### Benchmark
 
 if args.benchmark:
+    # clear cache / free memory
+    torch.cuda.empty_cache()
+    gc.collect()
+    deepspeed.runtime.utils.see_memory_usage('end-of-generate', force=True)
+
     print_rank0(f"*** Running benchmark")
 
     # warm up
@@ -203,7 +201,7 @@ if args.benchmark:
 
     # benchmark
     t0 = time.time()
-    cycles = 5
+    cycles = 1
     total_new_tokens_generated = 0
     for i in range(cycles):
         generated = generate()

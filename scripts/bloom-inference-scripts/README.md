@@ -18,8 +18,10 @@ Throughput in msecs on 8x80GB gpus:
 | accelerate   int8 | 286.56 | 40.92 | 22.65 | 13.27 |  oom |      |      |      |
 | ds-inference fp16 |  44.02 |  5.70 |  3.01 |  1.68 | 1.00 | 0.69 |  oom |      |
 | ds-inference int8 |  89.09 | 11.44 |  5.88 |  3.09 | 1.71 | 1.02 | 0.71 | oom  |
-| ds-zero           |    283 | 34.88 |   oom |       |      |      |      |      |
+| ds-zero      bf16 |    283 | 34.88 |   oom |       |      |      |      |      |
 |                   |        |       |       |       |      |      |      |      |
+
+note: Since Deepspeed-ZeRO can process multiple generate streams in parallel its throughput can be further divided by 8 or 16, depending on whether 8 or 16 gpus were used during the generate. and, of course, it means that it can process a bs of 64 in the case of 8x80 A100 (the table above).
 
 Start to ready to generate in secs (mainly loading and data preparation time):
 
@@ -144,6 +146,8 @@ Note that the script currently runs the same inputs on all GPUs, but you can run
 ```
 deepspeed --num_gpus 8 scripts/bloom-inference-scripts/bloom-ds-zero-inference.py --name bigscience/bloom --batch_size 1 --benchmark 2>&1 | tee bloom-ds-zero-inference_bs=1.txt
 ```
+
+Please remember that with ZeRO the user can generate multiple unique streams at the same time - and thus the overall performance should be throughput in secs/token divided by number of participating gpus - so 8x to 16x faster depending on whether 8 or 16 gpus were used!
 
 You can also try the offloading solutions with just one small GPU, which will take a long time to run, but if you don't have 8 huge GPUs this is as good as it gets.
 
