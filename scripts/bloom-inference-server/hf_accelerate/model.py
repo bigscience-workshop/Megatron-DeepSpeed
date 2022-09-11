@@ -15,13 +15,20 @@ class HFAccelerateModel(Model):
         self.tokenizer = AutoTokenizer.from_pretrained(downloaded_model_path)
         self.pad = self.tokenizer.pad_token_id
 
-        self.model = AutoModelForCausalLM.from_pretrained(
-            downloaded_model_path,
-            device_map="auto",
-            max_memory=get_max_memory_per_gpu_dict(
-                args.dtype, args.model_name),
-            torch_dtype=args.dtype
-        )
+        kwargs = {
+            "pretrained_model_name_or_path": downloaded_model_path,
+            "device_map": "auto",
+            "max_memory": get_max_memory_per_gpu_dict(
+                args.dtype,
+                args.model_name
+            )
+        }
+        if (args.dtype == torch.int8):
+            kwargs["load_in_8bit"] = True
+        else:
+            kwargs["torch_dtype"] = args.dtype
+
+        self.model = AutoModelForCausalLM.from_pretrained(**kwargs)
 
         self.model.requires_grad_(False)
         self.model.eval()
@@ -39,14 +46,20 @@ def get_max_memory_per_gpu_dict(dtype, model_name):
     if model_name == "bigscience/bloom" and n_gpus == 8 and torch.cuda.get_device_properties(0).total_memory > 79*2**30:
         # hand crafted optimized memory map for 8x80 setup over BLOOM
         # this works with bs=40
-        return {0: '0GIB', 1: '51GIB', 2: '51GIB', 3: '51GIB', 4: '51GIB', 5: '51GIB', 6: '51GIB', 7: '51GIB'}
-
+        if (dtype in [torch.bfloat16, torch.float16]):
+            max_memory_per_gpu = {0: '0GIB', 1: '51GIB', 2: '51GIB', 3: '51GIB',
+                                  4: '51GIB', 5: '51GIB', 6: '51GIB', 7: '51GIB'}
+        elif (dtype == torch.int8):
+            max_memory_per_gpu = {0: '0GIB', 1: '26GIB', 2: '26GIB', 3: '26GIB',
+                                  4: '26GIB', 5: '26GIB', 6: '26GIB', 7: '26GIB'}
+        print_rank_n("Max memory per gpu:", max_memory_per_gpu)
+        return max_memory_per_gpu
     try:
         # model_params calculation, as we don't have a model yet to do:
         #model_params = sum(dict((p.data_ptr(), p.numel()) for p in model.parameters()).values())
 
         config = AutoConfig.from_pretrained(model_name)
-        h = config.n_embed
+        h = config.hidden_size
         l = config.n_layer
         v = config.vocab_size
         # from https://github.com/bigscience-workshop/bigscience/tree/6917a3b5fefcf439d3485ca184b4d9f6ab605150/math#model-sizing
@@ -56,11 +69,14 @@ def get_max_memory_per_gpu_dict(dtype, model_name):
             f"The model {model_name} has a broken config file. Please notify the owner")
         raise
 
-    bytes = torch.finfo(dtype).bits / 8
+    if (dtype == torch.int8):
+        bytes = 1
+    else:
+        bytes = torch.finfo(dtype).bits / 8
     param_memory_total_in_bytes = model_params * bytes
     # add 5% since weight sizes aren't the same and some GPU may need more memory
     param_memory_per_gpu_in_bytes = int(
-        param_memory_total_in_bytes / n_gpus * 1.05)
+        param_memory_total_in_bytes / n_gpus * 1.10)
     print_rank_n(
         f"Estimating {param_memory_per_gpu_in_bytes/2**30:0.2f}GB per gpu for weights")
 
@@ -72,4 +88,7 @@ def get_max_memory_per_gpu_dict(dtype, model_name):
         raise ValueError(
             f"Unable to generate the memory map automatically as the needed estimated memory per gpu ({param_memory_per_gpu_in_bytes/2**30:0.2f}GB) is bigger than the available per gpu memory ({max_memory_per_gpu_in_bytes/2**30:0.2f}GB)")
 
-    return {i: param_memory_per_gpu_in_bytes for i in range(torch.cuda.device_count())}
+    max_memory_per_gpu = {
+        i: param_memory_per_gpu_in_bytes for i in range(torch.cuda.device_count())}
+    print("Max memory per gpu:", max_memory_per_gpu)
+    return max_memory_per_gpu

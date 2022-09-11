@@ -18,7 +18,7 @@ class GenerateRequest(BaseModel):
     top_k: int = None
     top_p: float = None
     typical_p: float = None
-    repitition_penalty: float = None
+    repetition_penalty: float = None
     bos_token_id: int = None
     pad_token_id: int = None
     eos_token_id: int = None
@@ -36,6 +36,10 @@ class GenerateRequest(BaseModel):
     exponential_decay_length_penalty: float = None
     remove_input_from_output: bool = False
     method: str = "generate"
+
+    def preprocess(self) -> None:
+        if (self.temperature == 0):
+            self.do_sample = False
 
 
 class GenerateResponse(BaseResponse):
@@ -91,7 +95,7 @@ def parse_generate_kwargs(text: List[str], kwargs: dict) -> GenerateRequest:
         top_k=parse_field(kwargs, "top_k", int),
         top_p=parse_field(kwargs, "top_p", float),
         typical_p=parse_field(kwargs, "typical_p", float),
-        repitition_penalty=parse_field(kwargs, "repitition_penalty", float),
+        repetition_penalty=parse_field(kwargs, "repetition_penalty", float),
         bos_token_id=parse_field(kwargs, "bos_token_id", int),
         pad_token_id=parse_field(kwargs, "pad_token_id", int),
         eos_token_id=parse_field(kwargs, "eos_token_id", int),

@@ -3,6 +3,7 @@ from argparse import Namespace
 
 import deepspeed
 import torch
+import torch.distributed as dist
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 from transformers.deepspeed import HfDeepSpeedConfig
 
@@ -64,3 +65,4 @@ class DSZeROModel(Model):
         self.input_device = torch.cuda.current_device()
 
         print_rank_n("Model loaded")
+        dist.barrier()

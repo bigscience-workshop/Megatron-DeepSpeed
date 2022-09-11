@@ -3,9 +3,11 @@ import io
 import json
 import os
 from argparse import Namespace
+from functools import partial
 
 import deepspeed
 import torch
+import torch.distributed as dist
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
 from utils import Model, get_downloaded_model_path, print_rank_n, run_rank_n
@@ -58,6 +60,7 @@ class DSInferenceModel(Model):
         self.input_device = torch.cuda.current_device()
 
         print_rank_n("Model loaded")
+        dist.barrier()
 
 
 class TemporaryCheckpointsJSON:
@@ -77,17 +80,10 @@ class TemporaryCheckpointsJSON:
 
     def __enter__(self):
         run_rank_n(
-            os.makedirs,
-            {
-                "name": self.tmp_directory,
-                "exist_ok": True
-            }
+            partial(os.makedirs, name=self.tmp_directory, exist_ok=True)
         )
         run_rank_n(
-            self.write_checkpoints_json,
-            {
-                "model_path": self.model_path
-            },
+            partial(self.write_checkpoints_json, model_path=self.model_path),
             barrier=True
         )
         return self.tmp_file
