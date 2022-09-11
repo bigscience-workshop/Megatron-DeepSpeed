@@ -55,6 +55,9 @@ def main() -> None:
                         continue
 
             request = parse_generate_kwargs([input_text], generate_kwargs)
+
+            request.preprocess()
+
             response = model.generate(request)
 
             print_rank_n("Output text:", response.text[0])

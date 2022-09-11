@@ -110,6 +110,8 @@ class Server:
 
     def generate(self, request: GenerateRequest) -> GenerateResponse:
         try:
+            request.preprocess()
+
             request.max_new_tokens = get_num_tokens_to_generate(
                 request.max_new_tokens, self.allowed_max_new_tokens)
 

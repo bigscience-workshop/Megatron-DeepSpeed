@@ -38,7 +38,7 @@ class Model:
                 top_k=request.top_k,
                 top_p=request.top_p,
                 typical_p=request.typical_p,
-                repitition_penalty=request.repitition_penalty,
+                repetition_penalty=request.repetition_penalty,
                 bos_token_id=request.bos_token_id,
                 pad_token_id=request.pad_token_id,
                 eos_token_id=request.eos_token_id,

@@ -66,6 +66,8 @@ def benchmark_end_to_end(args: argparse.Namespace,
         args.generate_kwargs
     )
 
+    request.preprocess()
+
     print_rank_n(f"generate_kwargs = {args.generate_kwargs}")
     print_rank_n(f"batch_size = {args.batch_size}")
 
