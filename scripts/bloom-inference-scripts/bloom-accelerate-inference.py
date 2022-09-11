@@ -6,6 +6,7 @@ import torch
 import math
 from transformers import AutoTokenizer, AutoConfig, AutoModelForCausalLM
 
+
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--local_rank", required=False, type=int, help="used by dist launchers")
@@ -15,6 +16,7 @@ def get_args():
     parser.add_argument("--greedy", action="store_true")
     parser.add_argument("--top-k", type=int, default=0)
     parser.add_argument("--top-p", type=float, default=0.)
+    parser.add_argument("--dtype", type=str, help="float16 or int8", choices=["int8", "float16"], default="float16")
 
     return parser.parse_args()
 
@@ -27,27 +29,35 @@ def get_max_memory_per_gpu_dict(dtype, model_name):
     if model_name == "bigscience/bloom" and n_gpus == 8 and torch.cuda.get_device_properties(0).total_memory > 79*2**30:
         # hand crafted optimized memory map for 8x80 setup over BLOOM
         # this works with bs=40
-        return {0: '0GIB', 1: '51GIB', 2: '51GIB', 3: '51GIB', 4: '51GIB', 5: '51GIB', 6: '51GIB', 7: '51GIB'}
+        if dtype != torch.int8:
+            max_memory_per_gpu = {0: '0GIB', 1: '51GIB', 2: '51GIB', 3: '51GIB', 4: '51GIB', 5: '51GIB', 6: '51GIB', 7: '51GIB'}
+        else:
+            max_memory_per_gpu = {0: '0GIB', 1: '26GIB', 2: '26GIB', 3: '26GIB', 4: '26GIB', 5: '26GIB', 6: '26GIB', 7: '26GIB'}
+        print("Max memory per gpu:", max_memory_per_gpu)
+        return max_memory_per_gpu
 
     try:
         # model_params calculation, as we don't have a model yet to do:
         #model_params = sum(dict((p.data_ptr(), p.numel()) for p in model.parameters()).values())
 
         config = AutoConfig.from_pretrained(model_name)
-        h = config.n_embed
+        h = config.hidden_size
         l = config.n_layer
         v = config.vocab_size
         # from https://github.com/bigscience-workshop/bigscience/tree/6917a3b5fefcf439d3485ca184b4d9f6ab605150/math#model-sizing
         model_params = l*(12*h**2 + 13*h) + v*h + 4*h
     except:
-        print(f"The model {model_name} has a broken config file. Please notify the owner")
+        print_rank0(f"The model {model_name} has a broken config file. Please notify the owner")
         raise
 
-    bytes = torch.finfo(dtype).bits / 8
+    if dtype == torch.int8:
+        bytes = 1
+    else:
+        bytes = torch.finfo(dtype).bits / 8
     param_memory_total_in_bytes = model_params * bytes
     # add 5% since weight sizes aren't the same and some GPU may need more memory
-    param_memory_per_gpu_in_bytes = int(param_memory_total_in_bytes / n_gpus * 1.05)
-    print(f"Estimating {param_memory_per_gpu_in_bytes/2**30:0.2f}GB per gpu for weights")
+    param_memory_per_gpu_in_bytes = int(param_memory_total_in_bytes / n_gpus * 1.10)
+    print_rank0(f"Estimating {param_memory_per_gpu_in_bytes/2**30:0.2f}GB per gpu for weights")
 
     # check the real available memory
     # load cuda kernels first and only measure the real free memory after loading (shorter by ~2GB)
@@ -56,7 +66,9 @@ def get_max_memory_per_gpu_dict(dtype, model_name):
     if max_memory_per_gpu_in_bytes < param_memory_per_gpu_in_bytes:
         raise ValueError(f"Unable to generate the memory map automatically as the needed estimated memory per gpu ({param_memory_per_gpu_in_bytes/2**30:0.2f}GB) is bigger than the available per gpu memory ({max_memory_per_gpu_in_bytes/2**30:0.2f}GB)")
 
-    return {i: param_memory_per_gpu_in_bytes for i in range(torch.cuda.device_count())}
+    max_memory_per_gpu = {i: param_memory_per_gpu_in_bytes for i in range(torch.cuda.device_count())}
+    print("Max memory per gpu:", max_memory_per_gpu)
+    return max_memory_per_gpu
 
 t_start = time.time()
 
@@ -65,14 +77,17 @@ num_tokens = 100
 args = get_args()
 
 local_rank = int(os.getenv('LOCAL_RANK', '0'))
-world_size = int(os.getenv('WORLD_SIZE', '1'))
+world_size = torch.cuda.device_count()
 
 rank = local_rank
 
-model_name = args.name
-if rank == 0:
-    print(f"Loading model {model_name}")
+def print_rank0(*msg):
+    if rank != 0: return
+    print(*msg)
 
+print_rank0(f"Using {world_size} gpus")
+model_name = args.name
+print_rank0(f"Loading model {model_name}")
 
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
@@ -81,13 +96,23 @@ dtype = torch.bfloat16 if model_name in ["bigscience/bloom", "bigscience/bigscie
 
 #print(get_max_memory_per_gpu_dict())
 
+infer_dtype = args.dtype
+if infer_dtype == "int8":
+    dtype = torch.int8
 
-model = AutoModelForCausalLM.from_pretrained(
-    model_name,
+kwargs = dict(
     device_map="auto",
     max_memory=get_max_memory_per_gpu_dict(dtype, model_name),
-    torch_dtype=dtype,
 )
+
+if infer_dtype == "int8":
+    print_rank0("Using `load_in_8bit=True` to use quanitized model")
+    kwargs['load_in_8bit'] = True
+else:
+    kwargs["torch_dtype"] = dtype
+
+
+model = AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
 
 
 if args.benchmark:
@@ -97,8 +122,7 @@ if args.benchmark:
 
 ### Generate
 
-if rank == 0:
-    print(f"*** Starting to generate {num_tokens} tokens with bs={args.batch_size}")
+print_rank0(f"*** Starting to generate {num_tokens} tokens with bs={args.batch_size}")
 
 input_sentences = [
     "DeepSpeed is a machine learning framework",
@@ -117,10 +141,9 @@ if args.batch_size > len(input_sentences):
 
 generate_kwargs = dict(max_new_tokens=num_tokens, do_sample=False)
 #generate_kwargs = dict(max_new_tokens=num_tokens, use_cache=False, do_sample=False)
-#generate_kwargs = dict(min_length=num_tokens, max_length=num_tokens, do_sample=False) 
+#generate_kwargs = dict(min_length=num_tokens, max_length=num_tokens, do_sample=False)
 
-if rank == 0:
-    print(f"Generate args {generate_kwargs}")
+print_rank0(f"Generate args {generate_kwargs}")
 inputs = input_sentences[:args.batch_size]
 def generate():
     """ returns a list of zipped inputs, outputs and number of new tokens """
@@ -147,9 +170,8 @@ _ = generate()
 t_generate_start = time.time()
 generated = generate()
 t_generate_span = time.time() - t_generate_start
-if rank == 0:
-    for i,o,_ in generated:
-        print(f"{'-'*60}\nin={i}\nout={o}\n")
+for i,o,_ in generated:
+    print_rank0(f"{'-'*60}\nin={i}\nout={o}\n")
 
 
 if args.benchmark:
@@ -159,8 +181,7 @@ if args.benchmark:
 ### Benchmark
 
 if args.benchmark:
-    if rank == 0:
-        print(f"*** Running benchmark")
+    print_rank0(f"*** Running benchmark")
 
     # warm up
     for i in range(1):
@@ -175,9 +196,8 @@ if args.benchmark:
         generated = generate()
         total_new_tokens_generated += sum(new_tokens for _,_,new_tokens in generated)
     torch.cuda.synchronize()
-    if rank == 0:
-        througput = (time.time() - t0)/(total_new_tokens_generated)
-        print(f"""
+    througput = (time.time() - t0)/(total_new_tokens_generated)
+    print_rank0(f"""
 *** Performance stats:
 Throughput per token including tokenize: {througput*1000:.2f} msecs
 Start to ready to generate: {t_ready - t_start:.3f} secs
