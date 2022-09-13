@@ -163,10 +163,7 @@ def generate():
 
     return zip(inputs, outputs, total_new_tokens)
 
-# warmup is a must if measuring speed as it's when all the optimizations are performed
-# e.g. on 8x80 a100 the first pass of 100 tokens takes 23sec, and the next one is 4secs
-_ = generate()
-
+print_rank0(f"*** Running generate")
 t_generate_start = time.time()
 generated = generate()
 t_generate_span = time.time() - t_generate_start
@@ -174,15 +171,14 @@ for i,o,_ in generated:
     print_rank0(f"{'-'*60}\nin={i}\nout={o}\n")
 
 
-if args.benchmark:
-    torch.cuda.empty_cache()
-    gc.collect()
-
 ### Benchmark
 
 if args.benchmark:
-    print_rank0(f"*** Running benchmark")
+    # clear cache / free memory
+    torch.cuda.empty_cache()
+    gc.collect()
 
+    print_rank0(f"*** Running benchmark")
     # warm up
     for i in range(1):
         _ = generate()
