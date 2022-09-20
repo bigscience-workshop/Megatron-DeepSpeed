@@ -12,7 +12,7 @@ DATETIME=`date +'date_%y-%m-%d_time_%H-%M-%S'`
 #DATASET_3="<PATH TO THE THIRD DATASET>"
 #DATASET="0.2 ${DATASET_1} 0.3 ${DATASET_2} 0.5 ${DATASET_3}"
 
-BASE_DATA_PATH=/data/Megatron-LM/data
+BASE_DATA_PATH=/vc_data/Megatron-LM/data
 DATASET=${BASE_DATA_PATH}/indexed_datasets/megatron
 VOCAB_PATH=${BASE_DATA_PATH}/gpt2-vocab.json
 MERGE_PATH=${BASE_DATA_PATH}/gpt2-merges.txt
@@ -20,39 +20,46 @@ MERGE_PATH=${BASE_DATA_PATH}/gpt2-merges.txt
 
 script_path=$(realpath $0)
 script_dir=$(dirname $script_path)
-#CONFIG_JSON="$script_dir/ds_config.json"
-CONFIG_JSON="/tmp/ds_config.json"
+CONFIG_JSON="$script_dir/ds_config.json"
+#CONFIG_JSON="/tmp/ds_config.json"
 
 USE_DEEPSPEED=1
-ZERO_STAGE=0
+ZERO_STAGE=2
+DTYPE="fp16"
 
-
-# Debug
 #TP=4
 #PP=4
-#LAYERS=8
-#HIDDEN=512
-#SEQ=1024
-#GLOBAL_BATCH=128
-#WORKER_STR="-i worker-0"
 
+# Debug
+DEBUG_MODE=1
+if [[ $DEBUG_MODE == 1 ]]; then
+        LAYERS=4
+        HIDDEN=512
+        SEQ=512
+        EXIT_INTERVAL=100
+        RUN_TAG="toy"
+else
+        HIDDEN=1024
+        LAYERS=24
+        SEQ=1024
+        EXIT_INTERVAL=100
+        RUN_TAG="big"
+fi  
 
 TP=1
 PP=1
-DP=2
+DP=1
 WORLD_SIZE=$((TP*PP*DP))
-HIDDEN=1024
-LAYERS=24
-SEQ=1024
-GLOBAL_BATCH=1
-WORKER_STR=""
+GLOBAL_BATCH=4
 
 MICRO_BATCH=1
+TRAIN_ITERS=100000
+CHECKPOINT_PATH=checkpoints/gpt2/z${ZERO_STAGE}/$DTYPE/tp${TP}_pp${PP}_dp${DP}_$RUN_TAG 
+LOAD_CHECKPOINT_PATH=checkpoints/gpt2/z${ZERO_STAGE}/$DTYPE/tp${TP}_pp${PP}_dp${DP}_$RUN_TAG
 LR=6.0e-4
 MIN_LR=6.0e-5
-DTYPE="fp16"
-EXP_DIR=${HOME}/experiments/results/bf16
-LOG_DIR="${EXP_DIR}/tensorboard/tp${TP}_pp${PP}_dp${DP}_hd${HIDDEN}_nl${LAYERS}_gbsz${GLOBAL_BATCH}_mbsz${MICRO_BATCH}_z${ZERO_STAGE}_LR_${LR}_${MIN_LR}_${DTYPE}_fix3"
+EXP_DIR="${HOME}/experiments/results/z${ZERO_STAGE}_uni_ckpt"
+LOG_DIR="${EXP_DIR}/tensorboard/tp${TP}_pp${PP}_dp${DP}_hd${HIDDEN}_nl${LAYERS}_gbsz${GLOBAL_BATCH}_mbsz${MICRO_BATCH}_z${ZERO_STAGE}_LR_${LR}_${MIN_LR}_${DTYPE}_cont_$RUN_TAG"
 mkdir -p $LOG_DIR
 
 while [[ $# -gt 0 ]]
@@ -88,7 +95,7 @@ options=" \
         --max-position-embeddings $SEQ \
 	--micro-batch-size $MICRO_BATCH \
 	--global-batch-size $GLOBAL_BATCH \
-	--train-iters 1000 \
+	--train-iters $TRAIN_ITERS \
         --lr $LR \
 	--min-lr $MIN_LR \
         --lr-decay-style cosine \
@@ -98,7 +105,7 @@ options=" \
 	--data-path ${DATASET} \
 	--vocab-file ${VOCAB_PATH} \
 	--merge-file ${MERGE_PATH} \
-	--save-interval 10000 \
+	--save-interval 1000 \
         --split 98,2,0 \
         --clip-grad 1.0 \
 	--weight-decay 0.1 \
@@ -107,7 +114,12 @@ options=" \
 	--init-method-std 0.006 \
         --${DTYPE} \
 	--checkpoint-activations \
-	--exit-interval 10000 \
+	--exit-interval ${EXIT_INTERVAL} \
+        --save ${CHECKPOINT_PATH} \
+        --load ${LOAD_CHECKPOINT_PATH} \
+        --position-embedding-type alibi \
+        --override-lr-scheduler \
+        --embed-layernorm \
 	--tensorboard-dir $LOG_DIR
         "
 

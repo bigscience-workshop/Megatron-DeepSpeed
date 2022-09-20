@@ -38,10 +38,10 @@ from deepspeed.checkpoint import (
     UNIVERSAL_CHECKPOINT_INFO,
     UNIVERSAL_CHECKPOINT_VERSION_KEY,
     UNIVERSAL_CHECKPOINT_VERSION_VALUE,
-    VOCABULARY_PARAMETERS_PATTERN,
-    PIPELINE_REPLICATED_PARAMETERS_PATTERN,
-    PARAMETERS_TO_AVERAGE_PATTERN,
-    PARAMETERS_WITH_ROW_PARALLELISM_PATTERN,
+    VOCABULARY_PARAMETER_PATTERNS,
+    PIPELINE_REPLICATED_PARAMETER_PATTERNS,
+    PARAMETER_TO_AVERAGE_PATTERNS,
+    PARAMETER_WITH_ROW_PARALLELISM_PATTERNS,
 )
 
 _CHECKPOINT_VERSION = None
@@ -506,13 +506,13 @@ def _universal_checkpoint_info():
     info[PADDED_VOCAB_SIZE] = args.padded_vocab_size
 
     # Vocabulary parameters (embeddings) that require special handling due to padding.
-    info[VOCABULARY_PARAMETERS_PATTERN] = ["word_embeddings.weight"]
+    info[VOCABULARY_PARAMETER_PATTERNS] = ["word_embeddings.weight"]
 
     # Replicated (shared) parameters on the pipeline dimension 
-    info[PIPELINE_REPLICATED_PARAMETERS_PATTERN] = ["word_embeddings.weight"]
+    info[PIPELINE_REPLICATED_PARAMETER_PATTERNS] = ["word_embeddings.weight"]
 
     # Parameter slices that should be averaged not concatenated. 
-    info[PARAMETERS_TO_AVERAGE_PATTERN] = [
+    info[PARAMETER_TO_AVERAGE_PATTERNS] = [
         r"tied_modules.embed.word_embeddings.norm.weight",
         r"tied_modules.embed.word_embeddings.norm.bias",
         r"\d+.input_layernorm.weight",
@@ -526,7 +526,7 @@ def _universal_checkpoint_info():
     ]
 
     # Parameter that are sliced on the row dimension
-    info[PARAMETERS_WITH_ROW_PARALLELISM_PATTERN] = [
+    info[PARAMETER_WITH_ROW_PARALLELISM_PATTERNS] = [
         "dense_4h_to_h.weight",
         "self_attention.dense.weight",
     ]

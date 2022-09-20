@@ -35,10 +35,10 @@ from deepspeed.checkpoint import (
     VOCAB_DIVISIBILITY_PADDING_TENSOR,
     ORIGINAL_VOCAB_SIZE,
     UNIVERSAL_CHECKPOINT_INFO,
-    VOCABULARY_PARAMETERS_PATTERN, 
-    PIPELINE_REPLICATED_PARAMETERS_PATTERN,
-    PARAMETERS_TO_AVERAGE_PATTERN,
-    PARAMETERS_WITH_ROW_PARALLELISM_PATTERN,
+    VOCABULARY_PARAMETER_PATTERNS, 
+    PIPELINE_REPLICATED_PARAMETER_PATTERNS,
+    PARAMETER_TO_AVERAGE_PATTERNS,
+    PARAMETER_WITH_ROW_PARALLELISM_PATTERNS,
 )
 
 def parse_arguments():
@@ -107,7 +107,7 @@ def extract_zero_shards(dir, slice_shapes, ds_checkpoint, indices_3D):
     optim_sd = sd[OPTIMIZER_STATE_DICT]
     param_slice_mappings = optim_sd[PARAM_SLICE_MAPPINGS]
     universal_checkpoint_info = ds_checkpoint.get_checkpoint_info(UNIVERSAL_CHECKPOINT_INFO)
-    pipeline_replicated_params = universal_checkpoint_info.get(PIPELINE_REPLICATED_PARAMETERS_PATTERN, [])
+    pipeline_replicated_params = universal_checkpoint_info.get(PIPELINE_REPLICATED_PARAMETER_PATTERNS, [])
     # dict
     state_groups = optim_sd[BASE_OPTIMIZER_STATE]["state"]
     # list
@@ -178,9 +178,9 @@ def merge_tp_slices(ds_checkpoint, dir, slice_dir, tp_degree, name_and_shape):
     param_base_path = os.path.join(dir, name)
 
     universal_checkpoint_info = ds_checkpoint.get_checkpoint_info(UNIVERSAL_CHECKPOINT_INFO)
-    parameters_to_average = universal_checkpoint_info.get(PARAMETERS_TO_AVERAGE_PATTERN, [])
-    parameters_with_row_parallelism = universal_checkpoint_info.get(PARAMETERS_WITH_ROW_PARALLELISM_PATTERN, [])
-    vocabulary_parameters = universal_checkpoint_info.get(VOCABULARY_PARAMETERS_PATTERN, [])
+    parameters_to_average = universal_checkpoint_info.get(PARAMETER_TO_AVERAGE_PATTERNS, [])
+    parameters_with_row_parallelism = universal_checkpoint_info.get(PARAMETER_WITH_ROW_PARALLELISM_PATTERNS, [])
+    vocabulary_parameters = universal_checkpoint_info.get(VOCABULARY_PARAMETER_PATTERNS, [])
     for state in ("fp32", "exp_avg", "exp_avg_sq"):
         slices = _merge_zero_shards(slice_base_path, state, tp_degree, shape)
         final_path = os.path.join(param_base_path, f"{state}.pt")
