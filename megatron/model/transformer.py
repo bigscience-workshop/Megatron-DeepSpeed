@@ -680,7 +680,7 @@ class ParallelTransformer(MegatronModule):
                 output_layer_init_method,
                 layer_number,
                 layer_type=layer_type,
-                self_attn_mask_type=self_attn_mask_type
+                self_attn_mask_type=self_attn_mask_type,
                 student_=student_)
         if args.virtual_pipeline_model_parallel_size is not None:
             assert (args.num_layers if not self.student_ else args.student_num_layers) % args.virtual_pipeline_model_parallel_size == 0, \
