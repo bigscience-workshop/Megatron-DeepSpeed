@@ -545,7 +545,7 @@ def setup_model_and_optimizer_distillation(model_provider_func):
     if args.deepspeed:
         print_rank_0("DeepSpeed is enabled.")
         pp = mpu.get_pipeline_model_parallel_world_size()
-        model, optimizer, _, lr_scheduler = deepspeed.initialize(
+        student_model, optimizer, _, lr_scheduler = deepspeed.initialize(
             model=student_model[0],
             optimizer=optimizer,
             args=args,
@@ -588,6 +588,54 @@ def setup_model_and_optimizer_distillation(model_provider_func):
         unwrapped_model[0].init_state_dict_from_bert()
         if args.fp16:
             optimizer.reload_model_params()
+    
+    # Do the same thing with the teacher model but without the opt state
+    teacher_model = get_model(teacher_model_provider_func)
+
+    unwrapped_model = unwrap_model(teacher_model,
+                                   (torchDDP, LocalDDP, Float16Module))
+
+
+
+    if args.deepspeed:
+        print_rank_0("DeepSpeed is enabled.")
+        pp = mpu.get_pipeline_model_parallel_world_size()
+        teacher_model, _, _, _ = deepspeed.initialize(
+            model=teacher_model[0],
+            optimizer=None,
+            args=args,
+            lr_scheduler=None
+        )
+
+        assert teacher_model.fp16_enabled() == args.fp16, "megatron fp16 config does not match deepspeed"
+        assert teacher_model.bfloat16_enabled() == args.bf16, "megatron bf16 config does not match deepspeed"
+
+        if isinstance(teacher_model, deepspeed.PipelineEngine):
+            # hack to get batch_fn from pretrain_gpt.py
+            teacher_model.set_batch_fn(model.module._megatron_batch_fn)
+
+            assert teacher_model.grid.get_pipe_parallel_rank() == mpu.get_pipeline_model_parallel_rank()
+            assert teacher_model.grid.get_slice_parallel_rank() == mpu.get_tensor_model_parallel_rank()
+            assert teacher_model.grid.get_data_parallel_rank() == mpu.get_data_parallel_rank()
+        teacher_model = [teacher_model]
+
+    if args.load is not None:
+        timers = get_timers()
+        # Extra barrier is added to make sure all ranks report the
+        # max time.
+        torch.distributed.barrier()
+        timers('load-checkpoint').start()
+        args.iteration = load_checkpoint(teacher_model, None, None)
+        torch.distributed.barrier()
+        timers('load-checkpoint').stop()
+        timers.log(['load-checkpoint'])
+    else:
+        args.iteration = 0
+
+    # We only support local DDP with multiple micro-batches.
+    if len(teacher_model) > 1 or mpu.get_pipeline_model_parallel_world_size() > 1:
+        assert args.DDP_impl == 'local'
+
 
     return student_model, teacher_model, optimizer, lr_scheduler
 
