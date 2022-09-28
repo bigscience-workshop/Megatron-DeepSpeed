@@ -314,7 +314,7 @@ class MLMDataset(torch.utils.data.Dataset):
             indexed_dataset=self.indexed_dataset,
             num_samples=num_samples,
             # -1 because GPTDataset will return `seq_length + 1` sequences.
-            seq_length=number_of_raw_tokens - 1,
+            seq_length=self.number_of_raw_tokens - 1,
             seed=seed
         )
 
@@ -327,12 +327,8 @@ class MLMDataset(torch.utils.data.Dataset):
         assert len(self.sentinel_token_ids) >= self.num_noise_spans, "Not enough sentinel tokens, please add more"
 
         args = get_args()
-        if hasattr(args, "encoder_seq_length") and args.encoder_seq_length is not None:
-            # T5 style
-            assert self.inputs_length == args.encoder_seq_length
-            assert self.targets_length == args.decoder_seq_length + 1
-        else:
-            assert self.inputs_length + self.targets_length == args.seq_length
+        # TODO @thomasw21 check once we merge t5
+        assert self.inputs_length + self.targets_length == args.seq_length + 1
 
     def __len__(self):
         return len(self._gpt_dataset)

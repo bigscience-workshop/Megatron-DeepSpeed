@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+from functools import lru_cache
 
 import torch
 import torch.nn as nn
@@ -124,7 +124,6 @@ class FusedScaleMaskSoftmax(nn.Module):
         softmax_in_fp32: if true, softmax in performed at fp32 precision.
         scale: scaling factor used in input tensor scaling.
     """
-    custom_kernel_friendly_attn_mask_type = [AttnMaskType.causal, AttnMaskType.padding]
 
     def __init__(
         self,
@@ -189,6 +188,7 @@ class FusedScaleMaskSoftmax(nn.Module):
 
         if self.attn_mask_type == AttnMaskType.causal:
             assert sq == sk, "causal mask is only for self attention"
+            assert mask is None, "Mask is silently ignored due to the use of a custom kernel"
 
             # input is 3D tensor (attn_batches, sq, sk)
             input = input.view(-1, sq, sk)
@@ -201,13 +201,26 @@ class FusedScaleMaskSoftmax(nn.Module):
             else:
                 return ScaledSoftmax.apply(input, scale)
 
+    @staticmethod
+    @lru_cache(maxsize=1)
+    def get_causal_mask(sequence_length: int):
+        mask = torch.ones(1, 1, sequence_length, sequence_length, dtype=torch.bool, device=torch.cuda.current_device())
+        return torch.triu(mask, diagonal=1)
+
     def forward_torch_softmax(self, input, mask):
         if self.input_in_float16 and self.softmax_in_fp32:
             input = input.float()
 
         if self.scale is not None:
             input = input * self.scale
+
+        if self.attn_mask_type == AttnMaskType.causal:
+            assert mask is None
+            assert input.shape[2] == input.shape[3]
+            mask = self.get_causal_mask(input.shape[2])
+
         mask_output = self.mask_func(input, mask) if mask is not None else input
+
         probs = torch.nn.Softmax(dim=-1)(mask_output)
 
         if self.input_in_float16 and self.softmax_in_fp32:

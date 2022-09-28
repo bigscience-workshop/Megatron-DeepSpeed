@@ -2,9 +2,10 @@ name: Run all tests
 on:
   # enable to manually trigger the tests
   workflow_dispatch:
-  pull_request:
-    paths:
-      - "**.py"
+# re-enable if we want automatic CI again
+#  pull_request:
+#    paths:
+#      - "**.py"
 
 jobs:
 
@@ -40,7 +41,7 @@ jobs:
         with:
           mode: start
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-          ec2-image-id: ami-04933c2edcc56a03a
+          ec2-image-id: ami-0ad997818d90480f2
           ec2-instance-type: g4dn.12xlarge
           security-group-id: sg-f2a4e2fc
           subnet-id: subnet-b7533b96 # us-east-1c
@@ -57,7 +58,7 @@ jobs:
         with:
           mode: start
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-          ec2-image-id: ami-04933c2edcc56a03a
+          ec2-image-id: ami-0ad997818d90480f2
           ec2-instance-type: g4dn.12xlarge
           security-group-id: sg-f2a4e2fc
           subnet-id: subnet-a396b2ad # us-east-1f
@@ -74,7 +75,7 @@ jobs:
         with:
           mode: start
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-          ec2-image-id: ami-04933c2edcc56a03a
+          ec2-image-id: ami-0ad997818d90480f2
           ec2-instance-type: g4dn.12xlarge
           security-group-id: sg-f2a4e2fc
           subnet-id: subnet-df0f6180 # us-east-1a
@@ -92,7 +93,7 @@ jobs:
         with:
           mode: start
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-          ec2-image-id: ami-04933c2edcc56a03a
+          ec2-image-id: ami-0ad997818d90480f2
           ec2-instance-type: p3.8xlarge
           security-group-id: sg-f2a4e2fc
           subnet-id: subnet-b7533b96 # us-east-1c
@@ -109,7 +110,7 @@ jobs:
         with:
           mode: start
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-          ec2-image-id: ami-04933c2edcc56a03a
+          ec2-image-id: ami-0ad997818d90480f2
           ec2-instance-type: p3.8xlarge
           security-group-id: sg-f2a4e2fc
           subnet-id: subnet-a396b2ad # us-east-1f
@@ -125,7 +126,7 @@ jobs:
         with:
           mode: start
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-          ec2-image-id: ami-04933c2edcc56a03a
+          ec2-image-id: ami-0ad997818d90480f2
           ec2-instance-type: p3.8xlarge
           security-group-id: sg-f2a4e2fc
           subnet-id: subnet-df0f6180 # us-east-1a

@@ -23,6 +23,7 @@ from megatron import get_timers
 from megatron import get_tokenizer
 from megatron import mpu
 from megatron.data.gpt_dataset import build_train_valid_test_datasets, build_dataset_group
+from megatron.enums import AttnMaskType
 from megatron.model import GPTModel, GPTModelPipe
 from megatron.training import pretrain
 from megatron.utils import get_ltor_masks_and_position_ids, get_prefix_indices
@@ -53,26 +54,11 @@ def model_provider(pre_process=True, post_process=True):
                              enabled=args.zero_stage == 3,
                              mpu=mpu):
         if args.deepspeed:
-            # Precompute the attention mask and store it in args. This avoids having to
-            # pipeline it as an activation during training. The mask is constant, and thus
-            # we can reuse it.
-            attention_mask = torch.tril(torch.ones(
-                (1, args.seq_length, args.seq_length), device=torch.cuda.current_device())).view(
-                    1, 1, args.seq_length, args.seq_length)
-
-            # Convert attention mask to binary:
-            attention_mask = (attention_mask < 0.5)
-            if args.fp16:
-                attention_mask = attention_mask.half()
-            elif args.bf16:
-                attention_mask = attention_mask.bfloat16()
-
-            # must be bool or the training crashes expecting bool, but getting Half
-            args.attn_mask = attention_mask.to(torch.bool)
-
+            args.pretrain_causal_attention = True
             model = GPTModelPipe(
                 num_tokentypes=0,
-                parallel_output=True
+                parallel_output=True,
+                attn_mask_type=AttnMaskType.causal
             )
             # This is a hack to give us a reference to get_batch_pipe from within training.py
             # We need to call model.set_batch_fn after deepspeed.initialize

@@ -573,6 +573,9 @@ class MMapIndexedDataset(torch.utils.data.Dataset):
     def sizes(self):
         return self._index.sizes
 
+    def size(self, index):
+        return self._index.sizes[index]
+
     @property
     def doc_idx(self):
         return self._index.doc_idx
