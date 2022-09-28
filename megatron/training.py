@@ -1239,7 +1239,7 @@ def distill_step(forward_step_func, student_model, teacher_model, optimizer, lr_
         tp_rank = mpu.get_tensor_model_parallel_rank()
         pp_rank = mpu.get_pipeline_model_parallel_rank()
         preamble = f"[{tp_rank:0>3d}-{pp_rank:0>3d}]"
-        print(f"{preamble} {get_parameters_in_billions(model):.4f}B / {get_parameters_in_billions(model, exclude_embeddings=True):.4f}B", flush=True)
+        print(f"{preamble} {get_parameters_in_billions(student_model):.4f}B / {get_parameters_in_billions(student_model, exclude_embeddings=True):.4f}B", flush=True)
         torch.distributed.barrier()
     else:
         torch.distributed.barrier()
