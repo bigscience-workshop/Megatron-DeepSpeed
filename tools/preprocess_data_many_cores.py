@@ -23,6 +23,9 @@ Rule of thumb for using this script instead of `tools/preprocess_data.py`:
  - cpus >= 20 (logical cores)
  - large inputs: size >= 1GB
 
+Caveat:
+ - It does not preserve original ordering. So not usable to `targets` and `inputs`
+
 For example using a 40 physical cores (80 logical cores) setup, we can run 60 workers on oscar (1.2T) to increase the speed of preprocessing.
 """
 

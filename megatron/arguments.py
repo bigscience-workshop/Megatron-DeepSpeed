@@ -381,6 +381,10 @@ def _add_network_size_args(parser):
                        ', needs to be divisible by TP size and `make-vocab-size-divisible-by`.')
     group.add_argument('--layernorm-epsilon', type=float, default=1e-5,
                        help='Layer norm epsilon.')
+    group.add_argument('--sync-tp-duplicated-parameters', action='store_true',
+                       help='Force syncing duplicated params across TP ranks in forward. '
+                       'This is a workaround for an unresolved bug leading to TP ranks '
+                       'getting out of sync with each other.')
     group.add_argument('--apply-residual-connection-post-layernorm',
                        action='store_true',
                        help='If set, use original BERT residula connection '
@@ -643,6 +647,8 @@ def _add_learning_rate_args(parser):
                        '(learning rate, warmup iterations, minimum learning '
                        'rate, maximum number of iterations, and decay style '
                        'from checkpoint and ignore input arguments.')
+    group.add_argument('--universal-checkpoint', action='store_true',
+                        help='Loading a universal format checkpoint.')
 
     return parser
 

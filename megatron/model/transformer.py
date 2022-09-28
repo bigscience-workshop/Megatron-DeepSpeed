@@ -333,6 +333,7 @@ class ParallelAttention(MegatronModule):
 
         if get_key_value:
             with torch.no_grad():
+                # TODO @thomasw21 Handle case where `attention_mask` is None
                 if layer_past is not None:
                     attention_mask = attention_mask[
                         ...,
@@ -633,17 +634,11 @@ class ParallelTransformerLayerPipe(ParallelTransformerLayer):
     2) forward(input, **kwargs) -> output
        When the mask is static over all samples, it is advantageous to
        cache the mask and avoid communicating it.
-
-       If no mask is provided, the module will query `self._args.attn_mask`
-       for the mask and only return `super().forward(...)`
     """
     def forward(self, inputs, **kwargs):
         assert torch.is_tensor(inputs) or isinstance(inputs, tuple)
         if torch.is_tensor(inputs) or len(inputs) == 1:
-            # No attention mask forwarded, search for args.attn_mask
-            if not hasattr(self, '_args'):
-                self._args = get_args()
-            hidden_states, attention_mask = inputs, self._args.attn_mask
+            hidden_states, attention_mask = inputs, None
             return super().forward(hidden_states, attention_mask, **kwargs)
         elif len(inputs) == 2:
             # Attention mask is an activation.

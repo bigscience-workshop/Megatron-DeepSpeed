@@ -250,6 +250,75 @@ def get_ltor_masks_and_position_ids(
     return attention_mask, loss_mask, position_ids
 
 
+def get_packed_attention_mask(is_causal: bool, causal_mask: torch.Tensor, decoder_is_inputs: torch.Tensor, segment_ids: torch.Tensor):
+    """
+    Inspired by https://github.com/google-research/t5x/blob/7193407f98a8b18100b71a04ff777238be1682ca/t5x/examples/decoder_only/layers.py#L978
+
+    Arguments:
+        - is_causal: determines if the masking should be causal in the `inputs` part
+        - causal_mask: torch.BoolTensor [batch_size, sequence_length, sequence_length]
+        - decoder_is_inputs: torch.BoolTensor [batch_size, sequence_length]
+        - segment_ids: torch.IntTensor [batch_size, sequence_length]
+    Returns:
+        - attention_mask: torch.BoolTensor [batch_size, 1, sequence_length, sequence_length]
+    """
+
+    """Causal Inputs Mask:
+    mask = [[[[1, 1, 0, 0, 0, 0, 0],
+            [1, 1, 0, 0, 0, 0, 0],
+            [1, 1, 1, 0, 0, 0, 0],
+            [1, 1, 1, 1, 1, 0, 0],
+            [1, 1, 1, 1, 1, 0, 0],
+            [1, 1, 1, 1, 1, 1, 0],
+            [1, 1, 1, 1, 1, 1, 1]]]]
+    """
+    assert causal_mask.dtype == torch.bool
+    assert segment_ids.dtype == torch.long
+    if is_causal:
+        causal_inputs_mask = causal_mask
+    else:
+        assert decoder_is_inputs.dtype == torch.bool
+        inputs_mask = decoder_is_inputs[:, None, :, None] * decoder_is_inputs[:, None, None, :]
+        causal_inputs_mask = causal_mask + inputs_mask
+
+    """Padding Mask:
+    mask = [[[[1, 1, 1, 1, 1, 1, 0],
+            [1, 1, 1, 1, 1, 1, 0],
+            [1, 1, 1, 1, 1, 1, 0],
+            [1, 1, 1, 1, 1, 1, 0],
+            [1, 1, 1, 1, 1, 1, 0],
+            [1, 1, 1, 1, 1, 1, 0],
+            [0, 0, 0, 0, 0, 0, 0]]]]
+    """
+    padding_mask = (segment_ids != 0)[:, None, :, None] * (segment_ids != 0)[:, None, None, :]
+
+    """Segment Mask:
+    mask = [[[[1, 1, 1, 0, 0, 0, 0],
+            [1, 1, 1, 0, 0, 0, 0],
+            [1, 1, 1, 0, 0, 0, 0],
+            [0, 0, 0, 1, 1, 1, 0],
+            [0, 0, 0, 1, 1, 1, 0],
+            [0, 0, 0, 1, 1, 1, 0],
+            [0, 0, 0, 0, 0, 0, 0]]]]
+    """
+    segment_mask = segment_ids[:, None, :, None] == segment_ids[:, None, None, :]
+
+    """Final Mask:
+    mask = [[[[1, 1, 0, 0, 0, 0, 0],
+            [1, 1, 0, 0, 0, 0, 0],
+            [1, 1, 1, 0, 0, 0, 0],
+            [0, 0, 0, 1, 1, 0, 0],
+            [0, 0, 0, 1, 1, 0, 0],
+            [0, 0, 0, 1, 1, 1, 0],
+            [0, 0, 0, 0, 0, 0, 0]]]]
+    """
+    attention_mask = causal_inputs_mask * padding_mask * segment_mask
+
+    # Convert attention mask to binary:
+    attention_mask = (attention_mask < 0.5)
+
+    return attention_mask
+
 def param_size(parameter):
     return parameter.ds_numel if hasattr(parameter, 'ds_id') else parameter.nelement()
 
@@ -392,3 +461,79 @@ def found_kill_switch():
         return True
     else:
         return False
+
+def get_fingerprint_header():
+    return f"{'min':^13} {'max':^13} {'mean':^13} {'l2 norm':^12} metadata"
+
+def get_fingerprint(p):
+    return f"{p.min():13.6e} {p.max():13.6e} {p.mean():13.6e} {p.norm():12.6e}"
+
+
+def dump_weights(preamble, iteration, model, optimizer, tensor=None):   
+    tp_rank = mpu.get_tensor_model_parallel_rank()
+    pp_rank = mpu.get_pipeline_model_parallel_rank()
+    dp_rank = mpu.get_data_parallel_rank()
+    dp_size = mpu.get_data_parallel_world_size()
+    fn = f"debug-bf16-{iteration}-pp{pp_rank}-tp{tp_rank}-dp{dp_rank}-{preamble}.txt"
+
+    # only care for first and last pp stages and dp0 tp0
+    #if not (mpu.is_pipeline_first_stage() or mpu.is_pipeline_last_stage()):
+    #    return
+
+    #if not (tp_rank == 0 and dp_rank == 0):
+    #    return
+
+    if tensor is not None:
+        orig_tensor = tensor
+        if hasattr(tensor, "_hp_param"):
+            numel = tensor._hp_param.numel() # // dp_size
+            tensor = tensor.flatten().narrow(0, 0, numel)
+
+    #print(fn)
+    with open(fn, "w") as fh:
+        fh.write(f"{get_fingerprint_header()}\n")
+
+        if tensor is not None:
+            fh.write(f"{get_fingerprint(tensor)} tensor {tensor.shape}\n")
+        else:
+            for n, p in model[0].named_parameters():
+                fh.write(f"{get_fingerprint(p)} {n} {p.shape}\n")
+
+
+    return 
+
+
+    # until we figure out how to dump the actual fp32 values don't do this
+    fn = f"debug-fp32-{iteration}-pp{pp_rank}-tp{tp_rank}-dp{dp_rank}-{preamble}.txt"
+    with open(fn, "w") as fh:
+        fh.write(f"{get_fingerprint_header()}\n")
+        if tensor is not None:
+            tensor = orig_tensor
+            if hasattr(tensor, "_hp_param"):
+                fh.write(f"{get_fingerprint(tensor._hp_param)} tensor {tensor._hp_param.shape}\n")
+                #fh.write(f"{get_fingerprint(tensor._hp_grad)} tensor grad\n")
+            else:
+                fh.write(f"{get_fingerprint(tensor)} tensor {tensor.shape}\n")
+                #fh.write(f"{get_fingerprint(tensor.grad)} tensor grad\n")
+
+        else:
+            if hasattr(model[0].module.tied_modules, "embed"):
+                p = model[0].module.tied_modules.embed.word_embeddings.weight._hp_param
+                fh.write(f"{get_fingerprint(p)} module.tied_modules.embed.word_embeddings.weight._hp_param {p.shape}\n")
+
+        # for i, param_group in enumerate(optimizer.param_groups):
+        #     fh.write(f"{get_fingerprint(optimizer.fp32_groups_flat_partition[i])} group={i}\n")
+            #fh.write(f"{i}={optimizer.fp32_groups_flat_partition[i]}\n")
+    #     if mpu.is_pipeline_first_stage():
+    #         x = optimizer.fp32_groups_flat_partition[0]
+    #         fh.write(f"fp32={x[:402432]}\n")
+    #     if mpu.is_pipeline_last_stage()):
+    #         x = optimizer.fp32_groups_flat_partition[1]
+    #         fh.write(f"fp32={x[-402432:]}\n")
+
+    # import os
+    # import socket
+    # hostname = socket.gethostname()
+    # pid = os.getpid()
+    # global_rank = torch.distributed.get_rank()
+    #fn = f"debug-{iteration}-pp{pp_rank}-tp{tp_rank}-dp{dp_rank}-global{global_rank}-{preamble}-{pid}.txt"

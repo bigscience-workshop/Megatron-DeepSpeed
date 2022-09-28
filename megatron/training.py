@@ -640,6 +640,32 @@ def setup_model_and_optimizer_distillation(model_provider_func):
     return teacher_model, student_model, optimizer, lr_scheduler
 
 
+def sync_hp_to_lp(optimizer):
+
+    optimizer.update_lp_params()
+
+    # for n,p in model.named_parameters():
+    #     print(n)
+
+    #     if p._hp_mapping is not None:
+    #         #print(f'rank {rank} fixing hp for input_layernorm')
+    #         #p._hp_mapping.update_hp()
+
+    #         hp = p._hp_mapping.hp_fragment
+
+
+
+    #         torch.distributed.all_reduce(hp, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
+
+    #         # 3. optim states
+    #         for key in ['exp_avg', 'exp_avg_sq']:
+    #             optim_state_fragment = p._hp_mapping.get_optim_state_fragment(key)
+    #             #print(f'rank {rank} before reduce optim state fragment {key} = {optim_state_fragment}')
+    #             torch.distributed.all_reduce(optim_state_fragment, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
+    #             #print(f'rank {rank} after reduce optim state fragment {key} = {optim_state_fragment}')
+
+
+
 def setup_model_and_optimizer(model_provider_func):
     """Setup model and optimizer."""
     args = get_args()
@@ -659,12 +685,21 @@ def setup_model_and_optimizer(model_provider_func):
 
     if args.deepspeed:
         print_rank_0("DeepSpeed is enabled.")
-        pp = mpu.get_pipeline_model_parallel_world_size()
+        #pp = mpu.get_pipeline_model_parallel_world_size()
+
+        import json
+        import io
+        with io.open(args.deepspeed_config, "r", encoding="utf-8") as f:
+            config = json.load(f)
+        if args.universal_checkpoint:
+            config["checkpoint"] = {"load_universal": True}
+
         model, optimizer, _, lr_scheduler = deepspeed.initialize(
             model=model[0],
             optimizer=optimizer,
+            lr_scheduler=lr_scheduler,
+            config=config,
             args=args,
-            lr_scheduler=lr_scheduler
         )
 
         assert model.fp16_enabled() == args.fp16, "megatron fp16 config does not match deepspeed"
@@ -689,8 +724,37 @@ def setup_model_and_optimizer(model_provider_func):
         torch.distributed.barrier()
         timers('load-checkpoint').stop()
         timers.log(['load-checkpoint'])
+
+
+        # hp -> lp
+        if args.deepspeed and args.universal_checkpoint:
+            sync_hp_to_lp(optimizer)
+
+
     else:
         args.iteration = 0
+    
+    from .utils import dump_weights 
+    dump_weights(f'{args.universal_checkpoint=}', args.iteration, model, optimizer)
+
+    # tp_rank = mpu.get_tensor_model_parallel_rank()
+    # pp_rank = mpu.get_pipeline_model_parallel_rank()
+    # dp_rank = mpu.get_data_parallel_rank()
+    # for n,p in model[0].named_parameters():
+    #     if 'word_embeddings.weight' not in n:
+    #         continue 
+    #     if tp_rank == 0 and pp_rank == 0:
+    #         print(f"{tp_rank=}{pp_rank=}{dp_rank=} bf16 {n=} {p[:10]=}")
+    #         if p._hp_mapping is not None:
+    #             hp = p._hp_mapping.hp_fragment
+    #             print(f'{tp_rank=}{pp_rank=}{dp_rank=} fp32 {n=} {hp[:10]=}')
+
+    #     if tp_rank == 0 and pp_rank == mpu.get_pipeline_model_parallel_world_size() - 1:
+    #         print(f"{tp_rank=}{pp_rank=}{dp_rank=} bf16 {n=} {p[:10]=}")
+    #         if p._hp_mapping is not None:
+    #             hp = p._hp_mapping.hp_fragment
+    #             print(f'{tp_rank=}{pp_rank=}{dp_rank=} fp32 {n=} {hp[:10]=}')
+
 
     # We only support local DDP with multiple micro-batches.
     if len(model) > 1 or mpu.get_pipeline_model_parallel_world_size() > 1:
@@ -1454,20 +1518,20 @@ def build_train_valid_test_data_iterators(
     assert dl_type in ['single', 'cyclic']
 
     if train_dataloader is not None:
-        train_data_iterator = iter(train_dataloader) if dl_type == 'single' \
+        train_data_iterator = iter(train_dataloader) if dl_type in ['single'] \
                               else iter(cyclic_iter(train_dataloader))
     else:
         train_data_iterator = None
 
     if valid_dataloaders is not None:
-        valid_data_iterators = [iter(vdl) if dl_type == 'single' \
+        valid_data_iterators = [iter(vdl) if dl_type in ['single'] \
                               else iter(cyclic_iter(valid_dataloaders))
                                  for vdl in valid_dataloaders]
     else:
         valid_data_iterators = [None] * num_valid_ds
 
     if test_dataloaders is not None:
-        test_data_iterators = [iter(tdl) if dl_type == 'single' \
+        test_data_iterators = [iter(tdl) if dl_type in ['single'] \
                              else iter(cyclic_iter(test_dataloaders))
                             for tdl in test_dataloaders]
     else:
