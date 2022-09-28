@@ -254,7 +254,8 @@ class GPTModelPipe(PipelineModule,MegatronModule):
                                                                        args.num_layers if not student_ else args.student_num_layers),
                     layer_number=layer_idx,
                     # TODO: Change naming of class from GPT to something that encapsulate prefix lm.
-                    self_attn_mask_type=attn_mask_type))
+                    self_attn_mask_type=attn_mask_type,
+                    student_=student_))
 
         # Undo data format change
         def undo(x):
