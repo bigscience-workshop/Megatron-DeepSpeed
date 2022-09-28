@@ -86,7 +86,7 @@ EXIT_OPTS=" \
     "
 
 GPT_ARGS=" \
-    --pp-partition-method 'type:transformer|embedding' \
+    --pp-partition-method type:transformer|embedding \
     --num-layers $NLAYERS \
     --hidden-size $NHIDDEN \
     --num-attention-heads $NHEADS \
