@@ -167,7 +167,7 @@ export LAUNCHER="python -u -m torch.distributed.run \
     "
 
 export CMD=" \
-    pretrain_gpt.py \
+    distill_gpt.py \
     --tensor-model-parallel-size $TP_SIZE \
     --pipeline-model-parallel-size $PP_SIZE \
     $GPT_ARGS \
