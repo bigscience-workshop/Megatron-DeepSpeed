@@ -123,7 +123,8 @@ class ParallelAttention(MegatronModule):
     def __init__(self, init_method,
                  output_layer_init_method, layer_number,
                  attention_type=AttnType.self_attn,
-                 attn_mask_type=AttnMaskType.padding):
+                 attn_mask_type=AttnMaskType.padding,
+                 student_=False):
         super(ParallelAttention, self).__init__()
         args = get_args()
         self.fp16 = args.fp16
@@ -152,20 +153,20 @@ class ParallelAttention(MegatronModule):
         # Strided linear layer.
         if attention_type == AttnType.self_attn:
             self.query_key_value = mpu.ColumnParallelLinear(
-                args.hidden_size,
+                (args.hidden_size if not student_ else args.student_hidden_size),
                 3 * projection_size,
                 gather_output=False,
                 init_method=init_method)
         else:
             assert attention_type == AttnType.cross_attn
             self.query = mpu.ColumnParallelLinear(
-                args.hidden_size,
+                (args.hidden_size if not student_ else args.student_hidden_size),
                 projection_size,
                 gather_output=False,
                 init_method=init_method)
 
             self.key_value = mpu.ColumnParallelLinear(
-                args.hidden_size,
+                (args.hidden_size if not student_ else args.student_hidden_size),
                 2 * projection_size,
                 gather_output=False,
                 init_method=init_method)
@@ -192,7 +193,7 @@ class ParallelAttention(MegatronModule):
         # Output.
         self.dense = mpu.RowParallelLinear(
             projection_size,
-            args.hidden_size,
+            (args.hidden_size if not student_ else args.student_hidden_size),
             input_is_parallel=True,
             init_method=output_layer_init_method,
             skip_bias_add=True)
