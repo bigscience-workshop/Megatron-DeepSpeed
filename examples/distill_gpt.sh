@@ -45,7 +45,7 @@ export TRANSFORMERS_OFFLINE=1
 MASTER_ADDR=$(scontrol show hostnames $SLURM_JOB_NODELIST | head -n 1)
 MASTER_PORT=6000
 
-GPUS_PER_NODE=4
+GPUS_PER_NODE=2
 NNODES=$SLURM_NNODES
 
 PP_SIZE=1
@@ -167,7 +167,7 @@ export LAUNCHER="python -u -m torch.distributed.run \
     "
 
 export CMD=" \
-    `pwd`/pretrain_gpt.py \
+    pretrain_gpt.py \
     --tensor-model-parallel-size $TP_SIZE \
     --pipeline-model-parallel-size $PP_SIZE \
     $GPT_ARGS \
@@ -190,7 +190,7 @@ export CUDA_LAUNCH_BLOCKING=1
 export TORCHELASTIC_ERROR_FILE=/tmp/torch-elastic-error.json
 
 
-$CMD
+$LAUNCHER $CMD
 # clear; srun --jobid $SLURM_JOBID bash -c "$LAUNCHER --node_rank \$SLURM_PROCID $CMD" 2>&1 | tee -a $LOGS_PATH/main_log.txt
 
 echo "END TIME: $(date)"
