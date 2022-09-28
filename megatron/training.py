@@ -1338,7 +1338,7 @@ def distill_step(forward_step_func, student_model, teacher_model, optimizer, lr_
                                           iteration, loss_scale,
                                           report_memory_flag, skipped_iter,
                                           grad_norm, params_norm, num_zeros_in_grad,
-                                          model)
+                                          student_model)
 
         # Autoresume
         if args.adlr_autoresume and \
@@ -1354,14 +1354,14 @@ def distill_step(forward_step_func, student_model, teacher_model, optimizer, lr_
             names = names if names is not None else ['valid'] * len(valid_data_iterator)
             for iterator, name in zip(valid_data_iterator, names):
                 evaluate_and_print_results(prefix, forward_step_func,
-                                           iterator, model,
+                                           iterator, student_model,
                                            iteration, False, data_group_name=name)
 
         # Checkpointing
         saved_checkpoint = False
         if args.save and args.save_interval and \
            iteration % args.save_interval == 0:
-            save_checkpoint_and_time(iteration, model, optimizer,
+            save_checkpoint_and_time(iteration, student_model, optimizer,
                                      lr_scheduler)
             saved_checkpoint = True
 
@@ -1375,7 +1375,7 @@ def distill_step(forward_step_func, student_model, teacher_model, optimizer, lr_
             done = done_cuda.item()
             if done:
                 if not saved_checkpoint:
-                    save_checkpoint_and_time(iteration, model, optimizer,
+                    save_checkpoint_and_time(iteration, student_model, optimizer,
                                              lr_scheduler)
                 print_datetime('exiting program after {} minutes'.format(train_time))
                 sys.exit()
@@ -1383,7 +1383,7 @@ def distill_step(forward_step_func, student_model, teacher_model, optimizer, lr_
         # Exiting based on iterations
         if args.exit_interval and iteration % args.exit_interval == 0:
             if not saved_checkpoint:
-                save_checkpoint_and_time(iteration, model, optimizer,
+                save_checkpoint_and_time(iteration, student_model, optimizer,
                                          lr_scheduler)
             torch.distributed.barrier()
             print_datetime('exiting program at iteration {}'.format(iteration))
