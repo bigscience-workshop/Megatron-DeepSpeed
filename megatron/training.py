@@ -1327,7 +1327,7 @@ def distill_step(forward_step_func, student_model, teacher_model, optimizer, lr_
         loss_scale = None
         if args.fp16:
             if args.deepspeed:
-                loss_scale = model[0].optimizer.cur_scale
+                loss_scale = student_model[0].optimizer.cur_scale
             else:
                 loss_scale = optimizer.get_loss_scale().item()
         params_norm = None
