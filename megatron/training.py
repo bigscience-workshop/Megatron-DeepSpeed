@@ -557,7 +557,7 @@ def setup_model_and_optimizer_distillation(model_provider_func):
 
         if isinstance(student_model, deepspeed.PipelineEngine):
             # hack to get batch_fn from pretrain_gpt.py
-            student_model.set_batch_fn(model.module._megatron_batch_fn)
+            student_model.set_batch_fn(student_model.module._megatron_batch_fn)
 
             assert student_model.grid.get_pipe_parallel_rank() == mpu.get_pipeline_model_parallel_rank()
             assert student_model.grid.get_slice_parallel_rank() == mpu.get_tensor_model_parallel_rank()
@@ -612,7 +612,7 @@ def setup_model_and_optimizer_distillation(model_provider_func):
 
         if isinstance(teacher_model, deepspeed.PipelineEngine):
             # hack to get batch_fn from pretrain_gpt.py
-            teacher_model.set_batch_fn(model.module._megatron_batch_fn)
+            teacher_model.set_batch_fn(teacher_model.module._megatron_batch_fn)
 
             assert teacher_model.grid.get_pipe_parallel_rank() == mpu.get_pipeline_model_parallel_rank()
             assert teacher_model.grid.get_slice_parallel_rank() == mpu.get_tensor_model_parallel_rank()
