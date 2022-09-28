@@ -637,7 +637,7 @@ def setup_model_and_optimizer_distillation(model_provider_func):
         assert args.DDP_impl == 'local'
 
 
-    return student_model, teacher_model, optimizer, lr_scheduler
+    return teacher_model, student_model, optimizer, lr_scheduler
 
 
 def setup_model_and_optimizer(model_provider_func):
