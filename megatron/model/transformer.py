@@ -464,7 +464,8 @@ class ParallelTransformerLayer(MegatronModule):
             output_layer_init_method,
             layer_number,
             attention_type=AttnType.self_attn,
-            attn_mask_type=self_attn_mask_type)
+            attn_mask_type=self_attn_mask_type,
+            student_=student_)
         self.hidden_dropout = args.hidden_dropout
         self.bias_dropout_fusion = args.bias_dropout_fusion
 
@@ -478,7 +479,8 @@ class ParallelTransformerLayer(MegatronModule):
                 init_method,
                 output_layer_init_method,
                 layer_number,
-                attention_type=AttnType.cross_attn)
+                attention_type=AttnType.cross_attn,
+                student_=student_)
             # Layernorm on the attention output.
             self.post_inter_attention_layernorm = LayerNorm(
                 args.hidden_size if not student_ else args.student_hidden_size,
