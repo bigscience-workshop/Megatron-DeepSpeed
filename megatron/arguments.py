@@ -353,6 +353,12 @@ def _add_network_size_args(parser):
                        help='Number of transformer layers.')
     group.add_argument('--hidden-size', type=int, default=None,
                        help='Tansformer hidden size.')
+    group.add_argument('--student-num-layers', type=int, default=None,
+                       help='Number of student transformer layers.')
+    group.add_argument('--student-hidden-size', type=int, default=None,
+                       help='Student Tansformer hidden size.')
+    group.add_argument('--student-num-attention-heads', type=int, default=None,
+                       help='Number of student transformer attention heads.')
     group.add_argument('--ffn-hidden-size', type=int, default=None,
                        help='Transformer Feed-Forward Network hidden size. '
                        'This is set to 4*hidden-size if not provided')
