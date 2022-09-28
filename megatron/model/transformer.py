@@ -139,16 +139,16 @@ class ParallelAttention(MegatronModule):
         self.attention_type = attention_type
         self.attn_mask_type = attn_mask_type
 
-        projection_size = args.kv_channels * args.num_attention_heads
+        projection_size = args.kv_channels * (args.num_attention_heads if not student_ else args.student_num_attention_heads)
 
         # Per attention head and per partition values.
         world_size = mpu.get_tensor_model_parallel_world_size()
         self.hidden_size_per_partition = mpu.divide(projection_size,
                                                     world_size)
         self.hidden_size_per_attention_head = mpu.divide(
-            projection_size, args.num_attention_heads)
+            projection_size, (args.num_attention_heads if not student_ else args.student_num_attention_heads))
         self.num_attention_heads_per_partition = mpu.divide(
-            args.num_attention_heads, world_size)
+            (args.num_attention_heads if not student_ else args.student_num_attention_heads), world_size)
 
         # Strided linear layer.
         if attention_type == AttnType.self_attn:
