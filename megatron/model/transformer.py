@@ -654,7 +654,7 @@ class ParallelTransformer(MegatronModule):
     def __init__(self, init_method, output_layer_init_method,
                  layer_type=LayerType.encoder,
                  self_attn_mask_type=AttnMaskType.padding,
-                 pre_process=True, post_process=True):
+                 pre_process=True, post_process=True, student_=False):
         super(ParallelTransformer, self).__init__()
         args = get_args()
 
@@ -671,7 +671,7 @@ class ParallelTransformer(MegatronModule):
         # Number of layers.
         assert args.num_layers % mpu.get_pipeline_model_parallel_world_size() == 0, \
             'num_layers must be divisible by pipeline_model_parallel_size'
-        self.num_layers = args.num_layers // mpu.get_pipeline_model_parallel_world_size()
+        self.num_layers = (args.num_layers if not self.student_ else args.student_num_layers) // mpu.get_pipeline_model_parallel_world_size()
 
         # Transformer layers.
         def build_layer(layer_number):
@@ -680,9 +680,10 @@ class ParallelTransformer(MegatronModule):
                 output_layer_init_method,
                 layer_number,
                 layer_type=layer_type,
-                self_attn_mask_type=self_attn_mask_type)
+                self_attn_mask_type=self_attn_mask_type
+                student_=student_)
         if args.virtual_pipeline_model_parallel_size is not None:
-            assert args.num_layers % args.virtual_pipeline_model_parallel_size == 0, \
+            assert (args.num_layers if not self.student_ else args.student_num_layers) % args.virtual_pipeline_model_parallel_size == 0, \
                 'num_layers_per_stage must be divisible by ' \
                 'virtual_pipeline_model_parallel_size'
             # Number of layers in each model chunk is the number of layers in the stage,
@@ -697,7 +698,7 @@ class ParallelTransformer(MegatronModule):
             # Stage 0: [0, 1]  [4, 5]
             # Stage 1: [2, 3]  [6, 7]
             offset = mpu.get_virtual_pipeline_model_parallel_rank() * (
-                args.num_layers // args.virtual_pipeline_model_parallel_size) + \
+                (args.num_layers if not self.student_ else args.student_num_layers) // args.virtual_pipeline_model_parallel_size) + \
                 (mpu.get_pipeline_model_parallel_rank() * self.num_layers)
         else:
             # Each stage gets a contiguous set of layers.
@@ -709,7 +710,7 @@ class ParallelTransformer(MegatronModule):
         if self.post_process:
             # Final layer norm before output.
             self.final_layernorm = LayerNorm(
-                args.hidden_size,
+                (args.hidden_size if not student_ else args.student_hidden_size),
                 eps=args.layernorm_epsilon)
 
         if deepspeed.checkpointing.is_configured():
