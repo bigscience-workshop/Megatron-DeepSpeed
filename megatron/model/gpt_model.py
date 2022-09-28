@@ -204,6 +204,7 @@ class GPTModelPipe(PipelineModule,MegatronModule):
         parallel_output=True,
         prefix_lm=False,
         student_=False,
+        attn_mask_type: AttnMaskType = AttnMaskType.causal,
     ):
         args = get_args()
         self.parallel_output = parallel_output
