@@ -202,7 +202,8 @@ class GPTModelPipe(PipelineModule,MegatronModule):
         self,
         num_tokentypes=0,
         parallel_output=True,
-        prefix_lm=False
+        prefix_lm=False,
+        student_=False,
     ):
         args = get_args()
         self.parallel_output = parallel_output
@@ -224,7 +225,7 @@ class GPTModelPipe(PipelineModule,MegatronModule):
         # Embedding layer
         self.specs.append(TiedLayerSpec('embed',
                                         EmbeddingPipe,
-                                        args.hidden_size,
+                                        args.hidden_size if not student_ else args.student_hidden_size,
                                         args.padded_vocab_size,
                                         args.hidden_dropout,
                                         init_method=init_method,
@@ -244,12 +245,12 @@ class GPTModelPipe(PipelineModule,MegatronModule):
                 # EmbeddingPipe returns attention mask as well
                 self.specs.append(lambda x: (x[0].transpose(0, 1).contiguous(), *x[1:]))
 
-        for layer_idx in range(args.num_layers):
+        for layer_idx in range(args.num_layers if not student_ else args.student_num_layers):
             self.specs.append(
                 LayerSpec(ParallelTransformerLayerPipe,
                     init_method=init_method,
                     output_layer_init_method=scaled_init_method_normal(args.init_method_std,
-                                                                       args.num_layers),
+                                                                       args.num_layers if not student_ else args.student_num_layers),
                     layer_number=layer_idx,
                     # TODO: Change naming of class from GPT to something that encapsulate prefix lm.
                     self_attn_mask_type=AttnMaskType.prefix if prefix_lm else AttnMaskType.causal))
@@ -265,7 +266,7 @@ class GPTModelPipe(PipelineModule,MegatronModule):
         # Final layernorm after transformer layers
         self.specs.append(
             LayerSpec(LayerNorm,
-                      args.hidden_size,
+                      args.hidden_size if not student_ else args.student_hidden_size,
                       eps=args.layernorm_epsilon))
 
         def _logits_helper(embedding, lm_output):
@@ -278,7 +279,7 @@ class GPTModelPipe(PipelineModule,MegatronModule):
         self.specs.append(
             TiedLayerSpec('embed',
                           EmbeddingPipe,
-                          args.hidden_size,
+                          args.hidden_size if not student_ else args.student_hidden_size,
                           args.padded_vocab_size,
                           args.hidden_dropout,
                           init_method=init_method,

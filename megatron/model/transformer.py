@@ -438,7 +438,7 @@ class ParallelTransformerLayer(MegatronModule):
 
     def __init__(self, init_method, output_layer_init_method,
                  layer_number, layer_type=LayerType.encoder,
-                 self_attn_mask_type=AttnMaskType.padding):
+                 self_attn_mask_type=AttnMaskType.padding, student_=False):
         args = get_args()
 
         super(ParallelTransformerLayer, self).__init__()
@@ -453,7 +453,7 @@ class ParallelTransformerLayer(MegatronModule):
 
         # Layernorm on the input data.
         self.input_layernorm = LayerNorm(
-            args.hidden_size,
+            args.hidden_size if not student_ else args.student_hidden_size,
             eps=args.layernorm_epsilon)
 
         # Self attention.
@@ -468,7 +468,7 @@ class ParallelTransformerLayer(MegatronModule):
 
         # Layernorm on the attention output
         self.post_attention_layernorm = LayerNorm(
-            args.hidden_size,
+            args.hidden_size if not student_ else args.student_hidden_size,
             eps=args.layernorm_epsilon)
 
         if self.layer_type == LayerType.decoder:
@@ -479,7 +479,7 @@ class ParallelTransformerLayer(MegatronModule):
                 attention_type=AttnType.cross_attn)
             # Layernorm on the attention output.
             self.post_inter_attention_layernorm = LayerNorm(
-                args.hidden_size,
+                args.hidden_size if not student_ else args.student_hidden_size,
                 eps=args.layernorm_epsilon)
 
         # MLP
@@ -488,7 +488,7 @@ class ParallelTransformerLayer(MegatronModule):
 
         # Alibi
         if args.position_embedding_type == PositionEmbeddingType.alibi:
-            self.alibi = self._build_alibi_tensor(args.seq_length, args.num_attention_heads, args.micro_batch_size).to(torch.cuda.current_device())
+            self.alibi = self._build_alibi_tensor(args.seq_length, args.num_attention_heads if not student_ else args.student_num_attention_heads, args.micro_batch_size).to(torch.cuda.current_device())
             if args.params_dtype == torch.float16:
                 self.alibi = self.alibi.to(torch.float16)
             elif args.params_dtype == torch.bfloat16:

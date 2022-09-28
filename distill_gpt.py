@@ -39,7 +39,8 @@ except ImportError:
     def record(fn):
         return fn
 
-def model_provider(pre_process=True, post_process=True):
+
+def model_provider(student_=False, pre_process=True, post_process=True):
     """Build the model."""
 
     print_rank_0('building GPT model ...')
@@ -70,44 +71,23 @@ def model_provider(pre_process=True, post_process=True):
             # must be bool or the training crashes expecting bool, but getting Half
             args.attn_mask = attention_mask.to(torch.bool)
 
-    teacher_model, student_model = get_teacher_student(pre_process=pre_process, post_process=post_process)
-    see_memory_usage(f"After Building Models", force=True)
-    return teacher_model, student_model
-
-def get_teacher_student(pre_process=True, post_process=True):
-    args = get_args()
-    if args.deepspeed:
-        teacher_model = GPTModelPipe(
-            num_tokentypes=0,
-            parallel_output=True
-        )
-        # This is a hack to give us a reference to get_batch_pipe from within training.py
-        # We need to call model.set_batch_fn after deepspeed.initialize
-        teacher_model._megatron_batch_fn = get_batch_pipe
-
-        student_model = GPTModelPipe(
-            num_tokentypes=0,
-            parallel_output=True
-        )
-        # This is a hack to give us a reference to get_batch_pipe from within training.py
-        # We need to call model.set_batch_fn after deepspeed.initialize
-        student_model._megatron_batch_fn = get_batch_pipe
-    else:
-        teacher_model = GPTModel(
-            num_tokentypes=0,
-            parallel_output=True,
-            pre_process=pre_process,
-            post_process=post_process
-        )
-
-        student_model = GPTModel(
-            num_tokentypes=0,
-            parallel_output=True
-        )
-        # This is a hack to give us a reference to get_batch_pipe from within training.py
-        # We need to call model.set_batch_fn after deepspeed.initialize
-        student_model._megatron_batch_fn = get_batch_pipe
-    return teacher_model, student_model
+            model = GPTModelPipe(
+                num_tokentypes=0,
+                parallel_output=True,
+                student_=student_
+            )
+            # This is a hack to give us a reference to get_batch_pipe from within training.py
+            # We need to call model.set_batch_fn after deepspeed.initialize
+            model._megatron_batch_fn = get_batch_pipe
+        else:
+            model = GPTModel(
+                num_tokentypes=0,
+                parallel_output=True,
+                pre_process=pre_process,
+                post_process=post_process
+            )
+    see_memory_usage(f"After Building Model", force=True)
+    return model
 
 
 def get_batch(data_iterator):
@@ -267,7 +247,7 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
 
 @record
 def main():
-    distill(train_valid_test_datasets_provider, model_provider, forward_step,
+    distill(train_valid_test_datasets_provider, (partial(model_provider, student=True), model_provider), forward_step,
              args_defaults={'tokenizer_type': 'GPT2BPETokenizer'})
 
 if __name__ == "__main__":

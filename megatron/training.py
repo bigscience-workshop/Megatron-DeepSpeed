@@ -215,6 +215,161 @@ def pretrain(train_valid_test_dataset_provider,
     codecarbon_tracker_stop()
 
 
+def distill(train_valid_test_dataset_provider,
+             model_provider,
+             forward_step_func,
+             extra_args_provider=None,
+             args_defaults={}):
+    """Main training program.
+
+    This function will run the followings in the order provided:
+        1) initialize Megatron.
+        2) setup model, optimizer and lr schedule using the model_provider.
+        3) call train_val_test_data_provider to get train/val/test datasets.
+        4) train the modle using the forward_step_func.
+
+    Arguments:
+        train_valid_test_dataset_provider: a function that takes the size of
+            train/valid/test dataset and returns `train, valid, test` datasets.
+        model_provider: a function that returns a vanilla version of the
+            model. By vanilla we mean a simple model on cpu with no fp16 or ddp.
+        forward_step_func: a function that takes a `data iterator` and `model`,
+            and returns a `loss` scalar with a dictionary with key:values being
+            the info we would like to monitor during training, for example
+            `lm-loss: value`. We also require that this function add
+            `batch generator` to the timers class.
+        extra_args_provider: a function that takes a parser and adds arguments
+            to it. It is used for programs to add their own arguments.
+        args_defaults: a dictionary from argument-name to argument-value. It
+            to set already parse arguments.
+    """
+
+    # Initalize and get arguments, timers, and Tensorboard writer.
+    initialize_megatron(extra_args_provider=extra_args_provider,
+                        args_defaults=args_defaults)
+
+    args = get_args()
+
+    if found_kill_switch():
+        print_datetime(f"Detected kill switch at {args.kill_switch_path}. Exiting")
+        sys.exit()
+
+    codecarbon_tracker_start()
+
+    # Adjust the startup time so it reflects the largest value.
+    # This will be closer to what scheduler will see (outside of
+    # image ... launches.
+    global _TRAIN_START_TIME
+    start_time_tensor = torch.cuda.FloatTensor([_TRAIN_START_TIME])
+    torch.distributed.all_reduce(start_time_tensor,
+                                 op=torch.distributed.ReduceOp.MIN)
+    _TRAIN_START_TIME = start_time_tensor.item()
+    print_rank_0('time to initialize megatron (seconds): {:.3f}'.format(
+        time.time() - _TRAIN_START_TIME))
+    print_datetime('after megatron is initialized')
+
+    timers = get_timers()
+
+    if args.deepspeed:
+        args.deepspeed_configuration = json.load(
+            open(args.deepspeed_config, 'r', encoding='utf-8'))
+        if "curriculum_learning" in args.deepspeed_configuration and \
+            "enabled" in args.deepspeed_configuration["curriculum_learning"]:
+            args.curriculum_learning = args.deepspeed_configuration[ \
+                "curriculum_learning"]["enabled"]
+        if args.curriculum_learning and \
+            args.pipeline_model_parallel_size >= 1:
+            from deepspeed.runtime.data_pipeline.curriculum_scheduler \
+                import CurriculumScheduler
+            args.curriculum_scheduler = CurriculumScheduler( \
+                args.deepspeed_configuration["curriculum_learning"])
+
+
+    # Model, optimizer, and learning rate.
+    timers('model-and-optimizer-setup').start()
+    teacher_model, student_model, optimizer, lr_scheduler = setup_model_and_optimizer_distillation(model_provider)
+    args.parameters_in_billions_no_embedding = get_parameters_in_billions(teacher_model, exclude_embeddings=True)
+    print_rank_0(f'estimated teacher model parameters: {get_parameters_in_billions(teacher_model)}')
+    print_rank_0(f'estimated teacher model parameters: {get_parameters_in_billions(teacher_model)}')
+    print_rank_0(f'estimated model parameters without embeddings: {get_parameters_in_billions(teacher_model, exclude_embeddings=True)}')
+
+    print_rank_0(f'estimated student model parameters: {get_parameters_in_billions(student_model)}')
+    print_rank_0(f'estimated student model parameters: {get_parameters_in_billions(student_model)}')
+    print_rank_0(f'estimated model parameters without embeddings: {get_parameters_in_billions(student_model, exclude_embeddings=True)}')
+
+    timers('model-and-optimizer-setup').stop()
+    print_datetime('after model, optimizer, and learning rate '
+                   'scheduler are built')
+
+    # Data stuff.
+    timers('train/valid/test-data-iterators-setup').start()
+    if args.virtual_pipeline_model_parallel_size is not None:
+        all_data_iterators = [
+            build_train_valid_test_data_iterators(train_valid_test_dataset_provider)
+            for _ in range(len(model))
+        ]
+        train_data_iterator = [data_iterators[0] for data_iterators in all_data_iterators]
+        valid_data_iterator = [data_iterators[1] for data_iterators in all_data_iterators]
+        test_data_iterator = [data_iterators[2] for data_iterators in all_data_iterators]
+    else:
+        train_data_iterator, valid_data_iterator, test_data_iterator = build_train_valid_test_data_iterators(
+                train_valid_test_dataset_provider)
+
+    if args.data_path is not None and len(args.data_path) > 1:
+        prefixes, weights = analyze_data_prefix(args.data_path)
+        setattr(args, "data_prefixes", prefixes)
+        setattr(args, "data_weights", weights)
+    elif args.train_weighted_split_paths is not None and len(args.train_weighted_split_paths[0]) > 1:
+        paths = args.train_weighted_split_paths[0]
+        weights = args.train_weighted_split_weights[0]
+        data_prefix = [j for i in [[w,p] for w,p in zip(weights, paths)] for j in i]
+        prefixes, weights = analyze_data_prefix(data_prefix)
+        setattr(args, "data_prefixes", prefixes)
+        setattr(args, "data_weights", weights)
+    else:
+        setattr(args, "data_prefixes", None)
+        setattr(args, "data_weights", None)
+
+    timers('train/valid/test-data-iterators-setup').stop()
+    print_datetime('after dataloaders are built')
+
+    # Print setup timing.
+    print_rank_0('done with setup ...')
+    timers.log(['model-and-optimizer-setup', 'train/valid/test-data-iterators-setup'])
+    print_rank_0('training ...')
+
+    iteration = 0
+    if args.do_train and args.train_iters > 0:
+        iteration = train(forward_step_func,
+                          model, optimizer, lr_scheduler,
+                          train_data_iterator, valid_data_iterator)
+    print_datetime('after training is done')
+
+    if args.do_valid:
+        names = args.valid_weighted_split_names
+        names = names if names is not None else ['valid'] * len(valid_data_iterator)
+        for iterator, name in zip(valid_data_iterator, names):
+            prefix = 'the end of training for val data'
+            evaluate_and_print_results(prefix, forward_step_func,
+                                       iterator, student_model,
+                                       iteration, False, data_group_name=name)
+
+    if args.save and iteration != 0:
+        save_checkpoint(iteration, student_model, optimizer, lr_scheduler)
+
+    if args.do_test:
+        # Run on test data.
+        prefix = 'the end of training for test data'
+        names = args.test_weighted_split_names
+        names = names if names is not None else ['test'] * len(test_data_iterator)
+        for iterator, name in zip(test_data_iterator, names):
+            evaluate_and_print_results(prefix, forward_step_func,
+                                       iterator, model,
+                                       0, True, data_group_name=name)
+
+    codecarbon_tracker_stop()
+
+
 def update_train_iters(args):
 
     # For iteration-based training, we don't need to do anything
@@ -365,6 +520,76 @@ def get_learning_rate_scheduler(optimizer):
         override_lr_scheduler=args.override_lr_scheduler)
 
     return lr_scheduler
+
+def setup_model_and_optimizer_distillation(model_provider_func):
+    """Setup model and optimizer for distillation."""
+    # TODO: hack it more
+    args = get_args()
+
+    student_model_provider_func, teacher_model_provider_func = model_provider_func
+
+    student_model = get_model(student_model_provider_func)
+    teacher_model = get_model(teacher_model_provider_func)
+
+    unwrapped_model = unwrap_model(student_model,
+                                   (torchDDP, LocalDDP, Float16Module))
+
+    if args.inference:
+        optimizer = None
+        lr_scheduler = None
+    else:
+        optimizer = get_megatron_optimizer(unwrapped_model)
+        lr_scheduler = get_learning_rate_scheduler(optimizer)
+
+
+    if args.deepspeed:
+        print_rank_0("DeepSpeed is enabled.")
+        pp = mpu.get_pipeline_model_parallel_world_size()
+        model, optimizer, _, lr_scheduler = deepspeed.initialize(
+            model=student_model[0],
+            optimizer=optimizer,
+            args=args,
+            lr_scheduler=lr_scheduler
+        )
+
+        assert student_model.fp16_enabled() == args.fp16, "megatron fp16 config does not match deepspeed"
+        assert student_model.bfloat16_enabled() == args.bf16, "megatron bf16 config does not match deepspeed"
+
+        if isinstance(student_model, deepspeed.PipelineEngine):
+            # hack to get batch_fn from pretrain_gpt.py
+            student_model.set_batch_fn(model.module._megatron_batch_fn)
+
+            assert student_model.grid.get_pipe_parallel_rank() == mpu.get_pipeline_model_parallel_rank()
+            assert student_model.grid.get_slice_parallel_rank() == mpu.get_tensor_model_parallel_rank()
+            assert student_model.grid.get_data_parallel_rank() == mpu.get_data_parallel_rank()
+        student_model = [student_model]
+
+    if args.load is not None:
+        timers = get_timers()
+        # Extra barrier is added to make sure all ranks report the
+        # max time.
+        torch.distributed.barrier()
+        timers('load-checkpoint').start()
+        args.iteration = load_checkpoint(student_model, optimizer, lr_scheduler)
+        torch.distributed.barrier()
+        timers('load-checkpoint').stop()
+        timers.log(['load-checkpoint'])
+    else:
+        args.iteration = 0
+
+    # We only support local DDP with multiple micro-batches.
+    if len(student_model) > 1 or mpu.get_pipeline_model_parallel_world_size() > 1:
+        assert args.DDP_impl == 'local'
+
+    # get model without FP16 and/or TorchDDP wrappers
+    if args.iteration == 0 and len(unwrapped_model) == 1 \
+        and hasattr(unwrapped_model[0], 'init_state_dict_from_bert'):
+        print_rank_0("Initializing ICT from pretrained BERT model")
+        unwrapped_model[0].init_state_dict_from_bert()
+        if args.fp16:
+            optimizer.reload_model_params()
+
+    return student_model, teacher_model, optimizer, lr_scheduler
 
 
 def setup_model_and_optimizer(model_provider_func):
