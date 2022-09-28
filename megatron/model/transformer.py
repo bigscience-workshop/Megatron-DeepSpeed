@@ -65,15 +65,15 @@ class ParallelMLP(MegatronModule):
     applied.
     """
 
-    def __init__(self, init_method, output_layer_init_method):
+    def __init__(self, init_method, output_layer_init_method, student_=False):
         super(ParallelMLP, self).__init__()
         args = get_args()
 
         # Project to ffn_hidden_size
         self.dense_h_to_4h = mpu.ColumnParallelLinear(
-            args.hidden_size,
+            (args.hidden_size if not student_ else args.student_hidden_size),
             # GLU is a special activation that divides the dimension by a factor 2.
-            2 * args.ffn_hidden_size if args.glu_activation else args.ffn_hidden_size,
+            2 * args.ffn_hidden_size if args.glu_activation else (args.ffn_hidden_size if not student_ else args.student_ffn_hidden_size),
             gather_output=False,
             init_method=init_method,
             skip_bias_add=True)
@@ -89,8 +89,8 @@ class ParallelMLP(MegatronModule):
 
         # Project back to h.
         self.dense_4h_to_h = mpu.RowParallelLinear(
-            args.ffn_hidden_size,
-            args.hidden_size,
+            (args.ffn_hidden_size if not student_ else args.student_ffn_hidden_size),
+            (args.hidden_size if not student_ else args.student_hidden_size),
             input_is_parallel=True,
             init_method=output_layer_init_method,
             skip_bias_add=True)
@@ -488,7 +488,7 @@ class ParallelTransformerLayer(MegatronModule):
 
         # MLP
         self.mlp = ParallelMLP(init_method,
-                               output_layer_init_method)
+                               output_layer_init_method, student_=student_)
 
         # Alibi
         if args.position_embedding_type == PositionEmbeddingType.alibi:

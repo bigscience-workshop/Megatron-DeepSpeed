@@ -242,6 +242,9 @@ def parse_args(extra_args_provider=None, defaults={},
     # Checks.
     if args.ffn_hidden_size is None:
         args.ffn_hidden_size = 4 * args.hidden_size
+    
+    if args.student_ffn_hidden_size is None:
+        args.student_ffn_hidden_size = 4 * args.student_hidden_size
 
     if args.kv_channels is None:
         assert args.hidden_size % args.num_attention_heads == 0
@@ -360,6 +363,9 @@ def _add_network_size_args(parser):
     group.add_argument('--student-num-attention-heads', type=int, default=None,
                        help='Number of student transformer attention heads.')
     group.add_argument('--ffn-hidden-size', type=int, default=None,
+                       help='Transformer Feed-Forward Network hidden size. '
+                       'This is set to 4*hidden-size if not provided')
+    group.add_argument('--student-ffn-hidden-size', type=int, default=None,
                        help='Transformer Feed-Forward Network hidden size. '
                        'This is set to 4*hidden-size if not provided')
     group.add_argument('--num-attention-heads', type=int, default=None,
