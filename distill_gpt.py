@@ -247,7 +247,7 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
 
 @record
 def main():
-    distill(train_valid_test_datasets_provider, (partial(model_provider, student=True), model_provider), forward_step,
+    distill(train_valid_test_datasets_provider, (partial(model_provider, student_=True), model_provider), forward_step,
              args_defaults={'tokenizer_type': 'GPT2BPETokenizer'})
 
 if __name__ == "__main__":
