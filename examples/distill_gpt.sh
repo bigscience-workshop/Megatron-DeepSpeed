@@ -57,6 +57,11 @@ GLOBAL_BATCH_SIZE=256
 NLAYERS=24
 NHIDDEN=1024
 NHEADS=16
+
+STUDENT_NLAYERS=12
+STUDENT_NHIDDEN=256
+STUDENT_NHEADS=8
+
 SEQ_LEN=2048
 
 SAVE_INTERVAL=250
@@ -90,6 +95,9 @@ GPT_ARGS=" \
     --num-layers $NLAYERS \
     --hidden-size $NHIDDEN \
     --num-attention-heads $NHEADS \
+    --student-num-layers $STUDENT_NLAYERS \
+    --student-hidden-size $STUDENT_NHIDDEN \
+    --student-num-attention-heads $STUDENT_NHEADS \
     --seq-length $SEQ_LEN \
     --max-position-embeddings $SEQ_LEN \
     --micro-batch-size $MICRO_BATCH_SIZE \
