@@ -24,8 +24,8 @@ from megatron import get_tokenizer
 from megatron import mpu
 from megatron.data.gpt_dataset import build_train_valid_test_datasets, build_dataset_group
 from megatron.model import GPTModel, GPTModelPipe
-from megatron.training import pretrain
-from megatron.utils import get_ltor_masks_and_position_ids, get_prefix_indices
+from megatron.training import distill
+from megatron.utils import get_ltor_masks_and_position_ids
 from megatron.utils import average_losses_across_data_parallel_group
 
 import deepspeed
@@ -267,7 +267,7 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
 
 @record
 def main():
-    pretrain(train_valid_test_datasets_provider, model_provider, forward_step,
+    distill(train_valid_test_datasets_provider, model_provider, forward_step,
              args_defaults={'tokenizer_type': 'GPT2BPETokenizer'})
 
 if __name__ == "__main__":
