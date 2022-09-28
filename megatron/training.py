@@ -1298,7 +1298,7 @@ def distill_step(forward_step_func, student_model, teacher_model, optimizer, lr_
             global_batch_size = mpu.get_data_parallel_world_size() * \
                                 args.micro_batch_size * \
                                 get_num_microbatches()
-            model[0].set_train_batch_size(global_batch_size)
+            student_model[0].set_train_batch_size(global_batch_size)
 
         if args.curriculum_learning and \
             args.pipeline_model_parallel_size >= 1:
@@ -1307,7 +1307,8 @@ def distill_step(forward_step_func, student_model, teacher_model, optimizer, lr_
         loss_dict, skipped_iter, grad_norm, num_zeros_in_grad = \
             distill_train_step(forward_step_func,
                        train_data_iterator,
-                       model,
+                       student_model,
+                       teacher_model,
                        optimizer,
                        lr_scheduler)
         iteration += 1
@@ -1320,7 +1321,7 @@ def distill_step(forward_step_func, student_model, teacher_model, optimizer, lr_
             args.consumed_train_tokens += new_samples * args.curriculum_seqlen
         else:
             args.consumed_train_tokens += new_samples * args.seq_length
-        args.gigaflos_no_embeds += (6 * new_samples * args.seq_length * get_parameters_in_billions(model, exclude_embeddings=True))
+        args.gigaflos_no_embeds += (6 * new_samples * args.seq_length * get_parameters_in_billions(student_model, exclude_embeddings=True))
 
         # Logging.
         loss_scale = None
