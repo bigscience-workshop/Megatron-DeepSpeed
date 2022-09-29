@@ -779,8 +779,9 @@ def distill_train_step(forward_step_func, data_iterator,
     timers = get_timers()
 
     if args.deepspeed:
-        assert isinstance(student_model[0], deepspeed.PipelineEngine), model
-        loss = student_model[0].train_batch(data_iter=data_iterator)
+        assert isinstance(student_model[0], deepspeed.PipelineEngine), student_model
+
+        loss = student_model[0].train_batch(data_iter=data_iterator, teacher_model=teacher_model)
         skipped_iter = 0
         grad_norm = student_model[0].get_global_grad_norm()
         num_zeros_in_grad = 0
