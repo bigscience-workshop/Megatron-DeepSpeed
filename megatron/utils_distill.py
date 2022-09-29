@@ -43,7 +43,7 @@ def get_batch_pipe_student(data, teacher_model):
 
     print(tokens.shape)
     with torch.no_grad():
-        teacher_logits = teacher_model[0].module(tokens)
+        teacher_logits = teacher_model[0].module((tokens, position_ids, attention_mask))
     print(teacher_logits.shape, tokens.shape)
 
-    return (tokens, position_ids, attention_mask, teacher_logits), (labels, loss_mask)
+    return (tokens, position_ids, attention_mask), (labels, loss_mask, teacher_logits)
