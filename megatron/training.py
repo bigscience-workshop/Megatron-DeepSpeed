@@ -781,9 +781,9 @@ def distill_train_step(forward_step_func, data_iterator,
 
     if args.deepspeed:
         assert isinstance(student_model[0], deepspeed.PipelineEngine), student_model[0]
-        from megatron.utils_distill import get_batch_pipe
+        from megatron.utils_distill import get_batch_pipe_student
 
-        student_model[0].set_batch_fn(partial(get_batch_pipe, teacher_model=teacher_model))
+        student_model[0].set_batch_fn(partial(get_batch_pipe_student, teacher_model=teacher_model))
 
 
         loss = student_model[0].train_batch(data_iter=data_iterator)

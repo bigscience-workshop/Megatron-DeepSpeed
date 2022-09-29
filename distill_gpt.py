@@ -129,7 +129,7 @@ def get_batch(data_iterator, teacher_model):
     return tokens, labels, loss_mask, attention_mask, position_ids, teacher_logits
 
 
-def get_batch_pipe(data, teacher_model):
+def get_batch_pipe(data):
     """Modification of `get_batch` to work on `next(data_iterator)` instead of `data_iterator`"""
     args = get_args()
     tokenizer = get_tokenizer()
@@ -157,9 +157,6 @@ def get_batch_pipe(data, teacher_model):
         loss_on_targets_only=args.loss_on_targets_only
     )
 
-    # Get the teacher logits
-    teacher_logits = teacher_model(tokens, attention_mask=attention_mask, position_ids=position_ids)[0]
-
     if args.curriculum_learning and args.curriculum_seqlen < tokens.size()[1]:
         # seqlen-based curriculum learning
         # tokens, position_ids, labels, loss_mask have size [batch size, seqlen]
@@ -168,7 +165,7 @@ def get_batch_pipe(data, teacher_model):
         labels = labels[:, :args.curriculum_seqlen].contiguous()
         loss_mask = loss_mask[:, :args.curriculum_seqlen].contiguous()
 
-    return (tokens, position_ids, attention_mask, teacher_logits), (labels, loss_mask)
+    return (tokens, position_ids, attention_mask), (labels, loss_mask)
 
 
 def loss_func(loss_mask, student_logits, teacher_logits):
