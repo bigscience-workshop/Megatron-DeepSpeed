@@ -194,6 +194,7 @@ def forward_step(data_iterator, teacher_model, student_model):
         data_iterator)
     timers('batch-generator').stop()
 
+    print(" I AM HERE ")
 
     output_tensor = student_model(tokens, position_ids, attention_mask,
                           labels=labels)
