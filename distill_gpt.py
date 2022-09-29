@@ -169,7 +169,6 @@ def get_batch_pipe(data):
 
 
 def loss_func(loss_mask, student_logits, teacher_logits):
-    print("heho")
 
     losses = student_logits.float()
     loss_mask = loss_mask.view(-1).float()
