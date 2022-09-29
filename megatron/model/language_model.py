@@ -280,7 +280,8 @@ class EmbeddingPipe(Embedding):
             attention_mask = inputs[2]
 
         if len(inputs) == 4:
-            tokentype_ids = inputs[3]
+            # tokentype_ids = inputs[3]
+            tokentype_ids = None
         else:
             tokentype_ids = None
 
