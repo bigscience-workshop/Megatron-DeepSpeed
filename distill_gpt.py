@@ -125,7 +125,7 @@ def get_batch(data_iterator):
     return tokens, labels, loss_mask, attention_mask, position_ids
 
 
-def get_batch_pipe(data):
+def get_batch_pipe(data, teacher_model):
     """Modification of `get_batch` to work on `next(data_iterator)` instead of `data_iterator`"""
     args = get_args()
     tokenizer = get_tokenizer()
@@ -152,6 +152,10 @@ def get_batch_pipe(data):
         prefix_indices=None,
         loss_on_targets_only=args.loss_on_targets_only
     )
+
+    # Get the teacher logits
+    teacher_logits = teacher_model(tokens, attention_mask=attention_mask, position_ids=position_ids)[0]
+
     if args.curriculum_learning and args.curriculum_seqlen < tokens.size()[1]:
         # seqlen-based curriculum learning
         # tokens, position_ids, labels, loss_mask have size [batch size, seqlen]
@@ -160,7 +164,7 @@ def get_batch_pipe(data):
         labels = labels[:, :args.curriculum_seqlen].contiguous()
         loss_mask = loss_mask[:, :args.curriculum_seqlen].contiguous()
 
-    return (tokens, position_ids, attention_mask), (labels, loss_mask)
+    return (tokens, position_ids, attention_mask, teacher_logits), (labels, loss_mask)
 
 
 def loss_func(loss_mask, student_logits, teacher_logits):
@@ -179,9 +183,11 @@ def forward_step(data_iterator, teacher_model, student_model):
     args = get_args()
     timers = get_timers()
 
+    student_model._megatron_batch_fn = partial(get_batch_pipe, teacher_model=teacher_model)
+
     # Get the batch.
     timers('batch-generator').start()
-    tokens, labels, loss_mask, attention_mask, position_ids = get_batch(
+    tokens, labels, loss_mask, attention_mask, position_ids, teacher_logits = get_batch(
         data_iterator)
     timers('batch-generator').stop()
 
