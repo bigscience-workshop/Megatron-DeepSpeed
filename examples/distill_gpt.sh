@@ -4,6 +4,8 @@
 
 variant=main
 
+TEACHER_CHECKPOINT_PATH=$SCRATCH/distill-bert-experiments/teacher_checkpoints_176B
+
 DATA_OUTPUT_PATH=$SCRATCH/checkpoints/distill-bloom
 CHECKPOINT_PATH=$DATA_OUTPUT_PATH/$variant
 REPO_PATH=$DATA_OUTPUT_PATH/distill-bloom-ml-logs
@@ -181,7 +183,7 @@ export CMD=" \
     $GPT_ARGS \
     $OUTPUT_ARGS \
     --save $CHECKPOINT_PATH \
-    --load $CHECKPOINT_PATH \
+    --load $TEACHER_CHECKPOINT_PATH \
     --train-weighted-split-paths-path $TRAIN_DATA_PATH \
     --valid-weighted-split-paths-path $VALID_DATA_PATH \
     --data-impl mmap \
