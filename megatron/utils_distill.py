@@ -31,10 +31,8 @@ def get_batch_pipe(data, teacher_model):
         loss_on_targets_only=args.loss_on_targets_only
     )
 
-    # Get the teacher logits
-    with torch.no_grad():
-        teacher_logits = teacher_model[0](tokens, attention_mask=attention_mask, position_ids=position_ids)[0]
-
+    teacher_logits = teacher_model[0].eval_batch(iter(data), compute_loss = False, reduce_output = None)
+    print(teacher_logits.shape, tokens.shape)
     if args.curriculum_learning and args.curriculum_seqlen < tokens.size()[1]:
         # seqlen-based curriculum learning
         # tokens, position_ids, labels, loss_mask have size [batch size, seqlen]
