@@ -90,7 +90,7 @@ def model_provider(student_=False, pre_process=True, post_process=True):
     return model
 
 
-def get_batch(data_iterator):
+def get_batch(data_iterator, teacher_model):
     """Generate a batch"""
     args = get_args()
     tokenizer = get_tokenizer()
@@ -122,7 +122,11 @@ def get_batch(data_iterator):
         loss_on_targets_only=args.loss_on_targets_only
     )
 
-    return tokens, labels, loss_mask, attention_mask, position_ids
+    # Get teacher logits
+    with torch.no_grad():
+        teacher_logits = teacher_model(tokens, attention_mask=attention_mask, position_ids=position_ids)
+
+    return tokens, labels, loss_mask, attention_mask, position_ids, teacher_logits
 
 
 def get_batch_pipe(data, teacher_model):
@@ -189,10 +193,9 @@ def forward_step(data_iterator, teacher_model, student_model):
     timers('batch-generator').start()
     tokens, labels, loss_mask, attention_mask, position_ids, teacher_logits = get_batch(
         data_iterator)
+    print(teacher_logits.shape)
     timers('batch-generator').stop()
 
-    teacher_logits = teacher_model(tokens, position_ids, attention_mask,
-                          labels=labels)
 
     output_tensor = student_model(tokens, position_ids, attention_mask,
                           labels=labels)
