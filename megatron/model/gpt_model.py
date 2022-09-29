@@ -194,6 +194,7 @@ def get_cross_entropy(is_prefix: bool):
 
         # TODO: check if the formula is correct
         ts_loss = (torch.nn.Softmax(dim=-1)(output) * torch.nn.LogSoftmax(dim=-1)(teacher_logits)).mean() / expected_number_of_tokens
+        print(ts_loss)
 
         return loss + ts_loss
     return CrossEntropy
