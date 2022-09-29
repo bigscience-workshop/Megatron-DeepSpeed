@@ -637,6 +637,7 @@ def setup_model_and_optimizer_distillation(model_provider_func):
     if len(teacher_model) > 1 or mpu.get_pipeline_model_parallel_world_size() > 1:
         assert args.DDP_impl == 'local'
 
+    teacher_model[0].module.eval()
 
     return teacher_model, student_model, optimizer, lr_scheduler
 
@@ -787,7 +788,7 @@ def distill_train_step(forward_step_func, data_iterator,
 
 
         loss = student_model[0].train_batch(data_iter=data_iterator)
-        
+
         skipped_iter = 0
         grad_norm = student_model[0].get_global_grad_norm()
         num_zeros_in_grad = 0
