@@ -193,6 +193,7 @@ def get_cross_entropy(is_prefix: bool):
         loss = torch.sum(losses.view(-1) * loss_mask) / expected_number_of_tokens
 
         # TODO: check if the formula is correct
+        teacher_logits = teacher_logits.detach()
         softmax_logits = (-torch.nn.LogSoftmax(dim=-1)(output) * torch.nn.Softmax(dim=-1)(teacher_logits))
         ts_loss = softmax_logits.sum() / expected_number_of_tokens
 
