@@ -192,7 +192,7 @@ def get_cross_entropy(is_prefix: bool):
         loss_mask = loss_mask.view(-1)
         loss = torch.sum(losses.view(-1) * loss_mask) / expected_number_of_tokens
 
-        ts_loss = (torch.nn.Softmax(dim=-1)(output) * torch.nn.LogSoftmax(dim=-1)(teacher_logits)).sum(dim=-1) / expected_number_of_tokens
+        ts_loss = (torch.nn.Softmax(dim=-1)(output) * torch.nn.LogSoftmax(dim=-1)(teacher_logits)).mean() / expected_number_of_tokens
 
         return loss + ts_loss
     return CrossEntropy
