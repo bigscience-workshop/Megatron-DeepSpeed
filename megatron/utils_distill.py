@@ -31,7 +31,7 @@ def get_batch_pipe_student(data, teacher_model):
         loss_on_targets_only=args.loss_on_targets_only
     )
 
-    teacher_logits = teacher_model[0].eval_batch(iter(data), compute_loss = False, reduce_output = None)
+    teacher_logits = teacher_model[0].eval_batch(data_b, compute_loss = False, reduce_output = None)
     print(teacher_logits.shape, tokens.shape)
     if args.curriculum_learning and args.curriculum_seqlen < tokens.size()[1]:
         # seqlen-based curriculum learning
