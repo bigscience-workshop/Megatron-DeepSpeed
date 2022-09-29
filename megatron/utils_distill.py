@@ -32,7 +32,8 @@ def get_batch_pipe(data, teacher_model):
     )
 
     # Get the teacher logits
-    teacher_logits = teacher_model(tokens, attention_mask=attention_mask, position_ids=position_ids)[0]
+    with torch.no_grad():
+        teacher_logits = teacher_model[0](tokens, attention_mask=attention_mask, position_ids=position_ids)[0]
 
     if args.curriculum_learning and args.curriculum_seqlen < tokens.size()[1]:
         # seqlen-based curriculum learning
