@@ -31,8 +31,8 @@ def get_batch_pipe_student(data, teacher_model):
         loss_on_targets_only=args.loss_on_targets_only
     )
 
-    teacher_logits = teacher_model[0].eval_batch(data_b, compute_loss = False, reduce_output = None)
-    print(teacher_logits.shape, tokens.shape)
+    # teacher_logits = teacher_model[0].eval_batch(data_b, compute_loss = False, reduce_output = None)
+    
     if args.curriculum_learning and args.curriculum_seqlen < tokens.size()[1]:
         # seqlen-based curriculum learning
         # tokens, position_ids, labels, loss_mask have size [batch size, seqlen]
@@ -40,5 +40,9 @@ def get_batch_pipe_student(data, teacher_model):
         position_ids = position_ids[:, :args.curriculum_seqlen].contiguous()
         labels = labels[:, :args.curriculum_seqlen].contiguous()
         loss_mask = loss_mask[:, :args.curriculum_seqlen].contiguous()
+
+    with torch.no_grad():
+        teacher_logits = teacher_model[0](tokens, attention_mask=attention_mask, position_ids=position_ids)
+    print(teacher_logits.shape, tokens.shape)
 
     return (tokens, position_ids, attention_mask, teacher_logits), (labels, loss_mask)
