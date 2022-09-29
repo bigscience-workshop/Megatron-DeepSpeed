@@ -780,10 +780,9 @@ def distill_train_step(forward_step_func, data_iterator,
     timers = get_timers()
 
     if args.deepspeed:
-        assert isinstance(student_model[0], deepspeed.PipelineEngine), student_model
-        import sys
-        sys.path.append("..")
-        from ..distill_gpt import get_batch_pipe
+        assert isinstance(student_model[0], deepspeed.PipelineEngine), student_model[0]
+        from utils_distill import get_batch_pipe
+
         student_model[0].set_batch_fn(partial(get_batch_pipe, teacher_model=teacher_model))
 
 
