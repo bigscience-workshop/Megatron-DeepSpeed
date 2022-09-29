@@ -169,6 +169,8 @@ def get_batch_pipe(data):
 
 
 def loss_func(loss_mask, student_logits, teacher_logits):
+    print("heho")
+
     losses = student_logits.float()
     loss_mask = loss_mask.view(-1).float()
     loss = torch.sum(losses.view(-1) * loss_mask) / loss_mask.sum()
@@ -190,7 +192,6 @@ def forward_step(data_iterator, teacher_model, student_model):
     timers('batch-generator').start()
     tokens, labels, loss_mask, attention_mask, position_ids, teacher_logits = get_batch(
         data_iterator)
-    print(teacher_logits.shape)
     timers('batch-generator').stop()
 
 
