@@ -781,7 +781,7 @@ def distill_train_step(forward_step_func, data_iterator,
 
     if args.deepspeed:
         assert isinstance(student_model[0], deepspeed.PipelineEngine), student_model[0]
-        from utils_distill import get_batch_pipe
+        from megatron.utils_distill import get_batch_pipe
 
         student_model[0].set_batch_fn(partial(get_batch_pipe, teacher_model=teacher_model))
 

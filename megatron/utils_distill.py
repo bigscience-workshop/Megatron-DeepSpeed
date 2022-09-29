@@ -1,7 +1,7 @@
 import torch
 from functools import partial
-from . import get_args, get_tokenizer, mpu
-from utils import get_ltor_masks_and_position_ids
+from megatron import get_args, get_tokenizer, mpu
+from megatron.utils import get_ltor_masks_and_position_ids
 
 def get_batch_pipe(data, teacher_model):
     """Modification of `get_batch` to work on `next(data_iterator)` instead of `data_iterator`"""
