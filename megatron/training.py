@@ -38,7 +38,7 @@ from megatron import update_num_microbatches
 from megatron import mpu
 from megatron import print_rank_0
 from megatron import print_rank_last
-from megatron.checkpointing import load_checkpoint
+from megatron.checkpointing import load_checkpoint, load_teacher_checkpoint
 from megatron.checkpointing import save_checkpoint
 from megatron.model.module import Float16Module
 from megatron.optimizer import get_megatron_optimizer
@@ -565,7 +565,7 @@ def setup_model_and_optimizer_distillation(model_provider_func):
             assert student_model.grid.get_data_parallel_rank() == mpu.get_data_parallel_rank()
         student_model = [student_model]
 
-    if args.load is not None:
+    if args.student_load is not None:
         timers = get_timers()
         # Extra barrier is added to make sure all ranks report the
         # max time.
@@ -577,6 +577,17 @@ def setup_model_and_optimizer_distillation(model_provider_func):
         timers.log(['load-checkpoint'])
     else:
         args.iteration = 0
+
+    # Load teacher model
+    timers = get_timers()
+    # Extra barrier is added to make sure all ranks report the
+    # max time.
+    torch.distributed.barrier()
+    timers('load-checkpoint').start()
+    load_teacher_checkpoint(teacher_model)
+    torch.distributed.barrier()
+    timers('load-checkpoint').stop()
+    timers.log(['load-checkpoint'])
 
     # We only support local DDP with multiple micro-batches.
     if len(student_model) > 1 or mpu.get_pipeline_model_parallel_world_size() > 1:
