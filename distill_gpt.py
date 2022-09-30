@@ -27,6 +27,7 @@ from megatron.model import GPTModel, GPTModelPipe
 from megatron.training import distill
 from megatron.utils import get_ltor_masks_and_position_ids
 from megatron.utils import average_losses_across_data_parallel_group
+from megatron.utils_distill import get_batch_pipe
 
 import deepspeed
 from deepspeed.runtime.utils import see_memory_usage
@@ -129,43 +130,43 @@ def get_batch(data_iterator, teacher_model):
     return tokens, labels, loss_mask, attention_mask, position_ids, teacher_logits
 
 
-def get_batch_pipe(data):
-    """Modification of `get_batch` to work on `next(data_iterator)` instead of `data_iterator`"""
-    args = get_args()
-    tokenizer = get_tokenizer()
+# def get_batch_pipe(data):
+#     """Modification of `get_batch` to work on `next(data_iterator)` instead of `data_iterator`"""
+#     args = get_args()
+#     tokenizer = get_tokenizer()
 
-    # Items and their type.
-    keys = ['text']
-    datatype = torch.int64
+#     # Items and their type.
+#     keys = ['text']
+#     datatype = torch.int64
 
-    # Broadcast data.
-    data_b = mpu.broadcast_data(keys, data, datatype)
+#     # Broadcast data.
+#     data_b = mpu.broadcast_data(keys, data, datatype)
 
-    # Unpack.
-    tokens_ = data_b['text'].long()
-    labels = tokens_[:, 1:].contiguous()
-    tokens = tokens_[:, :-1].contiguous()
+#     # Unpack.
+#     tokens_ = data_b['text'].long()
+#     labels = tokens_[:, 1:].contiguous()
+#     tokens = tokens_[:, :-1].contiguous()
 
-    # Get the masks and position ids.
-    attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
-        tokens,
-        tokenizer.eod,
-        args.reset_position_ids,
-        args.reset_attention_mask,
-        args.eod_mask_loss,
-        prefix_indices=None,
-        loss_on_targets_only=args.loss_on_targets_only
-    )
+#     # Get the masks and position ids.
+#     attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
+#         tokens,
+#         tokenizer.eod,
+#         args.reset_position_ids,
+#         args.reset_attention_mask,
+#         args.eod_mask_loss,
+#         prefix_indices=None,
+#         loss_on_targets_only=args.loss_on_targets_only
+#     )
 
-    if args.curriculum_learning and args.curriculum_seqlen < tokens.size()[1]:
-        # seqlen-based curriculum learning
-        # tokens, position_ids, labels, loss_mask have size [batch size, seqlen]
-        tokens = tokens[:, :args.curriculum_seqlen].contiguous()
-        position_ids = position_ids[:, :args.curriculum_seqlen].contiguous()
-        labels = labels[:, :args.curriculum_seqlen].contiguous()
-        loss_mask = loss_mask[:, :args.curriculum_seqlen].contiguous()
+#     if args.curriculum_learning and args.curriculum_seqlen < tokens.size()[1]:
+#         # seqlen-based curriculum learning
+#         # tokens, position_ids, labels, loss_mask have size [batch size, seqlen]
+#         tokens = tokens[:, :args.curriculum_seqlen].contiguous()
+#         position_ids = position_ids[:, :args.curriculum_seqlen].contiguous()
+#         labels = labels[:, :args.curriculum_seqlen].contiguous()
+#         loss_mask = loss_mask[:, :args.curriculum_seqlen].contiguous()
 
-    return (tokens, position_ids, attention_mask), (labels, loss_mask)
+#     return (tokens, position_ids, attention_mask), (labels, loss_mask)
 
 
 def loss_func(loss_mask, student_logits, teacher_logits):
