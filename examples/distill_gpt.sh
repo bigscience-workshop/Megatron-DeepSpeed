@@ -185,7 +185,6 @@ export CMD=" \
     $OUTPUT_ARGS \
     --save $CHECKPOINT_PATH \
     --teacher-load $TEACHER_CHECKPOINT_PATH \
-    --student-load $CHECKPOINT_PATH \
     --train-weighted-split-paths-path $TRAIN_DATA_PATH \
     --valid-weighted-split-paths-path $VALID_DATA_PATH \
     --data-impl mmap \
