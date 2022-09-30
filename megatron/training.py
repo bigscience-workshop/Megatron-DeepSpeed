@@ -633,6 +633,8 @@ def setup_model_and_optimizer_distillation(model_provider_func):
     timers('load-checkpoint').stop()
     timers.log(['load-checkpoint'])
 
+    exit()
+
     # We only support local DDP with multiple micro-batches.
     if len(teacher_model) > 1 or mpu.get_pipeline_model_parallel_world_size() > 1:
         assert args.DDP_impl == 'local'
