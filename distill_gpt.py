@@ -27,7 +27,7 @@ from megatron.model import GPTModel, GPTModelPipe
 from megatron.training import distill
 from megatron.utils import get_ltor_masks_and_position_ids
 from megatron.utils import average_losses_across_data_parallel_group
-from megatron.utils_distill import get_batch_pipe
+from megatron.utils_distill import get_batch_pipe_student
 
 import deepspeed
 from deepspeed.runtime.utils import see_memory_usage
@@ -186,7 +186,7 @@ def forward_step(data_iterator, teacher_model, student_model):
     args = get_args()
     timers = get_timers()
 
-    student_model._megatron_batch_fn = partial(get_batch_pipe, teacher_model=teacher_model)
+    student_model._megatron_batch_fn = partial(get_batch_pipe_student, teacher_model=teacher_model)
 
     # Get the batch.
     timers('batch-generator').start()
