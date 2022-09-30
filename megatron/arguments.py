@@ -674,6 +674,8 @@ def _add_checkpointing_args(parser):
                        help='Directory containing a model checkpoint.')
     group.add_argument('--teacher-load', type=str, default=None,
                        help='Directory containing a model checkpoint.')
+    group.add_argument('--student-load', type=str, default=None,
+                       help='Directory containing a model checkpoint.')
     group.add_argument('--no-load-optim', action='store_true', default=None,
                        help='Do not load optimizer when loading checkpoint.')
     group.add_argument('--no-load-rng', action='store_true', default=None,
