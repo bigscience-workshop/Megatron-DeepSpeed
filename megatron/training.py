@@ -578,16 +578,7 @@ def setup_model_and_optimizer_distillation(model_provider_func):
     else:
         args.iteration = 0
 
-    # Load teacher model
-    timers = get_timers()
-    # Extra barrier is added to make sure all ranks report the
-    # max time.
-    torch.distributed.barrier()
-    timers('load-checkpoint').start()
-    load_teacher_checkpoint(teacher_model)
-    torch.distributed.barrier()
-    timers('load-checkpoint').stop()
-    timers.log(['load-checkpoint'])
+    
 
     # We only support local DDP with multiple micro-batches.
     if len(student_model) > 1 or mpu.get_pipeline_model_parallel_world_size() > 1:
@@ -630,19 +621,17 @@ def setup_model_and_optimizer_distillation(model_provider_func):
             assert teacher_model.grid.get_slice_parallel_rank() == mpu.get_tensor_model_parallel_rank()
             assert teacher_model.grid.get_data_parallel_rank() == mpu.get_data_parallel_rank()
         teacher_model = [teacher_model]
-
-    if args.load is not None:
-        timers = get_timers()
-        # Extra barrier is added to make sure all ranks report the
-        # max time.
-        torch.distributed.barrier()
-        timers('load-checkpoint').start()
-        args.iteration = load_checkpoint(teacher_model, None, None)
-        torch.distributed.barrier()
-        timers('load-checkpoint').stop()
-        timers.log(['load-checkpoint'])
-    else:
-        args.iteration = 0
+    
+    # Load teacher model
+    timers = get_timers()
+    # Extra barrier is added to make sure all ranks report the
+    # max time.
+    torch.distributed.barrier()
+    timers('load-checkpoint').start()
+    load_teacher_checkpoint(teacher_model)
+    torch.distributed.barrier()
+    timers('load-checkpoint').stop()
+    timers.log(['load-checkpoint'])
 
     # We only support local DDP with multiple micro-batches.
     if len(teacher_model) > 1 or mpu.get_pipeline_model_parallel_world_size() > 1:
