@@ -592,9 +592,11 @@ def setup_model_and_optimizer_distillation(model_provider_func):
         if args.fp16:
             optimizer.reload_model_params()
     
+
+    del unwrapped_model
+
     # Do the same thing with the teacher model but without the opt state
     teacher_model = get_model(teacher_model_provider_func)
-
     unwrapped_model = unwrap_model(teacher_model,
                                    (torchDDP, LocalDDP, Float16Module))
 
