@@ -616,7 +616,8 @@ def setup_model_and_optimizer_distillation(model_provider_func):
 
         if isinstance(teacher_model, deepspeed.PipelineEngine):
             # hack to get batch_fn from pretrain_gpt.py
-            teacher_model.set_batch_fn(teacher_model.module._megatron_batch_fn)
+            # No need for set batch_fn
+            # teacher_model.set_batch_fn(teacher_model.module._megatron_batch_fn)
 
             assert teacher_model.grid.get_pipe_parallel_rank() == mpu.get_pipeline_model_parallel_rank()
             assert teacher_model.grid.get_slice_parallel_rank() == mpu.get_tensor_model_parallel_rank()
