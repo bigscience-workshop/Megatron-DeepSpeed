@@ -530,7 +530,6 @@ def setup_model_and_optimizer_distillation(model_provider_func):
     student_model_provider_func, teacher_model_provider_func = model_provider_func
 
     student_model = get_model(student_model_provider_func)
-    teacher_model = get_model(teacher_model_provider_func)
 
     unwrapped_model = unwrap_model(student_model,
                                    (torchDDP, LocalDDP, Float16Module))
