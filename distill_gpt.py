@@ -79,7 +79,8 @@ def model_provider(student_=False, pre_process=True, post_process=True):
             )
             # This is a hack to give us a reference to get_batch_pipe from within training.py
             # We need to call model.set_batch_fn after deepspeed.initialize
-            model._megatron_batch_fn = get_batch_pipe
+            if student_:
+                model._megatron_batch_fn = get_batch_pipe_student
         else:
             model = GPTModel(
                 num_tokentypes=0,
