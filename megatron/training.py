@@ -553,7 +553,7 @@ def setup_model_and_optimizer_distillation(model_provider_func):
             lr_scheduler=lr_scheduler
         )
 
-        assert student_model.fp16_enabled() == args.fp16, "megatron fp16 config does not match deepspeed"
+        # assert student_model.fp16_enabled() == args.fp16, "megatron fp16 config does not match deepspeed"
         assert student_model.bfloat16_enabled() == args.bf16, "megatron bf16 config does not match deepspeed"
 
         if isinstance(student_model, deepspeed.PipelineEngine):
