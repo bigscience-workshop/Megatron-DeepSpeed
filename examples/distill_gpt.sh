@@ -52,7 +52,7 @@ GPUS_PER_NODE=8
 NNODES=$SLURM_NNODES
 
 TP_SIZE=4
-PP_SIZE=10
+PP_SIZE=12
 
 
 MICRO_BATCH_SIZE=4
@@ -112,7 +112,7 @@ GPT_ARGS=" \
     --tokenizer-name-or-path $TOKENIZER_NAME_OR_PATH \
     --init-method-std 0.0048 \
     --embed-layernorm \
-    --fp16 \
+    --bf16 \
     --seed 42 \
     --position-embedding-type alibi \
     --abort-on-unmet-fused-kernel-constraints \
