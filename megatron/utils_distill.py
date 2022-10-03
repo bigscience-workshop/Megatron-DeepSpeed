@@ -34,14 +34,14 @@ def get_batch_pipe_student(data, teacher_model):
     with torch.no_grad():
         # teacher_logits = teacher_model[0].eval_batch(data_b, return_logits=True)
         teacher_logits, _ = teacher_model[0].module((tokens, position_ids, attention_mask))
-        for param in teacher_model[0].module.get_tied_weights_and_groups():
-            for p in param:
-                print(p.shape)
+    #     for param in teacher_model[0].module.get_tied_weights_and_groups():
+    #         for p in param:
+    #             print(p.shape)
 
-    print(teacher_logits[0].shape)
-    print(teacher_logits[1].shape)
-    print(teacher_logits.shape)
-    exit()
+    # print(teacher_logits[0].shape)
+    # print(teacher_logits[1].shape)
+    # print(teacher_logits.shape)
+    # exit()
 
     # teacher_logits = teacher_model[0].eval_batch(data_b, compute_loss = False, reduce_output = None)
     
