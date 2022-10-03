@@ -650,8 +650,12 @@ class ParallelTransformerLayerPipe(ParallelTransformerLayer):
             hidden_states, attention_mask = inputs[0], inputs[1]
             return super().forward(*inputs, **kwargs), attention_mask
         else:
-            print(self.student_, len(inputs), inputs[0].shape, inputs[1].shape, inputs[-1].shape)
-            raise RuntimeError('Received more inputs than understood.')
+            if not self.student_:
+                hidden_states, attention_mask = inputs[0], inputs[-1]
+                return super().forward(*inputs, **kwargs), attention_mask
+            # print(self.student_, len(inputs), inputs[0].shape, inputs[1].shape, inputs[-1].shape)
+            else:
+                raise RuntimeError('Received more inputs than understood.')
 
 
 class ParallelTransformer(MegatronModule):
