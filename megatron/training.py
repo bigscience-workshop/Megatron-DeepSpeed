@@ -777,7 +777,7 @@ def setup_model_and_optimizer(model_provider_func):
 
 
 
-def distill_train_step(forward_step_func, data_iterator,
+def distill_forward_train_step(forward_step_func, data_iterator,
                student_model, teacher_model, optimizer, lr_scheduler):
     """Single training step."""
     args = get_args()
@@ -1316,7 +1316,7 @@ def distill_step(forward_step_func, student_model, teacher_model, optimizer, lr_
             args.curriculum_seqlen = args.curriculum_scheduler.update_difficulty( \
                     args.iteration + 1)
         loss_dict, skipped_iter, grad_norm, num_zeros_in_grad = \
-            distill_train_step(forward_step_func,
+            distill_forward_train_step(forward_step_func,
                        train_data_iterator,
                        student_model,
                        teacher_model,
