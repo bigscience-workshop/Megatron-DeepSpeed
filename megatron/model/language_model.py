@@ -272,6 +272,7 @@ class EmbeddingPipe(Embedding):
         if not hasattr(self, '_args'):
             self._args = get_args()
 
+        print(inputs)
         input_ids = inputs[0]
         position_ids = inputs[1]
         if getattr(self._args, 'pretrain_causal_attention', False):
