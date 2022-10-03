@@ -215,7 +215,7 @@ class FusedScaleMaskSoftmax(nn.Module):
             input = input * self.scale
 
         if self.attn_mask_type == AttnMaskType.causal:
-            assert mask is None
+            # assert mask is None
             assert input.shape[2] == input.shape[3]
             mask = self.get_causal_mask(input.shape[2])
 
