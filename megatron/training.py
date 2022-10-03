@@ -641,8 +641,6 @@ def setup_model_and_optimizer_distillation(model_provider_func):
 
     teacher_model[0].module.eval()
 
-    exit()
-
     return teacher_model, student_model, optimizer, lr_scheduler
 
 
