@@ -447,6 +447,8 @@ class ParallelTransformerLayer(MegatronModule):
         self.layer_number = layer_number
         self.layer_type = layer_type
 
+        self.student_ = student_
+
         self.apply_residual_connection_post_layernorm \
             = args.apply_residual_connection_post_layernorm
 
@@ -645,9 +647,12 @@ class ParallelTransformerLayerPipe(ParallelTransformerLayer):
             return super().forward(hidden_states, attention_mask, **kwargs)
         elif len(inputs) == 2:
             # Attention mask is an activation.
+            print(self.student_)
             hidden_states, attention_mask = inputs[0], inputs[1]
+            print(attention_mask)
             return super().forward(*inputs, **kwargs), attention_mask
         else:
+            print(self.student_, len(inputs))
             raise RuntimeError('Received more inputs than understood.')
 
 
