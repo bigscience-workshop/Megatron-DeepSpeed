@@ -650,7 +650,7 @@ class ParallelTransformerLayerPipe(ParallelTransformerLayer):
             hidden_states, attention_mask = inputs[0], inputs[1]
             return super().forward(*inputs, **kwargs), attention_mask
         else:
-            print(self.student_, len(inputs), inputs[-1].shape)
+            print(self.student_, len(inputs), inputs[0].shape, inputs[1].shape, inputs[-1].shape)
             raise RuntimeError('Received more inputs than understood.')
 
 
