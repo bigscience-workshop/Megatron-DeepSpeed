@@ -33,7 +33,7 @@ def get_batch_pipe_student(data, teacher_model):
 
     with torch.no_grad():
         # teacher_logits = teacher_model[0].module((tokens, position_ids, attention_mask))
-        teacher_logits = teacher_model[0].eval_batch(iter([(tokens, position_ids, attention_mask)]))
+        teacher_logits = teacher_model[0].eval_batch(iter([tokens, position_ids, attention_mask]))
         # teacher_logits = teacher_model[0].train_batch((tokens, position_ids, attention_mask))
 
     
