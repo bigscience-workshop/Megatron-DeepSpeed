@@ -32,7 +32,7 @@ def get_batch_pipe_student(data, teacher_model):
     )
 
     with torch.no_grad():
-        teacher_logits, _ = teacher_model[0].module((tokens, position_ids, attention_mask))
+        teacher_logits = teacher_model[0].module((tokens, position_ids, attention_mask))
 
     
     if args.curriculum_learning and args.curriculum_seqlen < tokens.size()[1]:
