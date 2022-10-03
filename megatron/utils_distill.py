@@ -15,11 +15,6 @@ def get_batch_pipe_student(data, teacher_model):
     # Broadcast data.
     data_b = mpu.broadcast_data(keys, data, datatype)
 
-    with torch.no_grad():
-        teacher_logits = teacher_model[0].eval_batch(data_b, return_logits=True)
-        # teacher_logits = teacher_model[0].module((tokens, attention_mask))
-    print(teacher_logits.shape)
-
     # Unpack.
     tokens_ = data_b['text'].long()
     labels = tokens_[:, 1:].contiguous()
@@ -35,6 +30,11 @@ def get_batch_pipe_student(data, teacher_model):
         prefix_indices=None,
         loss_on_targets_only=args.loss_on_targets_only
     )
+
+    with torch.no_grad():
+        # teacher_logits = teacher_model[0].eval_batch(data_b, return_logits=True)
+        teacher_logits = teacher_model[0].module((tokens, position_ids, attention_mask))
+    print(teacher_logits.shape)
 
     # teacher_logits = teacher_model[0].eval_batch(data_b, compute_loss = False, reduce_output = None)
     
