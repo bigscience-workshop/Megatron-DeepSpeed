@@ -630,7 +630,7 @@ def setup_model_and_optimizer_distillation(model_provider_func):
     # max time.
     torch.distributed.barrier()
     timers('load-checkpoint').start()
-    # load_teacher_checkpoint(teacher_model)
+    load_teacher_checkpoint(teacher_model)
     torch.distributed.barrier()
     timers('load-checkpoint').stop()
     timers.log(['load-checkpoint'])
@@ -640,6 +640,8 @@ def setup_model_and_optimizer_distillation(model_provider_func):
         assert args.DDP_impl == 'local'
 
     teacher_model[0].module.eval()
+
+    exit()
 
     return teacher_model, student_model, optimizer, lr_scheduler
 
