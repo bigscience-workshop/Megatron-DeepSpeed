@@ -274,8 +274,7 @@ def load_teacher_checkpoint(model, load_arg='teacher_load', strict=True):
     load_dir = getattr(args, load_arg)
 
     if args.deepspeed:
-        load_optimizer_states = False
-        loaded_dir, state_dict = model[0].load_checkpoint(load_dir, load_optimizer_states=load_optimizer_states, load_lr_scheduler_states=False)
+        loaded_dir, state_dict = model[0].load_checkpoint(load_dir, load_optimizer_states=False, load_lr_scheduler_states=False)
         if loaded_dir is None:
             print_rank_0('WARNING: could not find the metadata file {} '.format(
                 load_dir))
