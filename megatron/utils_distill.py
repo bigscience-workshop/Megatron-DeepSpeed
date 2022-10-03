@@ -42,7 +42,7 @@ def get_batch_pipe_student(data, teacher_model):
         loss_mask = loss_mask[:, :args.curriculum_seqlen].contiguous()
 
     with torch.no_grad():
-        teacher_logits = teacher_model[0].module((tokens, position_ids, attention_mask))
+        teacher_logits = teacher_model.module((tokens, position_ids, attention_mask))
         # teacher_logits = teacher_model[0].module((tokens, attention_mask))
 
     return (tokens, position_ids, attention_mask, teacher_logits), (labels, loss_mask)
