@@ -158,10 +158,46 @@ class GPTModel(MegatronModule):
             state_dict = state_dict[self._language_model_key]
         self.language_model.load_state_dict(state_dict, strict=strict)
 
-
 def get_cross_entropy(is_prefix: bool):
-    def CrossEntropy(output, labels, teacher_logits):
+    def CrossEntropy(output, labels):
         labels, loss_mask = labels[0], labels[1]
+
+        args = get_args()
+
+        losses = mpu.vocab_parallel_cross_entropy(output.contiguous().float(), labels)
+
+        if is_prefix:
+            micro_batch_size, sequence_length = loss_mask.shape
+            average_tokens_per_sample: torch.Tensor
+            if args.loss_on_targets_only:
+                # HACK: This is useful when we obtain loss masks that are microbatch dependent. Consequently, if we want to
+                #   preserve the notion that all tokens have the same impact on the loss, we can only normalise using a
+                #   microbatch independent value. It should be expected weight over a microbatch.
+                #   Here we still use `sequence_length`, that's batch size dependent, in order to be backwards compatible with
+                #   current experiment on vanilla gpt.
+                if args.reweight_loss_based_on_position_frequency:
+                    reweight = torch.arange(
+                        sequence_length, 0, -1, dtype=torch.float, device=loss_mask.device
+                    ) / (sequence_length + 1) * 2
+                    average_tokens_per_sample = reweight.flip(-1).cumsum(-1).mean()
+                else:
+                    average_tokens_per_sample = (sequence_length + 1) / 2
+            else:
+                average_tokens_per_sample = sequence_length
+            expected_number_of_tokens = average_tokens_per_sample * micro_batch_size
+        else:
+            expected_number_of_tokens = loss_mask.sum()
+
+        loss_mask = loss_mask.view(-1)
+        loss = torch.sum(losses.view(-1) * loss_mask) / expected_number_of_tokens
+
+        return loss
+    return CrossEntropy
+
+
+def get_ts_loss(is_prefix: bool):
+    def TeacherStudentLoss(output, labels):
+        labels, loss_mask, teacher_logits = labels[0][0], labels[0][1], labels[1]
 
         args = get_args()
 
@@ -195,10 +231,10 @@ def get_cross_entropy(is_prefix: bool):
         # TODO: check if the formula is correct
         teacher_logits = teacher_logits.detach()
         softmax_logits = (-torch.nn.LogSoftmax(dim=-1)(output) * torch.nn.Softmax(dim=-1)(teacher_logits))
-        ts_loss = softmax_logits.mean()
+        logits_loss = softmax_logits.mean()
 
-        return loss + ts_loss
-    return CrossEntropy
+        return loss + logits_loss
+    return TeacherStudentLoss
 
 
 class GPTModelPipe(PipelineModule,MegatronModule):
@@ -322,7 +358,7 @@ class GPTModelPipe(PipelineModule,MegatronModule):
             partition_method = 'type:transformer'
 
         super().__init__(layers=self.specs,
-                         loss_fn=get_cross_entropy(is_prefix=attn_mask_type is AttnMaskType.prefix),
+                         loss_fn=get_ts_loss(is_prefix=attn_mask_type is AttnMaskType.prefix),
                          topology=topo,
                          activation_checkpoint_interval=interval,
                          partition_method=partition_method)
