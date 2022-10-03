@@ -197,7 +197,7 @@ def get_cross_entropy(is_prefix: bool):
 
 def get_ts_loss(is_prefix: bool):
     def TeacherStudentLoss(output, labels):
-        labels, loss_mask, teacher_logits = labels[0][0], labels[0][1], labels[1]
+        labels, loss_mask, teacher_logits = labels[0], labels[1], labels[2]
 
         args = get_args()
 

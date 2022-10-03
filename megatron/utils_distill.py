@@ -43,5 +43,4 @@ def get_batch_pipe_student(data, teacher_model):
         labels = labels[:, :args.curriculum_seqlen].contiguous()
         loss_mask = loss_mask[:, :args.curriculum_seqlen].contiguous()
 
-    print(teacher_logits.shape)
-    return (tokens, position_ids, attention_mask), ((labels, teacher_logits), loss_mask)
+    return (tokens, position_ids, attention_mask), (labels, loss_mask, teacher_logits)
