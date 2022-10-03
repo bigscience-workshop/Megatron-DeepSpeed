@@ -126,7 +126,7 @@ def get_batch(data_iterator, teacher_model):
 
     # Get teacher logits
     with torch.no_grad():
-        teacher_logits = teacher_model(tokens, attention_mask=attention_mask, position_ids=position_ids)
+        teacher_logits = teacher_model.module(tokens, attention_mask=attention_mask, position_ids=position_ids)
 
     return tokens, labels, loss_mask, attention_mask, position_ids, teacher_logits
 
