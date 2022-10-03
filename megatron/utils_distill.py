@@ -32,10 +32,12 @@ def get_batch_pipe_student(data, teacher_model):
     )
 
     with torch.no_grad():
+        # This works for TP=1 but not for TP>1
         # teacher_logits = teacher_model[0].module((tokens, position_ids, attention_mask))
-        # teacher_logits = teacher_model[0].eval_batch(iter([(tokens, position_ids, attention_mask), (tokens, position_ids, attention_mask)]))
+
+        # But this does not at all!
         teacher_logits = teacher_model[0].eval_batch(data)
-        # teacher_logits = teacher_model[0].train_batch((tokens, position_ids, attention_mask))
+
 
     
     if args.curriculum_learning and args.curriculum_seqlen < tokens.size()[1]:
