@@ -54,8 +54,10 @@ NNODES=$SLURM_NNODES
 TP_SIZE=4
 PP_SIZE=12
 
+TP_SIZE_STUDENT=4
+PP_SIZE_STUDENT=12
 
-MICRO_BATCH_SIZE=4
+MICRO_BATCH_SIZE=1
 GLOBAL_BATCH_SIZE=1024
 
 NLAYERS=70
@@ -177,6 +179,8 @@ export CMD=" \
     distill_gpt.py \
     --tensor-model-parallel-size $TP_SIZE \
     --pipeline-model-parallel-size $PP_SIZE \
+    --student-tensor-model-parallel-size $TP_SIZE_STUDENT \
+    --student-pipeline-model-parallel-size $PP_SIZE_STUDENT \
     $GPT_ARGS \
     $OUTPUT_ARGS \
     --save $CHECKPOINT_PATH \
