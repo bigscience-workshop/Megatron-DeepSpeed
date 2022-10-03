@@ -647,9 +647,7 @@ class ParallelTransformerLayerPipe(ParallelTransformerLayer):
             return super().forward(hidden_states, attention_mask, **kwargs)
         elif len(inputs) == 2:
             # Attention mask is an activation.
-            print(self.student_)
             hidden_states, attention_mask = inputs[0], inputs[1]
-            print(attention_mask)
             return super().forward(*inputs, **kwargs), attention_mask
         else:
             print(self.student_, len(inputs))
