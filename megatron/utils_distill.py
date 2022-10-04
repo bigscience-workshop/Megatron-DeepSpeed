@@ -39,6 +39,7 @@ def get_batch_pipe_student(data, teacher_model):
         #     teacher_logits = teacher_logits[0]
 
         # But this does not at all!
+        print("HEY")
         teacher_logits = teacher_model[0].eval_batch(data)
 
 
