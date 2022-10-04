@@ -3,7 +3,7 @@ from functools import partial
 from megatron import get_args, get_tokenizer, mpu
 from megatron.utils import get_ltor_masks_and_position_ids
 
-def get_batch_pipe_student(data, teacher_model):
+def get_batch_pipe_student(data, teacher_logits):
     """Modification of `get_batch` to work on `next(data_iterator)` instead of `data_iterator`"""
     args = get_args()
     tokenizer = get_tokenizer()
@@ -31,12 +31,7 @@ def get_batch_pipe_student(data, teacher_model):
         loss_on_targets_only=args.loss_on_targets_only
     )
 
-    with torch.no_grad():
-        # This works for TP=1 but not for TP>1
-        # teacher_logits = teacher_model[0].module((tokens, position_ids, attention_mask))
-
-        # But this does not at all!  - It hangs forever
-        teacher_logits = teacher_model[0].eval_batch(iter(list((tokens, position_ids, attention_mask))), compute_loss = False, reduce_output = None)
+    # teacher_logits = teacher_model[0].eval_batch(iter(list((tokens, position_ids, attention_mask))), compute_loss = False, reduce_output = None)
 
 
     
