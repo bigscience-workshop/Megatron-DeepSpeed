@@ -39,7 +39,7 @@ def get_batch_pipe_student(data, teacher_model):
         #     teacher_logits = teacher_logits[0]
 
         # But this does not at all!  - It hangs forever
-        teacher_logits = teacher_model[0].eval_batch(data)
+        teacher_logits = teacher_model[0].eval_batch(iter(data), compute_loss = False, reduce_output = None)
 
 
     
