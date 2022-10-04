@@ -38,8 +38,7 @@ def get_batch_pipe_student(data, teacher_model):
         # if isinstance(teacher_logits, tuple):
         #     teacher_logits = teacher_logits[0]
 
-        # But this does not at all!
-        print("HEY")
+        # But this does not at all!  - It hangs forever
         teacher_logits = teacher_model[0].eval_batch(data)
 
 
