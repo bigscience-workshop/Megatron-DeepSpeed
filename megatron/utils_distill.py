@@ -39,6 +39,7 @@ def get_batch_pipe_student(data, teacher_model):
             print(len(teacher_logits), "HEY")
             print(teacher_logits, "HEY")
 
+        exit()
         # But this does not at all!
         # teacher_logits = teacher_model[0].eval_batch(data)
 
