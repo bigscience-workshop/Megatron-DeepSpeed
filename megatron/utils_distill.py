@@ -37,7 +37,7 @@ def get_batch_pipe_student(data, teacher_model):
 
         if isinstance(teacher_logits, tuple):
             print(len(teacher_logits), "HEY")
-            print(teacher_logits, "HEY")
+            print(teacher_logits[0].shape, "HEY")
 
         exit()
         # But this does not at all!
