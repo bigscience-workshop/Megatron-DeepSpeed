@@ -36,10 +36,8 @@ def get_batch_pipe_student(data, teacher_model):
         teacher_logits = teacher_model[0].module((tokens, position_ids, attention_mask))
 
         if isinstance(teacher_logits, tuple):
-            print(len(teacher_logits), "HEY")
-            print(teacher_logits[0].shape, "HEY")
+            teacher_logits = teacher_logits[0]
 
-        exit()
         # But this does not at all!
         # teacher_logits = teacher_model[0].eval_batch(data)
 
