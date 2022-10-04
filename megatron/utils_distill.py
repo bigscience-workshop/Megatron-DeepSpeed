@@ -35,11 +35,8 @@ def get_batch_pipe_student(data, teacher_model):
         # This works for TP=1 but not for TP>1
         # teacher_logits = teacher_model[0].module((tokens, position_ids, attention_mask))
 
-        # if isinstance(teacher_logits, tuple):
-        #     teacher_logits = teacher_logits[0]
-
         # But this does not at all!  - It hangs forever
-        teacher_logits = teacher_model[0].eval_batch(iter(data), compute_loss = False, reduce_output = None)
+        teacher_logits = teacher_model[0].eval_batch(iter(list((tokens, position_ids, attention_mask))), compute_loss = False, reduce_output = None)
 
 
     
