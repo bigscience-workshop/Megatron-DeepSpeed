@@ -428,6 +428,7 @@ def get_student_model(model_provider_func):
         post_process=post_process
     )
 
+    print(len(model))
 
     if not isinstance(model, list):
         model = [model]
