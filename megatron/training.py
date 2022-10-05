@@ -407,28 +407,29 @@ def get_student_model(model_provider_func):
     args = get_args()
 
     # Build model.
-    # if mpu.get_pipeline_model_parallel_world_size() > 1 and \
-    #    args.virtual_pipeline_model_parallel_size is not None:
-    #     model = []
-    #     for i in range(args.virtual_pipeline_model_parallel_size):
-    #         # mpu.set_virtual_pipeline_model_parallel_rank(i)
-    #         # Set pre_process and post_process only after virtual rank is set.
-    #         pre_process = mpu.is_pipeline_first_stage()
-    #         post_process = mpu.is_pipeline_last_stage()
-    #         this_model = model_provider_func(
-    #             pre_process=pre_process,
-    #             post_process=post_process
-    #         )
-    #         model.append(this_model)
-    # else:
-    pre_process = mpu.is_pipeline_first_stage()
-    post_process = mpu.is_pipeline_last_stage()
-    model = model_provider_func(
-        pre_process=pre_process,
-        post_process=post_process
-    )
+    if mpu.get_pipeline_model_parallel_world_size() > 1 and \
+       args.virtual_pipeline_model_parallel_size is not None:
+        model = []
+        for i in range(args.virtual_pipeline_model_parallel_size):
+            # mpu.set_virtual_pipeline_model_parallel_rank(i)
+            # Set pre_process and post_process only after virtual rank is set.
+            pre_process = mpu.is_pipeline_first_stage()
+            post_process = mpu.is_pipeline_last_stage()
+            this_model = model_provider_func(
+                pre_process=pre_process,
+                post_process=post_process
+            )
+            model.append(this_model)
+    else:
+        pre_process = mpu.is_pipeline_first_stage()
+        post_process = mpu.is_pipeline_last_stage()
+        model = model_provider_func(
+            pre_process=pre_process,
+            post_process=post_process
+        )
 
     print(len(model))
+    exit()
 
     if not isinstance(model, list):
         model = [model]
