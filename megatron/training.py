@@ -794,9 +794,10 @@ def distill_forward_train_step(forward_step_func, data_iterator,
         # teacher_logits = get_batch_pipe_teacher(teacher_data_iterator, teacher_model)
         # print(teacher_logits.shape)
 
+        print("distill forward step func - 0")
         student_model[0].set_batch_fn(partial(get_batch_pipe_student, teacher_model=teacher_model))
 
-
+        print("distill forward step func - 1")
         loss = student_model[0].train_batch(data_iter=data_iterator)
 
         skipped_iter = 0

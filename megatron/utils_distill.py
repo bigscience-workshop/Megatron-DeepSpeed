@@ -38,24 +38,24 @@ def get_batch_pipe_student(data, teacher_model):
     """Modification of `get_batch` to work on `next(data_iterator)` instead of `data_iterator`"""
     args = get_args()
     tokenizer = get_tokenizer()
-    print("before eval batch 0")
+    # print("before eval batch 0")
 
 
     # Items and their type.
     keys = ['text']
     datatype = torch.int64
-    print("before eval batch 1")
+    # print("before eval batch 1")
 
     # Broadcast data.
     data_b = mpu.broadcast_data(keys, data, datatype)
-    print("before eval batch 2")
+    # print("before eval batch 2")
 
     # Unpack.
     tokens_ = data_b['text'].long()
     labels = tokens_[:, 1:].contiguous()
     tokens = tokens_[:, :-1].contiguous()
-
-    print("before eval batch 3")
+    
+    #print("before eval batch 3")
     # Get the masks and position ids.
     attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
         tokens,
@@ -66,7 +66,7 @@ def get_batch_pipe_student(data, teacher_model):
         prefix_indices=None,
         loss_on_targets_only=args.loss_on_targets_only
     )
-    print("before eval batch 4")
+    # print("before eval batch 4∏")
     teacher_logits = teacher_model[0].eval_batch(iter(list((tokens, position_ids, attention_mask))), compute_loss = False, reduce_output = None)
 
 
