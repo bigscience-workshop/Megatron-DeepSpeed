@@ -11,7 +11,7 @@ def get_batch_pipe_teacher(data, teacher_model):
     keys = ['text']
     datatype = torch.int64
 
-    print(len(data))
+    print(next(data))
 
     # Broadcast data.
     data_b = mpu.broadcast_data(keys, data, datatype)
