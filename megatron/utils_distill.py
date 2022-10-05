@@ -34,7 +34,7 @@ from megatron.utils import get_ltor_masks_and_position_ids
 #     teacher_logits = teacher_model[0].eval_batch(list((tokens, position_ids, attention_mask)), compute_loss = False, reduce_output = None)
 #     return teacher_logits
 
-def get_batch_pipe_student(data, teacher_logits):
+def get_batch_pipe_student(data, teacher_model):
     """Modification of `get_batch` to work on `next(data_iterator)` instead of `data_iterator`"""
     args = get_args()
     tokenizer = get_tokenizer()
