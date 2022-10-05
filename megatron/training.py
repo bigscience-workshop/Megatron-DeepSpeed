@@ -402,6 +402,86 @@ def update_train_iters(args):
     print_rank_0('setting training iterations to {}'.format(args.train_iters))
 
 
+def get_student_model(model_provider_func):
+    """Build the model."""
+    args = get_args()
+
+    # Build model.
+    # if mpu.get_pipeline_model_parallel_world_size() > 1 and \
+    #    args.virtual_pipeline_model_parallel_size is not None:
+    #     model = []
+    #     for i in range(args.virtual_pipeline_model_parallel_size):
+    #         # mpu.set_virtual_pipeline_model_parallel_rank(i)
+    #         # Set pre_process and post_process only after virtual rank is set.
+    #         pre_process = mpu.is_pipeline_first_stage()
+    #         post_process = mpu.is_pipeline_last_stage()
+    #         this_model = model_provider_func(
+    #             pre_process=pre_process,
+    #             post_process=post_process
+    #         )
+    #         model.append(this_model)
+    # else:
+    pre_process = mpu.is_pipeline_first_stage()
+    post_process = mpu.is_pipeline_last_stage()
+    model = model_provider_func(
+        pre_process=pre_process,
+        post_process=post_process
+    )
+
+
+    if not isinstance(model, list):
+        model = [model]
+
+    # Set tensor model parallel attributes if not set.
+    # Only parameters that are already tensor model parallel have these
+    # attributes set for them. We should make sure the default attributes
+    # are set for all params so the optimizer can use them.
+    for model_module in model:
+        for param in model_module.parameters():
+            mpu.set_defaults_if_not_set_tensor_model_parallel_attributes(param)
+
+    # # Print number of parameters.
+    # Moved to `train` with extras
+    # if mpu.get_data_parallel_rank() == 0:
+    #     print('Number of parameters on tensor={}, pipeline={}: {}'.format(
+    #         mpu.get_tensor_model_parallel_rank(),
+    #         mpu.get_pipeline_model_parallel_rank(),
+    #         sum([sum([p.ds_numel if hasattr(p,'ds_id') else p.nelement() for p in model_module.parameters()])
+    #              for model_module in model])), flush=True)
+    #     torch.distributed.barrier()
+    # else:
+    #     torch.distributed.barrier()
+
+    if args.deepspeed:
+        return model
+
+    # GPU allocation.
+    for model_module in model:
+        model_module.cuda(torch.cuda.current_device())
+
+    # Fp16 conversion.
+    if args.fp16 or args.bf16:
+        model = [Float16Module(model_module, args) for model_module in model]
+
+    if args.DDP_impl == 'torch':
+        i = torch.cuda.current_device()
+        model = [torchDDP(model_module, device_ids=[i], output_device=i,
+                          process_group=mpu.get_data_parallel_group())
+                 for model_module in model]
+        return model
+
+    if args.DDP_impl == 'local':
+        model = [LocalDDP(model_module,
+                          args.accumulate_allreduce_grads_in_fp32,
+                          args.use_contiguous_buffers_in_ddp)
+                 for model_module in model]
+        return model
+
+    raise NotImplementedError('Unknown DDP implementation specified: {}. '
+                              'Exiting.'.format(args.DDP_impl))
+
+
+
 def get_model(model_provider_func):
     """Build the model."""
     args = get_args()
@@ -530,7 +610,7 @@ def setup_model_and_optimizer_distillation(model_provider_func):
 
     student_model_provider_func, teacher_model_provider_func = model_provider_func
 
-    student_model = get_model(student_model_provider_func)
+    student_model = get_student_model(student_model_provider_func)
 
     unwrapped_model = unwrap_model(student_model,
                                    (torchDDP, LocalDDP, Float16Module))
