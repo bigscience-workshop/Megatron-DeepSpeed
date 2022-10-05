@@ -17,6 +17,7 @@
 from functools import partial
 
 from datetime import datetime
+from copy import deepcopy
 import bisect
 import math
 import sys
