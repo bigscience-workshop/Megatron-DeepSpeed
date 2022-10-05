@@ -787,7 +787,7 @@ def distill_forward_train_step(forward_step_func, data_iterator,
     if args.deepspeed:
         assert isinstance(student_model[0], deepspeed.PipelineEngine), student_model[0]
         assert isinstance(teacher_model[0], deepspeed.PipelineEngine), teacher_model[0]
-        from megatron.utils_distill import get_batch_pipe_student, get_batch_pipe_teacher
+        from megatron.utils_distill import get_batch_pipe_student
 
         # teacher_data_iterator = deepcopy(data_iterator)
 
