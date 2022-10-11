@@ -41,7 +41,10 @@ class FusedLayerNormAffineFunction(torch.autograd.Function):
 
     ctx.normalized_shape = normalized_shape
     ctx.eps = eps
-    input_ = input.contiguous()
+    if isinstance(input, tuple):
+      input_ = input[0].contiguous()
+    else:
+      input_ = input.contiguous()
     weight_ = weight.contiguous()
     bias_ = bias.contiguous()
     output, mean, invvar = fused_mix_prec_layer_norm_cuda.forward_affine(
@@ -109,3 +112,15 @@ class MixedFusedLayerNorm(torch.nn.Module):
             input, self.weight, self.bias, self.normalized_shape, self.eps)
     else:
         return F.layer_norm(input, self.normalized_shape, self.weight, self.bias)
+
+class MixedFusedLayerNormTeacher(MixedFusedLayerNorm):
+  
+  @torch.no_grad()
+  def forward(self, input):
+    input, original_input = input
+    return (super().forward(input), original_input)
+  
+class MixedFusedLayerNormStudent(MixedFusedLayerNorm):
+  def forward(self, input):
+    input, logits_teacher = input
+    return (super().forward(input), logits_teacher)

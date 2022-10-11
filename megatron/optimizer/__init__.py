@@ -22,6 +22,17 @@ from megatron.model.fused_layer_norm import MixedFusedLayerNorm as LayerNorm
 from .grad_scaler import ConstantGradScaler, DynamicGradScaler
 from .optimizer import Float16OptimizerWithFloat16Params, FP32Optimizer
 
+def _filter_for_teacher_student(modules):
+    trainable_modules = []
+
+    for module in modules:
+        for module_ in module.modules():
+            if "Student" in module_.__class__.__name__:
+                trainable_modules.append(module_)
+    
+    return trainable_modules
+
+
 
 def _get_params_for_weight_decay_optimization(modules):
     """Divide params into with-weight-decay and without-weight-decay groups.
@@ -30,6 +41,9 @@ def _get_params_for_weight_decay_optimization(modules):
 
     weight_decay_params = {'params': []}
     no_weight_decay_params = {'params': [], 'weight_decay': 0.0}
+
+    modules = _filter_for_teacher_student(modules)
+
     for module in modules:
         for module_ in module.modules():
             if isinstance(module_, LayerNorm):

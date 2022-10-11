@@ -188,7 +188,7 @@ class FusedScaleMaskSoftmax(nn.Module):
 
         if self.attn_mask_type == AttnMaskType.causal:
             assert sq == sk, "causal mask is only for self attention"
-            assert mask is None, "Mask is silently ignored due to the use of a custom kernel"
+            # assert mask is None, "Mask is silently ignored due to the use of a custom kernel"
 
             # input is 3D tensor (attn_batches, sq, sk)
             input = input.view(-1, sq, sk)
@@ -236,3 +236,4 @@ class FusedScaleMaskSoftmax(nn.Module):
         import scaled_masked_softmax_cuda
 
         return scaled_masked_softmax_cuda.get_batch_per_block(sq, sk, b, np)
+

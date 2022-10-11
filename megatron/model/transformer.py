@@ -65,18 +65,27 @@ class ParallelMLP(MegatronModule):
     applied.
     """
 
-    def __init__(self, init_method, output_layer_init_method):
+    def __init__(self, init_method, output_layer_init_method, student_=False):
         super(ParallelMLP, self).__init__()
         args = get_args()
 
         # Project to ffn_hidden_size
-        self.dense_h_to_4h = mpu.ColumnParallelLinear(
-            args.hidden_size,
-            # GLU is a special activation that divides the dimension by a factor 2.
-            2 * args.ffn_hidden_size if args.glu_activation else args.ffn_hidden_size,
-            gather_output=False,
-            init_method=init_method,
-            skip_bias_add=True)
+        if not student_:
+            self.dense_h_to_4h = mpu.ColumnParallelLinear(
+                args.hidden_size,
+                # GLU is a special activation that divides the dimension by a factor 2.
+                2 * args.ffn_hidden_size if args.glu_activation else args.ffn_hidden_size,
+                gather_output=False,
+                init_method=init_method,
+                skip_bias_add=True)
+        else: 
+            self.dense_h_to_4h = mpu.ColumnParallelLinear(
+                args.student_hidden_size,
+                # GLU is a special activation that divides the dimension by a factor 2.
+                2 * args.student_ffn_hidden_size if args.glu_activation else args.student_ffn_hidden_size,
+                gather_output=False,
+                init_method=init_method,
+                skip_bias_add=True)
 
         self.bias_gelu_fusion = args.bias_gelu_fusion
         self.activation_func = F.gelu
@@ -88,12 +97,20 @@ class ParallelMLP(MegatronModule):
             self.activation_func = erf_gelu
 
         # Project back to h.
-        self.dense_4h_to_h = mpu.RowParallelLinear(
-            args.ffn_hidden_size,
-            args.hidden_size,
-            input_is_parallel=True,
-            init_method=output_layer_init_method,
-            skip_bias_add=True)
+        if not student_:
+            self.dense_4h_to_h = mpu.RowParallelLinear(
+                args.ffn_hidden_size,
+                args.hidden_size,
+                input_is_parallel=True,
+                init_method=output_layer_init_method,
+                skip_bias_add=True)
+        else: 
+            self.dense_4h_to_h = mpu.RowParallelLinear(
+                args.student_ffn_hidden_size,
+                args.student_hidden_size,
+                input_is_parallel=True,
+                init_method=output_layer_init_method,
+                skip_bias_add=True)
 
 
     def forward(self, hidden_states):
@@ -123,7 +140,8 @@ class ParallelAttention(MegatronModule):
     def __init__(self, init_method,
                  output_layer_init_method, layer_number,
                  attention_type=AttnType.self_attn,
-                 attn_mask_type=AttnMaskType.padding):
+                 attn_mask_type=AttnMaskType.padding,
+                 student_=False):
         super(ParallelAttention, self).__init__()
         args = get_args()
         self.fp16 = args.fp16
@@ -145,27 +163,27 @@ class ParallelAttention(MegatronModule):
         self.hidden_size_per_partition = mpu.divide(projection_size,
                                                     world_size)
         self.hidden_size_per_attention_head = mpu.divide(
-            projection_size, args.num_attention_heads)
+            projection_size, args.num_attention_heads if not student_ else args.student_num_attention_heads)
         self.num_attention_heads_per_partition = mpu.divide(
-            args.num_attention_heads, world_size)
+            args.num_attention_heads if not student_ else args.student_num_attention_heads, world_size)
 
         # Strided linear layer.
         if attention_type == AttnType.self_attn:
             self.query_key_value = mpu.ColumnParallelLinear(
-                args.hidden_size,
+                args.hidden_size if not student_ else args.student_hidden_size,
                 3 * projection_size,
                 gather_output=False,
                 init_method=init_method)
         else:
             assert attention_type == AttnType.cross_attn
             self.query = mpu.ColumnParallelLinear(
-                args.hidden_size,
+                args.hidden_size if not student_ else args.student_hidden_size,
                 projection_size,
                 gather_output=False,
                 init_method=init_method)
 
             self.key_value = mpu.ColumnParallelLinear(
-                args.hidden_size,
+                args.hidden_size if not student_ else args.student_hidden_size,
                 2 * projection_size,
                 gather_output=False,
                 init_method=init_method)
@@ -192,7 +210,7 @@ class ParallelAttention(MegatronModule):
         # Output.
         self.dense = mpu.RowParallelLinear(
             projection_size,
-            args.hidden_size,
+            args.hidden_size if not student_ else args.student_hidden_size,
             input_is_parallel=True,
             init_method=output_layer_init_method,
             skip_bias_add=True)
@@ -439,7 +457,8 @@ class ParallelTransformerLayer(MegatronModule):
 
     def __init__(self, init_method, output_layer_init_method,
                  layer_number, layer_type=LayerType.encoder,
-                 self_attn_mask_type=AttnMaskType.padding):
+                 self_attn_mask_type=AttnMaskType.padding,
+                 student_=False):
         args = get_args()
 
         super(ParallelTransformerLayer, self).__init__()
@@ -463,7 +482,8 @@ class ParallelTransformerLayer(MegatronModule):
             output_layer_init_method,
             layer_number,
             attention_type=AttnType.self_attn,
-            attn_mask_type=self_attn_mask_type)
+            attn_mask_type=self_attn_mask_type,
+            student_=student_)
         self.hidden_dropout = args.hidden_dropout
         self.bias_dropout_fusion = args.bias_dropout_fusion
 
@@ -477,10 +497,11 @@ class ParallelTransformerLayer(MegatronModule):
                 init_method,
                 output_layer_init_method,
                 layer_number,
-                attention_type=AttnType.cross_attn)
+                attention_type=AttnType.cross_attn,
+                student_=student_)
             # Layernorm on the attention output.
             self.post_inter_attention_layernorm = LayerNorm(
-                args.hidden_size,
+                args.hidden_size if not student_ else args.student_hidden_size,
                 eps=args.layernorm_epsilon)
 
         # MLP
@@ -504,6 +525,8 @@ class ParallelTransformerLayer(MegatronModule):
 
         # Layer norm at the beginning of the transformer layer.
         layernorm_output = self.input_layernorm(hidden_states)
+        if isinstance(layernorm_output, tuple):
+            layernorm_output, _ = layernorm_output
         # Self attention.
         attention_output, attention_bias = \
             self.self_attention(layernorm_output,
@@ -520,6 +543,12 @@ class ParallelTransformerLayer(MegatronModule):
             residual = layernorm_output
         else:
             residual = hidden_states
+
+        if isinstance(residual, tuple):
+            if len(residual) > 1:
+                residual, _ = residual
+            else:
+                residual = residual[0]
 
         # jit scripting for a nn.module (with dropout) is not
         # trigerring the fusion kernel. For now, we use two
@@ -647,6 +676,115 @@ class ParallelTransformerLayerPipe(ParallelTransformerLayer):
         else:
             raise RuntimeError('Received more inputs than understood.')
 
+class ParallelTransformerLayerPipeTeacher(ParallelTransformerLayerPipe):
+    """Extends ParallelTransformerLayer to forward attention_mask through the pipeline.
+
+    Forward has two usages that affect attention mask communication:
+
+    1) forward((input, attn_mask) , **kwargs) -> (output, mask)
+       When the attention mask is provided as the second positional
+       argument, typical pipeline behavior is used and both the output
+       *and* mask are returned in a tuple. This tuple is then forwarded
+       to the next stage in the pipeline.
+
+       This version is useful if masks are dynamic.
+    
+    2) forward(input, **kwargs) -> output
+       When the mask is static over all samples, it is advantageous to
+       cache the mask and avoid communicating it.
+    """
+    @torch.no_grad()
+    def forward(self, inputs, **kwargs):
+        input_ids = inputs[-1]
+        if isinstance(input_ids, tuple):
+            # input_ids = input_ids[0]
+            input_ids = input_ids
+        # print(self.layer_number, input_ids)
+        return (super().forward(inputs, **kwargs), input_ids)
+
+class ParallelTransformerLayerPipeStudent(ParallelTransformerLayerPipe):
+    """Extends ParallelTransformerLayer to forward attention_mask through the pipeline.
+
+    Forward has two usages that affect attention mask communication:
+
+    1) forward((input, attn_mask) , **kwargs) -> (output, mask)
+       When the attention mask is provided as the second positional
+       argument, typical pipeline behavior is used and both the output
+       *and* mask are returned in a tuple. This tuple is then forwarded
+       to the next stage in the pipeline.
+
+       This version is useful if masks are dynamic.
+    
+    2) forward(input, **kwargs) -> output
+       When the mask is static over all samples, it is advantageous to
+       cache the mask and avoid communicating it.
+    """
+    def __init__(self, init_method, output_layer_init_method,
+                 layer_number, layer_type=LayerType.encoder,
+                 self_attn_mask_type=AttnMaskType.padding):
+        args = get_args()
+
+        super(ParallelTransformerLayer, self).__init__()
+        self.layer_number = layer_number
+        self.layer_type = layer_type
+
+        self.apply_residual_connection_post_layernorm \
+            = args.apply_residual_connection_post_layernorm
+
+        self.bf16 = args.bf16
+        self.fp32_residual_connection = args.fp32_residual_connection
+
+        # Layernorm on the input data.
+        self.input_layernorm = LayerNorm(
+            args.student_hidden_size,
+            eps=args.layernorm_epsilon)
+
+        # Self attention.
+        self.self_attention = ParallelAttention(
+            init_method,
+            output_layer_init_method,
+            layer_number,
+            attention_type=AttnType.self_attn,
+            attn_mask_type=self_attn_mask_type,
+            student_=True)
+        self.hidden_dropout = args.hidden_dropout
+        self.bias_dropout_fusion = args.bias_dropout_fusion
+
+        # Layernorm on the attention output
+        self.post_attention_layernorm = LayerNorm(
+            args.student_hidden_size,
+            eps=args.layernorm_epsilon)
+
+        if self.layer_type == LayerType.decoder:
+            self.inter_attention = ParallelAttention(
+                init_method,
+                output_layer_init_method,
+                layer_number,
+                attention_type=AttnType.cross_attn,
+                student_=True)
+            # Layernorm on the attention output.
+            self.post_inter_attention_layernorm = LayerNorm(
+                args.student_hidden_size,
+                eps=args.layernorm_epsilon)
+
+        # MLP
+        self.mlp = ParallelMLP(init_method,
+                               output_layer_init_method, student_=True)
+
+        # Alibi
+        if args.position_embedding_type == PositionEmbeddingType.alibi:
+            self.alibi = self._build_alibi_tensor(args.seq_length, args.student_num_attention_heads, args.micro_batch_size).to(torch.cuda.current_device())
+            if args.params_dtype == torch.float16:
+                self.alibi = self.alibi.to(torch.float16)
+            elif args.params_dtype == torch.bfloat16:
+                self.alibi = self.alibi.to(torch.bfloat16)
+        else:
+            self.alibi = None
+    @torch.no_grad()
+    def forward(self, inputs, **kwargs):
+        logits_teacher = inputs[-1]
+        inputs = inputs[:-1]
+        return (super().forward(inputs, **kwargs), logits_teacher)
 
 class ParallelTransformer(MegatronModule):
     """Transformer class."""
