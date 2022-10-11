@@ -114,10 +114,11 @@ class MixedFusedLayerNorm(torch.nn.Module):
         return F.layer_norm(input, self.normalized_shape, self.weight, self.bias)
 
 class MixedFusedLayerNormTeacher(MixedFusedLayerNorm):
-  
-  @torch.no_grad()
+  # @torch.no_grad()
   def forward(self, input):
     input, original_input = input
+    print("input", input.shape)
+    print("original_input", original_input[0].shape)
     return (super().forward(input), original_input)
   
 class MixedFusedLayerNormStudent(MixedFusedLayerNorm):

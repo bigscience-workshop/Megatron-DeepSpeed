@@ -693,7 +693,7 @@ class ParallelTransformerLayerPipeTeacher(ParallelTransformerLayerPipe):
        When the mask is static over all samples, it is advantageous to
        cache the mask and avoid communicating it.
     """
-    @torch.no_grad()
+    # @torch.no_grad()
     def forward(self, inputs, **kwargs):
         input_ids = inputs[-1]
         if isinstance(input_ids, tuple):
@@ -780,7 +780,7 @@ class ParallelTransformerLayerPipeStudent(ParallelTransformerLayerPipe):
                 self.alibi = self.alibi.to(torch.bfloat16)
         else:
             self.alibi = None
-    @torch.no_grad()
+
     def forward(self, inputs, **kwargs):
         logits_teacher = inputs[-1]
         inputs = inputs[:-1]

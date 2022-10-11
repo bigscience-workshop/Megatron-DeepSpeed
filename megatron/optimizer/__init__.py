@@ -18,6 +18,9 @@ from apex.optimizers import FusedSGD as SGD
 
 from megatron import get_args
 from megatron.model.fused_layer_norm import MixedFusedLayerNorm as LayerNorm
+from megatron.model.fused_layer_norm import MixedFusedLayerNormTeacher, MixedFusedLayerNormStudent
+from megatron.model.transformer import ParallelTransformerLayerPipeStudent, ParallelTransformerLayerPipeTeacher
+from megatron.model.language_model import EmbeddingPipeStudent, EmbeddingPipeTeacher
 
 from .grad_scaler import ConstantGradScaler, DynamicGradScaler
 from .optimizer import Float16OptimizerWithFloat16Params, FP32Optimizer
@@ -27,7 +30,8 @@ def _filter_for_teacher_student(modules):
 
     for module in modules:
         for module_ in module.modules():
-            if "Student" in module_.__class__.__name__:
+            # if "Student" in module_.__class__.__name__:
+            if isinstance(module, (ParallelTransformerLayerPipeStudent, EmbeddingPipeStudent, MixedFusedLayerNormStudent)):
                 trainable_modules.append(module_)
     
     return trainable_modules
@@ -46,7 +50,7 @@ def _get_params_for_weight_decay_optimization(modules):
 
     for module in modules:
         for module_ in module.modules():
-            if isinstance(module_, LayerNorm):
+            if isinstance(module_, MixedFusedLayerNormStudent):
                 no_weight_decay_params['params'].extend(
                     [p for p in list(module_._parameters.values())
                      if p is not None])

@@ -199,12 +199,12 @@ def get_cross_entropy(is_prefix: bool):
 
 def get_ts_loss(is_prefix: bool):
     def TeacherStudentLoss(output, labels):
-        output, teacher_logits = output[0], output[1]
+        student_logits, teacher_logits = output
         labels, loss_mask = labels[0], labels[1]
 
         args = get_args()
 
-        losses = mpu.vocab_parallel_cross_entropy(output.contiguous().float(), labels)
+        losses = mpu.vocab_parallel_cross_entropy(student_logits.contiguous().float(), labels)
 
         if is_prefix:
             micro_batch_size, sequence_length = loss_mask.shape
@@ -235,9 +235,9 @@ def get_ts_loss(is_prefix: bool):
         teacher_logits = teacher_logits.detach()
         # First pass it on CPU - otherwise we get OOM errors
         softmax_labels = torch.nn.Softmax(dim=-1)(teacher_logits)
-        softmax_labels = softmax_labels.permute(1, 0, 2)
-
-        student_log_softax = -torch.nn.LogSoftmax(dim=-1)(output)
+        # softmax_labels = softmax_labels.permute(1, 0, 2)
+        
+        student_log_softax = -torch.nn.LogSoftmax(dim=-1)(student_logits)
 
         # print(output.shape, teacher_logits.shape)
         # print(student_log_softax.shape, softmax_labels.shape)
@@ -373,8 +373,6 @@ class GPTModelPipe(PipelineModule,MegatronModule):
             else:
                 return inputs
 
-        # self.specs.append(_to_float16)
-        self.specs.append(lambda x: (x[0], x[1]))
 
         # Embedding layer
         self.specs.append(TiedLayerSpec('embed_student',
@@ -410,11 +408,11 @@ class GPTModelPipe(PipelineModule,MegatronModule):
                     self_attn_mask_type=attn_mask_type))
 
         # Undo data format change
-        # def undo(x):
-        #     if not getattr(args, 'pretrain_causal_attention', False):
-        #         x = x[0]
-        #     return x.transpose(0, 1).contiguous()
-        # self.specs.append(undo)
+        def undo(x):
+            if isinstance(x, tuple):
+                return (x[0].transpose(0, 1).contiguous(), x[1])
+            return x.transpose(0, 1).contiguous()
+        self.specs.append(undo)
 
         # Final layernorm after transformer layers
         self.specs.append(
@@ -422,12 +420,12 @@ class GPTModelPipe(PipelineModule,MegatronModule):
                       args.student_hidden_size,
                       eps=args.layernorm_epsilon))
 
-        def _logits_helper(embedding, lm_output):
+        def _logits_helper_student(embedding, lm_output):
             """A wrapper to massage inputs/outputs from pipeline. """
             return parallel_lm_logits(
                 lm_output,
                 embedding.word_embeddings_weight,
-                self.parallel_output)
+                self.parallel_output, permute_output=True)
 
         self.specs.append(
             TiedLayerSpec('embed_student',
@@ -437,7 +435,7 @@ class GPTModelPipe(PipelineModule,MegatronModule):
                           args.hidden_dropout,
                           init_method=init_method,
                           num_tokentypes=num_tokentypes,
-                          forward_fn=_logits_helper,
+                          forward_fn=_logits_helper_student,
                           tied_weight_attr='word_embeddings_weight')
         )
 
@@ -461,8 +459,6 @@ class GPTModelPipe(PipelineModule,MegatronModule):
                                              num_mp=mpu.get_tensor_model_parallel_world_size(),
                                              num_dp=mpu.get_data_parallel_world_size())
         
-
-
         super().__init__(layers=self.specs,
                          loss_fn=get_ts_loss(is_prefix=attn_mask_type is AttnMaskType.prefix),
                          topology=topo,
