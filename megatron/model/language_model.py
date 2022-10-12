@@ -310,7 +310,7 @@ class EmbeddingPipe(Embedding):
         return self.word_embeddings.weight
 
 class EmbeddingPipeTeacher(EmbeddingPipe):
-    # @torch.no_grad()
+    @torch.no_grad()
     def forward(self, inputs, **kwargs):
         return (super().forward(inputs, **kwargs), inputs)
 

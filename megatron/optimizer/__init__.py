@@ -30,11 +30,10 @@ def _filter_for_teacher_student(modules):
 
     for module in modules:
         for module_ in module.modules():
-            # if "Student" in module_.__class__.__name__:
-            if isinstance(module, (ParallelTransformerLayerPipeStudent, EmbeddingPipeStudent, MixedFusedLayerNormStudent)):
+            # TODO: this is empty ???
+            if isinstance(module_, (ParallelTransformerLayerPipeStudent, EmbeddingPipeStudent, MixedFusedLayerNormStudent)):
                 trainable_modules.append(module_)
-    
-    return trainable_modules
+    return modules
 
 
 

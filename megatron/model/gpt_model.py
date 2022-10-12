@@ -309,10 +309,8 @@ class GPTModelPipe(PipelineModule,MegatronModule):
 
         # Undo data format change
         def undo(x):
-            # if not getattr(args, 'pretrain_causal_attention', False):
-            #     x = x[0]
             if isinstance(x, tuple):
-                return (x[0][0].transpose(0, 1).contiguous(), x[1])
+                return (x[0].transpose(0, 1).contiguous(), *x[1:])
             return x.transpose(0, 1).contiguous()
         self.specs.append(undo)
 

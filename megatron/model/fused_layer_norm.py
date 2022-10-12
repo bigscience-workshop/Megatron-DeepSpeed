@@ -106,25 +106,26 @@ class MixedFusedLayerNorm(torch.nn.Module):
       torch.distributed.all_reduce(self.weight, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
       torch.distributed.all_reduce(self.bias, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
 
-    if self.use_meg_ds_fused_layer_norm:
+    # if self.use_meg_ds_fused_layer_norm:
+    if False:
         return FusedLayerNormAffineFunction.apply(
             input, self.weight, self.bias, self.normalized_shape, self.eps)
     else:
         return F.layer_norm(input, self.normalized_shape, self.weight, self.bias)
 
 class MixedFusedLayerNormTeacher(MixedFusedLayerNorm):
-  # @torch.no_grad()
+  @torch.no_grad()
   def forward(self, input):
-    if len(input) ==2:
-      input, original_input = input
-      return (super().forward(input), original_input)
+    if isinstance(input, tuple):
+      input, *original_input = input
+      return (super().forward(input), *original_input)
     else:
       return super().forward(input)
   
 class MixedFusedLayerNormStudent(MixedFusedLayerNorm):
   def forward(self, input):
-    if len(input) == 2:
-      input, logits_teacher = input
-      return (super().forward(input), logits_teacher)
+    if isinstance(input, tuple):
+      input, *logits_teacher = input
+      return (super().forward(input), *logits_teacher)
     else:
       return super().forward(input)

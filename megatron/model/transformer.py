@@ -24,7 +24,6 @@ from megatron import mpu
 from .module import MegatronModule
 from megatron.enums import AttnMaskType, LayerType, AttnType, PositionEmbeddingType
 from megatron.model.fused_layer_norm import MixedFusedLayerNormStudent as LayerNormStudent
-# from megatron.model.fused_layer_norm import MixedFusedLayerNorm as LayerNorm
 from megatron.model.fused_layer_norm import MixedFusedLayerNorm as LayerNorm
 from megatron.model.fused_softmax import FusedScaleMaskSoftmax
 from megatron.model.fused_bias_gelu import bias_gelu_impl
@@ -695,14 +694,11 @@ class ParallelTransformerLayerPipeTeacher(ParallelTransformerLayerPipe):
        When the mask is static over all samples, it is advantageous to
        cache the mask and avoid communicating it.
     """
-    # @torch.no_grad()
+    @torch.no_grad()
     def forward(self, inputs, **kwargs):
-        input_ids = inputs[-1]
-        if isinstance(input_ids, tuple):
-            # input_ids = input_ids[0]
-            input_ids = input_ids
+        # input_ids = inputs[-1]
         # print(self.layer_number, input_ids)
-        return (super().forward(inputs, **kwargs), input_ids)
+        return (super().forward(inputs[0], **kwargs), *inputs[1:])
 
 class ParallelTransformerLayerPipeStudent(ParallelTransformerLayerPipe):
     """Extends ParallelTransformerLayer to forward attention_mask through the pipeline.
@@ -784,9 +780,9 @@ class ParallelTransformerLayerPipeStudent(ParallelTransformerLayerPipe):
             self.alibi = None
 
     def forward(self, inputs, **kwargs):
-        logits_teacher = inputs[-1]
-        inputs = inputs[:-1]
-        return (super().forward(inputs, **kwargs), logits_teacher)
+        # logits_teacher = inputs[-1]
+        # inputs = inputs[:-1]
+        return (super().forward(inputs[0], **kwargs), *inputs[1:])
 
 class ParallelTransformer(MegatronModule):
     """Transformer class."""
