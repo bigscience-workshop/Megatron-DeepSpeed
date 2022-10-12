@@ -94,7 +94,6 @@ class MixedFusedLayerNorm(torch.nn.Module):
       or version.parse(torch.__version__) >= version.parse("1.11.0") # https://github.com/pytorch/pytorch/pull/66920
     )
 
-
   def reset_parameters(self):
 
     init.ones_(self.weight)
@@ -116,12 +115,16 @@ class MixedFusedLayerNorm(torch.nn.Module):
 class MixedFusedLayerNormTeacher(MixedFusedLayerNorm):
   # @torch.no_grad()
   def forward(self, input):
-    input, original_input = input
-    print("input", input.shape)
-    print("original_input", original_input[0].shape)
-    return (super().forward(input), original_input)
+    if len(input) ==2:
+      input, original_input = input
+      return (super().forward(input), original_input)
+    else:
+      return super().forward(input)
   
 class MixedFusedLayerNormStudent(MixedFusedLayerNorm):
   def forward(self, input):
-    input, logits_teacher = input
-    return (super().forward(input), logits_teacher)
+    if len(input) == 2:
+      input, logits_teacher = input
+      return (super().forward(input), logits_teacher)
+    else:
+      return super().forward(input)

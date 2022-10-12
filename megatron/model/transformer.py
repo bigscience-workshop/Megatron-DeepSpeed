@@ -23,6 +23,8 @@ from megatron import get_args, logging
 from megatron import mpu
 from .module import MegatronModule
 from megatron.enums import AttnMaskType, LayerType, AttnType, PositionEmbeddingType
+from megatron.model.fused_layer_norm import MixedFusedLayerNormStudent as LayerNormStudent
+# from megatron.model.fused_layer_norm import MixedFusedLayerNorm as LayerNorm
 from megatron.model.fused_layer_norm import MixedFusedLayerNorm as LayerNorm
 from megatron.model.fused_softmax import FusedScaleMaskSoftmax
 from megatron.model.fused_bias_gelu import bias_gelu_impl
@@ -735,7 +737,7 @@ class ParallelTransformerLayerPipeStudent(ParallelTransformerLayerPipe):
         self.fp32_residual_connection = args.fp32_residual_connection
 
         # Layernorm on the input data.
-        self.input_layernorm = LayerNorm(
+        self.input_layernorm = LayerNormStudent(
             args.student_hidden_size,
             eps=args.layernorm_epsilon)
 
@@ -751,7 +753,7 @@ class ParallelTransformerLayerPipeStudent(ParallelTransformerLayerPipe):
         self.bias_dropout_fusion = args.bias_dropout_fusion
 
         # Layernorm on the attention output
-        self.post_attention_layernorm = LayerNorm(
+        self.post_attention_layernorm = LayerNormStudent(
             args.student_hidden_size,
             eps=args.layernorm_epsilon)
 
@@ -763,7 +765,7 @@ class ParallelTransformerLayerPipeStudent(ParallelTransformerLayerPipe):
                 attention_type=AttnType.cross_attn,
                 student_=True)
             # Layernorm on the attention output.
-            self.post_inter_attention_layernorm = LayerNorm(
+            self.post_inter_attention_layernorm = LayerNormStudent(
                 args.student_hidden_size,
                 eps=args.layernorm_epsilon)
 
