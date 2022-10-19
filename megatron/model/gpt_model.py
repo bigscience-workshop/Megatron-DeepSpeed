@@ -200,6 +200,8 @@ def get_cross_entropy(is_prefix: bool):
 def get_ts_loss(is_prefix: bool):
     def TeacherStudentLoss(output, labels):
         student_logits, teacher_logits = output
+        if isinstance(teacher_logits, tuple):
+            teacher_logits = teacher_logits[0]
         labels, loss_mask = labels[0], labels[1]
 
         args = get_args()
@@ -232,15 +234,12 @@ def get_ts_loss(is_prefix: bool):
         loss = torch.sum(losses.view(-1) * loss_mask) / expected_number_of_tokens
 
         # TODO: check if the formula is correct
-        teacher_logits = teacher_logits.detach()
+        # teacher_logits = teacher_logits.detach()
         # First pass it on CPU - otherwise we get OOM errors
-        softmax_labels = torch.nn.Softmax(dim=-1)(teacher_logits)
-        # softmax_labels = softmax_labels.permute(1, 0, 2)
-        
-        student_log_softax = -torch.nn.LogSoftmax(dim=-1)(student_logits)
+        # teacher_logits = teacher_logits.detach()
+        softmax_labels = torch.nn.Softmax(dim=-1)(teacher_logits.contiguous().float())
+        student_log_softax = -torch.nn.LogSoftmax(dim=-1)(student_logits.contiguous().float())
 
-        # print(output.shape, teacher_logits.shape)
-        # print(student_log_softax.shape, softmax_labels.shape)
         softmax_logits = student_log_softax * softmax_labels
         logits_loss = softmax_logits.mean()
 
@@ -275,7 +274,7 @@ class GPTModelPipe(PipelineModule,MegatronModule):
         self.specs.append(_to_float16)
 
         # Embedding layer
-        self.specs.append(TiedLayerSpec('embed',
+        self.specs.append(TiedLayerSpec('embed_teacher',
                                         EmbeddingPipeTeacher,
                                         args.hidden_size,
                                         args.padded_vocab_size,
@@ -283,7 +282,7 @@ class GPTModelPipe(PipelineModule,MegatronModule):
                                         init_method=init_method,
                                         num_tokentypes=num_tokentypes,
                                         tied_weight_attr='word_embeddings_weight'))
-
+    
         if args.fp32_residual_connection:
             if getattr(args, 'pretrain_causal_attention', False):
                 self.specs.append(lambda x: x.transpose(0, 1).contiguous().float())
@@ -292,7 +291,8 @@ class GPTModelPipe(PipelineModule,MegatronModule):
                 self.specs.append(lambda x: (x[0].transpose(0, 1).contiguous().float(), *x[1:]))
         else:
             if getattr(args, 'pretrain_causal_attention', False):
-                self.specs.append(lambda x: (x[0].transpose(0, 1).contiguous(), x[1]))
+                self.specs.append(lambda x: (x[0].transpose(0, 1).contiguous(), *x[1:]))
+                # self.specs.append(lambda x: (x.transpose(0, 1).contiguous(), *x[1:]))
             else:
                 # EmbeddingPipe returns attention mask as well
                 self.specs.append(lambda x: (x[0].transpose(0, 1).contiguous(), *x[1:]))
@@ -310,7 +310,8 @@ class GPTModelPipe(PipelineModule,MegatronModule):
         # Undo data format change
         def undo(x):
             if isinstance(x, tuple):
-                return (x[0].transpose(0, 1).contiguous(), *x[1:])
+                return (x[0].transpose(0, 1).contiguous(), (x[1:]))
+                # return (x[0].transpose(0, 1).contiguous(), *x[1:])
             return x.transpose(0, 1).contiguous()
         self.specs.append(undo)
 
@@ -328,7 +329,7 @@ class GPTModelPipe(PipelineModule,MegatronModule):
                 self.parallel_output)
 
         self.specs.append(
-            TiedLayerSpec('embed',
+            TiedLayerSpec('embed_teacher',
                           EmbeddingPipeTeacher,
                           args.hidden_size,
                           args.padded_vocab_size,
@@ -408,7 +409,7 @@ class GPTModelPipe(PipelineModule,MegatronModule):
         # Undo data format change
         def undo(x):
             if isinstance(x, tuple):
-                return (x[0].transpose(0, 1).contiguous(), x[1])
+                return (x[0].transpose(0, 1).contiguous(), x[1:])
             return x.transpose(0, 1).contiguous()
         self.specs.append(undo)
 
@@ -424,6 +425,7 @@ class GPTModelPipe(PipelineModule,MegatronModule):
                 lm_output,
                 embedding.word_embeddings_weight,
                 self.parallel_output, permute_output=True)
+        
 
         self.specs.append(
             TiedLayerSpec('embed_student',

@@ -279,7 +279,6 @@ class EmbeddingPipe(Embedding):
     def forward(self, inputs, **kwargs):
         if not hasattr(self, '_args'):
             self._args = get_args()
-
         input_ids = inputs[0]
         position_ids = inputs[1]
         if isinstance(input_ids, tuple):
@@ -310,9 +309,9 @@ class EmbeddingPipe(Embedding):
         return self.word_embeddings.weight
 
 class EmbeddingPipeTeacher(EmbeddingPipe):
-    @torch.no_grad()
+    # @torch.no_grad()
     def forward(self, inputs, **kwargs):
-        return (super().forward(inputs, **kwargs), inputs)
+        return (super().forward(inputs, **kwargs), *inputs)
 
 class EmbeddingPipeStudent(EmbeddingPipe):
     def forward(self, inputs, **kwargs):

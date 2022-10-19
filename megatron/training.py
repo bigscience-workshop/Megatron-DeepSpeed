@@ -955,8 +955,9 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
             params_norm = calc_params_l2_norm(model)
         
         # raise NotImplementedError(optimizer.param_groups)
+        
         report_memory_flag = training_log(loss_dict, total_loss_dict,
-                                          optimizer.param_groups[0]['lr'],
+                                          optimizer.param_groups[0]['lr'] if len(optimizer.param_groups) > 0 else 0.0,
                                           iteration, loss_scale,
                                           report_memory_flag, skipped_iter,
                                           grad_norm, params_norm, num_zeros_in_grad,

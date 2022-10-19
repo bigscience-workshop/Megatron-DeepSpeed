@@ -29,11 +29,13 @@ def _filter_for_teacher_student(modules):
     trainable_modules = []
 
     for module in modules:
-        for module_ in module.modules():
+        # for module_ in module.modules():
+        for module_ in module.children():
             # TODO: this is empty ???
             if isinstance(module_, (ParallelTransformerLayerPipeStudent, EmbeddingPipeStudent, MixedFusedLayerNormStudent)):
                 trainable_modules.append(module_)
-    return modules
+    # return modules
+    return trainable_modules
 
 
 
@@ -45,7 +47,7 @@ def _get_params_for_weight_decay_optimization(modules):
     weight_decay_params = {'params': []}
     no_weight_decay_params = {'params': [], 'weight_decay': 0.0}
 
-    modules = _filter_for_teacher_student(modules)
+    # modules = _filter_for_teacher_student(modules)
 
     for module in modules:
         for module_ in module.modules():

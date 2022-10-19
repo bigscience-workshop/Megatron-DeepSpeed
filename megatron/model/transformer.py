@@ -597,6 +597,9 @@ class ParallelTransformerLayer(MegatronModule):
             layernorm_output = self.post_inter_attention_layernorm(layernorm_input)
 
         # MLP.
+        # print("========", layernorm_output)
+        if isinstance(layernorm_output, tuple):
+            layernorm_output, _ = layernorm_output
         mlp_output, mlp_bias = self.mlp(layernorm_output)
 
         # Second residual connection.
@@ -694,10 +697,8 @@ class ParallelTransformerLayerPipeTeacher(ParallelTransformerLayerPipe):
        When the mask is static over all samples, it is advantageous to
        cache the mask and avoid communicating it.
     """
-    @torch.no_grad()
+    # @torch.no_grad()
     def forward(self, inputs, **kwargs):
-        # input_ids = inputs[-1]
-        # print(self.layer_number, input_ids)
         return (super().forward(inputs[0], **kwargs), *inputs[1:])
 
 class ParallelTransformerLayerPipeStudent(ParallelTransformerLayerPipe):
@@ -780,9 +781,7 @@ class ParallelTransformerLayerPipeStudent(ParallelTransformerLayerPipe):
             self.alibi = None
 
     def forward(self, inputs, **kwargs):
-        # logits_teacher = inputs[-1]
-        # inputs = inputs[:-1]
-        return (super().forward(inputs[0], **kwargs), *inputs[1:])
+        return (super().forward(inputs[0], **kwargs), inputs[1])
 
 class ParallelTransformer(MegatronModule):
     """Transformer class."""
