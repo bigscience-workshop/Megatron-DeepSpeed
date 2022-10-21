@@ -13,8 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from apex.optimizers import FusedAdam as Adam
-from apex.optimizers import FusedSGD as SGD
+from torch.optim import AdamW
+from torch.optim import SGD
+from apex.optimizers import FusedAdam
+from apex.optimizers import FusedSGD
 
 from megatron import get_args
 from megatron.model.fused_layer_norm import MixedFusedLayerNorm as LayerNorm
@@ -72,18 +74,24 @@ def get_megatron_optimizer(model):
         if args.use_bnb_optimizer:
             import bitsandbytes as bnb
             adam_optimizer = bnb.optim.Adam8bit
+        elif args.optimizer_fusion:
+            adam_optimizer = FusedAdam
         else:
-            adam_optimizer = Adam
+            adam_optimizer = AdamW
         optimizer = adam_optimizer(param_groups,
                                    lr=args.lr,
                                    weight_decay=args.weight_decay,
                                    betas=(args.adam_beta1, args.adam_beta2),
                                    eps=args.adam_eps)
     elif args.optimizer == 'sgd':
-        optimizer = SGD(param_groups,
-                        lr=args.lr,
-                        weight_decay=args.weight_decay,
-                        momentum=args.sgd_momentum)
+        if args.optimizer_fusion:
+            sgd_optimizer = FusedSGD
+        else:
+            sgd_optimizer = SGD
+        optimizer = sgd_optimizer(param_groups,
+                                  lr=args.lr,
+                                  weight_decay=args.weight_decay,
+                                  momentum=args.sgd_momentum)
     else:
         raise Exception('{} optimizer is not supported.'.format(
             args.optimizer))

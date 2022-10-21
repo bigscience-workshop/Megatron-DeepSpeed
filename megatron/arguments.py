@@ -552,6 +552,9 @@ def _add_training_args(parser):
     group.add_argument('--no-layer-norm-fusion', action='store_true',
                        help='Disable fused layer norm.',
                        dest='layer_norm_fusion')
+    group.add_argument('--no-optimizer-fusion', action='store_true',
+                       help='Disable FusedAdam/FusedSGD norm.',
+                       dest='optimizer_fusion')
     group.add_argument('--optimizer', type=str, default='adam',
                        choices=['adam', 'sgd'],
                        help='Optimizer function')
