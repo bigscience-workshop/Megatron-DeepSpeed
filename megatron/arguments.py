@@ -549,10 +549,10 @@ def _add_training_args(parser):
     group.add_argument('--no-bias-dropout-fusion', action='store_false',
                        help='Disable bias and dropout fusion.',
                        dest='bias_dropout_fusion')
-    group.add_argument('--no-layer-norm-fusion', action='store_true',
+    group.add_argument('--no-layer-norm-fusion', action='store_false',
                        help='Disable fused layer norm.',
                        dest='layer_norm_fusion')
-    group.add_argument('--no-optimizer-fusion', action='store_true',
+    group.add_argument('--no-optimizer-fusion', action='store_false',
                        help='Disable FusedAdam/FusedSGD norm.',
                        dest='optimizer_fusion')
     group.add_argument('--optimizer', type=str, default='adam',
