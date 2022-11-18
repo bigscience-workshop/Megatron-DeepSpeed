@@ -28,7 +28,7 @@ from torch.nn import init
 from torch.nn.parameter import Parameter
 import importlib
 import torch
-from torch.nn import functional as F
+import torch.nn.functional as F
 
 global fused_mix_prec_layer_norm_cuda
 fused_mix_prec_layer_norm_cuda = None
@@ -102,14 +102,13 @@ class MixedFusedLayerNorm(torch.nn.Module):
 
 
   def forward(self, input):
+
     if self.layernorm_tp_auto_sync:
       torch.distributed.all_reduce(self.weight, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
       torch.distributed.all_reduce(self.bias, op=torch.distributed.ReduceOp.AVG, group=mpu.get_tensor_model_parallel_group())
-=
-    # CPU path is here for unittest sake.
-    if not input.is_cuda:
-        print("WARNING! The input of FusedLayerNorm should be on the GPU."
-              "This warning should only be triggered in the FusedLayerNorm unit tests.")
-        return F.layer_norm(input, self.normalized_shape, self.weight, self.bias, self.eps)
-    return FusedLayerNormAffineFunction.apply(
-      input, self.weight, self.bias, self.normalized_shape,self.eps)
+
+    if self.use_meg_ds_fused_layer_norm:
+        return FusedLayerNormAffineFunction.apply(
+            input, self.weight, self.bias, self.normalized_shape, self.eps)
+    else:
+        return F.layer_norm(input, self.normalized_shape, self.weight, self.bias)
