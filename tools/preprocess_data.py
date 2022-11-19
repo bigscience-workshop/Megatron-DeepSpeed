@@ -94,6 +94,9 @@ class Encoder(object):
                     doc_ids[-1].append(Encoder.tokenizer.eod)
                 elif self.args.append_bos:
                     doc_ids[-1].append(Encoder.tokenizer.bos)
+                elif self.args.append_random:
+                    for _ in range(self.args.prepend_random):
+                        doc_ids[-1].append(Encoder.tokenizer.bos)
             ids[key] = doc_ids
         return ids, len(json_line)
 
@@ -126,6 +129,8 @@ def get_args():
                        help='Append a bos token to the end of a document.')
     group.add_argument('--prepend-space', action='store_true',
                     help='Prepends a space to the beginning of a document')
+    group.add_argument('--append-random', type=int, default=0,
+                    help='Appends X random tokens to the end of a document')                    
     group.add_argument("--tokenizer-name-or-path", type=str, default=None,
                        help="Name or path of the huggingface tokenizer.")
     group.add_argument('--make-vocab-size-divisible-by', type=int, default=128,
