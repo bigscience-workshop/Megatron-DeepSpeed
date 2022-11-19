@@ -95,7 +95,7 @@ class Encoder(object):
                 elif self.args.append_bos:
                     doc_ids[-1].append(Encoder.tokenizer.bos)
                 elif self.args.append_random:
-                    for _ in range(self.args.prepend_random):
+                    for _ in range(self.args.append_random):
                         doc_ids[-1].append(Encoder.tokenizer.bos)
             ids[key] = doc_ids
         return ids, len(json_line)
