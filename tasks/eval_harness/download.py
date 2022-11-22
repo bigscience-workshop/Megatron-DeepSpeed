@@ -1,6 +1,7 @@
 # Downloads the specified taks in the evaluation harness
 # This is particularly useful when running in environments where the GPU nodes 
 # do not have internet access. This way we can pre-download them and use the cached data-set during evaluation.
+# May want to set a cache before, e.g. export HF_DATASETS_CACHE=/scratch/project_462000119/ds_cache
 
 from lm_eval import tasks
 from lm_eval.tasks import ALL_TASKS
