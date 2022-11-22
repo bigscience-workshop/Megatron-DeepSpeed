@@ -68,6 +68,9 @@ class AnnealingLR(object):
             if self.num_steps == self.warmup_steps and \
                 self.decay_tokens is not None:
                 self.warmup_tokens = self.num_tokens
+            # if self.decay_style == 'inverse_sqrt':
+            #     # use constant warmup for inverse_sqrt
+                # return 1e-2
             return self.max_lr * float(self.num_steps) / \
                 float(self.warmup_steps)
 
@@ -102,6 +105,9 @@ class AnnealingLR(object):
             coeff = (1.0 - decay_ratio)
         elif self.decay_style == 'cosine':
             coeff = 0.5 * (math.cos(math.pi * decay_ratio) + 1.0)
+        elif self.decay_style == 'inverse_sqrt':
+            return self.max_lr * math.sqrt(float(self.warmup_steps)) / \
+                math.sqrt(float(num_steps_))
         else:
             raise Exception('{} decay style is not supported.'.format(
                 self.decay_style))
