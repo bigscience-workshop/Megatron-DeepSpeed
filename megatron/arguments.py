@@ -621,6 +621,8 @@ def _add_learning_rate_args(parser):
     group.add_argument('--lr-decay-tokens', type=int, default=None,
                        help='number of tokens to decay learning rate over,'
                        ' If not None will override iter/sample-based decay')
+    group.add_argument('--lr-warmup-style', type=str, default='linear',
+                       choices=['constant', 'linear']),
     group.add_argument('--lr-warmup-fraction', type=float, default=None,
                        help='fraction of lr-warmup-(iters/samples) to use '
                        'for warmup (as a float)')

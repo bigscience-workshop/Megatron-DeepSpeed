@@ -23,7 +23,7 @@ class AnnealingLR(object):
     """Anneals the learning rate."""
 
     def __init__(self, optimizer, max_lr, min_lr,
-                 warmup_steps, decay_steps, decay_style,
+                 warmup_steps, decay_steps, decay_style, warmup_style,
                  use_checkpoint_lr_scheduler=True,
                  override_lr_scheduler=False):
         args = get_args()
@@ -46,6 +46,7 @@ class AnnealingLR(object):
         self.warmup_tokens = 0
 
         self.decay_style = decay_style
+        self.warmup_style = warmup_style
 
         self.override_lr_scheduler = override_lr_scheduler
         self.use_checkpoint_lr_scheduler = use_checkpoint_lr_scheduler
@@ -63,23 +64,26 @@ class AnnealingLR(object):
         """Learning rate decay functions from:
               https://openreview.net/pdf?id=BJYwwY9ll pg. 4"""
 
-        # Use linear warmup for the initial part.
+        # Use warmup for the initial part.
         if self.warmup_steps > 0 and self.num_steps <= self.warmup_steps:
             if self.num_steps == self.warmup_steps and \
                 self.decay_tokens is not None:
                 self.warmup_tokens = self.num_tokens
-            # if self.decay_style == 'inverse_sqrt':
-            #     # use constant warmup for inverse_sqrt
-                # return 1e-2
-            return self.max_lr * float(self.num_steps) / \
-                float(self.warmup_steps)
+            if self.warmup_style == 'linear':
+                return self.max_lr * float(self.num_steps) / \
+                    float(self.warmup_steps)
+            elif self.warmup_style == 'constant':
+                return self.max_lr
+            else:
+                raise ValueError('Unknown warmup style: {}'.format(
+                    self.warmup_style))
 
         # If the learning rate is constant, just return the initial value.
         if self.decay_style == 'constant':
             return self.max_lr
 
         if self.decay_style == 'inverse_sqrt':
-            return self.max_lr / math.sqrt(max(num_steps_, 1))
+            return self.max_lr / math.sqrt(max(self.num_steps - self.warmup_steps, 1))
 
         if self.decay_tokens is None:
             # step-based decay
