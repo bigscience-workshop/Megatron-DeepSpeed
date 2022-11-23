@@ -78,6 +78,9 @@ class AnnealingLR(object):
         if self.decay_style == 'constant':
             return self.max_lr
 
+        if self.decay_style == 'inverse_sqrt':
+            return self.max_lr / math.sqrt(float(max(num_steps_, 1)))
+
         if self.decay_tokens is None:
             # step-based decay
             
@@ -105,8 +108,6 @@ class AnnealingLR(object):
             coeff = (1.0 - decay_ratio)
         elif self.decay_style == 'cosine':
             coeff = 0.5 * (math.cos(math.pi * decay_ratio) + 1.0)
-        elif self.decay_style == 'inverse_sqrt':
-            return self.max_lr / math.sqrt(float(max(num_steps_, 1)))
         else:
             raise Exception('{} decay style is not supported.'.format(
                 self.decay_style))
