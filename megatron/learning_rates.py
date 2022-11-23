@@ -83,7 +83,8 @@ class AnnealingLR(object):
             return self.max_lr
 
         if self.decay_style == 'inverse_sqrt':
-            return self.max_lr / math.sqrt(max(self.num_steps - self.warmup_steps, 1))
+            num_steps_ = self.num_steps - self.warmup_steps
+            return self.max_lr / math.sqrt(max(num_steps_, 1))
 
         if self.decay_tokens is None:
             # step-based decay
