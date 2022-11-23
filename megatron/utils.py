@@ -264,8 +264,8 @@ def get_packed_attention_mask(is_causal: bool, causal_mask: torch.Tensor, decode
     """
 
     """Causal Inputs Mask:
-    mask = [[[[1, 1, 0, 0, 0, 0, 0],
-            [1, 1, 0, 0, 0, 0, 0],
+    mask = [[[[1, 1, 0, 1, 1, 0, 0],
+            [1, 1, 0, 1, 1, 0, 0],
             [1, 1, 1, 0, 0, 0, 0],
             [1, 1, 1, 1, 1, 0, 0],
             [1, 1, 1, 1, 1, 0, 0],
@@ -310,14 +310,21 @@ def get_packed_attention_mask(is_causal: bool, causal_mask: torch.Tensor, decode
             [0, 0, 0, 1, 1, 0, 0],
             [0, 0, 0, 1, 1, 0, 0],
             [0, 0, 0, 1, 1, 1, 0],
+            [0, 0, 0, 0, 0, 0, 1]]]]
+
+    If is_causal=True:
+    mask = [[[[1, 0, 0, 0, 0, 0, 0],
+            [1, 1, 0, 0, 0, 0, 0],
+            [1, 1, 1, 0, 0, 0, 0],
+            [0, 0, 0, 1, 0, 0, 0],
+            [0, 0, 0, 1, 1, 0, 0],
+            [0, 0, 0, 1, 1, 1, 0],
             [0, 0, 0, 0, 0, 0, 0]]]]
     """
     attention_mask = causal_inputs_mask * padding_mask * segment_mask
 
-    # Convert attention mask to binary:
-    attention_mask = (attention_mask < 0.5)
-
-    return attention_mask
+    # True for places we do not want to attend to
+    return ~attention_mask
 
 def param_size(parameter):
     return parameter.ds_numel if hasattr(parameter, 'ds_id') else parameter.nelement()

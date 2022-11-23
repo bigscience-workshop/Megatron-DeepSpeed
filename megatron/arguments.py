@@ -664,6 +664,8 @@ def _add_checkpointing_args(parser):
                        help='Do not save current optimizer.')
     group.add_argument('--no-save-rng', action='store_true', default=None,
                        help='Do not save current rng state.')
+    group.add_argument('--reset-progress', action='store_true', default=None,
+                       help='Reset iteration to 0 & do not load args.')                       
     group.add_argument('--load', type=str, default=None,
                        help='Directory containing a model checkpoint.')
     group.add_argument('--no-load-optim', action='store_true', default=None,
@@ -930,6 +932,8 @@ def _add_data_args(parser):
     group.add_argument('--reset-attention-mask', action='store_true',
                        help='Reset self attention maske after '
                        'end-of-document token. Attention between tokens from different documents is null.')
+    group.add_argument('--norm-target-loss', action='store_true',
+                       help='Normalize the loss per target. Used for multi-task finetuning with packing.')                       
     group.add_argument('--eod-mask-loss', action='store_true',
                        help='Mask loss for the end of document tokens.')
     group.add_argument('--loss-on-targets-only', action='store_true',
@@ -941,7 +945,7 @@ def _add_data_args(parser):
                        'This is mostly used for prefix_lm training')
     group.add_argument("--noise-density", type=float, default=None, help="Span corruption noise density")
     group.add_argument("--mean-noise-span-length", type=int, default=None, help="Span corruption mean noise span length")
-
+    group.add_argument("--prefixlm",  action='store_true', help="Whether to train a PrefixLM - To be used with finetune t0")
 
     return parser
 
