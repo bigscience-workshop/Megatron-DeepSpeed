@@ -64,6 +64,19 @@ class AnnealingLR(object):
         """Learning rate decay functions from:
               https://openreview.net/pdf?id=BJYwwY9ll pg. 4"""
 
+
+        if self.decay_style == 'inverse_sqrt':
+            if self.warmup_steps > 0 and self.num_steps <= self.warmup_steps:
+                if self.warmup_style == 'linear':
+                    return self.max_lr * self.num_steps / (self.warmup_steps * self.warmup_steps**0.5)
+                elif self.warmup_style == 'constant':
+                    return self.max_lr / self.warmup_steps**0.5
+                else:
+                    raise ValueError('Unknown warmup style: {}'.format(
+                        self.warmup_style))
+                
+            return self.max_lr / (max(self.num_steps, 1))**0.5
+
         # Use warmup for the initial part.
         if self.warmup_steps > 0 and self.num_steps <= self.warmup_steps:
             if self.num_steps == self.warmup_steps and \
@@ -82,9 +95,6 @@ class AnnealingLR(object):
         if self.decay_style == 'constant':
             return self.max_lr
 
-        if self.decay_style == 'inverse_sqrt':
-            num_steps_ = self.num_steps - self.warmup_steps
-            return self.max_lr / math.sqrt(max(num_steps_, 1))
 
         if self.decay_tokens is None:
             # step-based decay
