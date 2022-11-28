@@ -87,6 +87,7 @@ class AnnealingLR(object):
         # If constant decay style
         # In warmup phase: lr = max_lr
         # In decay phase: lr = max_lr * sqrt(warmup_steps) / sqrt(num_steps)
+        # Note: To replicate t5x check https://github.com/TurkuNLP/Megatron-DeepSpeed/pull/2
         if self.decay_style == 'inverse_sqrt':
             return self.max_lr * (max(self.warmup_steps, 1) / max(self.num_steps, 1))**0.5
 
