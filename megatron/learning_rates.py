@@ -84,7 +84,7 @@ class AnnealingLR(object):
             return self.max_lr
 
 
-        # If linear
+        # If constant decay style
         # In warmup phase: lr = max_lr
         # In decay phase: lr = max_lr * sqrt(warmup_steps) / sqrt(num_steps)
         if self.decay_style == 'inverse_sqrt':
