@@ -3,6 +3,10 @@ import math
 import torch
 from torch.nn import LayerNorm
 
+import sys
+# add to path
+sys.path.append("/home/nouamane/projects/Megatron-DeepSpeed/")
+import megatron
 from megatron.model.enums import AttnMaskType
 from megatron.model.fused_layer_norm import MixedFusedLayerNorm
 from megatron.model.fused_softmax import FusedScaleMaskSoftmax
