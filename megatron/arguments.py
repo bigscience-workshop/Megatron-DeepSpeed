@@ -49,6 +49,7 @@ def parse_args(extra_args_provider=None, defaults={},
     parser = _add_autoresume_args(parser)
     parser = _add_biencoder_args(parser)
     parser = _add_vit_args(parser)
+    parser = _add_ul2_args(parser)
     parser = _add_logging_args(parser)
     parser = _add_zero_args(parser)
     parser = _add_memoryopt_args(parser)
@@ -1020,6 +1021,39 @@ def _add_vit_args(parser):
                        help='Number of channels in input image data')
     group.add_argument('--patch-dim', type=int, default=16,
                        help='patch dimension used in vit')
+
+    return parser
+
+
+def _add_ul2_args(parser):
+    group = parser.add_argument_group(title="UL2")
+
+    group.add_argument('--ul2-denoiser-ratios', nargs='+', type=float,
+                       default=None,
+                       help='Probability of each denoising objective to be '
+                       'selected. Uniform distribution by default.')
+    group.add_argument('--ul2-denoisers', nargs='+', type=str,
+                       default=['R', 'R', 'S', 'X', 'X', 'X', 'X'],
+                       choices=['R', 'S', 'X'],
+                       help='What type of UL2 denoising objective the other '
+                       'UL2 configurations refer to.')
+    group.add_argument('--ul2-mean-span-lengths', nargs='+', type=float,
+                       default=[3, 8, 0.25, 3, 8, 64, 64],
+                       help='Mean length for sampling span lengths. '
+                       'Numbers < 1 indicate a mean length of the sequence '
+                       'length times that number.')
+    group.add_argument('--ul2-mask-ratios', nargs='+', type=float,
+                       default=[0.15, 0.15, 0.25, 0.5, 0.5, 0.15, 0.5],
+                       help='Ratio of masked token in the full sequence.')
+    group.add_argument('--ul2-r-denoiser-token', type=str, default='[R]',
+                       help='What token to prepend for the UL2 R-denoising '
+                       'objective.')
+    group.add_argument('--ul2-s-denoiser-token', type=str, default='[S]',
+                       help='What token to prepend for the UL2 S-denoising '
+                       'objective.')
+    group.add_argument('--ul2-x-denoiser-token', type=str, default='[X]',
+                       help='What token to prepend for the UL2 X-denoising '
+                       'objective.')
 
     return parser
 

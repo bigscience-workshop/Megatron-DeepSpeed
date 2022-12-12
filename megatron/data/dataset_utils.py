@@ -38,8 +38,9 @@ from megatron.data.indexed_dataset import make_dataset as make_indexed_dataset
 DSET_TYPE_BERT = 'standard_bert'
 DSET_TYPE_ICT = 'ict'
 DSET_TYPE_T5  = 't5'
+DSET_TYPE_UL2  = 'ul2'
 
-DSET_TYPES = [DSET_TYPE_BERT, DSET_TYPE_ICT, DSET_TYPE_T5]
+DSET_TYPES = [DSET_TYPE_BERT, DSET_TYPE_ICT, DSET_TYPE_T5, DSET_TYPE_UL2]
 
 
 class SamplingStyle(Enum):
@@ -553,6 +554,7 @@ def _build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
         from megatron.data.bert_dataset import BertDataset
         from megatron.data.ict_dataset import ICTDataset
         from megatron.data.t5_dataset import T5Dataset
+        from megatron.data.ul2_dataset import UL2Dataset
         dataset = None
         if splits[index + 1] > splits[index]:
             # Get the pointer to the original doc-idx so we can set it later.
@@ -590,6 +592,23 @@ def _build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
                     max_seq_length_dec=max_seq_length_dec,
                     short_seq_prob=short_seq_prob,
                     **kwargs
+                )
+            elif dataset_type == DSET_TYPE_UL2:
+                args = get_args()
+                dataset = UL2Dataset(
+                    indexed_dataset=indexed_dataset,
+                    denoiser_ratios=args.ul2_denoiser_ratios,
+                    denoisers=args.ul2_denoisers,
+                    mean_span_lengths=args.ul2_mean_span_lengths,
+                    mask_ratios=args.ul2_mask_ratios,
+                    denoiser_tokens={
+                        'R': args.ul2_r_denoiser_token,
+                        'S': args.ul2_s_denoiser_token,
+                        'X': args.ul2_x_denoiser_token,
+                    },
+                    max_seq_length_dec=max_seq_length_dec,
+                    short_seq_prob=short_seq_prob,
+                    **kwargs,
                 )
             elif dataset_type == DSET_TYPE_BERT:
                 dataset = BertDataset(
