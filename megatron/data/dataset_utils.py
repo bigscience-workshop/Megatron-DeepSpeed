@@ -45,6 +45,8 @@ DSET_TYPES = [DSET_TYPE_BERT, DSET_TYPE_ICT, DSET_TYPE_T5]
 class SamplingStyle(Enum):
     POISSON = 'poisson'
     GEOMETRIC = 'geometric'
+    UNIFORM = 'uniform'
+    NORMAL = 'normal'
 
 
 def analyze_data_prefix(data_prefix):
@@ -254,6 +256,8 @@ def create_masked_lm_predictions(tokens,
         pvals /= pvals.sum(keepdims=True)
         if favor_longer_ngram:
             pvals = pvals[::-1]
+    elif sampling_style is SamplingStyle.NORMAL:
+        normal_mean = (max_ngrams + 1) / 2
 
     ngram_indexes = []
     for idx in range(len(cand_indexes)):
@@ -287,6 +291,14 @@ def create_masked_lm_predictions(tokens,
             # the max_ngrams. Using p=0.2 default from the SpanBERT paper
             # https://arxiv.org/pdf/1907.10529.pdf (Sec 3.1)
             n = min(np_rng.geometric(0.2), max_ngrams)
+        elif sampling_style is SamplingStyle.UNIFORM:
+            n = np_rng.choice(ngrams[:len(cand_index_set)])
+        elif sampling_style is SamplingStyle.NORMAL:
+            n = round(np.clip(
+                np_rng.normal(loc=normal_mean),
+                1,
+                len(cand_index_set),
+            ))
         else:
             raise ValueError('unknown sampling style')
 
