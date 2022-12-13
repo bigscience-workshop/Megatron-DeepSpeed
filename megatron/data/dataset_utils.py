@@ -597,6 +597,7 @@ def _build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
                 args = get_args()
                 dataset = UL2Dataset(
                     indexed_dataset=indexed_dataset,
+                    model_type=args.ul2_model_type,
                     denoiser_ratios=args.ul2_denoiser_ratios,
                     denoisers=args.ul2_denoisers,
                     mean_span_lengths=args.ul2_mean_span_lengths,

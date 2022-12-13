@@ -24,7 +24,7 @@ import time
 import torch
 import deepspeed
 
-from megatron.enums import PositionEmbeddingType
+from megatron.enums import PositionEmbeddingType, UL2ModelType
 import megatron
 from megatron.logging import log_levels
 
@@ -310,6 +310,17 @@ def parse_args(extra_args_provider=None, defaults={},
                     "skip train iterations should be specified as two numbers, i.e. start-end"
                 )
         args.skip_train_iteration_range = skip_train_iteration_range
+
+    args.ul2_model_type = UL2ModelType(args.ul2_model_type)
+    if (
+            args.ul2_model_type is not UL2ModelType.ENCODER_DECODER
+            and args.decoder_seq_length is not None
+    ):
+        print(
+            f'WARNING: `--decoder_seq_length` is ignored when '
+            f'`--ul2-model-type` is not '
+            f'"{UL2ModelType.ENCODER_DECODER.value}"!'
+        )
 
     if args.use_bnb_optimizer:
         try:
@@ -1028,6 +1039,11 @@ def _add_vit_args(parser):
 def _add_ul2_args(parser):
     group = parser.add_argument_group(title="UL2")
 
+    group.add_argument('--ul2-model-type', type=str, default='ED',
+                       choices=['ED', 'ND', 'CD'],
+                       help='What type of model to use for UL2 pretraining. '
+                       'ED = encoder-decoder; ND = non-causal decoder-only; '
+                       'CD = causal decoder-only')
     group.add_argument('--ul2-denoiser-ratios', nargs='+', type=float,
                        default=None,
                        help='Probability of each denoising objective to be '
