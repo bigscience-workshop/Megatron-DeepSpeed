@@ -18,6 +18,7 @@
 #   https://github.com/google-research/albert/blob/master/create_pretraining_data.py
 # with some modifications.
 
+from enum import Enum
 import math
 import os
 import time
@@ -37,8 +38,16 @@ from megatron.data.indexed_dataset import make_dataset as make_indexed_dataset
 DSET_TYPE_BERT = 'standard_bert'
 DSET_TYPE_ICT = 'ict'
 DSET_TYPE_T5  = 't5'
+DSET_TYPE_UL2  = 'ul2'
 
-DSET_TYPES = [DSET_TYPE_BERT, DSET_TYPE_ICT, DSET_TYPE_T5]
+DSET_TYPES = [DSET_TYPE_BERT, DSET_TYPE_ICT, DSET_TYPE_T5, DSET_TYPE_UL2]
+
+
+class SamplingStyle(Enum):
+    POISSON = 'poisson'
+    GEOMETRIC = 'geometric'
+    UNIFORM = 'uniform'
+    NORMAL = 'normal'
 
 
 def analyze_data_prefix(data_prefix):
@@ -194,9 +203,16 @@ def create_masked_lm_predictions(tokens,
                                  favor_longer_ngram=False,
                                  do_permutation=False,
                                  geometric_dist=False,
-                                 masking_style="bert"):
+                                 masking_style="bert",
+                                 sampling_style=SamplingStyle.POISSON,
+                                 prefix_lm=False):
     """Creates the predictions for the masked LM objective.
     Note: Tokens here are vocab ids and not text tokens."""
+    if not isinstance(sampling_style, SamplingStyle):
+        sampling_style = SamplingStyle(sampling_style)
+    # Backward-compatibility
+    if geometric_dist:
+        sampling_style = SamplingStyle.GEOMETRIC
 
     cand_indexes = []
     # Note(mingdachen): We create a list for recording if the piece is
@@ -235,18 +251,24 @@ def create_masked_lm_predictions(tokens,
                          max(1, int(round(len(tokens) * masked_lm_prob))))
 
     ngrams = np.arange(1, max_ngrams + 1, dtype=np.int64)
-    if not geometric_dist:
+    if sampling_style is SamplingStyle.POISSON:
         # Note(mingdachen):
         # By default, we set the probilities to favor shorter ngram sequences.
         pvals = 1. / np.arange(1, max_ngrams + 1)
         pvals /= pvals.sum(keepdims=True)
         if favor_longer_ngram:
             pvals = pvals[::-1]
+    elif sampling_style is SamplingStyle.NORMAL:
+        normal_mean = (max_ngrams + 1) / 2
 
     ngram_indexes = []
     for idx in range(len(cand_indexes)):
         ngram_index = []
         for n in ngrams:
+            if prefix_lm:
+                last_cand_index_index = min(idx + n - 1, len(cand_indexes) - 1)
+                if cand_indexes[last_cand_index_index][-1] < len(tokens) - 1:
+                    continue
             ngram_index.append(cand_indexes[idx:idx + n])
         ngram_indexes.append(ngram_index)
 
@@ -266,15 +288,25 @@ def create_masked_lm_predictions(tokens,
                 if index in covered_indexes:
                     continue
 
-        if not geometric_dist:
+        if sampling_style is SamplingStyle.POISSON:
             n = np_rng.choice(ngrams[:len(cand_index_set)],
                               p=pvals[:len(cand_index_set)] /
                               pvals[:len(cand_index_set)].sum(keepdims=True))
-        else:
+        elif sampling_style is SamplingStyle.GEOMETRIC:
             # Sampling "n" from the geometric distribution and clipping it to
             # the max_ngrams. Using p=0.2 default from the SpanBERT paper
             # https://arxiv.org/pdf/1907.10529.pdf (Sec 3.1)
             n = min(np_rng.geometric(0.2), max_ngrams)
+        elif sampling_style is SamplingStyle.UNIFORM:
+            n = np_rng.choice(ngrams[:len(cand_index_set)])
+        elif sampling_style is SamplingStyle.NORMAL:
+            n = round(np.clip(
+                np_rng.normal(loc=normal_mean),
+                1,
+                len(cand_index_set),
+            ))
+        else:
+            raise ValueError('unknown sampling style')
 
         index_set = sum(cand_index_set[n - 1], [])
         n -= 1
@@ -522,6 +554,7 @@ def _build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
         from megatron.data.bert_dataset import BertDataset
         from megatron.data.ict_dataset import ICTDataset
         from megatron.data.t5_dataset import T5Dataset
+        from megatron.data.ul2_dataset import UL2Dataset
         dataset = None
         if splits[index + 1] > splits[index]:
             # Get the pointer to the original doc-idx so we can set it later.
@@ -559,6 +592,24 @@ def _build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
                     max_seq_length_dec=max_seq_length_dec,
                     short_seq_prob=short_seq_prob,
                     **kwargs
+                )
+            elif dataset_type == DSET_TYPE_UL2:
+                args = get_args()
+                dataset = UL2Dataset(
+                    indexed_dataset=indexed_dataset,
+                    model_type=args.ul2_model_type,
+                    denoiser_ratios=args.ul2_denoiser_ratios,
+                    denoisers=args.ul2_denoisers,
+                    mean_span_lengths=args.ul2_mean_span_lengths,
+                    mask_ratios=args.ul2_mask_ratios,
+                    denoiser_tokens={
+                        'R': args.ul2_r_denoiser_token,
+                        'S': args.ul2_s_denoiser_token,
+                        'X': args.ul2_x_denoiser_token,
+                    },
+                    max_seq_length_dec=max_seq_length_dec,
+                    short_seq_prob=short_seq_prob,
+                    **kwargs,
                 )
             elif dataset_type == DSET_TYPE_BERT:
                 dataset = BertDataset(

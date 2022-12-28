@@ -389,6 +389,18 @@ class _AutoTokenizer(AbstractTokenizer):
         return self._check_token_candidate(candidate)
 
     @property
+    def bos_token_id(self):
+        """Id of the beginning of sentence token in the vocabulary."""
+        candidate = self.tokenizer.bos_token_id
+        return self._check_token_candidate(candidate)
+
+    @property
+    def eos_token_id(self):
+        """Id of the end of sentence token in the vocabulary."""
+        candidate = self.tokenizer.eos_token_id
+        return self._check_token_candidate(candidate)
+
+    @property
     def additional_special_tokens_ids(self):
         """ All the additional special tokens you may want to use (list of strings)."""
         return self.tokenizer.additional_special_tokens_ids
