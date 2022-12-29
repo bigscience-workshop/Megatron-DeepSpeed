@@ -17,6 +17,7 @@
 
 from functools import partial
 
+import deepspeed
 import torch
 
 from megatron import (
@@ -26,11 +27,13 @@ from megatron import (
     print_rank_0
 )
 from megatron.data.dataset_utils import build_train_valid_test_datasets
+from megatron.data.gpt_dataset import build_dataset_group
 from megatron.data.ul2_dataset import (
     is_decoder_only as _is_decoder_only,
     is_prefix_lm as _is_prefix_lm,
 )
-from megatron.model.gpt_model import GPTModel
+from megatron.enums import AttnMaskType
+from megatron.model.gpt_model import GPTModel, GPTModelPipe
 from megatron.model.t5_model import T5Model, t5_position_ids
 from megatron.training import pretrain
 from megatron.utils import average_losses_across_data_parallel_group
@@ -51,21 +54,77 @@ def is_prefix_lm():
 def model_provider(pre_process=True, post_process=True):
     """Build the model."""
     assert pre_process and post_process, "UL2 doesn't yet support pipelining"
-
+    
     print_rank_0('building UL2 model ...')
-    if is_decoder_only():
-        print_rank_0('Using decoder-only UL2 model.')
-        model = GPTModel(
-            num_tokentypes=0,
-            parallel_output=True,
-            pre_process=pre_process,
-            post_process=post_process,
-            prefix_lm=is_prefix_lm(),
-        )
-    else:
-        print_rank_0('Using encoder-decoder UL2 model.')
-        model = T5Model(num_tokentypes=0, parallel_output=True)
+    args = get_args()
+
+    with deepspeed.zero.Init(data_parallel_group=mpu.get_data_parallel_group(),
+                             remote_device=None if args.remote_device == 'none' else args.remote_device,
+                             config_dict_or_path=args.deepspeed_config,
+                             enabled=args.zero_stage == 3,
+                             mpu=mpu):
+        if args.deepspeed and is_decoder_only():
+            args.pretrain_causal_attention = True
+            model = GPTModelPipe(
+                num_tokentypes=0,
+                parallel_output=True,
+                attn_mask_type=AttnMaskType.causal
+            )
+            # This is a hack to give us a reference to get_batch_pipe from within training.py
+            # We need to call model.set_batch_fn after deepspeed.initialize
+            model._megatron_batch_fn = get_batch_pipe
+        elif is_decoder_only():
+            print_rank_0('Using decoder-only UL2 model.')
+            model = GPTModel(
+                num_tokentypes=0,
+                parallel_output=True,
+                pre_process=pre_process,
+                post_process=post_process,
+                prefix_lm=is_prefix_lm(),
+            )
+        else:
+            print_rank_0('Using encoder-decoder UL2 model.')
+            model = T5Model(num_tokentypes=0, parallel_output=True)
     return model
+
+from megatron.global_vars import get_tokenizer
+def visualize_model_inputs(tokens, attention_mask, labels, loss_mask):
+    tok = get_tokenizer()
+    print("TOKENS:", ",".join([tok.detokenize(tokens[0, i]) for i in range(100)]))
+    print("ATTN:", attention_mask[0, :, :100, :100])
+    print("LABS:", labels[0, :100])
+    print("LOSSMSK:", loss_mask[:100])
+
+def get_batch_pipe(data):
+    """Modification of `get_batch` to work on `next(data_iterator)` instead of `data_iterator`"""
+    if is_decoder_only():
+        keys = ['text', 'labels', 'loss_mask', 'dec_mask']
+    else:
+        keys = ['text_enc', 'text_dec', 'labels', 'loss_mask',
+                'enc_mask', 'dec_mask', 'enc_dec_mask']
+    datatype = torch.int64
+
+    data_b = mpu.broadcast_data(keys, data, datatype)    
+    
+
+    print(
+        visualize_model_inputs(
+            data_b['text'],
+            data_b['dec_mask'],
+            data_b['labels'],
+            data_b['loss_mask'],
+        )
+    )
+
+    tokens = data_b['text'].long()
+    labels = data_b['labels'].long()
+    loss_mask = data_b['loss_mask'].float()
+
+    dec_mask = (data_b['dec_mask'] < 0.5)
+
+    position_ids = t5_position_ids(tokens)
+
+    return (tokens, position_ids, dec_mask), (labels, loss_mask)
 
 
 def get_batch(data_iterator):
@@ -84,6 +143,15 @@ def get_batch(data_iterator):
     else:
         data = None
     data_b = mpu.broadcast_data(keys, data, datatype)
+
+    print(
+        visualize_model_inputs(
+            data_b['text'],
+            data_b['dec_mask'],
+            data_b['labels'],
+            data_b['loss_mask'],
+        )
+    )
 
     # Unpack.
     if is_decoder_only():
@@ -162,19 +230,47 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
 
     print_rank_0('> building train, validation, and test datasets '
                  'for UL2 ...')
-    train_ds, valid_ds, test_ds = build_train_valid_test_datasets(
-        data_prefix=args.data_path,
-        data_impl=args.data_impl,
-        splits_string=args.split,
-        train_valid_test_num_samples=train_val_test_num_samples,
-        max_seq_length=args.encoder_seq_length,
-        max_seq_length_dec=args.decoder_seq_length,
-        masked_lm_prob=args.mask_prob,
-        short_seq_prob=args.short_seq_prob,
-        seed=args.seed,
-        skip_warmup=(not args.mmap_warmup),
-        dataset_type='ul2')
-    print_rank_0("> finished creating UL2 datasets ...")
+    if args.data_path:
+        train_ds, valid_ds, test_ds = build_train_valid_test_datasets(
+            data_prefix=args.data_path,
+            data_impl=args.data_impl,
+            splits_string=args.split,
+            train_valid_test_num_samples=train_val_test_num_samples,
+            max_seq_length=args.encoder_seq_length,
+            max_seq_length_dec=args.decoder_seq_length,
+            masked_lm_prob=args.mask_prob,
+            short_seq_prob=args.short_seq_prob,
+            seed=args.seed,
+            skip_warmup=(not args.mmap_warmup),
+            dataset_type='ul2')
+        print_rank_0("> finished creating UL2 datasets ...")
+    elif args.train_weighted_split_paths:
+        assigned_train_valid_test = []
+        if args.train_weighted_split_paths is not None:
+            train_ds = []
+            assigned_train_valid_test.append("train")
+        if args.valid_weighted_split_paths is not None:
+            valid_ds = []
+            assigned_train_valid_test.append("valid")
+        if args.test_weighted_split_paths is not None:
+            test_ds = []
+            assigned_train_valid_test.append("test")
+
+        for s in assigned_train_valid_test:
+            data_groups = zip(eval(f"args.{s}_weighted_split_paths"),
+                                eval(f"args.{s}_weighted_split_weights"),
+                                eval(f"args.{s}_weighted_split_splits"),
+                                eval(f"args.{s}_weighted_split_names"))
+            for paths, weights, splits, name in data_groups:
+                d = build_dataset_group(name, paths, weights, splits,
+                                        args.data_impl,
+                                        train_val_test_num_samples,
+                                        args.seq_length, args.seed,
+                                        (not args.mmap_warmup),
+                                        train_valid_test=s)
+                eval(f"{s}_ds").append(d)
+    else:
+        raise NotImplementedError("No dataloading argument passed")                           
 
     return train_ds, valid_ds, test_ds
 
