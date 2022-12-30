@@ -202,17 +202,17 @@ def build_training_sample(sample, target_seq_length,
     tokens = [token for sentence in sample for token in sentence]
 
     max_num_tokens = target_seq_length
-    # if is_decoder_only(model_type):
+    if is_decoder_only(model_type):
     #     # Keep space for repeated `extra_id` tokens; not the most data
     #     # efficient since we calculate this based on the maximum number
     #     # of possible `extra_id` tokens.
-    #     safe_max_seq_len = math.floor(max_num_tokens / (1 + masked_lm_prob))
-    #     truncated = len(tokens) > safe_max_seq_len
-    #     tokens = tokens[:safe_max_seq_len]
-    # else:
+        safe_max_seq_len = math.floor(max_num_tokens / (1 + masked_lm_prob))
+        truncated = len(tokens) > safe_max_seq_len
+        tokens = tokens[:safe_max_seq_len]
+    else:
     # Truncate to `target_sequence_length`.
-    truncated = len(tokens) > max_num_tokens
-    tokens = tokens[:max_num_tokens]
+        truncated = len(tokens) > max_num_tokens
+        tokens = tokens[:max_num_tokens]
 
     # Prepend objective token.
     cls_id = cls_ids.get(denoiser)
@@ -277,9 +277,16 @@ def build_training_sample(sample, target_seq_length,
         loss_mask = np.zeros(len(tokens), dtype=np.int64)
         loss_mask[-num_labels:] = 1
 
+        padding = [pad_id] * (max_seq_length - len(tokens))
+        tokens = np.concatenate((tokens, padding), axis=0)
+        labels = np.concatenate((labels, padding), axis=0)
+        loss_mask = np.concatenate((loss_mask, np.zeros(len(padding), dtype=np.int64)), axis=0)
+
         dec_mask = make_history_mask(tokens)
         if is_prefix_lm(model_type):
-            dec_mask[:-num_labels, :-num_labels] = 1
+            dec_mask[
+                :-num_labels-len(padding), :-num_labels-len(padding)
+            ] = 1
 
         train_sample = {
             'text': tokens,
@@ -288,6 +295,7 @@ def build_training_sample(sample, target_seq_length,
             'truncated': int(truncated),
             'dec_mask': dec_mask,
         }
+
     else:
         # Padding.
         tokens_enc, tokens_dec_in, labels, enc_mask, \

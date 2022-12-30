@@ -186,16 +186,20 @@ def merge_subsequent_masks(tokens, masked_spans=None, bos_id=None,
     (start_index, end_index) = (0, None)
     for span in masked_spans:
         flag = sentinel_tokens.popleft()
+
         # Append the same tokens in decoder input and output
         t5_decoder_in.append(flag)
         t5_decoder_in.extend(span.label)
         t5_decoder_out.append(flag)
         t5_decoder_out.extend(span.label)
+
         end_index = span.index[0]
         t5_input.extend(tokens[start_index: end_index])
         t5_input.append(flag)
+
         # the next start index is the token after the last span token
         start_index = span.index[-1] + 1
+
     # Add <eos> token to the t5_decoder_out
     t5_decoder_out.append(eos_id)
 
