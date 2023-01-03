@@ -249,6 +249,12 @@ def create_masked_lm_predictions(tokens,
 
     num_to_predict = min(max_predictions_per_seq,
                          max(1, int(round(len(tokens) * masked_lm_prob))))
+    if prefix_lm:
+        # Adjust probabilities so that the mean is centered at the
+        # correct position.
+        # If we do not do this, the mean is at
+        # `len(tokens) * masked_lm_prob / 2`.
+        masked_lm_prob *= 2
 
     ngrams = np.arange(1, max_ngrams + 1, dtype=np.int64)
     if sampling_style is SamplingStyle.POISSON:
@@ -271,7 +277,10 @@ def create_masked_lm_predictions(tokens,
                     continue
             ngram_index.append(cand_indexes[idx:idx + n])
         ngram_indexes.append(ngram_index)
-
+        if prefix_lm:
+            # No need to go further – we would only produce
+            # duplicate entries by continuing for this `idx`.
+            break
     np_rng.shuffle(ngram_indexes)
 
     (masked_lms, masked_spans) = ([], [])

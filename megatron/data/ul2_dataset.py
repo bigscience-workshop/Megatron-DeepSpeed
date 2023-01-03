@@ -15,14 +15,11 @@
 
 """UL2-style dataset."""
 
-import math
-
 import numpy as np
 
 from megatron import get_tokenizer
 from megatron.data.dataset_utils import (
     create_masked_lm_predictions,
-    get_samples_mapping,
     SamplingStyle
 )
 from megatron.data.t5_dataset import (
@@ -164,12 +161,13 @@ def build_training_sample(sample, target_seq_length,
                           bos_id=None, eos_id=None,
                           sentinel_tokens=None):
     """Build training sample.
-
     Arguments:
         sample: A list of sentences in which each sentence is a list token ids.
         target_seq_length: Desired sequence length.
         max_seq_length: Maximum length of the sequence. All values are padded to
             this length.
+        max_seq_length_dec: Maximum length of the decoder input sequence. All
+            values are padded to this length.
         vocab_id_list: List of vocabulary ids. Used to pick a random id.
         vocab_id_to_token_dict: A dictionary from vocab ids to text tokens.
         cls_ids: Start of example ids.
@@ -202,17 +200,17 @@ def build_training_sample(sample, target_seq_length,
     tokens = [token for sentence in sample for token in sentence]
 
     max_num_tokens = target_seq_length
-    if is_decoder_only(model_type):
+    # if is_decoder_only(model_type):
     #     # Keep space for repeated `extra_id` tokens; not the most data
     #     # efficient since we calculate this based on the maximum number
     #     # of possible `extra_id` tokens.
-        safe_max_seq_len = math.floor(max_num_tokens / (1 + masked_lm_prob))
-        truncated = len(tokens) > safe_max_seq_len
-        tokens = tokens[:safe_max_seq_len]
-    else:
+    #     safe_max_seq_len = math.floor(max_num_tokens / (1 + masked_lm_prob))
+    #     truncated = len(tokens) > safe_max_seq_len
+    #     tokens = tokens[:safe_max_seq_len]
+    # else:
     # Truncate to `target_sequence_length`.
-        truncated = len(tokens) > max_num_tokens
-        tokens = tokens[:max_num_tokens]
+    truncated = len(tokens) > max_num_tokens
+    tokens = tokens[:max_num_tokens]
 
     # Prepend objective token.
     cls_id = cls_ids.get(denoiser)
@@ -221,10 +219,12 @@ def build_training_sample(sample, target_seq_length,
     tokens = [cls_id] + tokens
 
     # Masking.
-    max_predictions_per_seq = masked_lm_prob * len(tokens)
+    # Ensure we always have at least one prediction.
+    max_predictions_per_seq = max(1.0, masked_lm_prob * len(tokens))
     mean_ngrams = mean_span_lengths[denoiser_index]
     if mean_ngrams < 1:
-        mean_ngrams = round(len(tokens) * mean_ngrams)
+        # Ensure we always obtain at least one `max_ngrams`.
+        mean_ngrams = max(1, round(len(tokens) * mean_ngrams))
     max_ngrams = mean_ngrams * 2 - 1
 
     if denoiser == 'R' or denoiser == 'X':
@@ -247,7 +247,7 @@ def build_training_sample(sample, target_seq_length,
     if is_decoder_only(model_type):
         # Concatenate to one sequence.
         tokens_enc, tokens_dec_in, labels = merge_subsequent_masks(
-            tokens, masked_spans, bos_id, eos_id, sentinel_tokens)
+            tokens, masked_spans, bos_id, eos_id, sentinel_tokens, prefix_lm)
 
         # Move EOS tokens to end of sequence.
         while tokens_enc[-1] == eos_id:
@@ -259,34 +259,35 @@ def build_training_sample(sample, target_seq_length,
 
         # Move BOS token to start of sequence.
         tokens_dec_in = tokens_dec_in[1:]
-        tokens = np.array((
+        tokens = (
             [bos_id]
             + tokens_enc
             + [sep_id]
             + tokens_dec_in
-        ), dtype=np.int64)
+        )
+
+        # Pad and convert to NumPy.
+        padding_length = max_seq_length - len(tokens)
+        if padding_length < 0:
+            raise LengthExceededError()
+        filler = [pad_id] * padding_length
+
+        tokens = np.array(tokens + filler, dtype=np.int64)
         labels = np.array((
             tokens_enc
             + [sep_id]
             + labels
+            + filler
         ), dtype=np.int64)
 
-        if max_seq_length - len(tokens) < 0:
-            raise LengthExceededError()
-
         loss_mask = np.zeros(len(tokens), dtype=np.int64)
-        loss_mask[-num_labels:] = 1
-
-        padding = [pad_id] * (max_seq_length - len(tokens))
-        tokens = np.concatenate((tokens, padding), axis=0)
-        labels = np.concatenate((labels, padding), axis=0)
-        loss_mask = np.concatenate((loss_mask, np.zeros(len(padding), dtype=np.int64)), axis=0)
+        labels_start_neg_index = -(num_labels + padding_length)
+        labels_end_neg_index = -padding_length if padding_length > 0 else None
+        loss_mask[labels_start_neg_index:labels_end_neg_index] = 1
 
         dec_mask = make_history_mask(tokens)
         if is_prefix_lm(model_type):
-            dec_mask[
-                :-num_labels-len(padding), :-num_labels-len(padding)
-            ] = 1
+            dec_mask[:labels_start_neg_index, :labels_start_neg_index] = 1
 
         train_sample = {
             'text': tokens,
@@ -295,7 +296,6 @@ def build_training_sample(sample, target_seq_length,
             'truncated': int(truncated),
             'dec_mask': dec_mask,
         }
-
     else:
         # Padding.
         tokens_enc, tokens_dec_in, labels, enc_mask, \
@@ -303,7 +303,8 @@ def build_training_sample(sample, target_seq_length,
             = pad_and_convert_to_numpy(tokens, masked_positions,
                                        masked_labels, pad_id, max_seq_length,
                                        max_seq_length_dec, masked_spans,
-                                       bos_id, eos_id, sentinel_tokens)
+                                       bos_id, eos_id, sentinel_tokens,
+                                       prefix_lm)
 
         train_sample = {
             'text_enc': tokens_enc,
