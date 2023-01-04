@@ -228,7 +228,6 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
 
 @record
 def main():
-    torch.multiprocessing.set_start_method('spawn')
     pretrain(train_valid_test_datasets_provider, model_provider, forward_step,
              args_defaults={'tokenizer_type': 'GPT2BPETokenizer'})
 

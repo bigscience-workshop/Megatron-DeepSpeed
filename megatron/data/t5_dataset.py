@@ -26,6 +26,27 @@ from megatron.data.dataset_utils import (
     get_samples_mapping
 )
 
+
+class LengthExceededError(ValueError):
+    def __init__(self, msg=None):
+        if msg is None:
+            msg = (
+                'The sequence input became too long. '
+                'Try to increase `--seq-length` or `--encoder-seq-length`.'
+            )
+        super().__init__(msg)
+
+
+class DecoderLengthExceededError(ValueError):
+    def __init__(self, msg=None):
+        if msg is None:
+            msg = (
+                'The sequence input for the decoder became too long. '
+                'Try to increase `--decoder-seq-length`.'
+            )
+        super().__init__(msg)
+
+
 class T5Dataset(torch.utils.data.Dataset):
 
     def __init__(self, name, indexed_dataset, data_prefix,
@@ -104,6 +125,8 @@ def build_training_sample(sample, target_seq_length,
         target_seq_length: Desired sequence length.
         max_seq_length: Maximum length of the sequence. All values are padded to
             this length.
+        max_seq_length_dec: Maximum length of the decoder input sequence. All
+            values are padded to this length.            
         vocab_id_list: List of vocabulary ids. Used to pick a random id.
         vocab_id_to_token_dict: A dictionary from vocab ids to text tokens.
         cls_id: Start of example id.
@@ -157,29 +180,30 @@ def build_training_sample(sample, target_seq_length,
     return train_sample
 
 
-def pad_and_convert_to_numpy(tokens, masked_positions,
-                             masked_labels, pad_id,
-                             max_seq_length, max_seq_length_dec,
-                             masked_spans=None, bos_id=None,
-                             eos_id=None, sentinel_tokens=None):
-    """Pad sequences and convert them to numpy."""
-
-    sentinel_tokens = collections.deque(sentinel_tokens)
+def merge_subsequent_masks(tokens, masked_spans=None, bos_id=None,
+                           eos_id=None, sentinel_tokens=None, prefix_lm=False):
+    if prefix_lm:
+        assert len(masked_spans) <= 1, \
+            'Received more than one masked span for PrefixLM masking'
+    else:
+        sentinel_tokens = collections.deque(sentinel_tokens)    
     t5_input = []
     (t5_decoder_in, t5_decoder_out) = ([bos_id], [])
     (start_index, end_index) = (0, None)
     for span in masked_spans:
-        flag = sentinel_tokens.popleft()
+        if not prefix_lm:
+            flag = sentinel_tokens.popleft()
+            # Append the same tokens in decoder input and output
+            t5_decoder_in.append(flag)
+            t5_decoder_out.append(flag)            
 
-        # Append the same tokens in decoder input and output
-        t5_decoder_in.append(flag)
         t5_decoder_in.extend(span.label)
-        t5_decoder_out.append(flag)
         t5_decoder_out.extend(span.label)
 
         end_index = span.index[0]
         t5_input.extend(tokens[start_index: end_index])
-        t5_input.append(flag)
+        if not prefix_lm:
+            t5_input.append(flag)
 
         # the next start index is the token after the last span token
         start_index = span.index[-1] + 1
@@ -189,6 +213,18 @@ def pad_and_convert_to_numpy(tokens, masked_positions,
 
     # Add the remaining tokens to the t5 input
     t5_input.extend(tokens[start_index:])
+    return t5_input, t5_decoder_in, t5_decoder_out
+
+
+def pad_and_convert_to_numpy(tokens, masked_positions,
+                             masked_labels, pad_id,
+                             max_seq_length, max_seq_length_dec,
+                             masked_spans=None, bos_id=None,
+                             eos_id=None, sentinel_tokens=None, prefix_lm=False):
+    """Pad sequences and convert them to numpy."""
+
+    t5_input, t5_decoder_in, t5_decoder_out = merge_subsequent_masks(
+        tokens, masked_spans, bos_id, eos_id, sentinel_tokens, prefix_lm)
 
     # assert (len(t5_input) - len(masked_spans)) + \
     #        (len(t5_decoder_in) - (len(masked_spans) + 1)) == len(tokens)
@@ -198,7 +234,8 @@ def pad_and_convert_to_numpy(tokens, masked_positions,
     # Encoder-side padding mask.
     num_tokens = len(t5_input)
     padding_length = max_seq_length - num_tokens
-    assert padding_length >= 0
+    if padding_length < 0:
+        raise LengthExceededError()
     assert len(masked_positions) == len(masked_labels)
 
     # Tokens..
@@ -208,7 +245,8 @@ def pad_and_convert_to_numpy(tokens, masked_positions,
     # Decoder-side padding mask.
     num_tokens_dec = len(t5_decoder_in)
     padding_length_dec = max_seq_length_dec - num_tokens_dec
-    assert padding_length_dec >= 0
+    if padding_length_dec < 0:
+        raise DecoderLengthExceededError()
     filler_dec = [pad_id] * padding_length_dec
     tokens_dec_in = np.array(t5_decoder_in + filler_dec, dtype=np.int64)
 

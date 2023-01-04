@@ -42,6 +42,8 @@ class EvalHarnessAdaptor(GPT2LM):
         self.tokenizer = tokenizer
         self.VOCAB_SIZE = tokenizer.vocab_size
         self.EOT_TOKEN_ID = tokenizer.eod
+        self.add_denoiser = args.add_denoiser
+        self.DENOISER_TOKEN_ID = tokenizer.tokenize("[S]")[0]
 
         self._max_length = args.seq_length
 
@@ -80,9 +82,15 @@ class EvalHarnessAdaptor(GPT2LM):
         for context, continuation in requests:
             if context == "":
                 # end of text as context
-                context_enc = [self.EOT_TOKEN_ID]
+                if self.add_denoiser:
+                    context_enc = [self.DENOISER_TOKEN_ID] + [self.EOT_TOKEN_ID]
+                else:
+                    context_enc = [self.EOT_TOKEN_ID]
             else:
-                context_enc = self.tokenizer_encode(context)
+                if self.add_denoiser:
+                    context_enc = [self.DENOISER_TOKEN_ID] + self.tokenizer_encode(context)
+                else:
+                    context_enc = self.tokenizer_encode(context)
 
             continuation_enc = self.tokenizer_encode(continuation)
 
@@ -390,6 +398,7 @@ def tasks_args(parser):
     group.add_argument('--intermed_results',  default = False, action='store_true', help='Whether to print & write intermediate results for each task')
     group.add_argument('--bootstrap_iters', type=int, default=100000, help='How many iterations to use for stderr estimation')
     group.add_argument('--micro_bs_multiplier', type=int, default=1, help='Increase the global batch size to remove bubble when pipeline parallel')
+    group.add_argument('--add_denoiser',  default = False, action='store_true', help='Whether to add a denoiser to the model')
     return parser
 
 from megatron.global_vars import _parse_args

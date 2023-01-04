@@ -21,12 +21,12 @@ import time
 import numpy as np
 import torch
 
-from megatron import mpu, print_rank_0
+from megatron import get_args, mpu, print_rank_0
 from megatron.data.blendable_dataset import BlendableDataset
 from megatron.data.dataset_utils import get_datasets_weights_and_num_samples
 from megatron.data.dataset_utils import get_train_valid_test_split_, get_split_by_range_
 from megatron.data.indexed_dataset import make_dataset as make_indexed_dataset
-
+from megatron.data.ul2_dataset import UL2Dataset
 
 def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
                                     train_valid_test_num_samples,
@@ -154,10 +154,35 @@ def _build_single_datasets(data_prefix, range_string, data_impl, train_valid_tes
         if splits[1] > splits[0]:
             documents = np.arange(start=splits[0], stop=splits[1],
                                   step=1, dtype=np.int32)
-            dataset = GPTDataset(name, data_prefix,
-                                  documents, indexed_dataset,
-                                  train_valid_test_num_samples[index],
-                                  seq_length, seed)
+
+            args = get_args()
+            if args.ul2_model_type:
+                dataset = UL2Dataset(
+                    name=name,
+                    data_prefix=data_prefix,
+                    num_epochs=None,
+                    max_num_samples=train_valid_test_num_samples[index],
+                    max_seq_length=seq_length,
+                    seed=seed,
+                    indexed_dataset=indexed_dataset,
+                    model_type=args.ul2_model_type,
+                    denoiser_ratios=args.ul2_denoiser_ratios,
+                    denoisers=args.ul2_denoisers,
+                    mean_span_lengths=args.ul2_mean_span_lengths,
+                    mask_ratios=args.ul2_mask_ratios,
+                    denoiser_tokens={
+                        'R': args.ul2_r_denoiser_token,
+                        'S': args.ul2_s_denoiser_token,
+                        'X': args.ul2_x_denoiser_token,
+                    },
+                    max_seq_length_dec=seq_length,
+                    short_seq_prob=args.short_seq_prob,
+                )
+            else:
+                dataset = GPTDataset(name, data_prefix,
+                                    documents, indexed_dataset,
+                                    train_valid_test_num_samples[index],
+                                    seq_length, seed)
         return dataset
 
     dataset = build_dataset(dataset_group_name)
