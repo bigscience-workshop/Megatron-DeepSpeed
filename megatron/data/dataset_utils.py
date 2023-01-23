@@ -219,6 +219,7 @@ def create_masked_lm_predictions(tokens,
     # the starting piece of current token, where 1 means true, so that
     # on-the-fly whole word masking is possible.
     token_boundary = [0] * len(tokens)
+    num_filtered_tokens = 0
 
     for (i, token) in enumerate(tokens):
         if token == cls_id or token == sep_id:
@@ -237,6 +238,7 @@ def create_masked_lm_predictions(tokens,
             cand_indexes.append([i])
             if is_start_piece(vocab_id_to_token_dict[token]):
                 token_boundary[i] = 1
+        num_filtered_tokens += 1
 
     output_tokens = list(tokens)
 
@@ -249,12 +251,16 @@ def create_masked_lm_predictions(tokens,
 
     num_to_predict = min(max_predictions_per_seq,
                          max(1, int(round(len(tokens) * masked_lm_prob))))
-    if prefix_lm:
-        # Adjust probabilities so that the mean is centered at the
-        # correct position.
-        # If we do not do this, the mean is at
-        # `len(tokens) * masked_lm_prob / 2`.
-        masked_lm_prob *= 2
+
+    if sampling_style is SamplingStyle.NORMAL:
+        # First, we get the center of our normal distribution from
+        # `max_ngrams`. Keeping the meaning of `max_ngrams` this way
+        # plays nicely with the other probability distributions in terms
+        # of math.
+        normal_mean = (max_ngrams + 1) / 2
+        # However, we do not want to bound the maximum number of
+        # n-grams.
+        max_ngrams = num_filtered_tokens - 1
 
     ngrams = np.arange(1, max_ngrams + 1, dtype=np.int64)
     if sampling_style is SamplingStyle.POISSON:
@@ -264,24 +270,45 @@ def create_masked_lm_predictions(tokens,
         pvals /= pvals.sum(keepdims=True)
         if favor_longer_ngram:
             pvals = pvals[::-1]
-    elif sampling_style is SamplingStyle.NORMAL:
-        normal_mean = (max_ngrams + 1) / 2
 
-    ngram_indexes = []
-    for idx in range(len(cand_indexes)):
-        ngram_index = []
-        for n in ngrams:
-            if prefix_lm:
-                last_cand_index_index = min(idx + n - 1, len(cand_indexes) - 1)
-                if cand_indexes[last_cand_index_index][-1] < len(tokens) - 1:
-                    continue
-            ngram_index.append(cand_indexes[idx:idx + n])
-        ngram_indexes.append(ngram_index)
-        if prefix_lm:
-            # No need to go further – we would only produce
-            # duplicate entries by continuing for this `idx`.
-            break
-    np_rng.shuffle(ngram_indexes)
+    if prefix_lm:
+        # We only do one span searching loop anyway, so this does not
+        # matter in terms of random search. However, we do want to allow
+        # sequences greater than the mean ratio.
+        num_to_predict = max_predictions_per_seq
+
+        # Find first index which is greater than the number of
+        # predictions.
+        first_gt_index = next(
+            (
+                i
+                for (i, x) in enumerate(cand_indexes)
+                if x[0] > num_filtered_tokens - max_predictions_per_seq
+            ),
+            len(cand_indexes),
+        )
+        # Then move one index before to get less than or equal to the
+        # number of predictions, handling not going below 0.
+        first_le_index = max(1, first_gt_index) - 1
+
+        tail_cand_indexes = cand_indexes[first_le_index:]
+        ngram_indexes = []
+        for i in range(len(tail_cand_indexes)):
+            ngram_indexes.append(tail_cand_indexes[i:])
+        ngram_indexes = [ngram_indexes]
+        # No need to shuffle outer list of length 1.
+    else:
+        num_to_predict = min(max_predictions_per_seq,
+                             max(1, int(round(len(tokens) * masked_lm_prob))))
+
+        ngram_indexes = []
+        for idx in range(len(cand_indexes)):
+            ngram_index = []
+            for n in ngrams:
+                ngram_index.append(cand_indexes[idx:idx + n])
+            ngram_indexes.append(ngram_index)
+
+        np_rng.shuffle(ngram_indexes)
 
     (masked_lms, masked_spans) = ([], [])
     covered_indexes = set()
