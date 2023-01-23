@@ -272,6 +272,8 @@ def create_masked_lm_predictions(tokens,
         ngram_index = []
         for n in ngrams:
             if prefix_lm:
+                # Select those index sets for which the final index is
+                # at the end of the sequence.
                 last_cand_index_index = min(idx + n - 1, len(cand_indexes) - 1)
                 if cand_indexes[last_cand_index_index][-1] < len(tokens) - 1:
                     continue
