@@ -19,7 +19,8 @@ import numpy as np
 
 from megatron import get_tokenizer
 from megatron.data.dataset_utils import (
-    create_masked_lm_predictions,    
+    create_masked_lm_predictions, 
+    get_samples_mapping,
     SamplingStyle
 )
 from megatron.data.t5_dataset import (
