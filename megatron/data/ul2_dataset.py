@@ -15,6 +15,7 @@
 
 """UL2-style dataset."""
 
+import math
 import numpy as np
 
 from megatron import get_tokenizer
