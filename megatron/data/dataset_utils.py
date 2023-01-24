@@ -206,7 +206,7 @@ def get_ngram_indices(
         # predictions.
         first_gt_index = bisect.bisect_right(
             cand_indexes,
-            [num_filtered_tokens - num_to_predict]
+            [num_filtered_tokens - num_to_predict],
         )
         # Then move one index before to get less than or equal to the
         # number of predictions, handling not going below 0.
