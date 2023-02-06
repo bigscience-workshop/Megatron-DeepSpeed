@@ -64,15 +64,26 @@ def model_provider(pre_process=True, post_process=True):
                              enabled=args.zero_stage == 3,
                              mpu=mpu):
         if args.deepspeed and is_decoder_only():
-            args.pretrain_causal_attention = True
-            model = GPTModelPipe(
-                num_tokentypes=0,
-                parallel_output=True,
-                attn_mask_type=AttnMaskType.causal
-            )
-            # This is a hack to give us a reference to get_batch_pipe from within training.py
-            # We need to call model.set_batch_fn after deepspeed.initialize
-            model._megatron_batch_fn = get_batch_pipe
+            if is_prefix_lm():
+                args.pretrain_causal_attention = False
+                print_rank_0('Using prefix LM UL2 model.')
+                model = GPTModelPipe(
+                    num_tokentypes=0,
+                    parallel_output=True,
+                    attn_mask_type=AttnMaskType.custom
+                )
+                model._megatron_batch_fn = get_batch_pipe
+            else:
+                args.pretrain_causal_attention = True
+                print_rank_0('Using decoder-only causal UL2 model.')   
+                model = GPTModelPipe(
+                    num_tokentypes=0,
+                    parallel_output=True,
+                    attn_mask_type=AttnMaskType.causal
+                )
+                # This is a hack to give us a reference to get_batch_pipe from within training.py
+                # We need to call model.set_batch_fn after deepspeed.initialize
+                model._megatron_batch_fn = get_batch_pipe
         elif is_decoder_only():
             print_rank_0('Using decoder-only UL2 model.')
             model = GPTModel(
