@@ -15,6 +15,7 @@
 
 """Pretrain UL2"""
 
+import argparse
 from functools import partial
 
 import torch
@@ -180,7 +181,13 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
     return train_ds, valid_ds, test_ds
 
 
+def extra_args_provider(parser):
+    parser.add_argument('--_is_ul2', default=True, help=argparse.SUPPRESS)
+    return parser
+
+
 if __name__ == "__main__":
 
     pretrain(train_valid_test_datasets_provider, model_provider, forward_step,
+             extra_args_provider=extra_args_provider,
              args_defaults={'tokenizer_type': 'BertWordPieceLowerCase'})
