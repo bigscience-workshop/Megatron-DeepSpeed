@@ -18,6 +18,7 @@
 from collections import ChainMap
 
 import numpy as np
+import torch
 
 from megatron import get_tokenizer
 from megatron.data.dataset_utils import (
@@ -46,12 +47,13 @@ def is_prefix_lm(ul2_model_type):
     return ul2_model_type is UL2ModelType.NON_CAUSAL_DECODER
 
 
-class UL2Dataset:
+class UL2Dataset(torch.utils.data.Dataset):
     def __init__(self, name, indexed_dataset, data_prefix,
                  num_epochs, max_num_samples, model_type,
                  denoiser_ratios, denoisers, mean_span_lengths,
                  mask_ratios, denoiser_tokens, max_seq_length,
                  max_seq_length_dec, short_seq_prob, seed):
+        super().__init__()
 
         if denoiser_ratios is None:
             # Uniform distribution by default.
