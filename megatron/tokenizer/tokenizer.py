@@ -356,6 +356,7 @@ class _GPT2BPETokenizer(AbstractTokenizer):
                 '<EOS>',
             ]
             special_tokens.extend(extra_ul2_tokens)
+
         self.tokenizer = GPT2Tokenizer(vocab_file, merge_file, errors='replace',
                                        special_tokens=special_tokens,
                                        max_len=None)
