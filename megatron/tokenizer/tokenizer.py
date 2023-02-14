@@ -30,17 +30,37 @@ def build_tokenizer(args):
 
     # Select and instantiate the tokenizer.
     assert args.vocab_file is not None or args.tokenizer_type == "PretrainedFromHF"
+
+    if hasattr(args, '_is_ul2') and args._is_ul2:
+        ul2_denoiser_tokens = [
+            args.ul2_r_denoiser_token,
+            args.ul2_s_denoiser_token,
+            args.ul2_x_denoiser_token,
+        ]
+    else:
+        ul2_denoiser_tokens = []
+
     if args.tokenizer_type == 'BertWordPieceLowerCase':
-        tokenizer = _BertWordPieceTokenizer(vocab_file=args.vocab_file,
-                                            lower_case=True,
-                                            vocab_extra_ids=args.vocab_extra_ids)
+        tokenizer = _BertWordPieceTokenizer(
+            vocab_file=args.vocab_file,
+            lower_case=True,
+            vocab_extra_ids=args.vocab_extra_ids,
+            ul2_denoiser_tokens=ul2_denoiser_tokens,
+        )
     elif args.tokenizer_type == 'BertWordPieceCase':
-        tokenizer = _BertWordPieceTokenizer(vocab_file=args.vocab_file,
-                                            lower_case=False,
-                                            vocab_extra_ids=args.vocab_extra_ids)
+        tokenizer = _BertWordPieceTokenizer(
+            vocab_file=args.vocab_file,
+            lower_case=False,
+            vocab_extra_ids=args.vocab_extra_ids,
+            ul2_denoiser_tokens=ul2_denoiser_tokens,
+        )
     elif args.tokenizer_type == 'GPT2BPETokenizer':
         assert args.merge_file is not None
-        tokenizer = _GPT2BPETokenizer(args.vocab_file, args.merge_file)
+        tokenizer = _GPT2BPETokenizer(
+            args.vocab_file,
+            args.merge_file,
+            ul2_denoiser_tokens=ul2_denoiser_tokens,
+        )
     elif args.tokenizer_type == "PretrainedFromHF":
         assert args.tokenizer_name_or_path is not None
 
@@ -55,7 +75,11 @@ def build_tokenizer(args):
 
         if args.rank == 0:
             print(" vocab file is un-used. loading tokenizer from pre-trained model")
-        tokenizer = _AutoTokenizer(args.tokenizer_name_or_path, vocab_extra_ids=args.vocab_extra_ids)
+        tokenizer = _AutoTokenizer(
+            args.tokenizer_name_or_path,
+            vocab_extra_ids=args.vocab_extra_ids,
+            ul2_denoiser_tokens=ul2_denoiser_tokens,
+        )
     else:
         raise NotImplementedError('{} tokenizer is not '
                                   'implemented.'.format(args.tokenizer_type))
@@ -155,7 +179,13 @@ class AbstractTokenizer(ABC):
 class _BertWordPieceTokenizer(AbstractTokenizer):
     """Original BERT wordpiece tokenizer."""
 
-    def __init__(self, vocab_file, lower_case=True, vocab_extra_ids=0):
+    def __init__(
+            self,
+            vocab_file,
+            lower_case=True,
+            vocab_extra_ids=0,
+            ul2_denoiser_tokens=None,
+    ):
         if lower_case:
             name = 'BERT Lower Case'
         else:
@@ -184,6 +214,13 @@ class _BertWordPieceTokenizer(AbstractTokenizer):
         additional_special_tokens = []
         additional_special_tokens.extend(
             ["<extra_id_{}>".format(i) for i in range(vocab_extra_ids)])
+
+        if ul2_denoiser_tokens is None:
+            ul2_denoiser_tokens = []
+        self._ul2_tokens = ul2_denoiser_tokens
+        for value in self._ul2_tokens:
+            self.add_token(value)
+
         self.add_additional_special_tokens(additional_special_tokens)
 
     def add_token(self, token):
@@ -282,16 +319,35 @@ class _BertWordPieceTokenizer(AbstractTokenizer):
     def additional_special_tokens(self, value):
         self._additional_special_tokens = value
 
+    @property
+    def ul2_token_ids(self):
+        return [self.vocab[k] for k in self._ul2_tokens]
+
 
 class _GPT2BPETokenizer(AbstractTokenizer):
     """Original GPT2 BPE tokenizer."""
 
-    def __init__(self, vocab_file, merge_file):
+    def __init__(self, vocab_file, merge_file, ul2_denoiser_tokens=None):
         name = 'GPT2 BPE'
         super().__init__(name)
 
+        if ul2_denoiser_tokens is None:
+            ul2_denoiser_tokens = []
+        self._ul2_tokens = ul2_denoiser_tokens
+
+        # Warning! `additional_special_token_ids` will also return the UL2
+        # tokens here.
+        special_tokens = self._ul2_tokens.copy()
+        if self._ul2_tokens:
+            special_tokens.append('<SEP>')
+
         self.tokenizer = GPT2Tokenizer(vocab_file, merge_file, errors='replace',
-                                       special_tokens=[], max_len=None)
+                                       special_tokens=special_tokens,
+                                       max_len=None)
+        if self._ul2_tokens:
+            self.sep_id = self.tokenizer.encoder['<SEP>']
+        else:
+            self.sep_id = None
         self.eod_id = self.tokenizer.encoder['<|endoftext|>']
 
     @property
@@ -313,21 +369,76 @@ class _GPT2BPETokenizer(AbstractTokenizer):
         return self.tokenizer.decode(token_ids)
 
     @property
+    def sep(self):
+        if self.sep_id is None:
+            raise AttributeError(
+                'GPT tokenizer does not have a SEP token by default; '
+                'please add it to the `special_tokens`')
+        return self.sep_id
+
+    @property
     def eod(self):
         return self.eod_id
+
+    @property
+    def additional_special_tokens_ids(self):
+        # Warning! This will also return the UL2 tokens.
+        return [self.vocab[k] for k in self.tokenizer.special_tokens]
+
+    @property
+    def ul2_tokens_ids(self):
+        return [self.vocab[k] for k in self._ul2_tokens]
 
 
 class _AutoTokenizer(AbstractTokenizer):
     """AutoTokenizer for Hf Pretrained model loading."""
 
-    def __init__(self, tokenizer_name_or_path, vocab_extra_ids):
+    def __init__(
+            self,
+            tokenizer_name_or_path,
+            vocab_extra_ids,
+            ul2_denoiser_tokens=None,
+    ):
         name = tokenizer_name_or_path
         super().__init__(name)
         hf_tokenizer_kwargs = {}
+
         if vocab_extra_ids > 0:
             # TODO @thomasw21 we might need to concatenate to a pre-existing list?
-            hf_tokenizer_kwargs["additional_special_tokens"] = [f"<extra_id_{_id}>" for _id in range(vocab_extra_ids)]
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, **hf_tokenizer_kwargs)
+            self._extra_id_tokens = [
+                f"<extra_id_{_id}>" for _id in range(vocab_extra_ids)]
+            hf_tokenizer_kwargs["additional_special_tokens"] = \
+                self._extra_id_tokens
+        else:
+            self._extra_id_tokens = []
+
+        if ul2_denoiser_tokens is None:
+            ul2_denoiser_tokens = []
+        self._ul2_tokens = ul2_denoiser_tokens
+
+        if self._ul2_tokens:
+            additional_tokens = hf_tokenizer_kwargs.setdefault(
+                'additional_special_tokens', [])
+            additional_tokens.extend(self._ul2_tokens)
+
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                tokenizer_name_or_path, **hf_tokenizer_kwargs)
+        except ValueError as e:
+            # Try to catch the exception raised when we have to pass
+            # `extra_ids` explicitly because its default does not match.
+            if not (
+                    str(e).startswith('Both extra_ids ')
+                    and str(e).endswith(
+                        'the additional_special_tokens must include the '
+                        'extra_ids tokens'
+                    )
+            ):
+                raise e
+
+            hf_tokenizer_kwargs['extra_ids'] = len(self._extra_id_tokens)
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                tokenizer_name_or_path, **hf_tokenizer_kwargs)
         self.encoder = self.tokenizer.get_vocab()
         self.decoder = {v: k for k, v in self.encoder.items()}
 
@@ -403,7 +514,11 @@ class _AutoTokenizer(AbstractTokenizer):
     @property
     def additional_special_tokens_ids(self):
         """ All the additional special tokens you may want to use (list of strings)."""
-        return self.tokenizer.additional_special_tokens_ids
+        return [self.vocab[k] for k in self._extra_id_tokens]
+
+    @property
+    def ul2_token_ids(self):
+        return [self.vocab[k] for k in self._ul2_tokens]
 
     @staticmethod
     def _check_token_candidate(candidate):
