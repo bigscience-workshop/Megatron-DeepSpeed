@@ -636,11 +636,13 @@ def _build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
                     **kwargs
                 )
             elif dataset_type == DSET_TYPE_T5:
+                args = get_args()
                 dataset = T5Dataset(
                     indexed_dataset=indexed_dataset,
                     masked_lm_prob=masked_lm_prob,
                     max_seq_length_dec=max_seq_length_dec,
                     short_seq_prob=short_seq_prob,
+                    add_mask_tokens=args.add_mask_tokens,
                     **kwargs
                 )
             elif dataset_type == DSET_TYPE_UL2:
@@ -652,6 +654,7 @@ def _build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
                     denoisers=args.ul2_denoisers,
                     mean_span_lengths=args.ul2_mean_span_lengths,
                     mask_ratios=args.ul2_mask_ratios,
+                    add_mask_tokens=args.add_mask_tokens,
                     denoiser_tokens={
                         'R': args.ul2_r_denoiser_token,
                         'S': args.ul2_s_denoiser_token,
