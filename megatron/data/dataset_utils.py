@@ -341,7 +341,7 @@ def create_masked_lm_predictions(tokens,
             if is_covered:
                 break
         if is_covered:
-            break
+            continue
 
         if sampling_style is SamplingStyle.POISSON:
             n = np_rng.choice(ngrams[:len(cand_index_set)],
