@@ -92,6 +92,7 @@ class UL2Dataset(torch.utils.data.Dataset):
         if is_decoder_only(model_type):
             # Here we also add a SEP token.
             min_added_tokens += 1
+
         self.samples_mapping = get_samples_mapping(
             self.indexed_dataset,
             data_prefix,
