@@ -237,7 +237,7 @@ class GPTDataset(torch.utils.data.Dataset):
         assert np.max(documents) < indexed_dataset.sizes.shape[0]
 
         # Build index mappings.
-        self.doc_idx, self.sample_idx, self.shuffle_idx = _build_index_mappings(
+        self.doc_idx, self.sample_idx, self.shuffle_idx = build_index_mappings(
             self.name, data_prefix, documents, self.indexed_dataset.sizes,
             num_samples, seq_length, seed)
 
@@ -275,7 +275,7 @@ class GPTDataset(torch.utils.data.Dataset):
         return {'text': np.array(sample, dtype=np.int64)}
 
 
-def _build_index_mappings(name, data_prefix, documents, sizes,
+def build_index_mappings(name, data_prefix, documents, sizes,
                           num_samples, seq_length, seed, cutoff_last_epoch=0.95):
     """Build doc-idx, sample-idx, and shuffle-idx.
     doc-idx: is an array (ordered) of documents to be used in training.
