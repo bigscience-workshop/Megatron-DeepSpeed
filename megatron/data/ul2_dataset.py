@@ -89,13 +89,13 @@ class UL2Dataset(torch.utils.data.Dataset):
         self.indexed_dataset = indexed_dataset
         self.pack_samples = pack_samples
 
-        # Build the samples mapping.
         # Minimum number of tokens added: BOS and EOS.
         min_added_tokens = 2
         if is_decoder_only(model_type):
             # Here we also add a SEP token.
             min_added_tokens += 1
 
+        # Build the samples mapping.
         if self.pack_samples:
             self.doc_idx, self.sample_idx, self.shuffle_idx = build_index_mappings(
                 self.name, data_prefix, self.indexed_dataset.get_doc_idx()[:-1],
@@ -261,7 +261,7 @@ def build_training_sample(sample, target_seq_length,
         tokens = tokens[:safe_max_seq_len]
     else:
         # If we are S-denoising, we know only one `extra_id` token is
-        # goint to be added.
+        # going to be added.
         if is_decoder_only(model_type) and denoiser == 'S':
             max_num_tokens -= 1
         # Truncate to `target_sequence_length`.
