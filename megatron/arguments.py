@@ -810,8 +810,6 @@ def _add_data_args(parser):
                 datasets = prefix.split(",")
                 # check if each dataset is formatted like `WEIGHT START:END PATH`
                 for d in datasets:
-                    dataset_message = d
-                    assert len(d.split()) == 3, dataset_message
                     start, end = d.split()[1].split(":")
                     assert float(start) < float(end), err_message
 
@@ -875,7 +873,6 @@ def _add_data_args(parser):
                 assert len(lines) == 1, f"Got multiple lines {len(lines)} instead of 1 expected"
                 assert lines[0][-2:] == "\"\n" and lines[0][0] == "\"", f"Invalid input format, got {lines}"
                 values = lines[0][1:-2].split("\" \"")
-                values = list(map(lambda x: x.replace('data-path','testing' ), values))
                 weighted_split_paths_dest = re.sub(r"_path$", "", self.dest)
                 weighted_split_paths_option = re.sub(r"-path$", "", self.option_strings[0])
                 setattr(args, weighted_split_paths_dest, values)
@@ -958,7 +955,6 @@ def _add_autoresume_args(parser):
     group.add_argument('--adlr-autoresume-interval', type=int, default=1000,
                        help='Intervals over which check for autoresume'
                        'termination signal')
-
     return parser
 
 
