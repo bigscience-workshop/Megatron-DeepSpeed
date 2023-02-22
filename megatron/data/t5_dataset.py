@@ -110,6 +110,31 @@ class T5Dataset(torch.utils.data.Dataset):
         else:
             return self.samples_mapping.shape[0]
 
+    def _create_samples_dict(self):
+        samples_dict = {
+            'text_enc': np.empty((self.max_seq_length,), dtype=np.int64),
+            'text_dec': np.empty(
+                (self.max_seq_length_dec,), dtype=np.int64),
+            'labels': np.empty(
+                (self.max_seq_length_dec,), dtype=np.int64),
+            'loss_mask': np.zeros(
+                (self.max_seq_length_dec,), dtype=np.int64),
+            'truncated': 0,
+            'enc_mask': np.zeros(
+                (self.max_seq_length, self.max_seq_length),
+                dtype=np.int64,
+            ),
+            'dec_mask': np.zeros(
+                (self.max_seq_length_dec, self.max_seq_length_dec),
+                dtype=np.int64,
+            ),
+            'enc_dec_mask': np.zeros(
+                (self.max_seq_length_dec, self.max_seq_length),
+                dtype=np.int64,
+            ),
+        }
+        return samples_dict
+
     def __getitem__(self, idx):
         # Note that this rng state should be numpy and not python since
         # python randint is inclusive whereas the numpy one is exclusive.
@@ -117,28 +142,7 @@ class T5Dataset(torch.utils.data.Dataset):
         if self.pack_samples:
             samples = get_samples(self.indexed_dataset, self.doc_idx,
                                   self.sample_idx, self.shuffle_idx, idx)
-            samples_dict = {
-                'text_enc': np.empty((self.max_seq_length,), dtype=np.int64),
-                'text_dec': np.empty(
-                    (self.max_seq_length_dec,), dtype=np.int64),
-                'labels': np.empty(
-                    (self.max_seq_length_dec,), dtype=np.int64),
-                'loss_mask': np.zeros(
-                    (self.max_seq_length_dec,), dtype=np.int64),
-                'truncated': 0,
-                'enc_mask': np.zeros(
-                    (self.max_seq_length, self.max_seq_length),
-                    dtype=np.int64,
-                ),
-                'dec_mask': np.zeros(
-                    (self.max_seq_length_dec, self.max_seq_length_dec),
-                    dtype=np.int64,
-                ),
-                'enc_dec_mask': np.zeros(
-                    (self.max_seq_length_dec, self.max_seq_length),
-                    dtype=np.int64,
-                ),
-            }
+            samples_dict = self._create_samples_dict()
             prev_len = 0
             prev_len_dec = 0
             for sample in samples:
