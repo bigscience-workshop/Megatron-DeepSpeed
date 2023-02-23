@@ -18,6 +18,8 @@
 import argparse
 from functools import partial
 
+import deepspeed
+from deepspeed.runtime.utils import see_memory_usage
 import torch
 
 from megatron import (
@@ -31,7 +33,8 @@ from megatron.data.ul2_dataset import (
     is_decoder_only as _is_decoder_only,
     is_prefix_lm as _is_prefix_lm,
 )
-from megatron.model.gpt_model import GPTModel
+from megatron.enums import AttnMaskType
+from megatron.model.gpt_model import GPTModel, GPTModelPipe
 from megatron.model.t5_model import T5Model, t5_position_ids
 from megatron.training import pretrain
 from megatron.utils import average_losses_across_data_parallel_group
@@ -51,21 +54,52 @@ def is_prefix_lm():
 
 def model_provider(pre_process=True, post_process=True):
     """Build the model."""
-    assert pre_process and post_process, "UL2 doesn't yet support pipelining"
+    args = get_args()
 
-    print_rank_0('building UL2 model ...')
-    if is_decoder_only():
-        print_rank_0('Using decoder-only UL2 model.')
-        model = GPTModel(
-            num_tokentypes=0,
-            parallel_output=True,
-            pre_process=pre_process,
-            post_process=post_process,
-            prefix_lm=is_prefix_lm(),
-        )
-    else:
-        print_rank_0('Using encoder-decoder UL2 model.')
-        model = T5Model(num_tokentypes=0, parallel_output=True)
+    see_memory_usage("Before Building Model", force=True)
+    with deepspeed.zero.Init(data_parallel_group=mpu.get_data_parallel_group(),
+                             remote_device=(
+                                 None
+                                 if args.remote_device == 'none'
+                                 else args.remote_device
+                             ),
+                             config_dict_or_path=args.deepspeed_config,
+                             enabled=args.zero_stage == 3,
+                             mpu=mpu):
+
+        print_rank_0('building UL2 model ...')
+        if is_decoder_only():
+            print_rank_0('Using decoder-only UL2 model.')
+            if args.deepspeed:
+                args.pretrain_causal_attention = not is_prefix_lm()
+                model = GPTModelPipe(
+                    num_tokentypes=0,
+                    parallel_output=True,
+                    attn_mask_type=(
+                        AttnMaskType.prefix
+                        if is_prefix_lm()
+                        else AttnMaskType.causal
+                    ),
+                )
+                # This is a hack to give us a reference to
+                # `get_batch_pipe` from within `training.py`.
+                # We need to call `model.set_batch_fn` after
+                # `deepspeed.initialize`.
+                model._megatron_batch_fn = get_batch_pipe
+            else:
+                model = GPTModel(
+                    num_tokentypes=0,
+                    parallel_output=True,
+                    pre_process=pre_process,
+                    post_process=post_process,
+                    prefix_lm=is_prefix_lm(),
+                )
+        else:
+            assert pre_process and post_process and not args.deepspeed, \
+                "Encoder-decoder model doesn't yet support pipelining"
+            print_rank_0('Using encoder-decoder UL2 model.')
+            model = T5Model(num_tokentypes=0, parallel_output=True)
+    see_memory_usage("After Building Model", force=True)
     return model
 
 
@@ -107,6 +141,49 @@ def get_batch(data_iterator):
 
         return tokens_enc, tokens_dec, loss_mask, labels, \
                enc_mask, dec_mask, enc_dec_mask
+
+
+def get_batch_pipe(data):
+    """Modification of `get_batch` to work on `next(data_iterator)`
+    instead of `data_iterator`.
+    """
+
+    if is_decoder_only():
+        keys = ['text', 'labels', 'loss_mask', 'dec_mask']
+    else:
+        keys = ['text_enc', 'text_dec', 'labels', 'loss_mask',
+                'enc_mask', 'dec_mask', 'enc_dec_mask']
+    datatype = torch.int64
+
+    # Broadcast data.
+    data_b = mpu.broadcast_data(keys, data, datatype)
+
+    # Unpack.
+    if is_decoder_only():
+        tokens = data_b['text'].long()
+        labels = data_b['labels'].long()
+        loss_mask = data_b['loss_mask'].float()
+
+        dec_mask = (data_b['dec_mask'] < 0.5)
+        dec_mask = dec_mask.unsqueeze(1)
+
+        position_ids = t5_position_ids(tokens)
+        return (tokens, position_ids, dec_mask), (labels, loss_mask)
+    else:
+        tokens_enc = data_b['text_enc'].long()
+        tokens_dec = data_b['text_dec'].long()
+        labels = data_b['labels'].long()
+        loss_mask = data_b['loss_mask'].float()
+
+        enc_mask = (data_b['enc_mask'] < 0.5)
+        dec_mask = (data_b['dec_mask'] < 0.5)
+        enc_dec_mask = (data_b['enc_dec_mask'] < 0.5)
+
+        # This will probably be incorrect. Need to adapt this if
+        # pipelining for encoder-decoder models is ever implemented (and
+        # implemented similarly to the GPT model).
+        return (tokens_enc, tokens_dec, enc_mask, dec_mask, enc_dec_mask), \
+            (labels, loss_mask)
 
 
 def loss_func(loss_mask, output_tensor):
