@@ -1084,6 +1084,10 @@ def _add_ul2_args(parser):
                        help='Whether to use the updated implementation as '
                        'described in the UL2R paper. This only changes the '
                        'implementation, not the objective configurations!')
+    group.add_argument('--ul2-pack-repeat-prompt', action='store_true',
+                       help='When `--pack-samples` is also given and '
+                       '`--ul2-pack-any` is *not* given, whether to '
+                       'repeat the prompt token for each packed sample.')
 
     return parser
 

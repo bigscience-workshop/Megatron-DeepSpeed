@@ -56,8 +56,8 @@ class UL2Dataset(torch.utils.data.Dataset):
                  num_epochs, max_num_samples, model_type,
                  denoiser_ratios, denoisers, mean_span_lengths,
                  mask_ratios, add_mask_tokens, pack_samples,
-                 denoiser_tokens, like_ul2r, max_seq_length,
-                 max_seq_length_dec, short_seq_prob, seed):
+                 denoiser_tokens, like_ul2r, pack_repeat_prompt,
+                 max_seq_length, max_seq_length_dec, short_seq_prob, seed):
         super().__init__()
 
         if denoiser_ratios is None:
@@ -91,6 +91,7 @@ class UL2Dataset(torch.utils.data.Dataset):
         # Dataset.
         self.indexed_dataset = indexed_dataset
         self.pack_samples = pack_samples
+        self.repeat_prompt = pack_repeat_prompt
 
         # Minimum number of tokens added: BOS and EOS.
         min_added_tokens = 2
@@ -228,6 +229,7 @@ class UL2Dataset(torch.utils.data.Dataset):
             samples_dict = self._create_samples_dict()
             prev_len = 0
             prev_len_dec = 0
+            cls_ids = self.cls_ids
             for sample in samples:
                 remaining_seq_len = self.max_seq_length - prev_len
                 seq_length = min(remaining_seq_len, len(sample))
@@ -236,7 +238,7 @@ class UL2Dataset(torch.utils.data.Dataset):
                     [sample], seq_length,
                     self.max_seq_length,  # needed for padding
                     self.max_seq_length_dec, self.vocab_id_list,
-                    self.vocab_id_to_token_dict, self.cls_ids, self.sep_id,
+                    self.vocab_id_to_token_dict, cls_ids, self.sep_id,
                     self.mask_id, self.pad_id, self.model_type, denoiser_index,
                     self.denoisers, self.mean_span_lengths,
                     self.mask_ratios, self.like_ul2r, np_rng,
@@ -272,6 +274,8 @@ class UL2Dataset(torch.utils.data.Dataset):
                     prev_len_dec += len_dec
                 prev_len += len_enc
 
+                if not self.repeat_prompt:
+                    cls_ids = {self.denoisers[denoiser_index]: None}
             if is_decoder_only(self.model_type):
                 samples_dict['text'][prev_len:] = self.pad_id
                 samples_dict['labels'][prev_len:] = -1
