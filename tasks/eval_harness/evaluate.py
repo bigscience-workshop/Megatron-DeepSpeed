@@ -24,7 +24,11 @@ from megatron import mpu
 from megatron.training import setup_model_and_optimizer, get_model
 from megatron.mpu.mappings import gather_from_tensor_model_parallel_region
 
-from megatron.utils import get_ltor_masks_and_position_ids, unwrap_model
+from megatron.utils import (
+    get_ltor_masks_and_position_ids,
+    get_prefix_indices,
+    unwrap_model,
+)
 from megatron.p2p_communication import recv_forward, send_forward
 import pickle
 import json
@@ -185,13 +189,23 @@ class EvalHarnessAdaptor(GPT2LM):
     def create_model_inputs(self, tokens):
         args = get_args()
 
+        if args.prefix_lm:
+            prefix_indices = get_prefix_indices(
+                tokens,
+                self.EOT_TOKEN_ID,
+                partial_prefix_indices=False,
+                reset_attention_mask=args.reset_attention_mask
+            )
+        else:
+            prefix_indices = None
+
         attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
             tokens,
             self.EOT_TOKEN_ID,
             args.reset_position_ids,
             args.reset_attention_mask,
             args.eod_mask_loss,
-            prefix_indices=None,
+            prefix_indices=prefix_indices,
             loss_on_targets_only=False)
 
         return (tokens, position_ids, attention_mask), (tokens, loss_mask)
@@ -390,6 +404,9 @@ def tasks_args(parser):
     group.add_argument('--intermed_results',  default = False, action='store_true', help='Whether to print & write intermediate results for each task')
     group.add_argument('--bootstrap_iters', type=int, default=100000, help='How many iterations to use for stderr estimation')
     group.add_argument('--micro_bs_multiplier', type=int, default=1, help='Increase the global batch size to remove bubble when pipeline parallel')
+    group.add_argument('--prefix_lm', action='store_true',
+                       help='Whether to adjust attention masks for a PrefixLM '
+                       'decoder-only model.')
     return parser
 
 from megatron.global_vars import _parse_args
