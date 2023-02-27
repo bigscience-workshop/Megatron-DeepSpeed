@@ -402,6 +402,8 @@ def tasks_args(parser):
                        help='Should the sequence length be adapted to the batch during evaluation, if in fp16 the results will be slightly different due to numerical errors but greatly speed up evaluation.')
     group.add_argument('--eval_fp32',  default = False, action='store_true', help='Should the evaluation run in fp32')
     group.add_argument('--intermed_results',  default = False, action='store_true', help='Whether to print & write intermediate results for each task')
+    group.add_argument('--num_fewshot', type=int, default=0,
+                       help='How many examples to show.')
     group.add_argument('--bootstrap_iters', type=int, default=100000, help='How many iterations to use for stderr estimation')
     group.add_argument('--micro_bs_multiplier', type=int, default=1, help='Increase the global batch size to remove bubble when pipeline parallel')
     group.add_argument('--prefix_lm', action='store_true',
@@ -434,7 +436,8 @@ def main():
 
     tokenizer = get_tokenizer()
     adaptor = EvalHarnessAdaptor(model, tokenizer)
-    
+    num_fewshot = args.num_fewshot
+
     if args.intermed_results:
         global_results = {"results": {}, "versions": {}}
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
@@ -443,7 +446,7 @@ def main():
         # Backup file in case of interruption during writing
         results_path_backup = args.results_path.replace(".json", f"_lm-eval_{iteration_id}_{timestamp}_backup.json")
         for task_name, task in task_dict.items():
-            results = evaluator.evaluate(adaptor, {task_name: task}, False, 0, None, bootstrap_iters=args.bootstrap_iters)
+            results = evaluator.evaluate(adaptor, {task_name: task}, False, num_fewshot, None, bootstrap_iters=args.bootstrap_iters)
             global_results["results"] = {**global_results["results"], **results["results"]}
             global_results["versions"] = {**global_results["versions"], **results["versions"]}
             if mpu.is_pipeline_last_stage() and mpu.get_tensor_model_parallel_rank() == 0:
@@ -453,7 +456,7 @@ def main():
                 with open(results_path_backup, 'w') as outfile:
                     json.dump(global_results, outfile, indent=4)
     else:
-        global_results = evaluator.evaluate(adaptor, task_dict, False, 0, None, bootstrap_iters=args.bootstrap_iters)
+        global_results = evaluator.evaluate(adaptor, task_dict, False, num_fewshot, None, bootstrap_iters=args.bootstrap_iters)
         if mpu.is_pipeline_last_stage() and mpu.get_tensor_model_parallel_rank() == 0:
             print(json.dumps(global_results, indent=2))
             with open(args.results_path, 'w') as outfile:
