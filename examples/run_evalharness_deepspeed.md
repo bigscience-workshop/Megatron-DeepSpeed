@@ -29,7 +29,7 @@ Also make sure `data` is not on one of the limited paritions like WORKSF.
 Then install datasets for the tasks:
 ```
 python ./tasks/eval_harness/download.py --task_list
-arc_challenge,arc_easy,boolq,copa,hellaswag,lambada,logiqa,mathqa,mc_taco,mrpc,multirc,openbookqa,piqa,prost,pubmedqa,qnli,qqp,race,rte,sciq,sst,triviaqa,webqs,wic,winogrande,wnli,wsc
+arc_challenge,arc_easy,boolq,copa,hellaswag,lambada_openai,logiqa,mathqa,mc_taco,mrpc,multirc,openbookqa,piqa,prost,pubmedqa,qnli,qqp,race,rte,sciq,sst,triviaqa,webqs,wic,winogrande,wnli,wsc
 ```
 and make sure that `export HF_DATASETS_OFFLINE=1`
 

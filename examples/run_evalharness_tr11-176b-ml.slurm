@@ -89,7 +89,7 @@ CMD="./tasks/eval_harness/evaluate.py  \
     --bf16 \
     --inference \
     --seq-length $SEQ_LEN \
-    --task_list arc_challenge,arc_easy,boolq,copa,headqa,hellaswag,lambada,logiqa,mathqa,mc_taco,mrpc,multirc,openbookqa,piqa,prost,pubmedqa,qnli,qqp,race,rte,sciq,sst,triviaqa,webqs,wic,winogrande,wnli,wsc \
+    --task_list arc_challenge,arc_easy,boolq,copa,headqa,hellaswag,lambada_openai,logiqa,mathqa,mc_taco,mrpc,multirc,openbookqa,piqa,prost,pubmedqa,qnli,qqp,race,rte,sciq,sst,triviaqa,webqs,wic,winogrande,wnli,wsc \
     --deepspeed \
     --deepspeed_config ds_config.json \
     --bootstrap_iters 2 \
