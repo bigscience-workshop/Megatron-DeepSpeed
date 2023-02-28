@@ -137,7 +137,7 @@ class EvalHarnessAdaptor(GPT2LM):
                 for _, context_enc, continuation_enc in chunk:
                     # when too long to fit in context, truncate from the left
                     inp = torch.tensor(
-                        (context_enc + continuation_enc)[-(self.max_length + 1):][:-1]
+                        (context_enc + continuation_enc)[-(self.max_length + 1):]
                         , dtype=torch.long).to(self.device)
                     inplen, = inp.shape
 
