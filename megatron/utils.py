@@ -419,10 +419,22 @@ def get_prefix_indices(data, eod_token, partial_prefix_indices, reset_attention_
             for doc_id, eod_index in enumerate(eod_indices):
                 assert partial_prefix_indices is None or partial_prefix_indices is False or isinstance(partial_prefix_indices[batch_id], list), f"Per document prefix has to store a list on indices for each row, got {partial_prefix_indices[batch_id]}"
                 # Prefix index is defined as the first index that isn't attended by all tokens in a document
-                if partial_prefix_indices is None or partial_prefix_indices[batch_id][doc_id] is None:
+                if (
+                        partial_prefix_indices is None
+                        or (
+                            partial_prefix_indices is not False
+                            and partial_prefix_indices[batch_id][doc_id] is None
+                        )
+                ):
                     # We need to randomly generate a prefix index that satisfies the interleave condition in the docstring
                     prefix_index = randint(prev_index + 1, eod_index)
-                elif partial_prefix_indices is False or partial_prefix_indices[batch_id][doc_id] is False:
+                elif (
+                        partial_prefix_indices is False
+                        or (
+                            partial_prefix_indices is not None
+                            and partial_prefix_indices[batch_id][doc_id] is False
+                        )
+                ):
                     prefix_index = eod_index
                 else:
                     # We get value from partial_prefix_indices, and run validation on that value
@@ -439,10 +451,22 @@ def get_prefix_indices(data, eod_token, partial_prefix_indices, reset_attention_
 
             # Prefix index is defined as the first index that isn't attended by all previous tokens in a document
             prefix_index: int
-            if partial_prefix_indices is None or partial_prefix_indices[batch_id] is None:
+            if (
+                    partial_prefix_indices is None
+                    or (
+                        partial_prefix_indices is not False
+                        and partial_prefix_indices[batch_id] is None
+                    )
+            ):
                 # 0 being the first prefix index makes no sense since 0 always attends to itself, and there are no other tokens before.
                 prefix_index = randint(1, seq_length)
-            elif partial_prefix_indices is False or partial_prefix_indices[batch_id] is False:
+            elif (
+                    partial_prefix_indices is False
+                    or (
+                        partial_prefix_indices is not None
+                        and partial_prefix_indices[batch_id] is False
+                    )
+            ):
                 prefix_index = seq_length
             else:
                 # We get value from partial_prefix_indices, and run validation on that value
