@@ -133,13 +133,20 @@ class EvalHarnessAdaptor(GPT2LM):
 
             reord = utils.Reorderer(requests, _collate)
             for chunk in utils.chunks(tqdm(reord.get_reordered(), disable=disable_tqdm), self.batch_size):
-                inps, contlens, inplens, padding_length = [], [], [], None
+                inps, ctxlens, contlens, inplens, padding_length = [], [], [], [], None
                 for _, context_enc, continuation_enc in chunk:
                     # when too long to fit in context, truncate from the left
                     inp = torch.tensor(
                         (context_enc + continuation_enc)[-(self.max_length + 1):]
                         , dtype=torch.long).to(self.device)
                     inplen, = inp.shape
+
+                    total_len = len(context_enc) + len(continuation_enc)
+                    if len(continuation_enc) == 0:
+                        ctxlen = 1
+                    else:
+                        num_truncated = max(total_len - self.max_length + 1, 0)
+                        ctxlen = max(len(context_enc) - num_truncated, 1)
 
                     cont = continuation_enc
 
@@ -157,8 +164,9 @@ class EvalHarnessAdaptor(GPT2LM):
 
                     contlens.append(cont)
                     inplens.append(inplen)
+                    ctxlens.append(ctxlen)
 
-                logits = self._model_call(torch.cat(inps, dim=0))
+                logits = self._model_call((torch.cat(inps, dim=0), ctxlens))
                 res_len += len(chunk)
                 if logits is not None:
                     multi_logits = F.log_softmax(logits, dim=-1).cpu()  # [batch, seq, vocab]
@@ -189,14 +197,24 @@ class EvalHarnessAdaptor(GPT2LM):
     def create_model_inputs(self, tokens):
         args = get_args()
 
-        if args.prefix_lm:
+        if isinstance(tokens, tuple) and len(tokens) == 2:
+            tokens, ctxlens = tokens
+        else:
+            ctxlens = None
+
+        if args.prefix_lm and ctxlens is not None:
             prefix_indices = get_prefix_indices(
                 tokens,
                 self.EOT_TOKEN_ID,
-                partial_prefix_indices=False,
+                partial_prefix_indices=ctxlens,
                 reset_attention_mask=args.reset_attention_mask
             )
         else:
+            if args.prefix_lm:
+                print(
+                    'Warning: requested PrefixLM inputs, but cannot determine '
+                    'prefix length – prefix is empty.'
+                )
             prefix_indices = None
 
         attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
@@ -213,13 +231,21 @@ class EvalHarnessAdaptor(GPT2LM):
     def _model_call(self, inps):
         args = get_args()
 
+        if isinstance(inps, tuple) and len(inps) == 2:
+            inps, ctxlens = inps
+        else:
+            ctxlens = None
+
         if args.deepspeed:
             self.model.set_batch_fn(self.create_model_inputs)
             # round up to multiple of micro_batch_size
             new_size = ((len(inps) + args.micro_batch_size-1)  // args.micro_batch_size) * args.micro_batch_size
             padded = F.pad(inps, (0, 0, 0, new_size-len(inps)), value = 0)
             # dummy data iterator for pipelining.
-            data_iterator = list((torch.stack(inp) for inp in utils.chunks(padded, args.micro_batch_size)))
+            data_iterator = list((
+                (torch.stack(inp), ctxlens)
+                for inp in utils.chunks(padded, args.micro_batch_size)
+            ))
             self.model.micro_batches = len(data_iterator)
             
             if self.adaptive_seq_len:
@@ -253,7 +279,7 @@ class EvalHarnessAdaptor(GPT2LM):
             # Forward pass through the model.
             unwrapped_model = unwrap_model(self.model, (torchDDP, LocalDDP, Float16Module))
             unwrapped_model.set_input_tensor(input_tensor)
-            output = self.model(*self.create_model_inputs(inps)[0])
+            output = self.model(*self.create_model_inputs((inps, ctxlens))[0])
             send_forward(output)
 
         if mpu.is_pipeline_last_stage():
