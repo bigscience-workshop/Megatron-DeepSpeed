@@ -1,3 +1,4 @@
+import argparse
 from functools import reduce
 from logging import logMultiprocessing
 import os
@@ -464,6 +465,8 @@ def tasks_args(parser):
                        'decoder-only model.')
     group.add_argument('--prefix_tokens', type=str, nargs='*', default=[],
                        help='Tokens to add at the front of the input sequence.')
+    # Automatically add UL2 tokens.
+    group.add_argument('--_is_ul2', default=True, help=argparse.SUPPRESS)
     return parser
 
 from megatron.global_vars import _parse_args
