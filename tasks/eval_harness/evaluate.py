@@ -300,7 +300,7 @@ class EvalHarnessAdaptor(GPT2LM):
 from megatron.initialize import initialize_megatron
 import megatron
 
-from tools.convert_checkpoint.deepspeed_checkpoint import DeepSpeedCheckpoint
+from deepspeed.checkpoint.deepspeed_checkpoint import DeepSpeedCheckpoint
 from tools.convert_checkpoint.deepspeed_to_megatron import _create_rank_checkpoint
 
 def override_args(args, override_args, skip_keys, skip_if_specified_keys):
