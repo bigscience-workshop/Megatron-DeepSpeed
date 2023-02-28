@@ -48,6 +48,11 @@ class EvalHarnessAdaptor(GPT2LM):
         self.EOT_TOKEN_ID = tokenizer.eod
 
         self._max_length = args.seq_length
+        self._prefix_tokens = args.prefix_tokens
+        self._prefix_token_ids = [
+            self.tokenizer.tokenizer.convert_tokens_to_ids(token)
+            for token in self._prefix_tokens
+        ]
 
         # For ds we split into mini batches and then micro batches to keep pipelining api happy.
         # With Megatron we just go to micro_batches directly
@@ -78,6 +83,14 @@ class EvalHarnessAdaptor(GPT2LM):
     def device(self):
         return self._device
 
+    def _prepend_prefix_token_ids(self, tokens):
+        if not self._prefix_token_ids:
+            pass
+        elif tokens[0] == self.EOT_TOKEN_ID:
+            tokens = tokens[:1] + self._prefix_token_ids + tokens[1:]
+        else:
+            tokens = self._prefix_token_ids + tokens
+        return tokens
 
     def loglikelihood(self, requests):
         new_reqs = []
@@ -136,17 +149,31 @@ class EvalHarnessAdaptor(GPT2LM):
                 inps, ctxlens, contlens, inplens, padding_length = [], [], [], [], None
                 for _, context_enc, continuation_enc in chunk:
                     # when too long to fit in context, truncate from the left
+                    context_len = len(context_enc) + len(self._prefix_tokens)
+                    total_len = context_len + len(continuation_enc)
+
+                    context_num_truncated = max(
+                        total_len - self.max_length + 1, 0)
+                    continuation_num_truncated = max(
+                        context_num_truncated - context_len, 0)
+
+                    context_enc = context_enc[context_num_truncated:]
+                    continuation_enc = \
+                        continuation_enc[continuation_num_truncated:]
+
+                    # Add prefix token after truncation.
+                    context_enc = self._prepend_prefix_token_ids(context_enc)
+
                     inp = torch.tensor(
-                        (context_enc + continuation_enc)[-(self.max_length + 1):]
-                        , dtype=torch.long).to(self.device)
+                        context_enc + continuation_enc,
+                        dtype=torch.long,
+                    ).to(self.device)
                     inplen, = inp.shape
 
-                    total_len = len(context_enc) + len(continuation_enc)
                     if len(continuation_enc) == 0:
                         ctxlen = 1
                     else:
-                        num_truncated = max(total_len - self.max_length + 1, 0)
-                        ctxlen = max(len(context_enc) - num_truncated, 1)
+                        ctxlen = max(context_len - context_num_truncated, 1)
 
                     cont = continuation_enc
 
@@ -435,6 +462,8 @@ def tasks_args(parser):
     group.add_argument('--prefix_lm', action='store_true',
                        help='Whether to adjust attention masks for a PrefixLM '
                        'decoder-only model.')
+    group.add_argument('--prefix_tokens', type=str, nargs='*', default=[],
+                       help='Tokens to add at the front of the input sequence.')
     return parser
 
 from megatron.global_vars import _parse_args
