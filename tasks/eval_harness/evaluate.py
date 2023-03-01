@@ -1,5 +1,6 @@
 import argparse
 from functools import reduce
+import importlib
 from logging import logMultiprocessing
 import os
 import sys
@@ -14,7 +15,6 @@ from tqdm import tqdm
 import torch.nn.functional as F
 
 from lm_eval.tasks import ALL_TASKS
-from pretrain_gpt import model_provider
 import numpy as np
 
 import torch
@@ -411,6 +411,10 @@ def load_ds_checkpoint_and_setup_megatron(args):
     # Initializing megatron will update eg. tokenizer size. Override again.
     override_args(args, cp_args, skip_keys, skip_if_specified)
 
+    model_provider = importlib.import_module(
+        f'pretrain_{args.model_name}',
+    ).model_provider
+
     # print final arguments.
     _print_args(args)
     if args.deepspeed:
@@ -453,6 +457,11 @@ def tasks_args(parser):
 
     """Provide extra arguments required for tasks."""
     group = parser.add_argument_group(title='Evaluation options')
+    group.add_argument('--model_name', type=str, default="gpt",
+                       help=(
+                           'Which model architecture to use (must exist as '
+                           '`pretrain_{model_name}.py` script).'
+                       ))
     group.add_argument('--task_list', type=str, default = "all", help='Either "all" or comma separated list of tasks.')
     group.add_argument('--results_path', type=str, default = results_path_default, help='Path to where the results will be stored.')
     group.add_argument('--adaptive_seq_len',  default = False, action='store_true',
