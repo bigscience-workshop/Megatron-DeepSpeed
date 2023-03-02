@@ -269,6 +269,7 @@ class EvalHarnessAdaptor(GPT2LM):
             # round up to multiple of micro_batch_size
             new_size = ((len(inps) + args.micro_batch_size-1)  // args.micro_batch_size) * args.micro_batch_size
             padded = F.pad(inps, (0, 0, 0, new_size-len(inps)), value = 0)
+            ctxlens = ctxlens + [1] * (new_size - len(ctxlens))
             # dummy data iterator for pipelining.
             data_iterator = list((
                 (torch.stack(inp), ctxlen)
