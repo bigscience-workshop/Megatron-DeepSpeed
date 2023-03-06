@@ -17,7 +17,7 @@
 #pragma once
 
 #include <assert.h>
-#include <cuda_fp16.h>
+#include <hip/hip_fp16.h>
 #include <cfloat>
 #include <limits>
 #include <stdint.h>
@@ -85,7 +85,7 @@ struct Max {
 template <typename T>
 __device__ __forceinline__ T WARP_SHFL_XOR_NATIVE(T value, int laneMask, int width = warpSize, unsigned int mask = 0xffffffff)
 {
-#if CUDA_VERSION >= 9000
+#if HIP_VERSION >= 9000
     return __shfl_xor_sync(mask, value, laneMask, width);
 #else
     return __shfl_xor(value, laneMask, width);
@@ -369,51 +369,51 @@ void dispatch_scaled_upper_triang_masked_softmax_forward(
         switch (log2_elements) {
             case 0: // 1
                 scaled_upper_triang_masked_softmax_warp_forward<input_t, output_t, acc_t, 0>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, scale, batch_count, softmax_elements_stride, softmax_elements);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, scale, batch_count, softmax_elements_stride, softmax_elements);
                 break;
             case 1: // 2
                 scaled_upper_triang_masked_softmax_warp_forward<input_t, output_t, acc_t, 1>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, scale, batch_count, softmax_elements_stride, softmax_elements);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, scale, batch_count, softmax_elements_stride, softmax_elements);
                 break;
             case 2: // 4
                 scaled_upper_triang_masked_softmax_warp_forward<input_t, output_t, acc_t, 2>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, scale, batch_count, softmax_elements_stride, softmax_elements);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, scale, batch_count, softmax_elements_stride, softmax_elements);
                 break;
             case 3: // 8
                 scaled_upper_triang_masked_softmax_warp_forward<input_t, output_t, acc_t, 3>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, scale, batch_count, softmax_elements_stride, softmax_elements);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, scale, batch_count, softmax_elements_stride, softmax_elements);
                 break;
             case 4: // 16
                 scaled_upper_triang_masked_softmax_warp_forward<input_t, output_t, acc_t, 4>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, scale, batch_count, softmax_elements_stride, softmax_elements);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, scale, batch_count, softmax_elements_stride, softmax_elements);
                 break;
             case 5: // 32
                 scaled_upper_triang_masked_softmax_warp_forward<input_t, output_t, acc_t, 5>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, scale, batch_count, softmax_elements_stride, softmax_elements);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, scale, batch_count, softmax_elements_stride, softmax_elements);
                 break;
             case 6: // 64
                 scaled_upper_triang_masked_softmax_warp_forward<input_t, output_t, acc_t, 6>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, scale, batch_count, softmax_elements_stride, softmax_elements);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, scale, batch_count, softmax_elements_stride, softmax_elements);
                 break;
             case 7: // 128
                 scaled_upper_triang_masked_softmax_warp_forward<input_t, output_t, acc_t, 7>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, scale, batch_count, softmax_elements_stride, softmax_elements);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, scale, batch_count, softmax_elements_stride, softmax_elements);
                 break;
             case 8: // 256
                 scaled_upper_triang_masked_softmax_warp_forward<input_t, output_t, acc_t, 8>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, scale, batch_count, softmax_elements_stride, softmax_elements);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, scale, batch_count, softmax_elements_stride, softmax_elements);
                 break;
             case 9: // 512
                 scaled_upper_triang_masked_softmax_warp_forward<input_t, output_t, acc_t, 9>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, scale, batch_count, softmax_elements_stride, softmax_elements);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, scale, batch_count, softmax_elements_stride, softmax_elements);
                 break;
             case 10: // 1024
                 scaled_upper_triang_masked_softmax_warp_forward<input_t, output_t, acc_t, 10>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, scale, batch_count, softmax_elements_stride, softmax_elements);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, scale, batch_count, softmax_elements_stride, softmax_elements);
                 break;
             case 11: // 2048
                 scaled_upper_triang_masked_softmax_warp_forward<input_t, output_t, acc_t, 11>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, scale, batch_count, softmax_elements_stride, softmax_elements);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, scale, batch_count, softmax_elements_stride, softmax_elements);
                 break;
             default:
                 break;
@@ -460,51 +460,51 @@ void dispatch_scaled_upper_triang_masked_softmax_backward(
         switch (log2_elements) {
             case 0: // 1
                 scaled_upper_triang_masked_softmax_warp_backward<input_t, output_t, acc_t, 0>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(grad_input, grad, output, scale, batch_count, softmax_elements_stride, softmax_elements);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(grad_input, grad, output, scale, batch_count, softmax_elements_stride, softmax_elements);
                 break;
             case 1: // 2
                 scaled_upper_triang_masked_softmax_warp_backward<input_t, output_t, acc_t, 1>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(grad_input, grad, output, scale, batch_count, softmax_elements_stride, softmax_elements);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(grad_input, grad, output, scale, batch_count, softmax_elements_stride, softmax_elements);
                 break;
             case 2: // 4
                 scaled_upper_triang_masked_softmax_warp_backward<input_t, output_t, acc_t, 2>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(grad_input, grad, output, scale, batch_count, softmax_elements_stride, softmax_elements);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(grad_input, grad, output, scale, batch_count, softmax_elements_stride, softmax_elements);
                 break;
             case 3: // 8
                 scaled_upper_triang_masked_softmax_warp_backward<input_t, output_t, acc_t, 3>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(grad_input, grad, output, scale, batch_count, softmax_elements_stride, softmax_elements);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(grad_input, grad, output, scale, batch_count, softmax_elements_stride, softmax_elements);
                 break;
             case 4: // 16
                 scaled_upper_triang_masked_softmax_warp_backward<input_t, output_t, acc_t, 4>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(grad_input, grad, output, scale, batch_count, softmax_elements_stride, softmax_elements);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(grad_input, grad, output, scale, batch_count, softmax_elements_stride, softmax_elements);
                 break;
             case 5: // 32
                 scaled_upper_triang_masked_softmax_warp_backward<input_t, output_t, acc_t, 5>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(grad_input, grad, output, scale, batch_count, softmax_elements_stride, softmax_elements);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(grad_input, grad, output, scale, batch_count, softmax_elements_stride, softmax_elements);
                 break;
             case 6: // 64
                 scaled_upper_triang_masked_softmax_warp_backward<input_t, output_t, acc_t, 6>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(grad_input, grad, output, scale, batch_count, softmax_elements_stride, softmax_elements);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(grad_input, grad, output, scale, batch_count, softmax_elements_stride, softmax_elements);
                 break;
             case 7: // 128
                 scaled_upper_triang_masked_softmax_warp_backward<input_t, output_t, acc_t, 7>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(grad_input, grad, output, scale, batch_count, softmax_elements_stride, softmax_elements);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(grad_input, grad, output, scale, batch_count, softmax_elements_stride, softmax_elements);
                 break;
             case 8: // 256
                 scaled_upper_triang_masked_softmax_warp_backward<input_t, output_t, acc_t, 8>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(grad_input, grad, output, scale, batch_count, softmax_elements_stride, softmax_elements);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(grad_input, grad, output, scale, batch_count, softmax_elements_stride, softmax_elements);
                 break;
             case 9: // 512
                 scaled_upper_triang_masked_softmax_warp_backward<input_t, output_t, acc_t, 9>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(grad_input, grad, output, scale, batch_count, softmax_elements_stride, softmax_elements);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(grad_input, grad, output, scale, batch_count, softmax_elements_stride, softmax_elements);
                 break;
             case 10: // 1024
                 scaled_upper_triang_masked_softmax_warp_backward<input_t, output_t, acc_t, 10>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(grad_input, grad, output, scale, batch_count, softmax_elements_stride, softmax_elements);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(grad_input, grad, output, scale, batch_count, softmax_elements_stride, softmax_elements);
                 break;
             case 11: // 2048
                 scaled_upper_triang_masked_softmax_warp_backward<input_t, output_t, acc_t, 11>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(grad_input, grad, output, scale, batch_count, softmax_elements_stride, softmax_elements);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(grad_input, grad, output, scale, batch_count, softmax_elements_stride, softmax_elements);
                 break;
             default:
                 break;

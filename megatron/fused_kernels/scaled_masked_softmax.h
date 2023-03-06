@@ -17,11 +17,11 @@
 #pragma once
 
 #include <assert.h>
-#include <cuda_fp16.h>
+#include <hip/hip_fp16.h>
 #include <cfloat>
 #include <limits>
 #include <stdint.h>
-#include <cuda_fp16.h>
+#include <hip/hip_fp16.h>
 #include <c10/macros/Macros.h>
 
 namespace {
@@ -86,7 +86,7 @@ struct Max {
 template <typename T>
 __device__ __forceinline__ T WARP_SHFL_XOR_NATIVE(T value, int laneMask, int width = warpSize, unsigned int mask = 0xffffffff)
 {
-#if CUDA_VERSION >= 9000
+#if HIP_VERSION >= 9000
     return __shfl_xor_sync(mask, value, laneMask, width);
 #else
     return __shfl_xor(value, laneMask, width);
@@ -497,55 +497,55 @@ void dispatch_scaled_softmax_forward(
         switch (log2_elements) {
             case 0: // 1
                 scaled_softmax_warp_forward<input_t, output_t, acc_t, 0>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, scale, batch_count, key_seq_len);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, scale, batch_count, key_seq_len);
                 break;
             case 1: // 2
                 scaled_softmax_warp_forward<input_t, output_t, acc_t, 1>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, scale, batch_count, key_seq_len);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, scale, batch_count, key_seq_len);
                 break;
             case 2: // 4
                 scaled_softmax_warp_forward<input_t, output_t, acc_t, 2>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, scale, batch_count, key_seq_len);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, scale, batch_count, key_seq_len);
                 break;
             case 3: // 8
                 scaled_softmax_warp_forward<input_t, output_t, acc_t, 3>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, scale, batch_count, key_seq_len);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, scale, batch_count, key_seq_len);
                 break;
             case 4: // 16
                 scaled_softmax_warp_forward<input_t, output_t, acc_t, 4>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, scale, batch_count, key_seq_len);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, scale, batch_count, key_seq_len);
                 break;
             case 5: // 32
                 scaled_softmax_warp_forward<input_t, output_t, acc_t, 5>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, scale, batch_count, key_seq_len);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, scale, batch_count, key_seq_len);
                 break;
             case 6: // 64
                 scaled_softmax_warp_forward<input_t, output_t, acc_t, 6>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, scale, batch_count, key_seq_len);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, scale, batch_count, key_seq_len);
                 break;
             case 7: // 128
                 scaled_softmax_warp_forward<input_t, output_t, acc_t, 7>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, scale, batch_count, key_seq_len);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, scale, batch_count, key_seq_len);
                 break;
             case 8: // 256
                 scaled_softmax_warp_forward<input_t, output_t, acc_t, 8>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, scale, batch_count, key_seq_len);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, scale, batch_count, key_seq_len);
                 break;
             case 9: // 512
                 scaled_softmax_warp_forward<input_t, output_t, acc_t, 9>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, scale, batch_count, key_seq_len);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, scale, batch_count, key_seq_len);
                 break;
             case 10: // 1024
                 scaled_softmax_warp_forward<input_t, output_t, acc_t, 10>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, scale, batch_count, key_seq_len);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, scale, batch_count, key_seq_len);
                 break;
             case 11: // 2048
                 scaled_softmax_warp_forward<input_t, output_t, acc_t, 11>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, scale, batch_count, key_seq_len);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, scale, batch_count, key_seq_len);
                 break;
             case 12: // 4096
                 scaled_softmax_warp_forward<input_t, output_t, acc_t, 12>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, scale, batch_count, key_seq_len);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, scale, batch_count, key_seq_len);
                 break;
             default:
                 break;
@@ -591,55 +591,55 @@ void dispatch_scaled_masked_softmax_forward(
         switch (log2_elements) {
             case 0: // 1
                 scaled_masked_softmax_warp_forward<input_t, output_t, acc_t, 0>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, mask, scale, batch_count, key_seq_len, pad_batches);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, mask, scale, batch_count, key_seq_len, pad_batches);
                 break;
             case 1: // 2
                 scaled_masked_softmax_warp_forward<input_t, output_t, acc_t, 1>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, mask, scale, batch_count, key_seq_len, pad_batches);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, mask, scale, batch_count, key_seq_len, pad_batches);
                 break;
             case 2: // 4
                 scaled_masked_softmax_warp_forward<input_t, output_t, acc_t, 2>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, mask, scale, batch_count, key_seq_len, pad_batches);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, mask, scale, batch_count, key_seq_len, pad_batches);
                 break;
             case 3: // 8
                 scaled_masked_softmax_warp_forward<input_t, output_t, acc_t, 3>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, mask, scale, batch_count, key_seq_len, pad_batches);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, mask, scale, batch_count, key_seq_len, pad_batches);
                 break;
             case 4: // 16
                 scaled_masked_softmax_warp_forward<input_t, output_t, acc_t, 4>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, mask, scale, batch_count, key_seq_len, pad_batches);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, mask, scale, batch_count, key_seq_len, pad_batches);
                 break;
             case 5: // 32
                 scaled_masked_softmax_warp_forward<input_t, output_t, acc_t, 5>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, mask, scale, batch_count, key_seq_len, pad_batches);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, mask, scale, batch_count, key_seq_len, pad_batches);
                 break;
             case 6: // 64
                 scaled_masked_softmax_warp_forward<input_t, output_t, acc_t, 6>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, mask, scale, batch_count, key_seq_len, pad_batches);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, mask, scale, batch_count, key_seq_len, pad_batches);
                 break;
             case 7: // 128
                 scaled_masked_softmax_warp_forward<input_t, output_t, acc_t, 7>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, mask, scale, batch_count, key_seq_len, pad_batches);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, mask, scale, batch_count, key_seq_len, pad_batches);
                 break;
             case 8: // 256
                 scaled_masked_softmax_warp_forward<input_t, output_t, acc_t, 8>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, mask, scale, batch_count, key_seq_len, pad_batches);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, mask, scale, batch_count, key_seq_len, pad_batches);
                 break;
             case 9: // 512
                 scaled_masked_softmax_warp_forward<input_t, output_t, acc_t, 9>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, mask, scale, batch_count, key_seq_len, pad_batches);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, mask, scale, batch_count, key_seq_len, pad_batches);
                 break;
             case 10: // 1024
                 scaled_masked_softmax_warp_forward<input_t, output_t, acc_t, 10>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, mask, scale, batch_count, key_seq_len, pad_batches);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, mask, scale, batch_count, key_seq_len, pad_batches);
                 break;
             case 11: // 2048
                 scaled_masked_softmax_warp_forward<input_t, output_t, acc_t, 11>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, mask, scale, batch_count, key_seq_len, pad_batches);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, mask, scale, batch_count, key_seq_len, pad_batches);
                 break;
             case 12: // 4096
                 scaled_masked_softmax_warp_forward<input_t, output_t, acc_t, 12>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(dst, src, mask, scale, batch_count, key_seq_len, pad_batches);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(dst, src, mask, scale, batch_count, key_seq_len, pad_batches);
                 break;
             default:
                 break;
@@ -683,55 +683,55 @@ void dispatch_scaled_masked_softmax_backward(
         switch (log2_elements) {
             case 0: // 1
                 scaled_masked_softmax_warp_backward<input_t, output_t, acc_t, 0>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(grad_input, grad, output, scale, batch_count, key_seq_len);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(grad_input, grad, output, scale, batch_count, key_seq_len);
                 break;
             case 1: // 2
                 scaled_masked_softmax_warp_backward<input_t, output_t, acc_t, 1>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(grad_input, grad, output, scale, batch_count, key_seq_len);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(grad_input, grad, output, scale, batch_count, key_seq_len);
                 break;
             case 2: // 4
                 scaled_masked_softmax_warp_backward<input_t, output_t, acc_t, 2>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(grad_input, grad, output, scale, batch_count, key_seq_len);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(grad_input, grad, output, scale, batch_count, key_seq_len);
                 break;
             case 3: // 8
                 scaled_masked_softmax_warp_backward<input_t, output_t, acc_t, 3>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(grad_input, grad, output, scale, batch_count, key_seq_len);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(grad_input, grad, output, scale, batch_count, key_seq_len);
                 break;
             case 4: // 16
                 scaled_masked_softmax_warp_backward<input_t, output_t, acc_t, 4>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(grad_input, grad, output, scale, batch_count, key_seq_len);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(grad_input, grad, output, scale, batch_count, key_seq_len);
                 break;
             case 5: // 32
                 scaled_masked_softmax_warp_backward<input_t, output_t, acc_t, 5>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(grad_input, grad, output, scale, batch_count, key_seq_len);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(grad_input, grad, output, scale, batch_count, key_seq_len);
                 break;
             case 6: // 64
                 scaled_masked_softmax_warp_backward<input_t, output_t, acc_t, 6>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(grad_input, grad, output, scale, batch_count, key_seq_len);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(grad_input, grad, output, scale, batch_count, key_seq_len);
                 break;
             case 7: // 128
                 scaled_masked_softmax_warp_backward<input_t, output_t, acc_t, 7>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(grad_input, grad, output, scale, batch_count, key_seq_len);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(grad_input, grad, output, scale, batch_count, key_seq_len);
                 break;
             case 8: // 256
                 scaled_masked_softmax_warp_backward<input_t, output_t, acc_t, 8>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(grad_input, grad, output, scale, batch_count, key_seq_len);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(grad_input, grad, output, scale, batch_count, key_seq_len);
                 break;
             case 9: // 512
                 scaled_masked_softmax_warp_backward<input_t, output_t, acc_t, 9>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(grad_input, grad, output, scale, batch_count, key_seq_len);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(grad_input, grad, output, scale, batch_count, key_seq_len);
                 break;
             case 10: // 1024
                 scaled_masked_softmax_warp_backward<input_t, output_t, acc_t, 10>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(grad_input, grad, output, scale, batch_count, key_seq_len);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(grad_input, grad, output, scale, batch_count, key_seq_len);
                 break;
             case 11: // 2048
                 scaled_masked_softmax_warp_backward<input_t, output_t, acc_t, 11>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(grad_input, grad, output, scale, batch_count, key_seq_len);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(grad_input, grad, output, scale, batch_count, key_seq_len);
                 break;
 			case 12: // 4096
                 scaled_masked_softmax_warp_backward<input_t, output_t, acc_t, 12>
-                    <<<blocks, threads, 0, at::cuda::getCurrentCUDAStream()>>>(grad_input, grad, output, scale, batch_count, key_seq_len);
+                    <<<blocks, threads, 0, at::hip::getCurrentHIPStream()>>>(grad_input, grad, output, scale, batch_count, key_seq_len);
                 break;
 
             default:

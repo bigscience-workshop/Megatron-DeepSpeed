@@ -34,7 +34,6 @@ def parse_args(extra_args_provider=None, defaults={},
     """Parse all arguments."""
     parser = argparse.ArgumentParser(description='Megatron-LM Arguments',
                                      allow_abbrev=False)
-
     # Standard arguments.
     parser = _add_network_size_args(parser)
     parser = _add_regularization_args(parser)
@@ -67,8 +66,8 @@ def parse_args(extra_args_provider=None, defaults={},
         args = parser.parse_args()
 
     # Distributed args.
-    args.rank = int(os.getenv('RANK', '0'))
-    args.world_size = int(os.getenv("WORLD_SIZE", '1'))
+    #args.rank = int(os.getenv('RANK', '0'))
+    #args.world_size = int(os.getenv("WORLD_SIZE", '1'))
     # Tensor model parallel size.
     args.tensor_model_parallel_size = min(
         args.tensor_model_parallel_size, args.world_size)
@@ -315,7 +314,6 @@ def parse_args(extra_args_provider=None, defaults={},
             import bitsandbytes as bnb
         except ModuleNotFoundError:
             raise ModuleNotFoundError("Please install bitsandbytes from https://github.com/facebookresearch/bitsandbytes.")
-
     _print_args(args)
     return args
 
@@ -746,6 +744,12 @@ def _add_distributed_args(parser):
     group.add_argument('--use-cpu-initialization', action='store_true',
                        default=None, help='If set, affine parallel weights '
                        'initialization uses CPU' )
+    
+    group.add_argument('--rank', default=-1, type=int, help='node rank for distributed training')
+    group.add_argument('--dist_url', type=str, default="env://127.0.0.1:23456")
+    group.add_argument('--world_size', type=int, default=-1, help='number of nodes for distributed training')
+    group.add_argument('--dist_backend', default='nccl', type=str, help='distributed backend')
+
     return parser
 
 

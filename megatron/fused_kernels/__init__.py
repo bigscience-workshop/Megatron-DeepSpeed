@@ -54,8 +54,7 @@ def load(args):
             sources=sources,
             build_directory=buildpath,
             extra_cflags=['-O3',],
-            extra_cuda_cflags=['-O3',
-                               '--use_fast_math'] + extra_cuda_flags,
+            extra_cuda_cflags=['-O3'] + extra_cuda_flags,
             verbose=(args.rank == 0)
         )
                                # '-gencode', 'arch=compute_70,code=sm_70',
@@ -66,9 +65,7 @@ def load(args):
 
     if args.masked_softmax_fusion:
         extra_cuda_flags = ['-U__CUDA_NO_HALF_OPERATORS__',
-                            '-U__CUDA_NO_HALF_CONVERSIONS__',
-                            '--expt-relaxed-constexpr',
-                            '--expt-extended-lambda']
+                            '-U__CUDA_NO_HALF_CONVERSIONS__']
         
         # Upper triangular softmax.
         sources=[srcpath / 'scaled_upper_triang_masked_softmax.cpp',
@@ -87,7 +84,7 @@ def load(args):
     # Mixed precision fused layer norm.
     # =================================
 
-    extra_cuda_flags = ['-maxrregcount=50']
+    extra_cuda_flags = []
     sources=[srcpath / 'layer_norm_cuda.cpp',
              srcpath / 'layer_norm_cuda_kernel.cu']
     fused_mix_prec_layer_norm_cuda = _cpp_extention_load_helper(
@@ -95,10 +92,10 @@ def load(args):
 
 
 def _get_cuda_bare_metal_version(cuda_dir):
-    raw_output = subprocess.check_output([cuda_dir + "/bin/nvcc", "-V"],
+    raw_output = subprocess.check_output([cuda_dir + "/bin/hipcc", "--version"],
                                          universal_newlines=True)
     output = raw_output.split()
-    release_idx = output.index("release") + 1
+    release_idx = output.index("version") + 1
     release = output[release_idx].split(".")
     bare_metal_major = release[0]
     bare_metal_minor = release[1][0]
