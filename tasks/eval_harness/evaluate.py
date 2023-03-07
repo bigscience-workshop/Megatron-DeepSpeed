@@ -22,6 +22,10 @@ from megatron import get_args
 from megatron import print_rank_0
 from megatron import get_tokenizer
 from megatron import mpu
+from megatron.data.t5_dataset import (
+    make_attention_mask_3d,
+    make_history_mask_3d,
+)
 from megatron.training import setup_model_and_optimizer, get_model
 from megatron.mpu.mappings import gather_from_tensor_model_parallel_region
 
@@ -36,6 +40,7 @@ import json
 
 from torch.nn.parallel.distributed import DistributedDataParallel as torchDDP
 from megatron.model.distributed import DistributedDataParallel as LocalDDP
+from megatron.model.gpt_model import GPTModelPipe
 from megatron.model.module import Float16Module
 from deepspeed.runtime.pipe import schedule
 
@@ -54,6 +59,14 @@ class EvalHarnessAdaptor(GPT2LM):
             self.tokenizer.tokenizer.convert_tokens_to_ids(token)
             for token in self._prefix_tokens
         ]
+
+        # TODO More general check for pipelined models would be desirable.
+        self._is_encoder_decoder = not (
+                isinstance(self.model, GPTModelPipe)
+                or hasattr(self.model, 'language_model')
+                and hasattr(self.model.language_model, 'add_decoder')
+                and not self.model.language_model.add_decoder
+        )
 
         # For ds we split into mini batches and then micro batches to keep pipelining api happy.
         # With Megatron we just go to micro_batches directly
@@ -230,31 +243,66 @@ class EvalHarnessAdaptor(GPT2LM):
         else:
             ctxlens = None
 
-        if args.prefix_lm and ctxlens is not None:
-            prefix_indices = get_prefix_indices(
+        # TODO Handle encoder-only
+        if not self._is_encoder_decoder:
+            if args.prefix_lm and ctxlens is not None:
+                prefix_indices = get_prefix_indices(
+                    tokens,
+                    self.EOT_TOKEN_ID,
+                    partial_prefix_indices=ctxlens,
+                    reset_attention_mask=args.reset_attention_mask
+                )
+            else:
+                if args.prefix_lm:
+                    print(
+                        'Warning: requested PrefixLM inputs, but cannot determine '
+                        'prefix length – prefix is empty.'
+                    )
+                prefix_indices = None
+
+            attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
                 tokens,
                 self.EOT_TOKEN_ID,
-                partial_prefix_indices=ctxlens,
-                reset_attention_mask=args.reset_attention_mask
-            )
+                args.reset_position_ids,
+                args.reset_attention_mask,
+                args.eod_mask_loss,
+                prefix_indices=prefix_indices,
+                loss_on_targets_only=False)
+            return (tokens, position_ids, attention_mask), (tokens, loss_mask)
         else:
-            if args.prefix_lm:
-                print(
-                    'Warning: requested PrefixLM inputs, but cannot determine '
-                    'prefix length – prefix is empty.'
-                )
-            prefix_indices = None
+            assert ctxlens is not None
 
-        attention_mask, loss_mask, position_ids = get_ltor_masks_and_position_ids(
-            tokens,
-            self.EOT_TOKEN_ID,
-            args.reset_position_ids,
-            args.reset_attention_mask,
-            args.eod_mask_loss,
-            prefix_indices=prefix_indices,
-            loss_on_targets_only=False)
+            # Split tokens to separate encoder and decoder input.
+            # No BOS token used with eval harness, so we do not need to
+            # worry about the decoder receiving it in mind of the split.
+            enc_tokens = torch.stack([
+                F.pad(tok[:ctxlen], (0, len(tok) - ctxlen), value=0)
+                for (tok, ctxlen) in zip(tokens, ctxlens)
+            ])
+            dec_tokens = torch.stack([
+                F.pad(tok[ctxlen:], (0, ctxlen), value=0)
+                for (tok, ctxlen) in zip(tokens, ctxlens)
+            ])
 
-        return (tokens, position_ids, attention_mask), (tokens, loss_mask)
+            enc_attn_mask = make_attention_mask_3d(enc_tokens, enc_tokens)
+            dec_attn_mask = make_attention_mask_3d(dec_tokens, dec_tokens)
+            dec_attn_mask *= make_history_mask_3d(dec_tokens)
+            enc_dec_attn_mask = make_attention_mask_3d(dec_tokens, enc_tokens)
+
+            loss_mask = torch.ones(
+                dec_tokens.shape[:2],
+                device=dec_tokens.device,
+                dtype=dec_tokens.dtype,
+            )
+            for (i, ctxlen) in enumerate(ctxlens):
+                if ctxlen != 0:
+                    loss_mask[i, -ctxlen] = 0
+
+            return (
+                (enc_tokens, dec_tokens, enc_attn_mask,
+                 dec_attn_mask, enc_dec_attn_mask),
+                (dec_tokens, loss_mask)
+            )
 
     def _model_call(self, inps):
         args = get_args()
@@ -312,6 +360,8 @@ class EvalHarnessAdaptor(GPT2LM):
             unwrapped_model = unwrap_model(self.model, (torchDDP, LocalDDP, Float16Module))
             unwrapped_model.set_input_tensor(input_tensor)
             output = self.model(*self.create_model_inputs((inps, ctxlens))[0])
+            if isinstance(output, tuple):
+                output = output[0]
             send_forward(output)
 
         if mpu.is_pipeline_last_stage():
@@ -365,12 +415,18 @@ def load_ds_checkpoint_and_setup_megatron(args):
     if not os.path.exists(args.load):
         raise ValueError(f"checkpoint path {args.load} doesn't exit")
 
-    ds_checkpoint = DeepSpeedCheckpoint(args.load,
-                                        tp_degree=args.tensor_model_parallel_size,
-                                        pp_degree=args.pipeline_model_parallel_size)
+    try:
+        is_ds_cp = True
+        ds_checkpoint = DeepSpeedCheckpoint(args.load,
+                                            tp_degree=args.tensor_model_parallel_size,
+                                            pp_degree=args.pipeline_model_parallel_size)
 
-
-    cp_args = ds_checkpoint.get_args()
+        cp_args = ds_checkpoint.get_args()
+    except AssertionError:
+        is_ds_cp = False
+        cp_path = os.path.join(args.load, 'mp_rank_00', 'model_optim_rng.pt')
+        state_dict = torch.load(cp_path, map_location='cpu')
+        cp_args = state_dict['args']
     # Merge the current args with the checkpoint args.
     skip_keys = [
         'abort_on_unmet_fused_kernel_constraints',
@@ -418,7 +474,10 @@ def load_ds_checkpoint_and_setup_megatron(args):
 
     # print final arguments.
     _print_args(args)
-    if args.deepspeed:
+    if not is_ds_cp:
+        model = get_model(model_provider)[0]
+        model.load_state_dict(state_dict['model'], strict=True)
+    elif args.deepspeed:
 
         # Hack #3:
         # Loading pipelined models in deepspeed with different TP than it was originally trained on fails
@@ -501,7 +560,8 @@ def main():
     task_list = ALL_TASKS if args.task_list == 'all' else args.task_list.split(',')
     task_dict = tasks.get_task_dict(task_list)
 
-    model.module.activation_checkpoint_interval = 0
+    if hasattr(model, 'module'):
+        model.module.activation_checkpoint_interval = 0
     model._compute_loss = False
     model.fwd_outputs = []
 
