@@ -30,7 +30,7 @@ from megatron.model.utils import attention_mask_func, openai_gelu, erf_gelu
 
 import deepspeed
 
-from .glu_activations import GLU_ACTIVATIONS
+from .glu_activations import GLU_ACTIVATIONS, replaces_linear
 from .positional_embeddings import RotaryEmbedding, apply_rotary_pos_emb_torch, apply_rotary_pos_emb
 
 # flags required to enable jit fusion kernels
@@ -69,19 +69,34 @@ class ParallelMLP(MegatronModule):
         super(ParallelMLP, self).__init__()
         args = get_args()
 
-        # Project to ffn_hidden_size
-        self.dense_h_to_4h = mpu.ColumnParallelLinear(
-            args.hidden_size,
-            # GLU is a special activation that divides the dimension by a factor 2.
-            2 * args.ffn_hidden_size if args.glu_activation else args.ffn_hidden_size,
-            gather_output=False,
-            init_method=init_method,
-            skip_bias_add=True)
+        if args.glu_activation:
+            glu_activation = GLU_ACTIVATIONS[args.glu_activation]
+        else:
+            glu_activation = None
 
+        # Project to ffn_hidden_size
+        if replaces_linear(glu_activation):
+            self.dense_h_to_4h = glu_activation(
+                args.hidden_size,
+                args.ffn_hidden_size,
+                gather_output=False,
+                init_method=init_method)
+        else:
+            self.dense_h_to_4h = mpu.ColumnParallelLinear(
+                args.hidden_size,
+                # GLU is a special activation that divides the dimension by a factor 2.
+                # Only the case for non-T5 GLU.
+                2 * args.ffn_hidden_size if args.glu_activation else args.ffn_hidden_size,
+                gather_output=False,
+                init_method=init_method,
+                skip_bias_add=True)
         self.bias_gelu_fusion = args.bias_gelu_fusion
         self.activation_func = F.gelu
-        if args.glu_activation:
-            self.activation_func = GLU_ACTIVATIONS[args.glu_activation]
+
+        if replaces_linear(glu_activation):
+            self.activation_func = nn.Identity()
+        elif glu_activation:
+            self.activation_func = glu_activation
         elif args.openai_gelu:
             self.activation_func = openai_gelu
         elif args.onnx_safe:
@@ -101,7 +116,9 @@ class ParallelMLP(MegatronModule):
         # [s, b, 4hp]
         intermediate_parallel, bias_parallel = self.dense_h_to_4h(hidden_states)
 
-        if self.bias_gelu_fusion:
+        if bias_parallel is None:
+            intermediate_parallel = self.activation_func(intermediate_parallel)
+        elif self.bias_gelu_fusion:
              intermediate_parallel = \
                      bias_gelu_impl(intermediate_parallel, bias_parallel)
         else:
