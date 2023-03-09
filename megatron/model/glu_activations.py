@@ -55,13 +55,15 @@ class _T5GLUBase(nn.Module):
             out_features,
             bias=bias,
             gather_output=gather_output,
-            init_method=init_method)
+            init_method=init_method,
+        )
         self.nonlinear = mpu.ColumnParallelLinear(
             in_features,
             out_features,
             bias=bias,
             gather_output=gather_output,
-            init_method=init_method)
+            init_method=init_method,
+        )
         self.activation_fn = activation_fn
 
     def forward(self, x):
@@ -75,16 +77,16 @@ class T5LiGLU(_T5GLUBase):
             in_features,
             out_features,
             bias=False,
-            device=None,
-            dtype=None,
+            gather_output=True,
+            init_method=torch.nn.init.xavier_normal_,
     ):
         super().__init__(
             in_features,
             out_features,
             activation_fn=nn.Identity(),
             bias=bias,
-            device=device,
-            dtype=dtype,
+            gather_output=gather_output,
+            init_method=init_method,
         )
 
 
@@ -94,16 +96,16 @@ class T5GEGLU(_T5GLUBase):
             in_features,
             out_features,
             bias=False,
-            device=None,
-            dtype=None,
+            gather_output=True,
+            init_method=torch.nn.init.xavier_normal_,
     ):
         super().__init__(
             in_features,
             out_features,
             activation_fn=F.gelu,
             bias=bias,
-            device=device,
-            dtype=dtype,
+            gather_output=gather_output,
+            init_method=init_method,
         )
 
 
@@ -113,16 +115,16 @@ class T5ReGLU(_T5GLUBase):
             in_features,
             out_features,
             bias=False,
-            device=None,
-            dtype=None,
+            gather_output=True,
+            init_method=torch.nn.init.xavier_normal_,
     ):
         super().__init__(
             in_features,
             out_features,
             activation_fn=F.relu,
             bias=bias,
-            device=device,
-            dtype=dtype,
+            gather_output=gather_output,
+            init_method=init_method,
         )
 
 
@@ -132,16 +134,16 @@ class T5SwiGLU(_T5GLUBase):
             in_features,
             out_features,
             bias=False,
-            device=None,
-            dtype=None,
+            gather_output=True,
+            init_method=torch.nn.init.xavier_normal_,
     ):
         super().__init__(
             in_features,
             out_features,
             activation_fn=F.silu,
             bias=bias,
-            device=device,
-            dtype=dtype,
+            gather_output=gather_output,
+            init_method=init_method,
         )
 
 
