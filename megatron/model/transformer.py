@@ -113,6 +113,7 @@ class ParallelMLP(MegatronModule):
         self.dense_4h_to_h = mpu.RowParallelLinear(
             args.ffn_hidden_size,
             args.hidden_size,
+            bias=not replaces_linear(glu_activation),
             input_is_parallel=True,
             init_method=output_layer_init_method,
             skip_bias_add=True)
@@ -442,8 +443,10 @@ class ParallelAttention(MegatronModule):
 
 
 def bias_dropout_add(x, bias, residual, prob, training):
-    # type: (Tensor, Tensor, Tensor, float, bool) -> Tensor
-    out = torch.nn.functional.dropout(x + bias, p=prob, training=training)
+    # type: (Tensor, Optional[Tensor], Tensor, float, bool) -> Tensor
+    if bias is not None:
+        x = x + bias
+    out = torch.nn.functional.dropout(x, p=prob, training=training)
     out = residual + out
     return out
 
@@ -456,13 +459,13 @@ def get_bias_dropout_add(training):
 
 @torch.jit.script
 def bias_dropout_add_fused_train(x, bias, residual, prob):
-    # type: (Tensor, Tensor, Tensor, float) -> Tensor
+    # type: (Tensor, Optional[Tensor], Tensor, float) -> Tensor
     return bias_dropout_add(x, bias, residual, prob, True)
 
 
 @torch.jit.script
 def bias_dropout_add_fused_inference(x, bias, residual, prob):
-    # type: (Tensor, Tensor, Tensor, float) -> Tensor
+    # type: (Tensor, Optional[Tensor], Tensor, float) -> Tensor
     return bias_dropout_add(x, bias, residual, prob, False)
 
 
@@ -615,7 +618,7 @@ class ParallelTransformerLayer(MegatronModule):
         with torch.enable_grad():
             output = bias_dropout_add_func(
                 mlp_output,
-                mlp_bias.expand_as(residual),
+                mlp_bias.expand_as(residual) if mlp_bias is not None else None,
                 residual,
                 self.hidden_dropout)
 
