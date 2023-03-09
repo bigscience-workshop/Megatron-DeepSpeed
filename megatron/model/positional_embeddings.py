@@ -62,7 +62,7 @@ def fixed_pos_embedding(x, base):
     return torch.cos(sinusoid_inp), torch.sin(sinusoid_inp)
 
 
-class XPos(torch.nn.Module):
+class XPosEmbedding(torch.nn.Module):
     """
     xPos positional embeddings from https://arxiv.org/abs/2212.10554.
     """
