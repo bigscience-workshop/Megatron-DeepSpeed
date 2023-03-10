@@ -151,7 +151,11 @@ def replaces_linear(wrapped_glu_act):
     """Return whether the GLU activation wrapped by `log_debug_usage`
     contains a type.
     """
-    return isinstance(wrapped_glu_act.__closure__[0].cell_contents, type)
+    return (
+        hasattr(wrapped_glu_act, '__closure__')
+        and wrapped_glu_act.__closure__
+        and isinstance(wrapped_glu_act.__closure__[0].cell_contents, type)
+    )
 
 
 liglu = log_debug_usage(logger, "Using GLU activation: LiGLU.")(torch.jit.script(LiGLU()))
