@@ -43,6 +43,7 @@ from megatron.model.distributed import DistributedDataParallel as LocalDDP
 from megatron.model.gpt_model import GPTModelPipe
 from megatron.model.module import Float16Module
 from deepspeed.runtime.pipe import schedule
+from deepspeed.runtime.pipe.engine import PipelineEngine
 
 class EvalHarnessAdaptor(GPT2LM):
     def __init__(self, model, tokenizer):
@@ -63,6 +64,7 @@ class EvalHarnessAdaptor(GPT2LM):
         # TODO More general check for pipelined models would be desirable.
         self._is_encoder_decoder = not (
                 isinstance(self.model, GPTModelPipe)
+                or isinstance(self.model, PipelineEngine)
                 or hasattr(self.model, 'language_model')
                 and hasattr(self.model.language_model, 'add_decoder')
                 and not self.model.language_model.add_decoder
