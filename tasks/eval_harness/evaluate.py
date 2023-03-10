@@ -100,7 +100,7 @@ class EvalHarnessAdaptor(GPT2LM):
     def _prepend_prefix_token_ids(self, tokens):
         if not self._prefix_token_ids:
             pass
-        elif tokens[0] == self.EOT_TOKEN_ID:
+        elif tokens and tokens[0] == self.EOT_TOKEN_ID:
             tokens = tokens[:1] + self._prefix_token_ids + tokens[1:]
         else:
             tokens = self._prefix_token_ids + tokens
