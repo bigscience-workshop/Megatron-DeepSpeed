@@ -170,8 +170,10 @@ class EvalHarnessAdaptor(GPT2LM):
 
                     context_num_truncated = max(
                         total_len - self.max_length + 1, 0)
+                    # Need actual truncated length of context here
+                    # (without prefix tokens).
                     continuation_num_truncated = max(
-                        context_num_truncated - context_len, 0)
+                        context_num_truncated - len(context_enc), 0)
 
                     context_enc = context_enc[context_num_truncated:]
                     continuation_enc = \
