@@ -285,6 +285,15 @@ def get_samples(indexed_dataset, doc_idx, sample_idx, shuffle_idx, idx):
     return sample_list
 
 
+def _get_filename_prefix(data_prefix, name, num_samples, seq_length, seed):
+    _filename = data_prefix
+    _filename += '_{}_indexmap'.format(name)
+    _filename += '_{}ns'.format(num_samples)
+    _filename += '_{}sl'.format(seq_length)
+    _filename += '_{}s'.format(seed)
+    return _filename
+
+
 def build_index_mappings(name, data_prefix, documents, sizes,
                           num_samples, seq_length, seed, cutoff_last_epoch=0.95):
     """Build doc-idx, sample-idx, and shuffle-idx.
@@ -300,11 +309,8 @@ def build_index_mappings(name, data_prefix, documents, sizes,
     np_rng = np.random.RandomState(seed=seed)
 
     # Filename of the index mappings.
-    _filename = data_prefix
-    _filename += '_{}_indexmap'.format(name)
-    _filename += '_{}ns'.format(num_samples)
-    _filename += '_{}sl'.format(seq_length)
-    _filename += '_{}s'.format(seed)
+    _filename = _get_filename_prefix(
+        data_prefix, name, num_samples, seq_length, seed)
     doc_idx_filename = _filename + '_doc_idx.npy'
     sample_idx_filename = _filename + '_sample_idx.npy'
     shuffle_idx_filename = _filename + '_shuffle_idx.npy'
