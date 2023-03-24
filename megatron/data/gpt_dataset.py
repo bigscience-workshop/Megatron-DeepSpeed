@@ -589,8 +589,11 @@ def _build_sample_idx_full_docs(
     the last index into `doc_idx`.
     """
     sample_idx = np.zeros([num_samples], dtype=np.int32)
+    # If we only manage to pack one sample each time, we need this many
+    # epochs.
+    min_epochs = math.ceil(num_samples / len(documents))
 
-    doc_idx = np.empty((0,), dtype=np.int32)
+    doc_idx = _build_doc_idx(documents, min_epochs, np_rng, False)
     # Index into sample_idx.
     sample_index = 0
     # Index into doc_idx.
