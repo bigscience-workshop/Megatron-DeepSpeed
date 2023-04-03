@@ -168,6 +168,7 @@ export CMD=" \
      $DEEPSPEED_ARGS \
     "
 export NODE_RANK
+mkdir -p $(dirname $0)/logs
 
 echo "master_addr:$MASTER_ADDR master_port:$MASTER_PORT nnodes:$NNODES node_rank:$NODE_RANK"
 echo "logfile:$(dirname $0)/logs/${HOSTNAME}.log"

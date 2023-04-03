@@ -156,11 +156,12 @@ export CMD=" \
     "
 
 export NODE_RANK
+mkdir -p $(dirname $0)/logs
 
 echo "CMD:$CMD"
 
 echo "master_addr:$MASTER_ADDR master_port:$MASTER_PORT nnodes:$NNODES node_rank:$NODE_RANK GPUS_PER_NODE:$GPUS_PER_NODE"
-
+echo "logfile:$(dirname $0)/logs/${HOSTNAME}.log"
 
 bash -c '$LAUNCHER --node_rank ${NODE_RANK} $CMD' 2>&1 | tee $(dirname $0)/logs/$NNODES-${GPUS_PER_NODE}-${HOSTNAME}.log
 
