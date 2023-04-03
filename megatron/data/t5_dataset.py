@@ -438,10 +438,12 @@ def create_samples_dict(max_seq_length, max_seq_length_dec):
 def _remove_padding(result_sample, pad_id):
     # Remove padding
     padding_start = np.argmax(result_sample['text_enc'] == pad_id)
-    if padding_start == 0:
-        padding_start = None
     padding_start_dec = np.argmax(result_sample['text_dec'] == pad_id)
-    if padding_start_dec == 0:
+    if padding_start == 0 and padding_start_dec == 0:
+        return
+    elif padding_start == 0:
+        padding_start = None
+    elif padding_start_dec == 0:
         padding_start_dec = None
 
     result_sample['text_enc'] = result_sample['text_enc'][:padding_start]
