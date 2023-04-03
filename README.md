@@ -4,7 +4,7 @@ This is a detached fork of https://github.com/microsoft/Megatron-DeepSpeed, whic
 
 This fork in turn will include direct changes to the models needed for the BigScience project. This is the repo we use for this project.
 
-In addition various code bits and lots of docs are to be found at https://github.com/bigscience-workshop/bigscience.
+In addition various code bits and lots of docs are to be found at https://github.com/EastInsure/bigscience.
 
 Please note that the rest of this page has been trimmed to only include the info relevant to the BigScience project and also updated to usage with the integrated Deepspeed. You will find the original page with all the tables and training info on Bert and T5 [here](https://github.com/NVIDIA/Megatron-LM).
 
@@ -14,9 +14,9 @@ Here is doc with just [instructions to going from 0 to training really fast](sta
 
 # Setup
 
-1. Install `bigscience-workshop/Megatron-DeepSpeed`
+1. Install `EastInsure/Megatron-DeepSpeed`
 ```
-git clone https://github.com/bigscience-workshop/Megatron-DeepSpeed
+git clone https://github.com/EastInsure/Megatron-DeepSpeed
 cd Megatron-DeepSpeed
 pip install -r requirements.txt
 ```
@@ -35,7 +35,7 @@ cd apex
 pip install --global-option="--cpp_ext" --global-option="--cuda_ext" --no-cache -v --disable-pip-version-check .  2>&1 | tee build.log
 ```
 
-(on JZ it's done in a special way, see [here](https://github.com/bigscience-workshop/bigscience/tree/master/jz/envs#apex).)
+(on JZ it's done in a special way, see [here](https://github.com/EastInsure/bigscience/tree/master/jz/envs#apex).)
 
 3. Install `deepspeed`
 
@@ -48,7 +48,7 @@ TORCH_CUDA_ARCH_LIST="7.0" DS_BUILD_CPU_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 p
 
 adjust `TORCH_CUDA_ARCH_LIST="7.0"` to the architecture of your NVIDIA GPU (or just remove it altogether if you are not sure how to find one).
 
-(on JZ it's done in a special way, see [here](https://github.com/bigscience-workshop/bigscience/tree/master/jz/envs#deepspeed).)
+(on JZ it's done in a special way, see [here](https://github.com/EastInsure/bigscience/tree/master/jz/envs#deepspeed).)
 
 
 3. CUDA kernels compilation
@@ -356,7 +356,7 @@ $CMD
 
 ```
 
-on JZ we use a different launching command, see for example the end of  [tr1-13B-round1.slurm](https://github.com/bigscience-workshop/bigscience/blob/master/train/tr1-13B-base/tr1-13B-round1.slurm), but this is also a good fully functional script that you can use. Except it's written for SLURM environment.
+on JZ we use a different launching command, see for example the end of  [tr1-13B-round1.slurm](https://github.com/EastInsure/bigscience/blob/master/train/tr1-13B-base/tr1-13B-round1.slurm), but this is also a good fully functional script that you can use. Except it's written for SLURM environment.
 
 
 
@@ -521,19 +521,3 @@ python tasks/main.py \
 
 Currently the test suite is not yet plugged into CI and needs to be run manually. For more details please see [Testing](tests/README.md).
 
-
-## Contributing
-
-This is a community project and we would love to have your help.
-
-If you are inspired to contribute please see the following entries:
-
-Megatron-DeeepSpeed:
-
-- [Megatron-DeepSpeed Issues](https://github.com/bigscience-workshop/Megatron-DeepSpeed/issues)
-- [Good First Issues](https://github.com/bigscience-workshop/Megatron-DeepSpeed/contribute)
-
-General BigScience:
-
-- [bigscience Issues](https://github.com/bigscience-workshop/bigscience/issues)
-- [Good First Issues](https://github.com/bigscience-workshop/bigscience/contribute)
