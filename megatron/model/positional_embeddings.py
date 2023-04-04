@@ -143,7 +143,7 @@ def apply_xpos_emb(q, k, cos, sin, scale, offset: int = 0):
     scale = scale[offset:q.shape[0] + offset]
     return (
         _apply_xpos_emb(q, cos, sin, scale),
-        _apply_xpos_emb(q, cos, sin, 1.0 / scale),
+        _apply_xpos_emb(k, cos, sin, 1.0 / scale),
     )
 
 
@@ -154,5 +154,5 @@ def apply_xpos_emb_torch(q, k, cos, sin, scale, offset: int = 0):
     scale = scale[offset:q.shape[0] + offset]
     return (
         _apply_xpos_emb(q, cos, sin, scale),
-        _apply_xpos_emb(q, cos, sin, 1.0 / scale),
+        _apply_xpos_emb(k, cos, sin, 1.0 / scale),
     )
