@@ -300,7 +300,7 @@ class EvalHarnessAdaptor(GPT2LM):
             )
             for (i, ctxlen) in enumerate(ctxlens):
                 if ctxlen != 0:
-                    loss_mask[i, -ctxlen] = 0
+                    loss_mask[i, -ctxlen:] = 0
 
             return (
                 (enc_tokens, dec_tokens, enc_attn_mask,
