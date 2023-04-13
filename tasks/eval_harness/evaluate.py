@@ -426,7 +426,7 @@ def load_ds_checkpoint_and_setup_megatron(args):
                                             pp_degree=args.pipeline_model_parallel_size)
 
         cp_args = ds_checkpoint.get_args()
-    except AssertionError:
+    except (AssertionError, ZeroDivisionError):
         is_ds_cp = False
         cp_path = os.path.join(args.load, 'mp_rank_00', 'model_optim_rng.pt')
         state_dict = torch.load(cp_path, map_location='cpu')
