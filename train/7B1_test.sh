@@ -8,7 +8,7 @@ mkdir -p $RUSH_PATH
 CHECKPOINT_PATH=$RUSH_PATH/checkpoint
 TENSORBOARD_PATH=$RUSH_PATH/tensorboard
 LOGS_PATH=$RUSH_PATH/logs
-TOKENIZER_NAME_OR_PATH=/mnt/Megatron-DeepSpeed/bloom_tokenizer
+TOKENIZER_NAME_OR_PATH=$(pwd)/bloom_tokenizer
 
 MASTER_ADDR=$1
 MASTER_PORT=$2
@@ -169,11 +169,13 @@ export CMD=" \
     "
 export NODE_RANK
 mkdir -p $(dirname $0)/logs
+logfile=$(dirname $0)/logs/$NNODES-${GPUS_PER_NODE}-${HOSTNAME}.log
 
-echo "master_addr:$MASTER_ADDR master_port:$MASTER_PORT nnodes:$NNODES node_rank:$NODE_RANK"
-echo "logfile:$(dirname $0)/logs/${HOSTNAME}.log"
+echo "SCRIPT_CMD:$CMD"
+echo "MASTER_ADDR:$MASTER_ADDR MASTER_PORT:$MASTER_PORT NNODES:$NNODES NODE_RANK:$NODE_RANK"
+echo "LOGFILE:$logfile"
 
-bash -c '$LAUNCHER --node_rank ${NODE_RANK} $CMD' 2>&1 | tee $(dirname $0)/logs/$NNODES-${GPUS_PER_NODE}-${HOSTNAME}.log
-
+logfile=$(dirname $0)/logs/$NNODES-${GPUS_PER_NODE}-${HOSTNAME}.log
+bash -c '$LAUNCHER --node_rank ${NODE_RANK} $CMD' > >(tee $logfile) 2>&1
 
 

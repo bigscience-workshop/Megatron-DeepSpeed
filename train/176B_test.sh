@@ -2,13 +2,13 @@
 export OMP_NUM_THREADS=16
 
 DATA_PATH=/mnt/Megatron-DeepSpeed/data/zhihu_100000_text_document
-RUSH_PATH=/mnt/Megatron-DeepSpeed/176B_ft_qb_60w_en_80w
+RUSH_PATH=/mnt/Megatron-DeepSpeed/176B
 mkdir -p $RUSH_PATH
-LOAD_PATH=/mnt/Megatron-DeepSpeed/176B_ft_qb_60w_en_80w/checkpoint
+LOAD_PATH=/mnt/Megatron-DeepSpeed/176B/checkpoint
 CHECKPOINT_PATH=$RUSH_PATH/checkpoint
 TENSORBOARD_PATH=$RUSH_PATH/tensorboard
 LOGS_PATH=$RUSH_PATH/logs
-TOKENIZER_NAME_OR_PATH=/mnt/Megatron-DeepSpeed/bloom_tokenizer
+TOKENIZER_NAME_OR_PATH=$(pwd)/bloom_tokenizer
 
 MASTER_ADDR=$1
 MASTER_PORT=$2
@@ -158,10 +158,13 @@ export CMD=" \
 export NODE_RANK
 mkdir -p $(dirname $0)/logs
 
-echo "CMD:$CMD"
+ogfile=$(dirname $0)/logs/$NNODES-${GPUS_PER_NODE}-${HOSTNAME}.log
 
-echo "master_addr:$MASTER_ADDR master_port:$MASTER_PORT nnodes:$NNODES node_rank:$NODE_RANK GPUS_PER_NODE:$GPUS_PER_NODE"
-echo "logfile:$(dirname $0)/logs/${HOSTNAME}.log"
+echo "SCRIPT_CMD:$CMD"
+echo "MASTER_ADDR:$MASTER_ADDR MASTER_PORT:$MASTER_PORT NNODES:$NNODES NODE_RANK:$NODE_RANK"
+echo "LOGFILE:$logfile"
 
-bash -c '$LAUNCHER --node_rank ${NODE_RANK} $CMD' 2>&1 | tee $(dirname $0)/logs/$NNODES-${GPUS_PER_NODE}-${HOSTNAME}.log
+logfile=$(dirname $0)/logs/$NNODES-${GPUS_PER_NODE}-${HOSTNAME}.log
+bash -c '$LAUNCHER --node_rank ${NODE_RANK} $CMD' > >(tee $logfile) 2>&1
+
 

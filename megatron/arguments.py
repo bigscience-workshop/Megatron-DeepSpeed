@@ -778,7 +778,8 @@ def _add_data_args(parser):
                        ' validation, and test split. For example the split '
                        '`90,5,5` will use 90%% of data for training, 5%% for '
                        'validation and 5%% for test.')
-
+    group.add_argument('--shuffle', action='store_true',
+                       help='if shuffle')
     # option 2 for data loading (mutually exclusive with option1)
 
     # helper class to parse the --xxx-weighted-split-paths

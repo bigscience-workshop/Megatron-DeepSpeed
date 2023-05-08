@@ -27,7 +27,7 @@ from megatron.data.dataset_utils import get_datasets_weights_and_num_samples
 from megatron.data.dataset_utils import get_train_valid_test_split_, get_split_by_range_
 from megatron.data.indexed_dataset import make_dataset as make_indexed_dataset
 
-
+from megatron import get_args
 def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
                                     train_valid_test_num_samples,
                                     seq_length, seed, skip_warmup):
@@ -248,7 +248,10 @@ class GPTDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         # Get the shuffled index.
-        idx = self.shuffle_idx[idx]
+        #idx = self.shuffle_idx[idx]
+        args = get_args()
+        if args.shuffle == True:
+            idx = self.shuffle_idx[idx]
         # Start and end documents and offsets.
         doc_index_f = self.sample_idx[idx][0]
         doc_index_l = self.sample_idx[idx + 1][0]
