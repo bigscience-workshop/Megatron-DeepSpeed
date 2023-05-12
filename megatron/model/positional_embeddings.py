@@ -84,28 +84,28 @@ class XPosEmbedding(torch.nn.Module):
     def forward(self, x, seq_dim=1, seq_len=None):
         if seq_len is None:
             seq_len = x.shape[seq_dim]
+        scale = (
+            self.scale
+            ** (
+                torch.arange(0, seq_len, 1) - seq_len // 2
+            ).to(self.scale).div(self.scale_base)[:, None]
+        )
+
         if (
                 self.max_seq_len_cached is None
                 or (seq_len > self.max_seq_len_cached)
         ):
             self.max_seq_len_cached = seq_len
-            scale = (
-                self.scale
-                ** (
-                    torch.arange(0, seq_len, 1) - seq_len // 2
-                ).to(self.scale).div(self.scale_base)[:, None]
-            )
             cos, sin = fixed_pos_embedding(scale, self.freq_base)
             self.cos_cached = cos
             self.sin_cached = sin
-            self.scale_cached = scale
             if self.precision == torch.bfloat16:
                 self.cos_cached = self.cos_cached.bfloat16()
                 self.sin_cached = self.sin_cached.bfloat16()
         return (
             self.cos_cached[:seq_len],
             self.sin_cached[:seq_len],
-            self.scale_cached[:seq_len],
+            scale,
         )
 
 
