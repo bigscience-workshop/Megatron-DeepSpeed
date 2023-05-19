@@ -40,9 +40,7 @@ def build_tokenizer(args):
                                             vocab_extra_ids=args.vocab_extra_ids)
     elif args.tokenizer_type == 'GPT2BPETokenizer':
         assert args.merge_file is not None
-        tokenizer = _GPT2BPETokenizer(
-            args.vocab_file, args.merge_file, vocab_extra_ids=args.vocab_extra_ids
-        )
+        tokenizer = _GPT2BPETokenizer(args.vocab_file, args.merge_file)
     elif args.tokenizer_type == "PretrainedFromHF":
         assert args.tokenizer_name_or_path is not None
 
@@ -288,36 +286,13 @@ class _BertWordPieceTokenizer(AbstractTokenizer):
 class _GPT2BPETokenizer(AbstractTokenizer):
     """Original GPT2 BPE tokenizer."""
 
-    def __init__(self, vocab_file, merge_file, vocab_extra_ids=0):
+    def __init__(self, vocab_file, merge_file):
         name = 'GPT2 BPE'
         super().__init__(name)
 
         self.tokenizer = GPT2Tokenizer(vocab_file, merge_file, errors='replace',
                                        special_tokens=[], max_len=None)
-        self.eod_id = self.eos_token_id = self.tokenizer.encoder['<|endoftext|>']
-
-        self.bod_id = self.bos_token_id = self.tokenizer.encoder['[EOS]']
-        self.sep_id = self.tokenizer.encoder['[SEP]']
-        self.mask_id = self.tokenizer.encoder['[MASK]']
-        self.pad_id = self.tokenizer.encoder['[PAD]']
-
-        additional_special_tokens = []
-        self._additional_special_tokens = []
-        additional_special_tokens.extend(
-            ["<extra_id_{}>".format(i) for i in range(vocab_extra_ids)])
-        self.add_additional_special_tokens(additional_special_tokens)
-
-    def add_additional_special_tokens(self, tokens_list):
-        setattr(self, "additional_special_tokens", tokens_list)
-        for value in tokens_list:
-            self.add_token(value)
-
-    def add_token(self, token):
-        if token not in self.vocab:
-            self.inv_vocab[self.vocab_size] = token
-            # self.vocab_size comes from len(vocab)
-            # and it will increase as we add elements
-            self.vocab[token] = self.vocab_size
+        self.eod_id = self.tokenizer.encoder['<|endoftext|>']
 
     @property
     def vocab_size(self):
@@ -341,35 +316,6 @@ class _GPT2BPETokenizer(AbstractTokenizer):
     def eod(self):
         return self.eod_id
 
-    @property
-    def bod(self):
-        return self.bod_id
-
-    @property
-    def sep(self):
-        return self.sep_id
-
-    @property
-    def mask(self):
-        return self.mask_id     
-
-    @property
-    def pad(self):
-        return self.pad_id
-
-    @property
-    def additional_special_tokens(self):
-        """ All the additional special tokens you may want to use (list of strings)."""
-        return self._additional_special_tokens
-        
-    @property
-    def additional_special_tokens_ids(self):
-        """ Ids of all the additional special tokens in the vocabulary (list of integers)."""
-        return [self.vocab.get(token) for token in self._additional_special_tokens]
-
-    @additional_special_tokens.setter
-    def additional_special_tokens(self, value):
-        self._additional_special_tokens = value
 
 class _AutoTokenizer(AbstractTokenizer):
     """AutoTokenizer for Hf Pretrained model loading."""
@@ -439,18 +385,6 @@ class _AutoTokenizer(AbstractTokenizer):
     @property
     def eos(self):
         # TODO @thomasw21 might conflict with the notion of <eod>
-        candidate = self.tokenizer.eos_token_id
-        return self._check_token_candidate(candidate)
-
-    @property
-    def bos_token_id(self):
-        """Id of the beginning of sentence token in the vocabulary."""
-        candidate = self.tokenizer.bos_token_id
-        return self._check_token_candidate(candidate)
-
-    @property
-    def eos_token_id(self):
-        """Id of the end of sentence token in the vocabulary."""
         candidate = self.tokenizer.eos_token_id
         return self._check_token_candidate(candidate)
 
