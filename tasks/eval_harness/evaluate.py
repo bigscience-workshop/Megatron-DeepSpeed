@@ -390,6 +390,8 @@ def tasks_args(parser):
     group.add_argument('--intermed_results',  default = False, action='store_true', help='Whether to print & write intermediate results for each task')
     group.add_argument('--bootstrap_iters', type=int, default=100000, help='How many iterations to use for stderr estimation')
     group.add_argument('--micro_bs_multiplier', type=int, default=1, help='Increase the global batch size to remove bubble when pipeline parallel')
+    group.add_argument('--fewshots', type=int, default=0, help='Num fewshots')
+    group.add_argument('--limit', type=int, default=None, help='Limit samples')
     return parser
 
 from megatron.global_vars import _parse_args
@@ -398,6 +400,10 @@ def main():
     # parse the megatron args. But wait with initalizing megatron.
     # avoid printing the arguments, since they will later be overridden.
     args = _parse_args(tasks_args)
+    if os.path.exists(args.results_path):
+        print("Exists ", args.results_path)
+        exit()
+
     load_path = args.load
     model = load_ds_checkpoint_and_setup_megatron(args)
 
@@ -422,11 +428,11 @@ def main():
         global_results = {"results": {}, "versions": {}}
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
         iteration_id = load_path.split("/")[-1].replace("/", "")
-        results_path = args.results_path.replace(".json", f"_lm-eval_{iteration_id}_{timestamp}.json")
+        results_path = args.results_path#.replace(".json", f"_lm-eval_{iteration_id}_{timestamp}_{args.fewshots}shots.json")
         # Backup file in case of interruption during writing
-        results_path_backup = args.results_path.replace(".json", f"_lm-eval_{iteration_id}_{timestamp}_backup.json")
+        results_path_backup = args.results_path.replace(".json", f"_lm-eval_{iteration_id}_{timestamp}_{args.fewshots}shots_backup.json")
         for task_name, task in task_dict.items():
-            results = evaluator.evaluate(adaptor, {task_name: task}, False, 0, None, bootstrap_iters=args.bootstrap_iters)
+            results = evaluator.evaluate(adaptor, {task_name: task}, False, args.fewshots, bootstrap_iters=args.bootstrap_iters, limit=args.limit)
             global_results["results"] = {**global_results["results"], **results["results"]}
             global_results["versions"] = {**global_results["versions"], **results["versions"]}
             if mpu.is_pipeline_last_stage() and mpu.get_tensor_model_parallel_rank() == 0:
@@ -436,7 +442,7 @@ def main():
                 with open(results_path_backup, 'w') as outfile:
                     json.dump(global_results, outfile, indent=4)
     else:
-        global_results = evaluator.evaluate(adaptor, task_dict, False, 0, None, bootstrap_iters=args.bootstrap_iters)
+        global_results = evaluator.evaluate(adaptor, task_dict, False, args.fewshots, bootstrap_iters=args.bootstrap_iters, limit=args.limit)
         if mpu.is_pipeline_last_stage() and mpu.get_tensor_model_parallel_rank() == 0:
             print(json.dumps(global_results, indent=2))
             with open(args.results_path, 'w') as outfile:

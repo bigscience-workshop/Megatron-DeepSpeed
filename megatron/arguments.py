@@ -649,7 +649,8 @@ def _add_learning_rate_args(parser):
                        'from checkpoint and ignore input arguments.')
     group.add_argument('--universal-checkpoint', action='store_true',
                         help='Loading a universal format checkpoint.')
-
+    group.add_argument('--reset-progress', action='store_true', default=None,
+                        help='Reset iteration to 0 & do not load args.') 
     return parser
 
 
