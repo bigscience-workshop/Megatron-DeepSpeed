@@ -72,9 +72,9 @@ def parse_args(extra_args_provider=None, defaults={},
     # Tensor model parallel size.
     args.tensor_model_parallel_size = min(
         args.tensor_model_parallel_size, args.world_size)
-    assert args.world_size % args.tensor_model_parallel_size == 0, 'world size'\
-        ' ({}) is not divisible by tensor model parallel size ({})'.format(
-            args.world_size, args.tensor_model_parallel_size)
+    assert args.world_size % args.tensor_model_parallel_size == 0, 'world size' \
+                                                                   ' ({}) is not divisible by tensor model parallel size ({})'.format(
+        args.world_size, args.tensor_model_parallel_size)
     # Pipeline model parallel size.
     args.pipeline_model_parallel_size = min(
         args.pipeline_model_parallel_size,
@@ -82,23 +82,24 @@ def parse_args(extra_args_provider=None, defaults={},
     # Checks.
     model_parallel_size = args.pipeline_model_parallel_size * \
                           args.tensor_model_parallel_size
-    assert args.world_size % model_parallel_size == 0, 'world size is not'\
-        ' divisible by tensor parallel size ({}) times pipeline parallel ' \
-        'size ({})'.format(args.world_size, args.tensor_model_parallel_size,
-                           args.pipeline_model_parallel_size)
+    assert args.world_size % model_parallel_size == 0, 'world size is not' \
+                                                       ' divisible by tensor parallel size ({}) times pipeline parallel ' \
+                                                       'size ({})'.format(args.world_size,
+                                                                          args.tensor_model_parallel_size,
+                                                                          args.pipeline_model_parallel_size)
     args.data_parallel_size = args.world_size // model_parallel_size
     if args.rank == 0:
         print('using world size: {}, data-parallel-size: {}, '
               'tensor-model-parallel size: {}, '
               'pipeline-model-parallel size: {} '.format(
-                  args.world_size, args.data_parallel_size,
-                  args.tensor_model_parallel_size,
-                  args.pipeline_model_parallel_size), flush=True)
+            args.world_size, args.data_parallel_size,
+            args.tensor_model_parallel_size,
+            args.pipeline_model_parallel_size), flush=True)
 
     # --data-path and --train-weighted-splits-paths
-    message = "Data loading Mode 1: --data-path and --split "\
-            "and Mode 2: --(train|valid|test)-weighted-split-paths"\
-            "are mutually exclusive i.e. cannot be set together."
+    message = "Data loading Mode 1: --data-path and --split " \
+              "and Mode 2: --(train|valid|test)-weighted-split-paths" \
+              "are mutually exclusive i.e. cannot be set together."
 
     if args.data_path:
         assert args.train_weighted_split_paths is None, message
@@ -116,20 +117,18 @@ def parse_args(extra_args_provider=None, defaults={},
             args.split = "969, 30, 1"
 
     if args.train_weighted_split_paths or args.valid_weighted_split_paths or \
-                args.test_weighted_split_paths:
+            args.test_weighted_split_paths:
         assert args.data_path is None and args.split is None, message
-
-
 
     # Deprecated arguments
     assert args.batch_size is None, '--batch-size argument is no longer ' \
-        'valid, use --micro-batch-size instead'
+                                    'valid, use --micro-batch-size instead'
     del args.batch_size
     assert args.warmup is None, '--warmup argument is no longer valid, use ' \
-        '--lr-warmup-fraction instead'
+                                '--lr-warmup-fraction instead'
     del args.warmup
     assert args.model_parallel_size is None, '--model-parallel-size is no ' \
-        'longer valid, use --tensor-model-parallel-size instead'
+                                             'longer valid, use --tensor-model-parallel-size instead'
     del args.model_parallel_size
 
     # Set input defaults.
@@ -142,7 +141,7 @@ def parse_args(extra_args_provider=None, defaults={},
                 print('WARNING: overriding default arguments for {key}:{v} \
                        with {key}:{v2}'.format(key=key, v=defaults[key],
                                                v2=getattr(args, key)),
-                                               flush=True)
+                      flush=True)
         else:
             setattr(args, key, defaults[key])
 
@@ -276,7 +275,7 @@ def parse_args(extra_args_provider=None, defaults={},
     # Activation checkpointing.
     if args.distribute_checkpointed_activations:
         assert args.checkpoint_activations, \
-            'for distribute-checkpointed-activations to work you '\
+            'for distribute-checkpointed-activations to work you ' \
             'need to enable checkpoint-activations'
 
     args.curriculum_learning = False
@@ -296,7 +295,7 @@ def parse_args(extra_args_provider=None, defaults={},
             if len(range_) == 2:
                 start, end = range_
                 assert end >= start, \
-                "end of skip range cannot be smaller than start of skip range"
+                    "end of skip range cannot be smaller than start of skip range"
                 # merge overlapping intervals (e.g. 1-5 2-6 -> 1-6)
                 if not skip_train_iteration_range:
                     skip_train_iteration_range.append([start, end])
@@ -314,7 +313,8 @@ def parse_args(extra_args_provider=None, defaults={},
         try:
             import bitsandbytes as bnb
         except ModuleNotFoundError:
-            raise ModuleNotFoundError("Please install bitsandbytes from https://github.com/facebookresearch/bitsandbytes.")
+            raise ModuleNotFoundError(
+                "Please install bitsandbytes from https://github.com/facebookresearch/bitsandbytes.")
 
     _print_args(args)
     return args
@@ -331,9 +331,9 @@ def _print_args(args):
             str_list.append('  {} {} {}'.format(arg, dots, getattr(args, arg)))
 
         if args.log_path is not None:
-            with open(os.path.join(args.log_path,f'args_{time.strftime("%Y-%m-%dT%H:%M:%S")}.txt'), 'w') as f:
+            with open(os.path.join(args.log_path, f'args_{time.strftime("%Y-%m-%dT%H:%M:%S")}.txt'), 'w') as f:
                 for arg in sorted(str_list, key=lambda x: x.lower()):
-                    f.write(arg+"\n")
+                    f.write(arg + "\n")
                     print(arg, flush=True)
         else:
             for arg in sorted(str_list, key=lambda x: x.lower()):
@@ -355,43 +355,43 @@ def _add_network_size_args(parser):
                        help='Tansformer hidden size.')
     group.add_argument('--ffn-hidden-size', type=int, default=None,
                        help='Transformer Feed-Forward Network hidden size. '
-                       'This is set to 4*hidden-size if not provided')
+                            'This is set to 4*hidden-size if not provided')
     group.add_argument('--num-attention-heads', type=int, default=None,
                        help='Number of transformer attention heads.')
     group.add_argument('--kv-channels', type=int, default=None,
                        help='Projection weights dimension in multi-head '
-                       'attention. This is set to '
-                       '   args.hidden_size // args.num_attention_heads '
-                       'if not provided.')
+                            'attention. This is set to '
+                            '   args.hidden_size // args.num_attention_heads '
+                            'if not provided.')
     group.add_argument('--max-position-embeddings', type=int, default=None,
                        help='Maximum number of position embeddings to use. '
-                       'This is the size of position embedding.')
+                            'This is the size of position embedding.')
     group.add_argument('--make-vocab-size-divisible-by', type=int, default=128,
                        help='Pad the vocab size to be divisible by this value.'
-                       'This is added for computational efficieny reasons.')
+                            'This is added for computational efficieny reasons.')
     group.add_argument('--pad-vocab-size-to', type=int, default=None,
                        help='Pad the vocab size to this value.'
-                       'This value must be greater than the initial size of the tokenizer'
-                       ', needs to be divisible by TP size and `make-vocab-size-divisible-by`.')
+                            'This value must be greater than the initial size of the tokenizer'
+                            ', needs to be divisible by TP size and `make-vocab-size-divisible-by`.')
     group.add_argument('--layernorm-epsilon', type=float, default=1e-5,
                        help='Layer norm epsilon.')
     group.add_argument('--sync-tp-duplicated-parameters', action='store_true',
                        help='Force syncing duplicated params across TP ranks in forward. '
-                       'This is a workaround for an unresolved bug leading to TP ranks '
-                       'getting out of sync with each other.')
+                            'This is a workaround for an unresolved bug leading to TP ranks '
+                            'getting out of sync with each other.')
     group.add_argument('--apply-residual-connection-post-layernorm',
                        action='store_true',
                        help='If set, use original BERT residula connection '
-                       'ordering.')
+                            'ordering.')
     group.add_argument('--embed-layernorm', action='store_true',
                        help='use layernorm for embedding')
     group.add_argument('--openai-gelu', action='store_true',
                        help='Use OpenAIs GeLU implementation. This option'
-                       'should not be used unless for backward compatibility'
-                       'reasons.')
+                            'should not be used unless for backward compatibility'
+                            'reasons.')
     group.add_argument('--onnx-safe', type=bool, required=False,
                        help='Use workarounds for known problems with '
-                       'Torch ONNX exporter')
+                            'Torch ONNX exporter')
     group.add_argument('--bert-no-binary-head', action='store_false',
                        help='Disable BERT binary head.',
                        dest='bert_binary_head')
@@ -409,11 +409,10 @@ def _add_network_size_args(parser):
                        help='path to look for a kill switch, which if found will automatically exit the program'
                        )
 
-
     group.add_argument('--log-level', type=str, choices=list(log_levels.keys()),
                        help="Logger log level to use on the main process. Possible choices are the log levels as strings: 'debug', "
-                       "'info', 'warning', 'error' and 'critical', plus a 'passive' level which doesn't set anything and lets the "
-                       "application set the level."
+                            "'info', 'warning', 'error' and 'critical', plus a 'passive' level which doesn't set anything and lets the "
+                            "application set the level."
                        )
     group.add_argument('--log-level-replica', type=str, choices=list(log_levels.keys()),
                        help="Logger log level to use on replicas. Same choices as ``log_level``"
@@ -432,8 +431,8 @@ def _add_logging_args(parser):
                        help='Report to tensorboard interval.')
     group.add_argument('--tensorboard-queue-size', type=int, default=1000,
                        help='Size of the tensorboard queue for pending events '
-                       'and summaries before one of the ‘add’ calls forces a '
-                       'flush to disk.')
+                            'and summaries before one of the ‘add’ calls forces a '
+                            'flush to disk.')
     group.add_argument('--log-timers-to-tensorboard', action='store_true',
                        help='If set, write timers to tensorboard.')
     group.add_argument('--log-batch-size-to-tensorboard', action='store_true',
@@ -449,7 +448,7 @@ def _add_logging_args(parser):
     group.add_argument('--log-validation-ppl-to-tensorboard',
                        action='store_true',
                        help='If set, write validation perplexity to '
-                       'tensorboard.')
+                            'tensorboard.')
 
     return parser
 
@@ -467,13 +466,13 @@ def _add_regularization_args(parser):
                        help='Gradient clipping based on global L2 norm.')
     group.add_argument('--adam-beta1', type=float, default=0.9,
                        help='First coefficient for computing running averages '
-                       'of gradient and its square')
+                            'of gradient and its square')
     group.add_argument('--adam-beta2', type=float, default=0.999,
                        help='Second coefficient for computing running averages '
-                       'of gradient and its square')
+                            'of gradient and its square')
     group.add_argument('--adam-eps', type=float, default=1e-08,
                        help='Term added to the denominator to improve'
-                       'numerical stability')
+                            'numerical stability')
     group.add_argument('--sgd-momentum', type=float, default=0.9,
                        help='Momentum factor for sgd')
 
@@ -485,55 +484,55 @@ def _add_training_args(parser):
 
     group.add_argument('--micro-batch-size', type=int, default=None,
                        help='Batch size per model instance (local batch size). '
-                       'Global batch size is local batch size times data '
-                       'parallel size times number of micro batches.')
+                            'Global batch size is local batch size times data '
+                            'parallel size times number of micro batches.')
     group.add_argument('--batch-size', type=int, default=None,
                        help='Old batch size parameter, do not use. '
-                       'Use --micro-batch-size instead')
+                            'Use --micro-batch-size instead')
     group.add_argument('--global-batch-size', type=int, default=None,
                        help='Training batch size. If set, it should be a '
-                       'multiple of micro-batch-size times data-parallel-size. '
-                       'If this value is None, then '
-                       'use micro-batch-size * data-parallel-size as the '
-                       'global batch size. This choice will result in 1 for '
-                       'number of micro-batches.')
+                            'multiple of micro-batch-size times data-parallel-size. '
+                            'If this value is None, then '
+                            'use micro-batch-size * data-parallel-size as the '
+                            'global batch size. This choice will result in 1 for '
+                            'number of micro-batches.')
     group.add_argument('--rampup-batch-size', nargs='*', default=None,
                        help='Batch size ramp up with the following values:'
-                       '  --rampup-batch-size <start batch size> '
-                       '                      <batch size increment> '
-                       '                      <ramp-up samples> '
-                       'For example: '
-                       '   --rampup-batch-size 16 8 300000 '
-                       '   --global-batch-size 1024 '
-                       'will start with global batch size 16 and over '
-                       ' (1024 - 16) / 8 = 126 intervals will increase '
-                       'the batch size linearly to 1024. In each interval '
-                       'we will use approximately 300000 / 126 = 2380 samples.')
+                            '  --rampup-batch-size <start batch size> '
+                            '                      <batch size increment> '
+                            '                      <ramp-up samples> '
+                            'For example: '
+                            '   --rampup-batch-size 16 8 300000 '
+                            '   --global-batch-size 1024 '
+                            'will start with global batch size 16 and over '
+                            ' (1024 - 16) / 8 = 126 intervals will increase '
+                            'the batch size linearly to 1024. In each interval '
+                            'we will use approximately 300000 / 126 = 2380 samples.')
     group.add_argument('--checkpoint-activations', action='store_true',
                        help='Checkpoint activation to allow for training '
-                       'with larger models, sequences, and batch sizes.')
+                            'with larger models, sequences, and batch sizes.')
     group.add_argument('--distribute-checkpointed-activations',
                        action='store_true',
                        help='If set, distribute checkpointed activations '
-                       'across model parallel group.')
+                            'across model parallel group.')
     group.add_argument('--checkpoint-num-layers', type=int, default=1,
                        help='chunk size (number of layers) for checkpointing.')
     group.add_argument('--train-iters', type=int, default=None,
                        help='Total number of iterations to train over all '
-                       'training runs. Note that either train-iters or '
-                       'train-samples should be provided.')
+                            'training runs. Note that either train-iters or '
+                            'train-samples should be provided.')
     group.add_argument('--train-samples', type=int, default=None,
                        help='Total number of samples to train over all '
-                       'training runs. Note that either train-iters or '
-                       'train-samples should be provided.')
+                            'training runs. Note that either train-iters or '
+                            'train-samples should be provided.')
     group.add_argument('--train-tokens', type=int, default=None,
                        help='Total number of tokens to train over all '
-                       'training runs.')
+                            'training runs.')
     group.add_argument('--log-interval', type=int, default=100,
                        help='Report loss and timing interval.')
     group.add_argument('--exit-interval', type=int, default=None,
                        help='Exit the program after the iteration is divisible '
-                       'by this value.')
+                            'by this value.')
     group.add_argument('--exit-duration-in-mins', type=int, default=None,
                        help='Exit the program after this many minutes.')
     group.add_argument('--tensorboard-dir', type=str, default=None,
@@ -541,7 +540,7 @@ def _add_training_args(parser):
     group.add_argument('--no-masked-softmax-fusion',
                        action='store_false',
                        help='Disable fusion of query_key_value scaling, '
-                       'masking, and softmax.',
+                            'masking, and softmax.',
                        dest='masked_softmax_fusion')
     group.add_argument('--no-bias-gelu-fusion', action='store_false',
                        help='Disable bias and gelu fusion.',
@@ -554,7 +553,7 @@ def _add_training_args(parser):
                        help='Optimizer function')
     group.add_argument('--use-bnb-optimizer', action='store_true',
                        help='Use bitsandbytes optimizer for efficient training,'
-                       'please refer https://github.com/facebookresearch/bitsandbytes.',
+                            'please refer https://github.com/facebookresearch/bitsandbytes.',
                        dest='use_bnb_optimizer')
     group.add_argument('--dataloader-type', type=str, default=None,
                        choices=['single', 'cyclic'],
@@ -567,8 +566,8 @@ def _add_training_args(parser):
                        help='Write CodeCarbon logs to this directory.')
     group.add_argument('--eval-only', type=bool, required=False,
                        help='If set to True, no train step will be performed.'
-                       'and only the evaluation on the `valid` and `test` sets '
-                       'will be performed' )
+                            'and only the evaluation on the `valid` and `test` sets '
+                            'will be performed')
     group.add_argument('--skip-train-iteration-range', type=str, nargs='+', default=None,
                        help='Iteration ranges to skip. The values are one or more dash-separated ranges. e.g., 101-200 251-300.')
     group.add_argument('--inference', action='store_true',
@@ -586,10 +585,10 @@ def _add_initialization_args(parser):
 
     group.add_argument('--seed', type=int, default=1234,
                        help='Random seed used for python, numpy, '
-                       'pytorch, and cuda.')
+                            'pytorch, and cuda.')
     group.add_argument('--init-method-std', type=float, default=0.02,
                        help='Standard deviation of the zero mean normal '
-                       'distribution used for weight initialization.')
+                            'distribution used for weight initialization.')
     group.add_argument('--init-method-xavier-uniform', action='store_true',
                        help='Enable Xavier uniform parameter initialization')
 
@@ -601,48 +600,48 @@ def _add_learning_rate_args(parser):
 
     group.add_argument('--lr', type=float, default=None,
                        help='Initial learning rate. Depending on decay style '
-                       'and initial warmup, the learing rate at each '
-                       'iteration would be different.')
+                            'and initial warmup, the learing rate at each '
+                            'iteration would be different.')
     group.add_argument('--lr-decay-style', type=str, default='linear',
                        choices=['constant', 'linear', 'cosine'],
                        help='Learning rate decay function.')
     group.add_argument('--lr-decay-iters', type=int, default=None,
                        help='number of iterations to decay learning rate over,'
-                       ' If None defaults to `--train-iters`')
+                            ' If None defaults to `--train-iters`')
     group.add_argument('--lr-decay-samples', type=int, default=None,
                        help='number of samples to decay learning rate over,'
-                       ' If None defaults to `--train-samples`')
+                            ' If None defaults to `--train-samples`')
     group.add_argument('--lr-decay-tokens', type=int, default=None,
                        help='number of tokens to decay learning rate over,'
-                       ' If not None will override iter/sample-based decay')
+                            ' If not None will override iter/sample-based decay')
     group.add_argument('--lr-warmup-fraction', type=float, default=None,
                        help='fraction of lr-warmup-(iters/samples) to use '
-                       'for warmup (as a float)')
+                            'for warmup (as a float)')
     group.add_argument('--lr-warmup-iters', type=int, default=0,
                        help='number of iterations to linearly warmup '
-                       'learning rate over.')
+                            'learning rate over.')
     group.add_argument('--lr-warmup-samples', type=int, default=0,
                        help='number of samples to linearly warmup '
-                       'learning rate over.')
+                            'learning rate over.')
     group.add_argument('--warmup', type=int, default=None,
                        help='Old lr warmup argument, do not use. Use one of the'
-                       '--lr-warmup-* arguments above')
+                            '--lr-warmup-* arguments above')
     group.add_argument('--min-lr', type=float, default=0.0,
                        help='Minumum value for learning rate. The scheduler'
-                       'clip values below this threshold.')
+                            'clip values below this threshold.')
     group.add_argument('--override-lr-scheduler', action='store_true',
                        help='Reset the values of the scheduler (learning rate,'
-                       'warmup iterations, minimum learning rate, maximum '
-                       'number of iterations, and decay style from input '
-                       'arguments and ignore values from checkpoints. Note'
-                       'that all the above values will be reset.')
+                            'warmup iterations, minimum learning rate, maximum '
+                            'number of iterations, and decay style from input '
+                            'arguments and ignore values from checkpoints. Note'
+                            'that all the above values will be reset.')
     group.add_argument('--use-checkpoint-lr-scheduler', action='store_true',
                        help='Use checkpoint to set the values of the scheduler '
-                       '(learning rate, warmup iterations, minimum learning '
-                       'rate, maximum number of iterations, and decay style '
-                       'from checkpoint and ignore input arguments.')
+                            '(learning rate, warmup iterations, minimum learning '
+                            'rate, maximum number of iterations, and decay style '
+                            'from checkpoint and ignore input arguments.')
     group.add_argument('--universal-checkpoint', action='store_true',
-                        help='Loading a universal format checkpoint.')
+                       help='Loading a universal format checkpoint.')
 
     return parser
 
@@ -660,14 +659,16 @@ def _add_checkpointing_args(parser):
                        help='Do not save current rng state.')
     group.add_argument('--load', type=str, default=None,
                        help='Directory containing a model checkpoint.')
+    group.add_argument('--tag', type=str, default=None,
+                       help='Checkpoint version used by deepspeed.runtime.engine.load_checkpoint (step dir under --load dir)')
     group.add_argument('--no-load-optim', action='store_true', default=None,
                        help='Do not load optimizer when loading checkpoint.')
     group.add_argument('--no-load-rng', action='store_true', default=None,
                        help='Do not load rng state when loading checkpoint.')
     group.add_argument('--finetune', action='store_true',
                        help='Load model for finetuning. Do not load optimizer '
-                       'or rng state from checkpoint and set iteration to 0. '
-                       'Assumed when loading a release checkpoint.')
+                            'or rng state from checkpoint and set iteration to 0. '
+                            'Assumed when loading a release checkpoint.')
 
     return parser
 
@@ -681,9 +682,9 @@ def _add_mixed_precision_args(parser):
                        help='Run model in bfloat16 mode.')
     group.add_argument('--loss-scale', type=float, default=None,
                        help='Static loss scaling, positive power of 2 '
-                       'values can improve fp16 convergence. If None, dynamic'
-                       'loss scaling is used.')
-    group.add_argument('--initial-loss-scale', type=float, default=2**32,
+                            'values can improve fp16 convergence. If None, dynamic'
+                            'loss scaling is used.')
+    group.add_argument('--initial-loss-scale', type=float, default=2 ** 32,
                        help='Initial loss-scale for dynamic loss scaling.')
     group.add_argument('--min-loss-scale', type=float, default=1.0,
                        help='Minimum loss scale for dynamic loss scale.')
@@ -698,14 +699,14 @@ def _add_mixed_precision_args(parser):
                        dest='apply_query_key_layer_scaling')
     group.add_argument('--attention-softmax-in-fp32', action='store_true',
                        help='Run attention masking and softmax in fp32. '
-                       'This flag is ignored unless '
-                       '--no-query-key-layer-scaling is specified.')
+                            'This flag is ignored unless '
+                            '--no-query-key-layer-scaling is specified.')
     group.add_argument('--accumulate-allreduce-grads-in-fp32',
                        action='store_true',
                        help='Gradient accumulation and all-reduce in fp32.')
     group.add_argument('--fp16-lm-cross-entropy', action='store_true',
                        help='Move the cross entropy unreduced loss calculation'
-                       'for lm head to fp16.')
+                            'for lm head to fp16.')
 
     return parser
 
@@ -719,7 +720,7 @@ def _add_distributed_args(parser):
                        help='Degree of pipeline model parallelism.')
     group.add_argument('--model-parallel-size', type=int, default=None,
                        help='Old model parallel argument, do not use. Use '
-                       '--tensor-model-parallel-size instead.')
+                            '--tensor-model-parallel-size instead.')
     group.add_argument('--num-layers-per-virtual-pipeline-stage', type=int, default=None,
                        help='Number of layers per virtual pipeline stage')
     group.add_argument('--distributed-backend', default='nccl',
@@ -728,10 +729,10 @@ def _add_distributed_args(parser):
     group.add_argument('--DDP-impl', default='local',
                        choices=['local', 'torch'],
                        help='which DistributedDataParallel implementation '
-                       'to use.')
+                            'to use.')
     group.add_argument('--use-contiguous-buffers-in-ddp', action='store_true',
                        help='If set, use contiguous buffer in DDP. Note that '
-                       'this option only works woth local DDP.' )
+                            'this option only works woth local DDP.')
     group.add_argument('--no-scatter-gather-tensors-in-pipeline', action='store_false',
                        help='Use scatter/gather to optimize communication of tensors in pipeline',
                        dest='scatter_gather_tensors_in_pipeline')
@@ -739,13 +740,13 @@ def _add_distributed_args(parser):
                        help='local rank passed from distributed launcher.')
     group.add_argument('--lazy-mpu-init', type=bool, required=False,
                        help='If set to True, initialize_megatron() '
-                       'skips DDP initialization and returns function to '
-                       'complete it instead.Also turns on '
-                       '--use-cpu-initialization flag. This is for '
-                       'external DDP manager.' )
+                            'skips DDP initialization and returns function to '
+                            'complete it instead.Also turns on '
+                            '--use-cpu-initialization flag. This is for '
+                            'external DDP manager.')
     group.add_argument('--use-cpu-initialization', action='store_true',
                        default=None, help='If set, affine parallel weights '
-                       'initialization uses CPU' )
+                                          'initialization uses CPU')
     return parser
 
 
@@ -754,10 +755,10 @@ def _add_validation_args(parser):
 
     group.add_argument('--eval-iters', type=int, default=100,
                        help='Number of iterations to run for evaluation'
-                       'validation/test for.')
+                            'validation/test for.')
     group.add_argument('--eval-interval', type=int, default=1000,
                        help='Interval between running evaluation on '
-                       'validation set.')
+                            'validation set.')
 
     return parser
 
@@ -765,19 +766,18 @@ def _add_validation_args(parser):
 def _add_data_args(parser):
     group = parser.add_argument_group(title='data and dataloader')
 
-
     # option 1 for data loading  (mutually exclusive with option2)
     group.add_argument('--data-path', nargs='*', default=None,
                        help='Path to the training dataset. Accepted format:'
-                       '1) a single data path, 2) multiple datasets in the'
-                       'form: dataset1-weight dataset1-path dataset2-weight '
-                       'dataset2-path ...')
+                            '1) a single data path, 2) multiple datasets in the'
+                            'form: dataset1-weight dataset1-path dataset2-weight '
+                            'dataset2-path ...')
 
     group.add_argument('--split', type=str, default=None,
                        help='Comma-separated list of proportions for training,'
-                       ' validation, and test split. For example the split '
-                       '`90,5,5` will use 90%% of data for training, 5%% for '
-                       'validation and 5%% for test.')
+                            ' validation, and test split. For example the split '
+                            '`90,5,5` will use 90%% of data for training, 5%% for '
+                            'validation and 5%% for test.')
 
     # option 2 for data loading (mutually exclusive with option1)
 
@@ -796,7 +796,7 @@ def _add_data_args(parser):
             'where START < END'
             for v in values:
                 # each prefix consists several datasets separated by commas
-                prefix = ":".join(v.split(":")[1:]) # remove GIVEN_NAME
+                prefix = ":".join(v.split(":")[1:])  # remove GIVEN_NAME
                 datasets = prefix.split(",")
                 # check if each dataset is formatted like `WEIGHT START:END PATH`
                 for d in datasets:
@@ -822,42 +822,42 @@ def _add_data_args(parser):
             setattr(args, self.dest, paths)
             setattr(args, self.dest.replace("paths", "weights"), weights)
             setattr(args, self.dest.replace("paths", "splits"), splits)
-            setattr(args, self.dest.replace("paths","names"), names)
-
+            setattr(args, self.dest.replace("paths", "names"), names)
 
     group.add_argument('--train-weighted-split-paths', nargs='*', default=None,
-                    help='Weights, splits and paths to groups of datasets'
-                    'Accepted format: ONE dataset groups could be'
-                    'submitted in the following form between double quotes'
-                    '"GIVEN_NAME WEIGHT1 START:END PATH1, WEIGHT2 START:END PATH2"'
-                    'e.g.: "NAME_ABC: 0.6 0:0.6 A, 0.3 0:1 B, 0.1 0:1 C" '
-                    'WEIGHT is used to up and down sample each dataset A,B,C in the group'
-                    'START:END indicates the split portion of the dataset',
-                    action=parse_data_paths)
+                       help='Weights, splits and paths to groups of datasets'
+                            'Accepted format: ONE dataset groups could be'
+                            'submitted in the following form between double quotes'
+                            '"GIVEN_NAME WEIGHT1 START:END PATH1, WEIGHT2 START:END PATH2"'
+                            'e.g.: "NAME_ABC: 0.6 0:0.6 A, 0.3 0:1 B, 0.1 0:1 C" '
+                            'WEIGHT is used to up and down sample each dataset A,B,C in the group'
+                            'START:END indicates the split portion of the dataset',
+                       action=parse_data_paths)
 
     group.add_argument('--valid-weighted-split-paths', nargs='*', default=None,
-                    help='Weights, splits and paths to groups of datasets'
-                    'Accepted format: one or many dataset groups could be'
-                    'submitted in the following form each between double quotes'
-                    '"GIVEN_NAME WEIGHT1 START:END PATH1, WEIGHT2 START:END PATH2"'
-                    'e.g.: "NAME_ABC: 0.6 0.6:0.8 A, 0.3 0:1 B, 0.1 0:1 C" '
-                    '"NAME_CDE: 0.6 0.6:0.8 C, 0.3 0:1 D, 0.1 0:1 E" '
-                    'validation will be run on each of those groups independently',
-                    action=parse_data_paths)
+                       help='Weights, splits and paths to groups of datasets'
+                            'Accepted format: one or many dataset groups could be'
+                            'submitted in the following form each between double quotes'
+                            '"GIVEN_NAME WEIGHT1 START:END PATH1, WEIGHT2 START:END PATH2"'
+                            'e.g.: "NAME_ABC: 0.6 0.6:0.8 A, 0.3 0:1 B, 0.1 0:1 C" '
+                            '"NAME_CDE: 0.6 0.6:0.8 C, 0.3 0:1 D, 0.1 0:1 E" '
+                            'validation will be run on each of those groups independently',
+                       action=parse_data_paths)
 
     group.add_argument('--test-weighted-split-paths', nargs='*', default=None,
-                    help='Weights, splits and paths to groups of datasets'
-                    'Accepted format: one or many dataset groups could be'
-                    'submitted in the following form each between double quotes'
-                    '"GIVEN_NAME WEIGHT1 START:END PATH1, WEIGHT2 START:END PATH2"'
-                    'e.g.: "NAME_ABC: 0.6 0.6:0.8 A, 0.3 0:1 B, 0.1 0:1 C" '
-                    '"NAME_CDE: 0.6 0.6:0.8 C, 0.3 0:1 D, 0.1 0:1 E" '
-                    'test will be run on each of those groups independently',
-                    action=parse_data_paths)
+                       help='Weights, splits and paths to groups of datasets'
+                            'Accepted format: one or many dataset groups could be'
+                            'submitted in the following form each between double quotes'
+                            '"GIVEN_NAME WEIGHT1 START:END PATH1, WEIGHT2 START:END PATH2"'
+                            'e.g.: "NAME_ABC: 0.6 0.6:0.8 A, 0.3 0:1 B, 0.1 0:1 C" '
+                            '"NAME_CDE: 0.6 0.6:0.8 C, 0.3 0:1 D, 0.1 0:1 E" '
+                            'test will be run on each of those groups independently',
+                       action=parse_data_paths)
 
     class parse_data_paths_path(argparse.Action):
         def __call__(self, parser, args, values, option_string=None):
-            expected_option_strings = ["--train-weighted-split-paths-path", "--valid-weighted-split-paths-path", "--test-weighted-split-paths-path"]
+            expected_option_strings = ["--train-weighted-split-paths-path", "--valid-weighted-split-paths-path",
+                                       "--test-weighted-split-paths-path"]
             assert option_string in expected_option_strings, f"Expected {option_string} to be in {expected_option_strings}"
 
             with open(values, "r") as fi:
@@ -868,10 +868,12 @@ def _add_data_args(parser):
                 weighted_split_paths_dest = re.sub(r"_path$", "", self.dest)
                 weighted_split_paths_option = re.sub(r"-path$", "", self.option_strings[0])
                 setattr(args, weighted_split_paths_dest, values)
-                parse_data_paths(option_strings=[weighted_split_paths_option], dest=weighted_split_paths_dest)(parser, args, values, option_string=weighted_split_paths_option)
+                parse_data_paths(option_strings=[weighted_split_paths_option], dest=weighted_split_paths_dest)(parser,
+                                                                                                               args,
+                                                                                                               values,
+                                                                                                               option_string=weighted_split_paths_option)
 
-
-    group.add_argument('--train-weighted-split-paths-path', type=str, action=parse_data_paths_path ,default=None)
+    group.add_argument('--train-weighted-split-paths-path', type=str, action=parse_data_paths_path, default=None)
     group.add_argument('--valid-weighted-split-paths-path', type=str, action=parse_data_paths_path, default=None)
     group.add_argument('--test-weighted-split-paths-path', type=str, action=parse_data_paths_path, default=None)
 
@@ -888,12 +890,12 @@ def _add_data_args(parser):
                        help='Maximum sequence length to process.')
     group.add_argument('--encoder-seq-length', type=int, default=None,
                        help='Maximum encoder sequence length to process.'
-                       'This should be exclusive of --seq-length')
+                            'This should be exclusive of --seq-length')
     group.add_argument('--decoder-seq-length', type=int, default=None,
                        help="Maximum decoder sequence length to process.")
     group.add_argument('--retriever-seq-length', type=int, default=256,
                        help='Maximum sequence length for the biencoder model '
-                        ' for retriever')
+                            ' for retriever')
     group.add_argument('--sample-rate', type=float, default=1.0,
                        help='sample rate for training data. Supposed to be 0 '
                             ' < sample_rate < 1')
@@ -923,19 +925,19 @@ def _add_data_args(parser):
                        help='Reset posistion ids after end-of-document token.')
     group.add_argument('--reset-attention-mask', action='store_true',
                        help='Reset self attention maske after '
-                       'end-of-document token. Attention between tokens from different documents is null.')
+                            'end-of-document token. Attention between tokens from different documents is null.')
     group.add_argument('--eod-mask-loss', action='store_true',
                        help='Mask loss for the end of document tokens.')
     group.add_argument('--loss-on-targets-only', action='store_true',
                        help='Mask loss on input sequence.')
     group.add_argument('--reweight-loss-based-on-position-frequency', action="store_true",
                        help='Some objectives require us to sample loss_mask. This might introduce bias towards '
-                       'specific positions. This option tries to un-bias the loss by reweighting loss on specific '
-                       'positions based on how frequently we train on that position.'
-                       'This is mostly used for prefix_lm training')
+                            'specific positions. This option tries to un-bias the loss by reweighting loss on specific '
+                            'positions based on how frequently we train on that position.'
+                            'This is mostly used for prefix_lm training')
     group.add_argument("--noise-density", type=float, default=None, help="Span corruption noise density")
-    group.add_argument("--mean-noise-span-length", type=int, default=None, help="Span corruption mean noise span length")
-
+    group.add_argument("--mean-noise-span-length", type=int, default=None,
+                       help="Span corruption mean noise span length")
 
     return parser
 
@@ -947,7 +949,7 @@ def _add_autoresume_args(parser):
                        help='Enable autoresume on adlr cluster.')
     group.add_argument('--adlr-autoresume-interval', type=int, default=1000,
                        help='Intervals over which check for autoresume'
-                       'termination signal')
+                            'termination signal')
 
     return parser
 
@@ -958,27 +960,27 @@ def _add_biencoder_args(parser):
     # network size
     group.add_argument('--ict-head-size', type=int, default=None,
                        help='Size of block embeddings to be used in ICT and '
-                        'REALM (paper default: 128)')
+                            'REALM (paper default: 128)')
     group.add_argument('--biencoder-projection-dim', type=int, default=0,
                        help='Size of projection head used in biencoder (paper'
-                        ' default: 128)')
+                            ' default: 128)')
     group.add_argument('--biencoder-shared-query-context-model', action='store_true',
-                        help='Whether to share the parameters of the query '
-                        'and context models or not')
+                       help='Whether to share the parameters of the query '
+                            'and context models or not')
 
     # checkpointing
     group.add_argument('--ict-load', type=str, default=None,
                        help='Directory containing an ICTBertModel checkpoint')
     group.add_argument('--bert-load', type=str, default=None,
                        help='Directory containing an BertModel checkpoint '
-                       '(needed to start ICT and REALM)')
+                            '(needed to start ICT and REALM)')
 
     # data
     group.add_argument('--titles-data-path', type=str, default=None,
                        help='Path to titles dataset used for ICT')
     group.add_argument('--query-in-block-prob', type=float, default=0.1,
                        help='Probability of keeping query in block for '
-                       'ICT dataset')
+                            'ICT dataset')
     group.add_argument('--use-one-sent-docs', action='store_true',
                        help='Whether to use one sentence documents in ICT')
     group.add_argument('--evidence-data-path', type=str, default=None,
@@ -986,26 +988,26 @@ def _add_biencoder_args(parser):
 
     # training
     group.add_argument('--retriever-report-topk-accuracies', nargs='+', type=int,
-                        default=[], help="Which top-k accuracies to report "
-                        "(e.g. '1 5 20')")
+                       default=[], help="Which top-k accuracies to report "
+                                        "(e.g. '1 5 20')")
     group.add_argument('--retriever-score-scaling', action='store_true',
                        help='Whether to scale retriever scores by inverse '
-                        'square root of hidden size')
+                            'square root of hidden size')
 
     # faiss index
     group.add_argument('--block-data-path', type=str, default=None,
                        help='Where to save/load BlockData to/from')
     group.add_argument('--embedding-path', type=str, default=None,
                        help='Where to save/load Open-Retrieval Embedding'
-                        ' data to/from')
+                            ' data to/from')
 
     # indexer
     group.add_argument('--indexer-batch-size', type=int, default=128,
                        help='How large of batches to use when doing indexing '
-                       'jobs')
+                            'jobs')
     group.add_argument('--indexer-log-interval', type=int, default=1000,
                        help='After how many batches should the indexer '
-                       'report progress')
+                            'report progress')
     return parser
 
 
@@ -1036,10 +1038,11 @@ def _add_zero_args(parser):
     group.add_argument("--zero-reduce-bucket-size", type=int, default=0.0)
     group.add_argument("--zero-allgather-bucket-size", type=int, default=0.0)
     group.add_argument('--remote-device', type=str, default='none', choices=['none', 'cpu', 'nvme'],
-                      help='Remote device for ZeRO-3 initialized parameters.')
+                       help='Remote device for ZeRO-3 initialized parameters.')
     group.add_argument('--use-pin-memory', action='store_true',
-                     help='Use pinned CPU memory for ZeRO-3 initialized model parameters.')
+                       help='Use pinned CPU memory for ZeRO-3 initialized model parameters.')
     return parser
+
 
 def _add_memoryopt_args(parser):
     """Memory optimization arguments."""
@@ -1050,7 +1053,7 @@ def _add_memoryopt_args(parser):
                             'Introduces dropout differences across MP configurations.')
     group.add_argument("--split-transformers", action='store_true',
                        help='Save memory by splitting transformer layers into two parts, '
-                       'allowing for more frequent activation checkpoint savings.')
+                            'allowing for more frequent activation checkpoint savings.')
     group.add_argument("--memory-centric-tiled-linear", action="store_true",
                        help='Save memory by tiling with deepspeed.zero.TiledLinear.')
     group.add_argument("--tile-factor", type=int, default=1,
@@ -1061,6 +1064,7 @@ def _add_memoryopt_args(parser):
                             'Default is 1.')
 
     return parser
+
 
 def _add_activation_checkpoint_args(parser):
     group = parser.add_argument_group('Activation Checkpointing',

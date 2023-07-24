@@ -33,6 +33,7 @@ from megatron.enums import PositionEmbeddingType
 
 _CHECKPOINT_VERSION = None
 
+
 def set_checkpoint_version(value):
     global _CHECKPOINT_VERSION
     if _CHECKPOINT_VERSION is not None:
@@ -40,9 +41,11 @@ def set_checkpoint_version(value):
             "checkpoint versions do not match"
     _CHECKPOINT_VERSION = value
 
+
 def get_checkpoint_version():
     global _CHECKPOINT_VERSION
     return _CHECKPOINT_VERSION
+
 
 def check_checkpoint_args(checkpoint_args):
     """Ensure fixed arguments for a model are the same for the input
@@ -57,7 +60,7 @@ def check_checkpoint_args(checkpoint_args):
         args_value = getattr(args, arg_name)
         error_message = '{} value from checkpoint ({}) is not equal to the ' \
                         'input argument value ({}).'.format(
-                            arg_name, checkpoint_value, args_value)
+            arg_name, checkpoint_value, args_value)
         assert checkpoint_value == args_value, error_message
 
     _compare('num_layers')
@@ -124,7 +127,7 @@ def save_checkpoint(iteration, model, optimizer, lr_scheduler):
         iteration, args.save))
 
     if not torch.distributed.is_initialized() or mpu.get_data_parallel_rank() == 0 \
-        or args.deepspeed:
+            or args.deepspeed:
 
         # Arguments, iteration, and model.
         state_dict = {}
@@ -182,7 +185,7 @@ def save_checkpoint(iteration, model, optimizer, lr_scheduler):
 
     # And update the latest iteration
     if (not args.deepspeed
-        and (not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0)):
+            and (not torch.distributed.is_initialized() or torch.distributed.get_rank() == 0)):
         tracker_filename = get_checkpoint_tracker_filename(args.save)
         with open(tracker_filename, 'w') as f:
             f.write(str(iteration))
@@ -195,6 +198,7 @@ def save_checkpoint(iteration, model, optimizer, lr_scheduler):
     # a save saving point for the codecarbon tracker. If the program doesn't run to its normal
     # end, then only the data since the last saved checkpoint will be lost.
     codecarbon_tracker_flush()
+
 
 def _transpose_first_dim(t, num_splits, num_splits_first, model):
     input_shape = t.size()
@@ -225,8 +229,8 @@ def _transpose_first_dim(t, num_splits, num_splits_first, model):
 
         intermediate_shape = \
             (num_attention_heads_per_partition,
-             hidden_size_per_attention_head, num_splits) +\
-             input_shape[1:]
+             hidden_size_per_attention_head, num_splits) + \
+            input_shape[1:]
 
         t = t.view(*intermediate_shape)
         t = t.transpose(1, 2).contiguous()
@@ -234,13 +238,14 @@ def _transpose_first_dim(t, num_splits, num_splits_first, model):
 
     return t
 
+
 def fix_query_key_value_ordering(model, checkpoint_version):
     """Fix up query/key/value matrix ordering if checkpoint
     version is smaller than 2.0
     """
     if checkpoint_version < 2.0:
         if isinstance(model, list):
-            assert len(model)==1
+            assert len(model) == 1
             model = model[0]
         for name, param in model.named_parameters():
             if name.endswith(('.query_key_value.weight', '.query_key_value.bias')):
@@ -262,9 +267,10 @@ def fix_query_key_value_ordering(model, checkpoint_version):
                     sys.exit()
                 param.data.copy_(fixed_param)
         print_rank_0(" succesfully fixed query-key-values ordering for"
-                    " checkpoint version {}".format(checkpoint_version))
+                     " checkpoint version {}".format(checkpoint_version))
 
-def load_checkpoint(model, optimizer, lr_scheduler, load_arg='load', strict=True):
+
+def load_checkpoint(model, optimizer, lr_scheduler, load_arg='load', load_tag_arg='tag', strict=True):
     """Load a model checkpoint and return the iteration.
     strict (bool): whether to strictly enforce that the keys in
         :attr:`state_dict` of the checkpoint match the names of
@@ -272,15 +278,17 @@ def load_checkpoint(model, optimizer, lr_scheduler, load_arg='load', strict=True
     """
     args = get_args()
     load_dir = getattr(args, load_arg)
+    load_tag = getattr(args, load_tag_arg)
 
     if args.deepspeed:
         load_optimizer_states = False if args.no_load_optim else True
-        loaded_dir, state_dict = model[0].load_checkpoint(load_dir, load_optimizer_states=load_optimizer_states)
+        loaded_dir, state_dict = model[0].load_checkpoint(load_dir, tag=load_tag,
+                                                          load_optimizer_states=load_optimizer_states)
         if loaded_dir is None:
             print_rank_0('WARNING: could not find the metadata file {} '.format(
                 load_dir))
             print_rank_0('    will not load any checkpoints and will start from '
-                        'random')
+                         'random')
             return 0
         release = False
     else:
@@ -294,7 +302,7 @@ def load_checkpoint(model, optimizer, lr_scheduler, load_arg='load', strict=True
             print_rank_0('WARNING: could not find the metadata file {} '.format(
                 tracker_filename))
             print_rank_0('    will not load any checkpoints and will start from '
-                        'random')
+                         'random')
             return 0
 
         # Otherwise, read the tracker file and either set the iteration or
@@ -355,7 +363,7 @@ def load_checkpoint(model, optimizer, lr_scheduler, load_arg='load', strict=True
             except KeyError:
                 print_rank_0('A metadata file exists but unable to load '
                              'iteration from checkpoint {}, exiting'.format(
-                                 checkpoint_name))
+                    checkpoint_name))
                 sys.exit()
 
     # Check arguments.
@@ -399,9 +407,9 @@ def load_checkpoint(model, optimizer, lr_scheduler, load_arg='load', strict=True
                     lr_scheduler.load_state_dict(state_dict['lr_scheduler'])
             except KeyError:
                 print_rank_0('Unable to load optimizer from checkpoint {}. '
-                            'Specify --no-load-optim or --finetune to prevent '
-                            'attempting to load the optimizer state, '
-                            'exiting ...'.format(checkpoint_name))
+                             'Specify --no-load-optim or --finetune to prevent '
+                             'attempting to load the optimizer state, '
+                             'exiting ...'.format(checkpoint_name))
                 sys.exit()
 
     # rng states.
@@ -434,7 +442,7 @@ def load_checkpoint(model, optimizer, lr_scheduler, load_arg='load', strict=True
 
 
 def load_biencoder_checkpoint(model, only_query_model=False,
-        only_context_model=False, custom_load_path=None):
+                              only_context_model=False, custom_load_path=None):
     """
     selectively load retrieval models for indexing/retrieving
     from saved checkpoints
