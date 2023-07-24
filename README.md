@@ -1,3 +1,7 @@
+# What is this fork of Megatron-LM and Megatron-DeepSpeed from Bigscience
+tigerbot-7B tigerbot-(180B)176B 基于Bloom架构，bigscience基于2022年初的Megatron-Deepspeed创建了自己的分支运行Bloom的训练。
+tigerbot从bigscience的分支出发，用于各尺寸的tigerbot训练。
+
 # What is this fork of Megatron-LM and Megatron-DeepSpeed
 
 This is a detached fork of https://github.com/microsoft/Megatron-DeepSpeed, which in itself is a fork of https://github.com/NVIDIA/Megatron-LM. The former integrates DeepSpeed into the original Megatron-LM code.
