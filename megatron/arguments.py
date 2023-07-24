@@ -659,8 +659,8 @@ def _add_checkpointing_args(parser):
                        help='Do not save current rng state.')
     group.add_argument('--load', type=str, default=None,
                        help='Directory containing a model checkpoint.')
-    group.add_argument('--tag', type=str, default=None,
-                       help='Checkpoint version used by deepspeed.runtime.engine.load_checkpoint (step dir under --load dir)')
+    group.add_argument('--from-weights', type=str, default=None,
+                       help='Path to dir which contains layer_xx-model_xx-model_states.pt')
     group.add_argument('--no-load-optim', action='store_true', default=None,
                        help='Do not load optimizer when loading checkpoint.')
     group.add_argument('--no-load-rng', action='store_true', default=None,
