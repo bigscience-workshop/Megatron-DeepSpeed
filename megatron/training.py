@@ -412,9 +412,8 @@ def setup_model_and_optimizer(model_provider_func):
 
     if args.deepspeed:
         print_rank_0("DeepSpeed is enabled.")
-        print(model)
         if args.from_weights:
-            print(args.from_weights)
+            print_rank_0(f"[TigerBot]: load model weights from: {args.from_weights}")
             model[0].load_state_dir(args.from_weights, strict=True)
         #pp = mpu.get_pipeline_model_parallel_world_size()
 
