@@ -502,6 +502,10 @@ class ParallelTransformerLayer(MegatronModule):
                 layer_past=None, get_key_value=False):
         # hidden_states: [b, s, h]
 
+        from megatron.debug_utils import dump_weights
+        args = get_args()
+        dump_weights("before-input_layernorm", args.iteration, None, None, tensor=self.input_layernorm.weight)
+
         # Layer norm at the beginning of the transformer layer.
         layernorm_output = self.input_layernorm(hidden_states)
         # Self attention.
@@ -609,12 +613,12 @@ class ParallelTransformerLayer(MegatronModule):
         slopes = torch.Tensor(get_slopes(num_attention_heads))
         alibi = slopes.unsqueeze(1).unsqueeze(1) * torch.arange(max_seq_len).unsqueeze(0).unsqueeze(0).expand(
             num_attention_heads, -1, -1)
-        
+
         #Select the part of the tensor that corresponds to our tensor parallel index.
         tp_world_size = mpu.get_tensor_model_parallel_world_size()
         tp_index = mpu.get_tensor_model_parallel_rank()
         alibi = alibi.reshape((tp_world_size, -1, *alibi.shape[1:]))[tp_index]
-        
+
         alibi = alibi.repeat(batch_size, 1, 1)
         return alibi
 
@@ -630,7 +634,7 @@ class ParallelTransformerLayerPipe(ParallelTransformerLayer):
        to the next stage in the pipeline.
 
        This version is useful if masks are dynamic.
-    
+
     2) forward(input, **kwargs) -> output
        When the mask is static over all samples, it is advantageous to
        cache the mask and avoid communicating it.
