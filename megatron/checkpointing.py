@@ -375,6 +375,15 @@ def load_checkpoint(model, optimizer, lr_scheduler, load_arg='load', strict=True
     else:
         print_rank_0('could not find arguments in the checkpoint ...')
 
+    # XXX: new
+    args.debug_with_new_dataset = 1
+    if args.debug_with_new_dataset:
+        args.consumed_train_samples = 0
+        args.consumed_valid_samples = 0
+        iteration = 0
+    # XXX: also don't want to override the latest checkpoint when the program exits
+    # unset --save
+
     # Model.
     if not args.deepspeed:
         if len(model) == 1:
