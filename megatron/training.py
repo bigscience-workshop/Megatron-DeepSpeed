@@ -414,7 +414,8 @@ def setup_model_and_optimizer(model_provider_func):
         print_rank_0("DeepSpeed is enabled.")
         if args.from_weights:
             print_rank_0(f"[TigerBot]: load model weights from: {args.from_weights}")
-            model[0].load_state_dir(args.from_weights, strict=True)
+            from deepspeed.runtime.checkpoint_engine.torch_checkpoint_engine import TorchCheckpointEngine
+            model[0].load_state_dir(args.from_weights, TorchCheckpointEngine(), strict=True)
         #pp = mpu.get_pipeline_model_parallel_world_size()
 
         import json
@@ -428,7 +429,6 @@ def setup_model_and_optimizer(model_provider_func):
             model=model[0],
             optimizer=optimizer,
             lr_scheduler=lr_scheduler,
-            config=config,
             args=args,
         )
 
