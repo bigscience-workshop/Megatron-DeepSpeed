@@ -31,6 +31,19 @@ from megatron import (get_args,
                       get_tokenizer)
 from megatron.enums import PositionEmbeddingType
 
+
+from deepspeed.checkpoint import (
+    ORIGINAL_VOCAB_SIZE,
+    PADDED_VOCAB_SIZE,
+    UNIVERSAL_CHECKPOINT_INFO,
+    UNIVERSAL_CHECKPOINT_VERSION_KEY,
+    UNIVERSAL_CHECKPOINT_VERSION_VALUE,
+    VOCABULARY_PARAMETER_PATTERNS,
+    PIPELINE_REPLICATED_PARAMETER_PATTERNS,
+    PARAMETER_TO_AVERAGE_PATTERNS,
+    PARAMETER_WITH_ROW_PARALLELISM_PATTERNS,
+)
+
 _CHECKPOINT_VERSION = None
 
 def set_checkpoint_version(value):
@@ -133,6 +146,7 @@ def save_checkpoint(iteration, model, optimizer, lr_scheduler):
         state_dict['iteration'] = iteration
         state_dict['tokens'] = args.consumed_train_tokens
         state_dict['checkpoint_info'] = _checkpoint_info()
+        state_dict[UNIVERSAL_CHECKPOINT_INFO] = _universal_checkpoint_info()
 
         # DeepSpeed saves the model/optimizer/scheduler
         if not args.deepspeed:
@@ -481,3 +495,41 @@ def _checkpoint_info():
         "padded_vocab_size": args.padded_vocab_size,
         "original_vocab_size": tokenizer.vocab_size,
     }
+
+def _universal_checkpoint_info():
+    args = get_args()
+    tokenizer = get_tokenizer()
+
+    info = dict()
+    info[UNIVERSAL_CHECKPOINT_VERSION_KEY] = UNIVERSAL_CHECKPOINT_VERSION_VALUE
+    info[ORIGINAL_VOCAB_SIZE] = tokenizer.vocab_size
+    info[PADDED_VOCAB_SIZE] = args.padded_vocab_size
+
+    # Vocabulary parameters (embeddings) that require special handling due to padding.
+    info[VOCABULARY_PARAMETER_PATTERNS] = ["word_embeddings.weight"]
+
+    # Replicated (shared) parameters on the pipeline dimension 
+    info[PIPELINE_REPLICATED_PARAMETER_PATTERNS] = ["word_embeddings.weight"]
+
+    # Parameter slices that should be averaged not concatenated. 
+    info[PARAMETER_TO_AVERAGE_PATTERNS] = [
+        r"tied_modules.embed.word_embeddings.norm.weight",
+        r"tied_modules.embed.word_embeddings.norm.bias",
+        r"\d+.input_layernorm.weight",
+        r"\d+.input_layernorm.bias",
+        r"\d+.post_attention_layernorm.weight",
+        r"\d+.post_attention_layernorm.bias",
+        r"\d+.self_attention.dense.bias",
+        r"\d+.mlp.dense_4h_to_h.bias",
+        r"\d+.weight",
+        r"\d+.bias",
+    ]
+
+    # Parameter that are sliced on the row dimension
+    info[PARAMETER_WITH_ROW_PARALLELISM_PATTERNS] = [
+        "dense_4h_to_h.weight",
+        "self_attention.dense.weight",
+    ]
+
+    return info 
+

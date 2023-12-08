@@ -30,40 +30,42 @@ CONFIG_JSON="$script_dir/ds_config.json"
 
 USE_DEEPSPEED=1
 ZERO_STAGE=0
+DTYPE="bf16"
 
 #TP=4
 #PP=4
 
 # Debug
-DEBUG_MODE=0 
+DEBUG_MODE=1 
 if [[ $DEBUG_MODE == 1 ]]; then
         LAYERS=4
         HIDDEN=512
         SEQ=512
-        EXIT_INTERVAL=3
+        EXIT_INTERVAL=100
+        RUN_TAG="toy"
 else
         HIDDEN=1024
         LAYERS=24
         SEQ=1024
-        EXIT_INTERVAL=10
+        EXIT_INTERVAL=100
+        RUN_TAG="big"
 fi  
 
-TP=2
-PP=2
-DP=4
+TP=1
+PP=1
+DP=2
 WORLD_SIZE=$((TP*PP*DP))
 GLOBAL_BATCH=4
 
 MICRO_BATCH=1
 TRAIN_ITERS=100000
-CHECKPOINT_PATH=checkpoints/gpt2/tp${TP}_pp${PP}_dp${DP} 
-LOAD_CHECKPOINT_PATH=checkpoints/gpt2/tp2_pp2_dp4
+CHECKPOINT_PATH=checkpoints/gpt2/tp${TP}_pp${PP}_dp${DP}_$RUN_TAG 
+LOAD_CHECKPOINT_PATH=checkpoints/gpt2/tp2_pp2_dp2_$RUN_TAG
 
 LR=6.0e-4
 MIN_LR=6.0e-5
-DTYPE="bf16"
-EXP_DIR=${HOME}/experiments/results/ckpt_reshape
-LOG_DIR="${EXP_DIR}/tensorboard/tp${TP}_pp${PP}_dp${DP}_hd${HIDDEN}_nl${LAYERS}_gbsz${GLOBAL_BATCH}_mbsz${MICRO_BATCH}_z${ZERO_STAGE}_LR_${LR}_${MIN_LR}_${DTYPE}_uni"
+EXP_DIR=${HOME}/experiments/results/uni_ckpt
+LOG_DIR="${EXP_DIR}/tensorboard/tp${TP}_pp${PP}_dp${DP}_hd${HIDDEN}_nl${LAYERS}_gbsz${GLOBAL_BATCH}_mbsz${MICRO_BATCH}_z${ZERO_STAGE}_LR_${LR}_${MIN_LR}_${DTYPE}_ref_uni_$RUN_TAG"
 mkdir -p $LOG_DIR
 
 while [[ $# -gt 0 ]]
@@ -167,7 +169,7 @@ cat <<EOT > $CONFIG_JSON
 }
 EOT
 
-#WORKER_STR="--num_nodes 1 --num_gpus $WORLD_SIZE"
+WORKER_STR="--num_nodes 1 --num_gpus $WORLD_SIZE"
 #WORKER_STR="-i worker-0:0,1,2,3"
 #run_cmd="deepspeed -i worker-0:0,1,2,3 ${DIR}/pretrain_gpt.py $@ ${options}"
 #run_cmd="deepspeed -i worker-0 ${DIR}/pretrain_gpt.py $@ ${options}"
