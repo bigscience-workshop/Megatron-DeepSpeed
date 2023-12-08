@@ -93,7 +93,7 @@ An example script to prepare data for GPT training is:
 python tools/preprocess_data.py \
     --input my-corpus.json \
     --output-prefix my-gpt2 \
-    --vocab gpt2-vocab.json \
+    --vocab-file gpt2-vocab.json \
     --dataset-impl mmap \
     --tokenizer-type GPT2BPETokenizer \
     --merge-file gpt2-merges.txt \
@@ -132,7 +132,7 @@ xz -d oscar-1GB.jsonl.xz
 python tools/preprocess_data.py \
     --input oscar-1GB.jsonl \
     --output-prefix my-gpt2 \
-    --vocab gpt2-vocab.json \
+    --vocab-file gpt2-vocab.json \
     --dataset-impl mmap \
     --tokenizer-type GPT2BPETokenizer \
     --merge-file gpt2-merges.txt \
@@ -192,13 +192,13 @@ DATA_ARGS=" \
     --data-path $DATA_PATH \
     "
 
-CMD="pretrain_gpt.py $GPT_ARGS $OUTPUT_ARGS $DATA_ARGS"
+CMD="pretrain_gpt.py GPTARGSGPT_ARGS OUTPUT_ARGS $DATA_ARGS"
 
 N_GPUS=1
 
 LAUNCHER="deepspeed --num_gpus $N_GPUS"
 
-$LAUNCHER $CMD
+LAUNCHERLAUNCHER CMD
 ```
 
 Note, we replaced `python` with `deepspeed --num_gpus 1`. For multi-gpu training update `--num_gpus` to the number of GPUs you have.
