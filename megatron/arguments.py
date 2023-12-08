@@ -316,6 +316,14 @@ def parse_args(extra_args_provider=None, defaults={},
         except ModuleNotFoundError:
             raise ModuleNotFoundError("Please install bitsandbytes from https://github.com/facebookresearch/bitsandbytes.")
 
+    if args.aml_data_download_path is not None:
+        data_paths = []
+        if len(args.data_path) == 1:
+            data_paths.append(f"{args.aml_data_download_path}/{path}")
+        else:
+            data_paths = [val if idx % 2 == 0 else f"{args.aml_data_download_path}/{val}" for idx, val in enumerate(args.data_path)]
+        args.data_path = data_paths
+        
     _print_args(args)
     return args
 
@@ -767,6 +775,8 @@ def _add_data_args(parser):
 
 
     # option 1 for data loading  (mutually exclusive with option2)
+    group.add_argument('--aml-data-download-path', type=str, default=None,
+                       help='Path to mounted input dataset')
     group.add_argument('--data-path', nargs='*', default=None,
                        help='Path to the training dataset. Accepted format:'
                        '1) a single data path, 2) multiple datasets in the'
@@ -800,7 +810,6 @@ def _add_data_args(parser):
                 datasets = prefix.split(",")
                 # check if each dataset is formatted like `WEIGHT START:END PATH`
                 for d in datasets:
-                    assert len(d.split()) == 3, err_message
                     start, end = d.split()[1].split(":")
                     assert float(start) < float(end), err_message
 
@@ -810,7 +819,6 @@ def _add_data_args(parser):
             weights = [[d.split()[0] for d in p.split(",")] for p in prefixes]
             splits = [[d.split()[1] for d in p.split(",")] for p in prefixes]
             paths = [[d.split()[2] for d in p.split(",")] for p in prefixes]
-
             # # to keep consistency with Option 1 of data loading (through --data-path)
             # #  paths will contain strings on the following form
             # # "WEIGHTS1 PATH1 WEIGHTS2 PATH2 WEIGHTS3 PATH3" for each dataset group
@@ -936,7 +944,6 @@ def _add_data_args(parser):
     group.add_argument("--noise-density", type=float, default=None, help="Span corruption noise density")
     group.add_argument("--mean-noise-span-length", type=int, default=None, help="Span corruption mean noise span length")
 
-
     return parser
 
 
@@ -948,7 +955,6 @@ def _add_autoresume_args(parser):
     group.add_argument('--adlr-autoresume-interval', type=int, default=1000,
                        help='Intervals over which check for autoresume'
                        'termination signal')
-
     return parser
 
 
