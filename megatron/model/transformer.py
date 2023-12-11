@@ -86,6 +86,8 @@ class ParallelMLP(MegatronModule):
             self.activation_func = openai_gelu
         elif args.onnx_safe:
             self.activation_func = erf_gelu
+        elif args.relu:
+            self.activation_func = F.relu
 
         # Project back to h.
         self.dense_4h_to_h = mpu.RowParallelLinear(
