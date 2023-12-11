@@ -30,9 +30,11 @@ from .utils import scaled_init_method_normal
 
 from deepspeed.pipe import PipelineModule, LayerSpec, TiedLayerSpec
 from megatron.model.fused_layer_norm import MixedFusedLayerNorm as LayerNorm
+from megatron.model.fused_layer_norm import MixedFusedLayerNormTeacher as LayerNormTeacher
+from megatron.model.fused_layer_norm import MixedFusedLayerNormStudent as LayerNormStudent
 from megatron.model.module import float16_to_fp32
-from .language_model import EmbeddingPipe
-from .transformer import ParallelTransformerLayerPipe
+from .language_model import EmbeddingPipe, EmbeddingPipeTeacher, EmbeddingPipeStudent
+from .transformer import ParallelTransformerLayerPipe, ParallelTransformerLayerPipeTeacher, ParallelTransformerLayerPipeStudent
 
 
 def post_language_model_processing(lm_output, labels, logit_weights,
@@ -195,6 +197,56 @@ def get_cross_entropy(is_prefix: bool):
     return CrossEntropy
 
 
+def get_ts_loss(is_prefix: bool):
+    def TeacherStudentLoss(output, labels):
+        student_logits, teacher_logits = output
+        if isinstance(teacher_logits, tuple):
+            teacher_logits = teacher_logits[0]
+        labels, loss_mask = labels[0], labels[1]
+
+        args = get_args()
+
+        losses = mpu.vocab_parallel_cross_entropy(student_logits.contiguous().float(), labels)
+
+        if is_prefix:
+            micro_batch_size, sequence_length = loss_mask.shape
+            average_tokens_per_sample: torch.Tensor
+            if args.loss_on_targets_only:
+                # HACK: This is useful when we obtain loss masks that are microbatch dependent. Consequently, if we want to
+                #   preserve the notion that all tokens have the same impact on the loss, we can only normalise using a
+                #   microbatch independent value. It should be expected weight over a microbatch.
+                #   Here we still use `sequence_length`, that's batch size dependent, in order to be backwards compatible with
+                #   current experiment on vanilla gpt.
+                if args.reweight_loss_based_on_position_frequency:
+                    reweight = torch.arange(
+                        sequence_length, 0, -1, dtype=torch.float, device=loss_mask.device
+                    ) / (sequence_length + 1) * 2
+                    average_tokens_per_sample = reweight.flip(-1).cumsum(-1).mean()
+                else:
+                    average_tokens_per_sample = (sequence_length + 1) / 2
+            else:
+                average_tokens_per_sample = sequence_length
+            expected_number_of_tokens = average_tokens_per_sample * micro_batch_size
+        else:
+            expected_number_of_tokens = loss_mask.sum()
+
+        loss_mask = loss_mask.view(-1)
+        loss = torch.sum(losses.view(-1) * loss_mask) / expected_number_of_tokens
+
+        # TODO: check if the formula is correct
+        # teacher_logits = teacher_logits.detach()
+        # First pass it on CPU - otherwise we get OOM errors
+        # teacher_logits = teacher_logits.detach()
+        softmax_labels = torch.nn.Softmax(dim=-1)(teacher_logits.contiguous().float())
+        student_log_softax = -torch.nn.LogSoftmax(dim=-1)(student_logits.contiguous().float())
+
+        softmax_logits = student_log_softax * softmax_labels
+        logits_loss = softmax_logits.mean()
+
+        return loss + logits_loss
+    return TeacherStudentLoss
+
+
 class GPTModelPipe(PipelineModule,MegatronModule):
     """GPT-2 Language model."""
 
@@ -222,9 +274,109 @@ class GPTModelPipe(PipelineModule,MegatronModule):
         self.specs.append(_to_float16)
 
         # Embedding layer
-        self.specs.append(TiedLayerSpec('embed',
-                                        EmbeddingPipe,
+        self.specs.append(TiedLayerSpec('embed_teacher',
+                                        EmbeddingPipeTeacher,
                                         args.hidden_size,
+                                        args.padded_vocab_size,
+                                        args.hidden_dropout,
+                                        init_method=init_method,
+                                        num_tokentypes=num_tokentypes,
+                                        tied_weight_attr='word_embeddings_weight'))
+    
+        if args.fp32_residual_connection:
+            if getattr(args, 'pretrain_causal_attention', False):
+                self.specs.append(lambda x: x.transpose(0, 1).contiguous().float())
+            else:
+                # EmbeddingPipe returns attention mask as well
+                self.specs.append(lambda x: (x[0].transpose(0, 1).contiguous().float(), *x[1:]))
+        else:
+            if getattr(args, 'pretrain_causal_attention', False):
+                self.specs.append(lambda x: (x[0].transpose(0, 1).contiguous(), *x[1:]))
+                # self.specs.append(lambda x: (x.transpose(0, 1).contiguous(), *x[1:]))
+            else:
+                # EmbeddingPipe returns attention mask as well
+                self.specs.append(lambda x: (x[0].transpose(0, 1).contiguous(), *x[1:]))
+
+        for layer_idx in range(args.num_layers):
+            self.specs.append(
+                LayerSpec(ParallelTransformerLayerPipeTeacher,
+                    init_method=init_method,
+                    output_layer_init_method=scaled_init_method_normal(args.init_method_std,
+                                                                       args.num_layers),
+                    layer_number=layer_idx,
+                    # TODO: Change naming of class from GPT to something that encapsulate prefix lm.
+                    self_attn_mask_type=attn_mask_type))
+
+        # Undo data format change
+        def undo(x):
+            if isinstance(x, tuple):
+                return (x[0].transpose(0, 1).contiguous(), (x[1:]))
+                # return (x[0].transpose(0, 1).contiguous(), *x[1:])
+            return x.transpose(0, 1).contiguous()
+        self.specs.append(undo)
+
+        # Final layernorm after transformer layers
+        self.specs.append(
+            LayerSpec(LayerNormTeacher,
+                      args.hidden_size,
+                      eps=args.layernorm_epsilon))
+
+        def _logits_helper(embedding, lm_output):
+            """A wrapper to massage inputs/outputs from pipeline. """
+            return parallel_lm_logits(
+                lm_output,
+                embedding.word_embeddings_weight,
+                self.parallel_output)
+
+        self.specs.append(
+            TiedLayerSpec('embed_teacher',
+                          EmbeddingPipeTeacher,
+                          args.hidden_size,
+                          args.padded_vocab_size,
+                          args.hidden_dropout,
+                          init_method=init_method,
+                          num_tokentypes=num_tokentypes,
+                          forward_fn=_logits_helper,
+                          tied_weight_attr='word_embeddings_weight')
+        )
+
+        # self.specs.append(lambda x: print(x[0]))
+        # Convert to fp32 if needed
+        # if args.fp16 or args.bf16:
+        #     self.specs.append(float16_to_fp32)
+
+        if args.checkpoint_activations:
+            interval = args.checkpoint_num_layers
+        else:
+            interval = 0
+
+        
+
+        # here one can extend the regex to include more layers to be counted towards partitioning,
+        # e.g. 'type:transformer|embedding' will add up all the transformer blocks and also the first
+        # and last embedding layers and then partition that transformers+2 layers - so to get a good
+        # balance you may want to use less transformer layers
+        #
+        # caveat emptor: the current implementation of PP fails unless each stage has at least one
+
+        # Beginning student model
+
+        init_method = init_method_normal(args.init_method_std)
+
+
+        def _to_float16(inputs):
+            if args.fp16:
+                return fp32_to_float16(inputs, lambda v: v.half())
+            elif args.bf16:
+                return fp32_to_float16(inputs, lambda v: v.bfloat16())
+            else:
+                return inputs
+
+
+        # Embedding layer
+        self.specs.append(TiedLayerSpec('embed_student',
+                                        EmbeddingPipeStudent,
+                                        args.student_hidden_size,
                                         args.padded_vocab_size,
                                         args.hidden_dropout,
                                         init_method=init_method,
@@ -239,50 +391,51 @@ class GPTModelPipe(PipelineModule,MegatronModule):
                 self.specs.append(lambda x: (x[0].transpose(0, 1).contiguous().float(), *x[1:]))
         else:
             if getattr(args, 'pretrain_causal_attention', False):
-                self.specs.append(lambda x: x.transpose(0, 1).contiguous())
+                self.specs.append(lambda x: (x[0].transpose(0, 1).contiguous(), x[1]))
             else:
                 # EmbeddingPipe returns attention mask as well
                 self.specs.append(lambda x: (x[0].transpose(0, 1).contiguous(), *x[1:]))
 
-        for layer_idx in range(args.num_layers):
+        for layer_idx in range(args.student_num_layers):
             self.specs.append(
-                LayerSpec(ParallelTransformerLayerPipe,
+                LayerSpec(ParallelTransformerLayerPipeStudent,
                     init_method=init_method,
                     output_layer_init_method=scaled_init_method_normal(args.init_method_std,
-                                                                       args.num_layers),
+                                                                       args.student_num_layers),
                     layer_number=layer_idx,
                     # TODO: Change naming of class from GPT to something that encapsulate prefix lm.
                     self_attn_mask_type=attn_mask_type))
 
         # Undo data format change
         def undo(x):
-            if not getattr(args, 'pretrain_causal_attention', False):
-                x = x[0]
+            if isinstance(x, tuple):
+                return (x[0].transpose(0, 1).contiguous(), x[1:])
             return x.transpose(0, 1).contiguous()
         self.specs.append(undo)
 
         # Final layernorm after transformer layers
         self.specs.append(
-            LayerSpec(LayerNorm,
-                      args.hidden_size,
+            LayerSpec(LayerNormStudent,
+                      args.student_hidden_size,
                       eps=args.layernorm_epsilon))
 
-        def _logits_helper(embedding, lm_output):
+        def _logits_helper_student(embedding, lm_output):
             """A wrapper to massage inputs/outputs from pipeline. """
             return parallel_lm_logits(
                 lm_output,
                 embedding.word_embeddings_weight,
-                self.parallel_output)
+                self.parallel_output, permute_output=True)
+        
 
         self.specs.append(
-            TiedLayerSpec('embed',
-                          EmbeddingPipe,
-                          args.hidden_size,
+            TiedLayerSpec('embed_student',
+                          EmbeddingPipeStudent,
+                          args.student_hidden_size,
                           args.padded_vocab_size,
                           args.hidden_dropout,
                           init_method=init_method,
                           num_tokentypes=num_tokentypes,
-                          forward_fn=_logits_helper,
+                          forward_fn=_logits_helper_student,
                           tied_weight_attr='word_embeddings_weight')
         )
 
@@ -295,25 +448,19 @@ class GPTModelPipe(PipelineModule,MegatronModule):
         else:
             interval = 0
 
-        from deepspeed.runtime.pipe.topology import PipeModelDataParallelTopology
-        topo = PipeModelDataParallelTopology(num_pp=mpu.get_pipeline_model_parallel_world_size(),
-                                             num_mp=mpu.get_tensor_model_parallel_world_size(),
-                                             num_dp=mpu.get_data_parallel_world_size())
-
-        # here one can extend the regex to include more layers to be counted towards partitioning,
-        # e.g. 'type:transformer|embedding' will add up all the transformer blocks and also the first
-        # and last embedding layers and then partition that transformers+2 layers - so to get a good
-        # balance you may want to use less transformer layers
-        #
-        # caveat emptor: the current implementation of PP fails unless each stage has at least one
         # transformer layer
         if args.pp_partition_method is not None:
             partition_method = args.pp_partition_method
         else:
             partition_method = 'type:transformer'
-
+        
+        from deepspeed.runtime.pipe.topology import PipeModelDataParallelTopology
+        topo = PipeModelDataParallelTopology(num_pp=mpu.get_pipeline_model_parallel_world_size(),
+                                             num_mp=mpu.get_tensor_model_parallel_world_size(),
+                                             num_dp=mpu.get_data_parallel_world_size())
+        
         super().__init__(layers=self.specs,
-                         loss_fn=get_cross_entropy(is_prefix=attn_mask_type is AttnMaskType.prefix),
+                         loss_fn=get_ts_loss(is_prefix=attn_mask_type is AttnMaskType.prefix),
                          topology=topo,
                          activation_checkpoint_interval=interval,
                          partition_method=partition_method)

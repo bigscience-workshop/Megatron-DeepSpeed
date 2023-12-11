@@ -15,6 +15,7 @@
 
 """Transformer based language model."""
 
+from importlib import invalidate_caches
 import torch
 import torch.nn.functional as F
 
@@ -27,8 +28,14 @@ from megatron.model.utils import get_linear_layer
 from megatron.model.utils import init_method_normal, scaled_init_method_normal
 
 def parallel_lm_logits(input_, word_embeddings_weight, parallel_output,
-                       bias=None):
+                       bias=None, permute_output=False):
     """LM logits using word embedding weights."""
+    if isinstance(input_, tuple):
+        # retrieve the input tensor from the tuple
+        original_inputs = input_[1]
+        input_ = input_[0]
+    else:
+        original_inputs = None
     # Parallel logits.
     input_parallel = mpu.copy_to_tensor_model_parallel_region(input_)
     # Matrix multiply.
@@ -36,11 +43,12 @@ def parallel_lm_logits(input_, word_embeddings_weight, parallel_output,
         logits_parallel = F.linear(input_parallel, word_embeddings_weight)
     else:
         logits_parallel = F.linear(input_parallel, word_embeddings_weight, bias)
+    
     # Gather if needed.
     if parallel_output:
-        return logits_parallel
-
-    return mpu.gather_from_tensor_model_parallel_region(logits_parallel)
+        return (logits_parallel, original_inputs) if permute_output else (original_inputs, logits_parallel)
+    
+    return (mpu.gather_from_tensor_model_parallel_region(logits_parallel), original_inputs) if permute_output else (original_inputs, mpu.gather_from_tensor_model_parallel_region(logits_parallel))
 
 
 def get_language_model(num_tokentypes, add_pooler,
@@ -271,9 +279,11 @@ class EmbeddingPipe(Embedding):
     def forward(self, inputs, **kwargs):
         if not hasattr(self, '_args'):
             self._args = get_args()
-
         input_ids = inputs[0]
         position_ids = inputs[1]
+        if isinstance(input_ids, tuple):
+            # print(input_ids)
+            input_ids = input_ids[0]
         if getattr(self._args, 'pretrain_causal_attention', False):
             attention_mask = None
         else:
@@ -297,6 +307,16 @@ class EmbeddingPipe(Embedding):
     def word_embeddings_weight(self):
         """Easy accessory for the DeepSpeed pipeline engine to tie embeddings across stages."""
         return self.word_embeddings.weight
+
+class EmbeddingPipeTeacher(EmbeddingPipe):
+    # @torch.no_grad()
+    def forward(self, inputs, **kwargs):
+        return (super().forward(inputs, **kwargs), *inputs)
+
+class EmbeddingPipeStudent(EmbeddingPipe):
+    def forward(self, inputs, **kwargs):
+        inputs, logits_teacher = inputs
+        return (super().forward(inputs, **kwargs), logits_teacher)
 
 
 class TransformerLanguageModel(MegatronModule):
