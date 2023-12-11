@@ -15,7 +15,6 @@
 
 """GPT-2 model."""
 
-from functools import partial
 import torch
 
 from megatron import get_args
@@ -186,6 +185,10 @@ def get_cross_entropy(is_prefix: bool):
             else:
                 average_tokens_per_sample = sequence_length
             expected_number_of_tokens = average_tokens_per_sample * micro_batch_size
+        elif args.norm_target_loss:
+            expected_num_of_target_seqs = loss_mask.sum()
+            loss = torch.sum(losses.view(-1) * loss_mask) / expected_num_of_target_seqs
+            return loss
         else:
             expected_number_of_tokens = loss_mask.sum()
 
@@ -252,7 +255,8 @@ class GPTModelPipe(PipelineModule,MegatronModule):
                                                                        args.num_layers),
                     layer_number=layer_idx,
                     # TODO: Change naming of class from GPT to something that encapsulate prefix lm.
-                    self_attn_mask_type=attn_mask_type))
+                    self_attn_mask_type=attn_mask_type)
+                )
 
         # Undo data format change
         def undo(x):
