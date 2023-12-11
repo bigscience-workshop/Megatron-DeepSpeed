@@ -31,7 +31,14 @@ from megatron.model.utils import attention_mask_func, openai_gelu, erf_gelu
 import deepspeed
 
 from .glu_activations import GLU_ACTIVATIONS
-from .positional_embeddings import RotaryEmbedding, apply_rotary_pos_emb_torch, apply_rotary_pos_emb
+from .positional_embeddings import (
+    apply_rotary_pos_emb,
+    apply_rotary_pos_emb_torch,
+    apply_xpos_emb,
+    apply_xpos_emb_torch,
+    RotaryEmbedding,
+    XPosEmbedding,
+)
 
 # flags required to enable jit fusion kernels
 torch._C._jit_set_profiling_mode(False)
@@ -204,6 +211,8 @@ class ParallelAttention(MegatronModule):
 
         if self.position_embedding_type == PositionEmbeddingType.rotary:
             self.rotary_emb = RotaryEmbedding(self.hidden_size_per_attention_head, precision=args.params_dtype)
+        elif self.position_embedding_type == PositionEmbeddingType.xpos:
+            self.xpos_emb = XPosEmbedding(self.hidden_size_per_attention_head, precision=args.params_dtype)
 
     def forward(self, hidden_states, attention_mask, layer_past=None,
                 get_key_value=False, encoder_output=None, alibi=None):
@@ -291,16 +300,24 @@ class ParallelAttention(MegatronModule):
             matmul_result = alibi[:output_size[0]*output_size[1], :, :output_size[3]]
 
         # Rotary embeddings
-        if self.position_embedding_type == PositionEmbeddingType.rotary:
-            apply_rotary_fn = apply_rotary_pos_emb_torch if self.bf16 else apply_rotary_pos_emb
-
+        if self.position_embedding_type in [
+                PositionEmbeddingType.rotary, PositionEmbeddingType.xpos]:
             seq_len = key_layer.shape[0]
             offset = 0
             if layer_past is not None and layer_past.numel() > 0:
                 offset = layer_past[0].shape[0]
                 seq_len += offset
+
+        if self.position_embedding_type == PositionEmbeddingType.rotary:
+            apply_rotary_fn = apply_rotary_pos_emb_torch if self.bf16 else apply_rotary_pos_emb
             cos, sin = self.rotary_emb(value_layer, seq_len=seq_len)
             query_layer, key_layer = apply_rotary_fn(query_layer, key_layer, cos, sin, offset=offset)
+        elif self.position_embedding_type == PositionEmbeddingType.xpos:
+            apply_xpos_fn = apply_xpos_emb_torch if self.bf16 else apply_xpos_emb
+            cos, sin, scale = self.xpos_emb(value_layer, seq_len=seq_len)
+            query_layer, key_layer = apply_xpos_fn(
+                query_layer, key_layer, cos, sin, scale, offset=offset)
+
 
         # Raw attention scores. [b * np, sq, sk]
         if alibi is None:

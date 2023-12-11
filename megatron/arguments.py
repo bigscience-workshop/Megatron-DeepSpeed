@@ -398,7 +398,7 @@ def _add_network_size_args(parser):
     group.add_argument('--position-embedding-type', type=lambda x: PositionEmbeddingType[x],
                        choices=list(PositionEmbeddingType),
                        default=PositionEmbeddingType.absolute,
-                       help='Define position embedding type ("absolute" | "rotary" | "alibi"). "absolute" by default.'
+                       help='Define position embedding type ("absolute" | "rotary" | "alibi" | "xpos"). "absolute" by default.'
                        )
     group.add_argument('--glu-activation', type=str,
                        choices=megatron.model.glu_activations.GLU_ACTIVATIONS.keys(),
