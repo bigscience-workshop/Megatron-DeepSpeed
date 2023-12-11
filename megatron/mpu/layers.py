@@ -423,7 +423,7 @@ class RowParallelLinear(torch.nn.Module):
         else:
             self.register_parameter('bias', None)
 
-        self.bias_tp_auto_sync = args.sync_tp_duplicated_parameters
+        self.bias_tp_auto_sync = bias and args.sync_tp_duplicated_parameters
 
 
     def forward(self, input_):

@@ -24,7 +24,7 @@ import time
 import torch
 import deepspeed
 
-from megatron.enums import PositionEmbeddingType
+from megatron.enums import PositionEmbeddingType, UL2ModelType
 import megatron
 from megatron.logging import log_levels
 
@@ -49,6 +49,7 @@ def parse_args(extra_args_provider=None, defaults={},
     parser = _add_autoresume_args(parser)
     parser = _add_biencoder_args(parser)
     parser = _add_vit_args(parser)
+    parser = _add_ul2_args(parser)
     parser = _add_logging_args(parser)
     parser = _add_zero_args(parser)
     parser = _add_memoryopt_args(parser)
@@ -310,6 +311,17 @@ def parse_args(extra_args_provider=None, defaults={},
                 )
         args.skip_train_iteration_range = skip_train_iteration_range
 
+    args.ul2_model_type = UL2ModelType(args.ul2_model_type)
+    if (
+            args.ul2_model_type is not UL2ModelType.ENCODER_DECODER
+            and args.decoder_seq_length is not None
+    ):
+        print(
+            f'WARNING: `--decoder_seq_length` is ignored when '
+            f'`--ul2-model-type` is not '
+            f'"{UL2ModelType.ENCODER_DECODER.value}"!'
+        )
+
     if args.use_bnb_optimizer:
         try:
             import bitsandbytes as bnb
@@ -398,7 +410,7 @@ def _add_network_size_args(parser):
     group.add_argument('--position-embedding-type', type=lambda x: PositionEmbeddingType[x],
                        choices=list(PositionEmbeddingType),
                        default=PositionEmbeddingType.absolute,
-                       help='Define position embedding type ("absolute" | "rotary" | "alibi"). "absolute" by default.'
+                       help='Define position embedding type ("absolute" | "rotary" | "alibi" | "xpos"). "absolute" by default.'
                        )
     group.add_argument('--glu-activation', type=str,
                        choices=megatron.model.glu_activations.GLU_ACTIVATIONS.keys(),
@@ -901,6 +913,13 @@ def _add_data_args(parser):
                        help='Probability of replacing a token with mask.')
     group.add_argument('--short-seq-prob', type=float, default=0.1,
                        help='Probability of producing a short sequence.')
+    group.add_argument('--no-add-mask-tokens', action='store_false',
+                       help='Whether not to add sentinel tokens for masked '
+                       'spans in span corruption tasks.',
+                       dest='add_mask_tokens')
+    group.add_argument('--pack-samples', action='store_true',
+                       help='Whether to pack samples in span corruption '
+                       'datasets (T5 or UL2). GPT dataset is always packed.')
     group.add_argument('--mmap-warmup', action='store_true',
                        help='Warm up mmap files.')
     group.add_argument('--num-workers', type=int, default=2,
@@ -1020,6 +1039,64 @@ def _add_vit_args(parser):
                        help='Number of channels in input image data')
     group.add_argument('--patch-dim', type=int, default=16,
                        help='patch dimension used in vit')
+
+    return parser
+
+
+def _add_ul2_args(parser):
+    group = parser.add_argument_group(title="UL2")
+
+    group.add_argument('--ul2-model-type', type=str, default='ED',
+                       choices=['ED', 'ND', 'CD'],
+                       help='What type of model to use for UL2 pretraining. '
+                       'ED = encoder-decoder; ND = non-causal decoder-only; '
+                       'CD = causal decoder-only')
+    group.add_argument('--ul2-denoiser-ratios', nargs='+', type=float,
+                       default=None,
+                       help='Probability of each denoising objective to be '
+                       'selected. Uniform distribution by default.')
+    group.add_argument('--ul2-denoisers', nargs='+', type=str,
+                       default=['R', 'R', 'S', 'X', 'X', 'X', 'X'],
+                       choices=['R', 'S', 'X'],
+                       help='What type of UL2 denoising objective the other '
+                       'UL2 configurations refer to.')
+    group.add_argument('--ul2-mean-span-lengths', nargs='+', type=float,
+                       default=[3, 8, 0.25, 3, 8, 64, 64],
+                       help='Mean length for sampling span lengths. '
+                       'Numbers < 1 indicate a mean length of the sequence '
+                       'length times that number.')
+    group.add_argument('--ul2-mask-ratios', nargs='+', type=float,
+                       default=[0.15, 0.15, 0.25, 0.5, 0.5, 0.15, 0.5],
+                       help='Ratio of masked token in the full sequence.')
+    group.add_argument('--ul2-r-denoiser-token', type=str, default='[R]',
+                       help='What token to prepend for the UL2 R-denoising '
+                       'objective. If empty, do not prepend a token for this '
+                       'objective.')
+    group.add_argument('--ul2-s-denoiser-token', type=str, default='[S]',
+                       help='What token to prepend for the UL2 S-denoising '
+                       'objective. If empty, do not prepend a token for this '
+                       'objective.')
+    group.add_argument('--ul2-x-denoiser-token', type=str, default='[X]',
+                       help='What token to prepend for the UL2 X-denoising '
+                       'objective. If empty, do not prepend a token for this '
+                       'objective.')
+    group.add_argument('--ul2-scale-normal-std', action='store_true',
+                       help='Whether to scale the standard deviation when '
+                       'using a normal distribution for span length sampling.')
+    group.add_argument('--ul2-like-ul2r', action='store_true',
+                       help='Whether to use the updated implementation as '
+                       'described in the UL2R paper. This only changes the '
+                       'implementation, not the objective configurations!')
+    group.add_argument('--ul2-pack-any', action='store_true',
+                       help='When `--pack-samples` is also given, whether to '
+                       'pack different denoisers into one sample. If not '
+                       'given, the same denoiser is used for all packed '
+                       'samples.')
+    group.add_argument('--ul2-pack-no-repeat-prompt', action='store_false',
+                       help='When `--pack-samples` is also given and '
+                       '`--ul2-pack-any` is *not* given, whether to '
+                       'repeat the prompt token for each packed sample.',
+                       dest='ul2_pack_repeat_prompt')
 
     return parser
 

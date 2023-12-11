@@ -30,8 +30,15 @@ from megatron.model.utils import attention_mask_func, openai_gelu, erf_gelu
 
 import deepspeed
 
-from .glu_activations import GLU_ACTIVATIONS
-from .positional_embeddings import RotaryEmbedding, apply_rotary_pos_emb_torch, apply_rotary_pos_emb
+from .glu_activations import GLU_ACTIVATIONS, replaces_linear
+from .positional_embeddings import (
+    apply_rotary_pos_emb,
+    apply_rotary_pos_emb_torch,
+    apply_xpos_emb,
+    apply_xpos_emb_torch,
+    RotaryEmbedding,
+    XPosEmbedding,
+)
 
 # flags required to enable jit fusion kernels
 torch._C._jit_set_profiling_mode(False)
@@ -69,19 +76,34 @@ class ParallelMLP(MegatronModule):
         super(ParallelMLP, self).__init__()
         args = get_args()
 
-        # Project to ffn_hidden_size
-        self.dense_h_to_4h = mpu.ColumnParallelLinear(
-            args.hidden_size,
-            # GLU is a special activation that divides the dimension by a factor 2.
-            2 * args.ffn_hidden_size if args.glu_activation else args.ffn_hidden_size,
-            gather_output=False,
-            init_method=init_method,
-            skip_bias_add=True)
+        if args.glu_activation:
+            glu_activation = GLU_ACTIVATIONS[args.glu_activation]
+        else:
+            glu_activation = None
 
+        # Project to ffn_hidden_size
+        if replaces_linear(glu_activation):
+            self.dense_h_to_4h = glu_activation(
+                args.hidden_size,
+                args.ffn_hidden_size,
+                gather_output=False,
+                init_method=init_method)
+        else:
+            self.dense_h_to_4h = mpu.ColumnParallelLinear(
+                args.hidden_size,
+                # GLU is a special activation that divides the dimension by a factor 2.
+                # Only the case for non-T5 GLU.
+                2 * args.ffn_hidden_size if args.glu_activation else args.ffn_hidden_size,
+                gather_output=False,
+                init_method=init_method,
+                skip_bias_add=True)
         self.bias_gelu_fusion = args.bias_gelu_fusion
         self.activation_func = F.gelu
-        if args.glu_activation:
-            self.activation_func = GLU_ACTIVATIONS[args.glu_activation]
+
+        if replaces_linear(glu_activation):
+            self.activation_func = nn.Identity()
+        elif glu_activation:
+            self.activation_func = glu_activation
         elif args.openai_gelu:
             self.activation_func = openai_gelu
         elif args.onnx_safe:
@@ -91,6 +113,7 @@ class ParallelMLP(MegatronModule):
         self.dense_4h_to_h = mpu.RowParallelLinear(
             args.ffn_hidden_size,
             args.hidden_size,
+            bias=not replaces_linear(glu_activation),
             input_is_parallel=True,
             init_method=output_layer_init_method,
             skip_bias_add=True)
@@ -101,7 +124,9 @@ class ParallelMLP(MegatronModule):
         # [s, b, 4hp]
         intermediate_parallel, bias_parallel = self.dense_h_to_4h(hidden_states)
 
-        if self.bias_gelu_fusion:
+        if bias_parallel is None:
+            intermediate_parallel = self.activation_func(intermediate_parallel)
+        elif self.bias_gelu_fusion:
              intermediate_parallel = \
                      bias_gelu_impl(intermediate_parallel, bias_parallel)
         else:
@@ -204,6 +229,11 @@ class ParallelAttention(MegatronModule):
 
         if self.position_embedding_type == PositionEmbeddingType.rotary:
             self.rotary_emb = RotaryEmbedding(self.hidden_size_per_attention_head, precision=args.params_dtype)
+        elif self.position_embedding_type == PositionEmbeddingType.xpos:
+            self.xpos_emb = XPosEmbedding(
+                self.hidden_size_per_attention_head,
+                precision=args.params_dtype,
+            )
 
     def forward(self, hidden_states, attention_mask, layer_past=None,
                 get_key_value=False, encoder_output=None, alibi=None):
@@ -291,16 +321,23 @@ class ParallelAttention(MegatronModule):
             matmul_result = alibi[:output_size[0]*output_size[1], :, :output_size[3]]
 
         # Rotary embeddings
-        if self.position_embedding_type == PositionEmbeddingType.rotary:
-            apply_rotary_fn = apply_rotary_pos_emb_torch if self.bf16 else apply_rotary_pos_emb
-
+        if self.position_embedding_type in [
+                PositionEmbeddingType.rotary, PositionEmbeddingType.xpos]:
             seq_len = key_layer.shape[0]
             offset = 0
             if layer_past is not None and layer_past.numel() > 0:
                 offset = layer_past[0].shape[0]
                 seq_len += offset
+
+        if self.position_embedding_type == PositionEmbeddingType.rotary:
+            apply_rotary_fn = apply_rotary_pos_emb_torch if self.bf16 else apply_rotary_pos_emb
             cos, sin = self.rotary_emb(value_layer, seq_len=seq_len)
             query_layer, key_layer = apply_rotary_fn(query_layer, key_layer, cos, sin, offset=offset)
+        elif self.position_embedding_type == PositionEmbeddingType.xpos:
+            apply_xpos_fn = apply_xpos_emb_torch if self.bf16 else apply_xpos_emb
+            cos, sin, scale = self.xpos_emb(value_layer, seq_len=seq_len)
+            query_layer, key_layer = apply_xpos_fn(
+                query_layer, key_layer, cos, sin, scale, offset=offset)
 
         # Raw attention scores. [b * np, sq, sk]
         if alibi is None:
@@ -406,8 +443,10 @@ class ParallelAttention(MegatronModule):
 
 
 def bias_dropout_add(x, bias, residual, prob, training):
-    # type: (Tensor, Tensor, Tensor, float, bool) -> Tensor
-    out = torch.nn.functional.dropout(x + bias, p=prob, training=training)
+    # type: (Tensor, Optional[Tensor], Tensor, float, bool) -> Tensor
+    if bias is not None:
+        x = x + bias
+    out = torch.nn.functional.dropout(x, p=prob, training=training)
     out = residual + out
     return out
 
@@ -420,13 +459,13 @@ def get_bias_dropout_add(training):
 
 @torch.jit.script
 def bias_dropout_add_fused_train(x, bias, residual, prob):
-    # type: (Tensor, Tensor, Tensor, float) -> Tensor
+    # type: (Tensor, Optional[Tensor], Tensor, float) -> Tensor
     return bias_dropout_add(x, bias, residual, prob, True)
 
 
 @torch.jit.script
 def bias_dropout_add_fused_inference(x, bias, residual, prob):
-    # type: (Tensor, Tensor, Tensor, float) -> Tensor
+    # type: (Tensor, Optional[Tensor], Tensor, float) -> Tensor
     return bias_dropout_add(x, bias, residual, prob, False)
 
 
@@ -579,7 +618,7 @@ class ParallelTransformerLayer(MegatronModule):
         with torch.enable_grad():
             output = bias_dropout_add_func(
                 mlp_output,
-                mlp_bias.expand_as(residual),
+                mlp_bias.expand_as(residual) if mlp_bias is not None else None,
                 residual,
                 self.hidden_dropout)
 

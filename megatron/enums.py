@@ -33,3 +33,9 @@ class PositionEmbeddingType(enum.Enum):
     rotary = 1
     absolute = 2
     alibi = 3
+    xpos = 4
+
+class UL2ModelType(enum.Enum):
+    ENCODER_DECODER = 'ED'
+    NON_CAUSAL_DECODER = 'ND'
+    CAUSAL_DECODER = 'CD'

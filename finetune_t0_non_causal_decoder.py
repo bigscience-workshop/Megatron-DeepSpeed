@@ -94,7 +94,11 @@ def get_batch_pipe(data):
         segment_ids=segment_ids.long(),
     )
 
-    if args.position_embedding_type not in [PositionEmbeddingType.alibi, PositionEmbeddingType.rotary]:
+    if args.position_embedding_type not in [
+            PositionEmbeddingType.alibi,
+            PositionEmbeddingType.rotary,
+            PositionEmbeddingType.xpos,
+    ]:
         raise NotImplementedError("absolute positional embeddings require us to reset position_ids accordingly.")
 
     return (tokens, position_ids, attention_mask), (labels, loss_mask)

@@ -376,15 +376,18 @@ def get_prefix_indices(data, eod_token, partial_prefix_indices, reset_attention_
     :param eod_token: int, token_id used to signal end of document
     :param partial_prefix_indices: this agument can have multiple types:
         - None, it signals that all prefix indices are randomly sampled.
-        - List[Optional[int]], its length has to be equal to mini batch size. It stores all the indices for per row prefix.
-            Optional means that if set to None, we allows ourselves to sample one randomly.
-        - List[List[Optional[int]]], it follows the following rules:
+        - False, it signals that prefix indices always go to the end of document.
+        - List[Union[int, bool, None]], its length has to be equal to mini batch size. It stores all the indices for per row prefix.
+            If set to None, we allows ourselves to sample one randomly.
+            If set to False, the current row will be attended to completely.
+        - List[List[Union[int, bool, None]]], it follows the following rules:
             - The first dimension refers to that sample, ie len(partial_prefix_indices) == len(data)
             - The second dimension refers to the number of document of that sample, ie
                 len(partial_prefix_indices[b]) == (data[b] == eod_token).sum() (+1 for the last partial document).
             - partial_prefix_indices have to be interleaved with eod_indices, ie
                 eod_indices[b][d-1] < partial_prefix_indices[b][d] < eod_indices[b][d] + 1 or is None.
-            - Optional means that if set to None, we allows ourselves to sample one randomly.
+            - If set to None, we allows ourselves to sample one randomly.
+            - If set to False, the current document will be attended to completely.
     :param reset_attention_mask: bool, determines if prefixes are to be per document or per row.
     :return Depending if prefix is per document or per row, the method returns:
         - List[List[int]]: prefix indices for each document in case of per document prefix
@@ -393,7 +396,7 @@ def get_prefix_indices(data, eod_token, partial_prefix_indices, reset_attention_
     micro_batch_size, seq_length = data.size()
     prefix_indices = []
 
-    assert partial_prefix_indices is None or len(partial_prefix_indices) == micro_batch_size, f"partial_prefix_indices has to be None or its length equal to {micro_batch_size}, got {len(partial_prefix_indices)}"
+    assert partial_prefix_indices is None or partial_prefix_indices is False or len(partial_prefix_indices) == micro_batch_size, f"partial_prefix_indices has to be None or its length equal to {micro_batch_size}, got {len(partial_prefix_indices)}"
     for batch_id in range(micro_batch_size):
         # Prefix lm per document.
         if reset_attention_mask:
@@ -411,14 +414,28 @@ def get_prefix_indices(data, eod_token, partial_prefix_indices, reset_attention_
                 )
 
             prev_index = 0
-            assert partial_prefix_indices is None or len(partial_prefix_indices[batch_id]) == len(eod_indices), f"The number of prefixes has to match the number of documents, complete or partial. Got {len(partial_prefix_indices[batch_id])} prefixes and {len(eod_indices)} documents"
+            assert partial_prefix_indices is None or partial_prefix_indices is False or len(partial_prefix_indices[batch_id]) == len(eod_indices), f"The number of prefixes has to match the number of documents, complete or partial. Got {len(partial_prefix_indices[batch_id])} prefixes and {len(eod_indices)} documents"
 
             for doc_id, eod_index in enumerate(eod_indices):
-                assert partial_prefix_indices is None or isinstance(partial_prefix_indices[batch_id], list), f"Per document prefix has to store a list on indices for each row, got {partial_prefix_indices[batch_id]}"
+                assert partial_prefix_indices is None or partial_prefix_indices is False or isinstance(partial_prefix_indices[batch_id], list), f"Per document prefix has to store a list on indices for each row, got {partial_prefix_indices[batch_id]}"
                 # Prefix index is defined as the first index that isn't attended by all tokens in a document
-                if partial_prefix_indices is None or partial_prefix_indices[batch_id][doc_id] is None:
+                if (
+                        partial_prefix_indices is None
+                        or (
+                            partial_prefix_indices is not False
+                            and partial_prefix_indices[batch_id][doc_id] is None
+                        )
+                ):
                     # We need to randomly generate a prefix index that satisfies the interleave condition in the docstring
                     prefix_index = randint(prev_index + 1, eod_index)
+                elif (
+                        partial_prefix_indices is False
+                        or (
+                            partial_prefix_indices is not None
+                            and partial_prefix_indices[batch_id][doc_id] is False
+                        )
+                ):
+                    prefix_index = eod_index
                 else:
                     # We get value from partial_prefix_indices, and run validation on that value
                     prefix_index = partial_prefix_indices[batch_id][doc_id]
@@ -429,14 +446,28 @@ def get_prefix_indices(data, eod_token, partial_prefix_indices, reset_attention_
 
         # Prefix lm per row.
         else:
-            assert partial_prefix_indices is None or isinstance(partial_prefix_indices[batch_id], int), \
+            assert partial_prefix_indices is None or partial_prefix_indices is False or isinstance(partial_prefix_indices[batch_id], int), \
                 f"Per document prefix has to store an int for each row, got {partial_prefix_indices[batch_id]}"
 
             # Prefix index is defined as the first index that isn't attended by all previous tokens in a document
             prefix_index: int
-            if partial_prefix_indices is None or partial_prefix_indices[batch_id] is None:
+            if (
+                    partial_prefix_indices is None
+                    or (
+                        partial_prefix_indices is not False
+                        and partial_prefix_indices[batch_id] is None
+                    )
+            ):
                 # 0 being the first prefix index makes no sense since 0 always attends to itself, and there are no other tokens before.
                 prefix_index = randint(1, seq_length)
+            elif (
+                    partial_prefix_indices is False
+                    or (
+                        partial_prefix_indices is not None
+                        and partial_prefix_indices[batch_id] is False
+                    )
+            ):
+                prefix_index = seq_length
             else:
                 # We get value from partial_prefix_indices, and run validation on that value
                 prefix_index = partial_prefix_indices[batch_id]

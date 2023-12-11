@@ -18,6 +18,8 @@
 #   https://github.com/google-research/albert/blob/master/create_pretraining_data.py
 # with some modifications.
 
+import bisect
+from enum import Enum
 import math
 import os
 import time
@@ -37,8 +39,17 @@ from megatron.data.indexed_dataset import make_dataset as make_indexed_dataset
 DSET_TYPE_BERT = 'standard_bert'
 DSET_TYPE_ICT = 'ict'
 DSET_TYPE_T5  = 't5'
+DSET_TYPE_UL2  = 'ul2'
 
-DSET_TYPES = [DSET_TYPE_BERT, DSET_TYPE_ICT, DSET_TYPE_T5]
+DSET_TYPES = [DSET_TYPE_BERT, DSET_TYPE_ICT, DSET_TYPE_T5, DSET_TYPE_UL2]
+
+
+class SamplingStyle(Enum):
+    POISSON = 'poisson'
+    GEOMETRIC = 'geometric'
+    UNIFORM = 'uniform'
+    NORMAL = 'normal'
+    UNSCALED_NORMAL = 'unscaled normal'
 
 
 def analyze_data_prefix(data_prefix):
@@ -183,6 +194,35 @@ def is_start_piece(piece):
     return not piece.startswith("##")
 
 
+def get_ngram_indices(
+        idx,
+        ngrams,
+        cand_indexes,
+        num_to_predict,
+        num_filtered_tokens,
+        prefix_lm,
+):
+    if prefix_lm:
+        # Find first index which is greater than the number of
+        # predictions.
+        first_gt_index = bisect.bisect_right(
+            cand_indexes,
+            [num_filtered_tokens - num_to_predict],
+        )
+        # Then move one index before to get less than or equal to the
+        # number of predictions, handling not going below 0.
+        first_le_index = max(1, first_gt_index) - 1
+
+        tail_cand_indexes = cand_indexes[first_le_index:]
+        ngram_index = [
+            tail_cand_indexes[i:]
+            for i in range(len(tail_cand_indexes))
+        ]
+    else:
+        ngram_index = [cand_indexes[idx:idx + n] for n in ngrams]
+    return ngram_index
+
+
 def create_masked_lm_predictions(tokens,
                                  vocab_id_list, vocab_id_to_token_dict,
                                  masked_lm_prob,
@@ -194,15 +234,23 @@ def create_masked_lm_predictions(tokens,
                                  favor_longer_ngram=False,
                                  do_permutation=False,
                                  geometric_dist=False,
-                                 masking_style="bert"):
+                                 masking_style="bert",
+                                 sampling_style=SamplingStyle.POISSON,
+                                 prefix_lm=False):
     """Creates the predictions for the masked LM objective.
     Note: Tokens here are vocab ids and not text tokens."""
+    if not isinstance(sampling_style, SamplingStyle):
+        sampling_style = SamplingStyle(sampling_style)
+    # Backward-compatibility
+    if geometric_dist:
+        sampling_style = SamplingStyle.GEOMETRIC
 
     cand_indexes = []
     # Note(mingdachen): We create a list for recording if the piece is
     # the starting piece of current token, where 1 means true, so that
     # on-the-fly whole word masking is possible.
     token_boundary = [0] * len(tokens)
+    num_filtered_tokens = 0
 
     for (i, token) in enumerate(tokens):
         if token == cls_id or token == sep_id:
@@ -221,6 +269,7 @@ def create_masked_lm_predictions(tokens,
             cand_indexes.append([i])
             if is_start_piece(vocab_id_to_token_dict[token]):
                 token_boundary[i] = 1
+        num_filtered_tokens += 1
 
     output_tokens = list(tokens)
 
@@ -231,11 +280,26 @@ def create_masked_lm_predictions(tokens,
         return (output_tokens, masked_lm_positions,
                 masked_lm_labels, token_boundary)
 
-    num_to_predict = min(max_predictions_per_seq,
-                         max(1, int(round(len(tokens) * masked_lm_prob))))
+    if (
+            sampling_style is SamplingStyle.NORMAL
+            or sampling_style is SamplingStyle.UNSCALED_NORMAL
+    ):
+        # First, we get the center of our normal distribution from
+        # `max_ngrams`. Keeping the meaning of `max_ngrams` this way
+        # plays nicely with the other probability distributions in terms
+        # of math.
+        normal_mean = (max_ngrams + 1) / 2
+        normal_std = (
+            math.sqrt(normal_mean)
+            if sampling_style is not SamplingStyle.UNSCALED_NORMAL
+            else 1.0
+        )
+        # However, we do not want to bound the maximum length of
+        # n-grams.
+        max_ngrams = num_filtered_tokens - 1
 
     ngrams = np.arange(1, max_ngrams + 1, dtype=np.int64)
-    if not geometric_dist:
+    if sampling_style is SamplingStyle.POISSON:
         # Note(mingdachen):
         # By default, we set the probilities to favor shorter ngram sequences.
         pvals = 1. / np.arange(1, max_ngrams + 1)
@@ -243,14 +307,30 @@ def create_masked_lm_predictions(tokens,
         if favor_longer_ngram:
             pvals = pvals[::-1]
 
-    ngram_indexes = []
-    for idx in range(len(cand_indexes)):
-        ngram_index = []
-        for n in ngrams:
-            ngram_index.append(cand_indexes[idx:idx + n])
-        ngram_indexes.append(ngram_index)
+    if prefix_lm:
+        # We only do one span searching loop anyway, so this does not
+        # matter in terms of random search. However, we do want to allow
+        # sequences greater than the mean ratio.
+        num_to_predict = max_predictions_per_seq
 
-    np_rng.shuffle(ngram_indexes)
+        ngram_index_indexes = np.array([0])
+    else:
+        num_to_predict = min(max_predictions_per_seq,
+                             max(1, int(round(len(tokens) * masked_lm_prob))))
+
+        ngram_index_indexes = np.arange(len(cand_indexes))
+        np_rng.shuffle(ngram_index_indexes)
+
+    def get_ngram_indices_(idx):
+        return get_ngram_indices(
+            idx,
+            ngrams,
+            cand_indexes,
+            num_to_predict,
+            num_filtered_tokens,
+            prefix_lm,
+        )
+    ngram_indexes = map(get_ngram_indices_, ngram_index_indexes)
 
     (masked_lms, masked_spans) = ([], [])
     covered_indexes = set()
@@ -261,20 +341,39 @@ def create_masked_lm_predictions(tokens,
             continue
         # Note(mingdachen):
         # Skip current piece if they are covered in lm masking or previous ngrams.
+        is_covered = False
         for index_set in cand_index_set[0]:
             for index in index_set:
                 if index in covered_indexes:
-                    continue
+                    is_covered = True
+                    break
+            if is_covered:
+                break
+        if is_covered:
+            continue
 
-        if not geometric_dist:
+        if sampling_style is SamplingStyle.POISSON:
             n = np_rng.choice(ngrams[:len(cand_index_set)],
                               p=pvals[:len(cand_index_set)] /
                               pvals[:len(cand_index_set)].sum(keepdims=True))
-        else:
+        elif sampling_style is SamplingStyle.GEOMETRIC:
             # Sampling "n" from the geometric distribution and clipping it to
             # the max_ngrams. Using p=0.2 default from the SpanBERT paper
             # https://arxiv.org/pdf/1907.10529.pdf (Sec 3.1)
             n = min(np_rng.geometric(0.2), max_ngrams)
+        elif sampling_style is SamplingStyle.UNIFORM:
+            n = np_rng.choice(ngrams[:len(cand_index_set)])
+        elif (
+                sampling_style is SamplingStyle.NORMAL
+                or sampling_style is SamplingStyle.UNSCALED_NORMAL
+        ):
+            n = round(np.clip(
+                np_rng.normal(loc=normal_mean, scale=normal_std),
+                1,
+                len(cand_index_set),
+            ))
+        else:
+            raise ValueError('unknown sampling style')
 
         index_set = sum(cand_index_set[n - 1], [])
         n -= 1
@@ -324,7 +423,8 @@ def create_masked_lm_predictions(tokens,
             label=[tokens[index] for index in index_set]))
 
     assert len(masked_lms) <= num_to_predict
-    np_rng.shuffle(ngram_indexes)
+    np_rng.shuffle(ngram_index_indexes)
+    ngram_indexes = map(get_ngram_indices_, ngram_index_indexes)
 
     select_indexes = set()
     if do_permutation:
@@ -450,7 +550,8 @@ def build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
             prefixes[i], data_impl, splits_string,
             datasets_train_valid_test_num_samples[i],
             max_seq_length, masked_lm_prob, short_seq_prob,
-            seed, skip_warmup, binary_head, dataset_type=dataset_type)
+            seed, skip_warmup, binary_head, max_seq_length_dec,
+            dataset_type=dataset_type)
         if train_ds:
             train_datasets.append(train_ds)
         if valid_ds:
@@ -522,6 +623,7 @@ def _build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
         from megatron.data.bert_dataset import BertDataset
         from megatron.data.ict_dataset import ICTDataset
         from megatron.data.t5_dataset import T5Dataset
+        from megatron.data.ul2_dataset import UL2Dataset
         dataset = None
         if splits[index + 1] > splits[index]:
             # Get the pointer to the original doc-idx so we can set it later.
@@ -553,12 +655,39 @@ def _build_train_valid_test_datasets(data_prefix, data_impl, splits_string,
                     **kwargs
                 )
             elif dataset_type == DSET_TYPE_T5:
+                args = get_args()
                 dataset = T5Dataset(
                     indexed_dataset=indexed_dataset,
                     masked_lm_prob=masked_lm_prob,
                     max_seq_length_dec=max_seq_length_dec,
                     short_seq_prob=short_seq_prob,
+                    add_mask_tokens=args.add_mask_tokens,
+                    pack_samples=args.pack_samples,
                     **kwargs
+                )
+            elif dataset_type == DSET_TYPE_UL2:
+                args = get_args()
+                dataset = UL2Dataset(
+                    indexed_dataset=indexed_dataset,
+                    model_type=args.ul2_model_type,
+                    denoiser_ratios=args.ul2_denoiser_ratios,
+                    denoisers=args.ul2_denoisers,
+                    mean_span_lengths=args.ul2_mean_span_lengths,
+                    mask_ratios=args.ul2_mask_ratios,
+                    add_mask_tokens=args.add_mask_tokens,
+                    pack_samples=args.pack_samples,
+                    denoiser_tokens={
+                        'R': args.ul2_r_denoiser_token,
+                        'S': args.ul2_s_denoiser_token,
+                        'X': args.ul2_x_denoiser_token,
+                    },
+                    scale_normal_std=args.ul2_scale_normal_std,
+                    like_ul2r=args.ul2_like_ul2r,
+                    pack_any=args.ul2_pack_any,
+                    pack_repeat_prompt=args.ul2_pack_repeat_prompt,
+                    max_seq_length_dec=max_seq_length_dec,
+                    short_seq_prob=short_seq_prob,
+                    **kwargs,
                 )
             elif dataset_type == DSET_TYPE_BERT:
                 dataset = BertDataset(
@@ -714,15 +843,7 @@ def get_samples_mapping(indexed_dataset,
         print_rank_0(' > elasped time to build and save samples mapping '
                      '(seconds): {:4f}'.format(
                          time.time() - start_time))
-    # This should be a barrier but nccl barrier assumes
-    # device_index=rank which is not the case for model
-    # parallel case
-    counts = torch.cuda.LongTensor([1])
-    torch.distributed.all_reduce(counts, group=mpu.get_data_parallel_group())
-    torch.distributed.all_reduce(counts, group=mpu.get_pipeline_model_parallel_group())
-    assert counts[0].item() == (
-        torch.distributed.get_world_size() //
-        torch.distributed.get_world_size(group=mpu.get_tensor_model_parallel_group()))
+    dp_pp_barrier()
 
     # Load indexed dataset.
     print_rank_0(' > loading indexed mapping from {}'.format(
@@ -735,3 +856,18 @@ def get_samples_mapping(indexed_dataset,
         samples_mapping.shape[0]))
 
     return samples_mapping
+
+
+def dp_pp_barrier():
+    # This should be a barrier but nccl barrier assumes
+    # device_index=rank which is not the case for model
+    # parallel case
+    counts = torch.cuda.LongTensor([1])
+    torch.distributed.all_reduce(counts, group=mpu.get_data_parallel_group())
+    torch.distributed.all_reduce(
+        counts, group=mpu.get_pipeline_model_parallel_group())
+    assert counts[0].item() == (
+        torch.distributed.get_world_size()
+        // torch.distributed.get_world_size(
+            group=mpu.get_tensor_model_parallel_group())
+    )
