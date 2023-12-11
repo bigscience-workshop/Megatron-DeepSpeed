@@ -380,7 +380,8 @@ class _AutoTokenizer(AbstractTokenizer):
 
     @property
     def bos(self):
-        raise NotImplementedError("Missing <bos>")
+        candidate = self.tokenizer.bos_token_id
+        return self._check_token_candidate(candidate)
 
     @property
     def eos(self):

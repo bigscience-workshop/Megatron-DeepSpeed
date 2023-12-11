@@ -557,7 +557,7 @@ class MegDSTestTraining(TestCasePlus):
             --deepspeed-activation-checkpointing
         """.split()
 
-        script = [f"{self.src_dir}/finetune_t0_non_causal_decoder.py"]
+        script = [f"{self.src_dir}/finetune_t0.py"]
         launcher = get_launcher(num_gpus)
 
         cmd = launcher + script + args + ds_args
