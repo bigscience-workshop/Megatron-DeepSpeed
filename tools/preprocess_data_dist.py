@@ -65,6 +65,8 @@ except ImportError:
 from datasets import config, logging, load_dataset
 from datasets.utils.file_utils import OfflineModeIsEnabled
 
+from indexed_json import IndexedJSON
+
 from megatron.tokenizer import build_tokenizer
 from megatron.data.indexed_dataset import data_file_path, index_file_path, make_builder, best_fitting_dtype, gather_files_dist
 from megatron.data.distdata import DistData
@@ -222,7 +224,7 @@ def get_args():
     # TODO: perhaps more user friendly to disable scratch and print a warning?
     # check that serial merge is not attempted with scratch
     if args.scratch is not None and args.merge != 'parallel':
-        raise  ValueError("The --scratch option is only valid with --merge=parallel")
+        raise ValueError("The --scratch option is only valid with --merge=parallel")
 
     return args
 
@@ -594,7 +596,12 @@ def main():
     startup_start = time.time()
 
     # load the dataset
-    dset = load_dset(args)
+    if args.input.endswith(".jsonl"):
+        # assume file is JSONL format
+        dset = IndexedJSON(args.input, args.distctx)
+    else:
+        # otherwise load HuggingFace dataset
+        dset = load_dset(args)
     if args.rank == 0:
         print(dset)
         msg(f"Processing features: {args.columns}")
