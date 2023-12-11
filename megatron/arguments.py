@@ -24,7 +24,7 @@ import time
 import torch
 import deepspeed
 
-from megatron.enums import PositionEmbeddingType
+from megatron.enums import PositionEmbeddingType, UL2ModelType
 import megatron
 from megatron.logging import log_levels
 
@@ -49,6 +49,7 @@ def parse_args(extra_args_provider=None, defaults={},
     parser = _add_autoresume_args(parser)
     parser = _add_biencoder_args(parser)
     parser = _add_vit_args(parser)
+    parser = _add_ul2_args(parser)
     parser = _add_logging_args(parser)
     parser = _add_zero_args(parser)
     parser = _add_memoryopt_args(parser)
@@ -309,6 +310,17 @@ def parse_args(extra_args_provider=None, defaults={},
                     "skip train iterations should be specified as two numbers, i.e. start-end"
                 )
         args.skip_train_iteration_range = skip_train_iteration_range
+    
+    args.ul2_model_type = UL2ModelType(args.ul2_model_type)
+    if (
+            args.ul2_model_type is not UL2ModelType.ENCODER_DECODER
+            and args.decoder_seq_length is not None
+    ):
+        print(
+            f'WARNING: `--decoder_seq_length` is ignored when '
+            f'`--ul2-model-type` is not '
+            f'"{UL2ModelType.ENCODER_DECODER.value}"!'
+        )
 
     if args.use_bnb_optimizer:
         try:
@@ -549,6 +561,12 @@ def _add_training_args(parser):
     group.add_argument('--no-bias-dropout-fusion', action='store_false',
                        help='Disable bias and dropout fusion.',
                        dest='bias_dropout_fusion')
+    group.add_argument('--no-layer-norm-fusion', action='store_false',
+                       help='Disable fused layer norm.',
+                       dest='layer_norm_fusion')
+    group.add_argument('--no-optimizer-fusion', action='store_false',
+                       help='Disable FusedAdam/FusedSGD norm.',
+                       dest='optimizer_fusion')
     group.add_argument('--optimizer', type=str, default='adam',
                        choices=['adam', 'sgd'],
                        help='Optimizer function')
@@ -604,7 +622,7 @@ def _add_learning_rate_args(parser):
                        'and initial warmup, the learing rate at each '
                        'iteration would be different.')
     group.add_argument('--lr-decay-style', type=str, default='linear',
-                       choices=['constant', 'linear', 'cosine'],
+                       choices=['constant', 'linear', 'cosine', 'inverse_sqrt'],
                        help='Learning rate decay function.')
     group.add_argument('--lr-decay-iters', type=int, default=None,
                        help='number of iterations to decay learning rate over,'
@@ -615,6 +633,9 @@ def _add_learning_rate_args(parser):
     group.add_argument('--lr-decay-tokens', type=int, default=None,
                        help='number of tokens to decay learning rate over,'
                        ' If not None will override iter/sample-based decay')
+    group.add_argument('--lr-warmup-style', type=str, default='linear',
+                       choices=['constant', 'linear'], help='Learning rate '
+                          'warmup function.')
     group.add_argument('--lr-warmup-fraction', type=float, default=None,
                        help='fraction of lr-warmup-(iters/samples) to use '
                        'for warmup (as a float)')
@@ -643,7 +664,8 @@ def _add_learning_rate_args(parser):
                        'from checkpoint and ignore input arguments.')
     group.add_argument('--universal-checkpoint', action='store_true',
                         help='Loading a universal format checkpoint.')
-
+    group.add_argument('--reset-progress', action='store_true', default=None,
+                        help='Reset iteration to 0 & do not load args.') 
     return parser
 
 
@@ -1023,6 +1045,42 @@ def _add_vit_args(parser):
 
     return parser
 
+def _add_ul2_args(parser):
+    group = parser.add_argument_group(title="UL2")
+
+    group.add_argument('--ul2-model-type', type=str, default='ED',
+                       choices=['ED', 'ND', 'CD'],
+                       help='What type of model to use for UL2 pretraining. '
+                       'ED = encoder-decoder; ND = non-causal decoder-only; '
+                       'CD = causal decoder-only')
+    group.add_argument('--ul2-denoiser-ratios', nargs='+', type=float,
+                       default=None,
+                       help='Probability of each denoising objective to be '
+                       'selected. Uniform distribution by default.')
+    group.add_argument('--ul2-denoisers', nargs='+', type=str,
+                       default=['R', 'R', 'S', 'X', 'X', 'X', 'X'],
+                       choices=['R', 'S', 'X'],
+                       help='What type of UL2 denoising objective the other '
+                       'UL2 configurations refer to.')
+    group.add_argument('--ul2-mean-span-lengths', nargs='+', type=float,
+                       default=[3, 8, 0.25, 3, 8, 64, 64],
+                       help='Mean length for sampling span lengths. '
+                       'Numbers < 1 indicate a mean length of the sequence '
+                       'length times that number.')
+    group.add_argument('--ul2-mask-ratios', nargs='+', type=float,
+                       default=[0.15, 0.15, 0.25, 0.5, 0.5, 0.15, 0.5],
+                       help='Ratio of masked token in the full sequence.')
+    group.add_argument('--ul2-r-denoiser-token', type=str, default='[R]',
+                       help='What token to prepend for the UL2 R-denoising '
+                       'objective.')
+    group.add_argument('--ul2-s-denoiser-token', type=str, default='[S]',
+                       help='What token to prepend for the UL2 S-denoising '
+                       'objective.')
+    group.add_argument('--ul2-x-denoiser-token', type=str, default='[X]',
+                       help='What token to prepend for the UL2 X-denoising '
+                       'objective.')
+
+    return parser
 
 def _add_zero_args(parser):
     """Text generate arguments."""

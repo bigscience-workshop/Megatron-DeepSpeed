@@ -33,6 +33,7 @@ def model_provider(pre_process=True, post_process=True):
                              enabled=args.zero_stage == 3,
                              mpu=mpu):
         if args.deepspeed:
+            args.pretrain_causal_attention = False
             model = GPTModelPipe(
                 num_tokentypes=0,
                 parallel_output=True,

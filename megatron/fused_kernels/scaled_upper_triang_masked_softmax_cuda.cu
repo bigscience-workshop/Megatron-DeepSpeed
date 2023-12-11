@@ -18,7 +18,9 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <cuda_fp16.h>
+#ifndef __HIP_PLATFORM_HCC__
 #include <cuda_profiler_api.h>
+#endif
 #include <ATen/cuda/CUDAContext.h>
 #include <torch/extension.h>
 #include "scaled_upper_triang_masked_softmax.h"
@@ -35,7 +37,7 @@ torch::Tensor fwd_cuda(
   // input is a 3d tensor with dimensions [attn_batches, seq_len, seq_len]
   const int attn_batches = input.size(0);
   const int seq_len = input.size(1);
-  TORCH_INTERNAL_ASSERT(seq_len <= 2048);
+  TORCH_INTERNAL_ASSERT(seq_len <= 8192);
 
   // Output 
   auto act_options = input.options().requires_grad(false);
