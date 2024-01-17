@@ -866,6 +866,36 @@ def train(forward_step_func, model, optimizer, lr_scheduler,
     write_args_to_tensorboard()
     log_restart_to_tensorboard()
 
+    # this alone reproduces the leak in deepspeed when using register_full_backward_hook
+    # def backward_hook(module, input, output): pass
+    # def _register_backward_hook(module):
+    #     module.register_full_backward_hook(backward_hook)
+    #     #module.register_backward_hook(backward_hook)
+    # model[0].apply(_register_backward_hook)
+
+    if args.tensorboard_debug_dir:
+        from megatron.debug_utils import ModelInspector
+        dp_rank = torch.distributed.get_rank(group=mpu.get_data_parallel_group())
+        tp_rank = torch.distributed.get_rank(group=mpu.get_tensor_model_parallel_group())
+        pp_rank = torch.distributed.get_rank(group=mpu.get_pipeline_model_parallel_group())
+        # assumptions to reduce the amount of logged data:
+        # - should be enough to look at just one DP slice
+        # - making an assumption that the TP slices should be quite similar magnitude-wise so just 0-rank thre as well
+        if dp_rank == 0 and tp_rank == 0:
+            # To minimize the amount of logged data further prune multiple processes from pp group
+            MAX_PROCS_TO_TRACK = 5 # how many processes to track
+            pp_world_size = torch.distributed.get_world_size(group=mpu.get_pipeline_model_parallel_group())
+            num_procs_to_track = min(pp_world_size, MAX_PROCS_TO_TRACK)
+
+            pp_ranks_to_track = set(map(int, torch.linspace(0, pp_world_size-1, MAX_PROCS_TO_TRACK).tolist()))
+            print_rank_0(f"Tracking data values in pp ranks: {pp_ranks_to_track}")
+            if pp_rank in pp_ranks_to_track:
+                ModelInspector(pp_rank, model[0], args)
+
+    #x = DebugGradientNorm(model).register_backward_hook()
+    #for module in model:
+    #    DebugGradientNorm(module).register_backward_hook()
+
     # Turn on training mode which enables dropout.
     for model_module in model:
         model_module.train()
