@@ -10,5 +10,5 @@ torch>=1.7
 transformers
 DeepSpeed @ git+https://github.com/microsoft/DeepSpeed.git
 # versions from HF transformers
-black==21.4b0
+black==24.3.0
 isort>=5.5.4
