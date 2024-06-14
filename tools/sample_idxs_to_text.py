@@ -75,12 +75,13 @@ import torch
 from megatron import get_args
 from megatron import get_tokenizer
 from megatron import initialize_megatron
+from megatron.arguments import merge_skip_train_iteration_range
 from megatron.data.data_samplers import build_pretraining_data_loader
 from megatron.data.gpt_dataset import build_train_valid_test_datasets
 from megatron.training import update_train_iters
 
 
-def _add_network_size_args(parser):
+def _add_sample_idxs_args(parser):
     group = parser.add_argument_group(title='Get text from sample idxs.')
     group.add_argument('--sample-id-range', type=int, nargs='+', required=True,
                         help='The number of samples consumed. ex) --sample-id-range 1024 2048')
@@ -88,7 +89,8 @@ def _add_network_size_args(parser):
     group.add_argument('--print-tokens', action='store_true', help='Whether to print tokens')
     group.add_argument('--print-text', action='store_true', help='Whether to print text')
     group.add_argument('--output-file', help='path to file if the dump should be saved into a file')
-
+    group.add_argument('--skip-train-iteration-range', type=str, nargs='+', default=None,
+                       help='Iteration ranges to skip. The values are one or more dash-separated ranges. e.g., 101-200 251-300.')
     return parser
 
 
@@ -108,7 +110,7 @@ if __name__ == "__main__":
     """.split()
     sys.argv.extend(required_irrelevant_args)
 
-    initialize_megatron(extra_args_provider=_add_network_size_args)
+    initialize_megatron(extra_args_provider=_add_sample_idxs_args)
 
     args = get_args()
     tokenizer = get_tokenizer()
@@ -130,8 +132,16 @@ if __name__ == "__main__":
         skip_warmup=(not args.mmap_warmup)
     )
 
+    # account for skip ranges
+    if args.skip_train_iteration_range is not None:
+        merged = merge_skip_train_iteration_range(args.skip_train_iteration_range)
+        args.skip_train_iteration_range = merged
+    
+    # retrieve idxs
+    idxs = get_idxs(args.sample_id_range, args.skip_train_iteration_range)
+    
     # fast forward to where we want to start sampling
-    train_dataloader = build_pretraining_data_loader(train_ds, args.sample_id_range[0])
+    train_dataloader = build_pretraining_data_loader(train_ds, idxs[0])
     data_iterator = iter(train_dataloader)
 
     if args.all_tokens:
@@ -149,8 +159,11 @@ if __name__ == "__main__":
         else:
             print(msg)
 
-    for i in range(args.sample_id_range[0], args.sample_id_range[1]):
+    set_idxs = set(idxs)
+    for i in range(idxs[0], idxs[-1] + 1):
         tokens = next(data_iterator)["text"][0]
+        if i not in set_idxs:
+            continue
 
         if args.print_tokens:
             write(f"{i} {tokens}")
@@ -164,3 +177,36 @@ if __name__ == "__main__":
         fh.close()
 
     print(f"*** {args.sample_id_range[1]-args.sample_id_range[0]} records dumped")
+
+
+def get_idxs(range_, skips):
+    """returns indicies of iterations, with skips taken into account"""
+    
+    # edge case
+    if skips is None:
+        return range_
+    
+    result = []
+    # idx to append
+    pointer = 1
+    # range, actual iterations
+    range_start, range_end = range_
+    range_len = range_end - range_start + 1
+    
+    for start, end in skips:
+
+        # extend by actual iterations
+        result.extend(list(range(pointer, start)))
+        
+        # pop excess and return
+        if len(result) >= range_len:
+            for _ in  range(len(result) - range_len):
+                _ = result.pop()
+            return result
+        
+        # update pointer
+        pointer = end + 1
+    
+    # extend remainder as needed
+    result.extend(list(range(pointer, pointer + range_len - len(result))))
+    return result
