@@ -142,6 +142,10 @@ def pretrain(train_valid_test_dataset_provider,
     args.parameters_in_billions_no_embedding = get_parameters_in_billions(model, exclude_embeddings=True)
     print_rank_0(f'estimated model parameters: {get_parameters_in_billions(model)}')
     print_rank_0(f'estimated model parameters without embeddings: {get_parameters_in_billions(model, exclude_embeddings=True)}')
+    if args.rank == 0:
+        total_params_b = get_parameters_in_billions(model)
+        total_params = int(total_params_b * 1e9)
+        print(f"Model size: {round(total_params_b)}B ({total_params} params)", flush=True)
     timers('model-and-optimizer-setup').stop()
     print_datetime('after model, optimizer, and learning rate '
                    'scheduler are built')
