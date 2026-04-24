@@ -37,7 +37,7 @@ from unittest.case import SkipTest
 try:
     import torch
     _torch_available = True
-except:
+except Exception:
     _torch_available = False
 
 def is_torch_available():
@@ -312,7 +312,7 @@ def apply_print_resets(buf):
 def assert_screenout(out, what):
     out_pr = apply_print_resets(out).lower()
     match_str = out_pr.find(what.lower())
-    assert match_str != -1, f"expecting to find {what} in output: f{out_pr}"
+    assert match_str != -1, f"expecting to find {what} in output: {out_pr}"
 
 
 class CaptureStd:

@@ -121,7 +121,7 @@ def initialize_megatron(extra_args_provider=None, args_defaults={},
                 from transformers.utils import logging as transformers_logging
                 log_level = logging.log_levels[logging_level]
                 logging.set_verbosity(log_level)
-            except:
+            except Exception:
                 pass
 
         if args.rank == 0:
