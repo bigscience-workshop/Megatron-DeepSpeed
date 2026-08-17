@@ -115,7 +115,7 @@ def get_model(model_type):
         from pretrain_gpt import model_provider
     elif model_type == 'RACE':
         from tasks.race.finetune import model_provider
-    elif model_type == ['MNLI', 'QQP']:
+    elif model_type in ['MNLI', 'QQP']:
         num_classes = 2
         if model_type == 'MNLI':
             num_classes = 3
